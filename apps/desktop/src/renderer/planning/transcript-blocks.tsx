@@ -42,6 +42,10 @@ import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
 import { ModelLabel } from "./model-label";
 import {
+  TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
+  TranscriptMarkdownSource,
+} from "./transcript-markdown";
+import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
@@ -69,12 +73,17 @@ import { WorkingTime } from "./working-time";
  */
 
 /**
- * How a transcript's markdown is drawn: at the panel's scale, but never
- * as an image, because an image is a request to wherever its address
- * points the moment the tab opens, and nothing said on a call or written
- * by a model should make one.
+ * How a transcript's markdown is drawn: at the panel's scale, its code and
+ * tables as `transcript-markdown.tsx` draws them, but never as an image,
+ * because an image is a request to wherever its address points the moment
+ * the tab opens, and nothing said on a call or written by a model should
+ * make one.
  */
-export const TRANSCRIPT_COMPONENTS: Components = { ...PANEL_MARKDOWN_COMPONENTS, img: () => null };
+export const TRANSCRIPT_COMPONENTS: Components = {
+  ...PANEL_MARKDOWN_COMPONENTS,
+  ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
+  img: () => null,
+};
 
 /** A turn's words as markdown. */
 export function TranscriptWords({
@@ -85,9 +94,11 @@ export function TranscriptWords({
   components?: Components;
 }): ReactNode {
   return (
-    <MessageResponse mode="static" components={components}>
-      {text}
-    </MessageResponse>
+    <TranscriptMarkdownSource markdown={text}>
+      <MessageResponse mode="static" components={components}>
+        {text}
+      </MessageResponse>
+    </TranscriptMarkdownSource>
   );
 }
 

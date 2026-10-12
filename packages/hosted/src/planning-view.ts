@@ -268,6 +268,11 @@ const codeTokenSchema = EffectSchema.Struct({
 
 export type CodeToken = typeof codeTokenSchema.Type;
 
+/** Lines of code as the host coloured them, each a line's runs in order. */
+export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
+
+export type CodeLines = typeof codeLinesSchema.Type;
+
 /**
  * One code Luke showed on the active plan: what he named, the repository
  * the service read it from, the file's lines as they arrived and this
@@ -282,7 +287,7 @@ const planCodeSchema = EffectSchema.Struct({
   firstLine: EffectSchema.Int,
   /** How many lines the whole file has. */
   lineCount: EffectSchema.Int,
-  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+  lines: codeLinesSchema,
   /** What Luke said the lines are for; absent on code shown before notes were asked for. */
   note: EffectSchema.optionalKey(EffectSchema.String),
 });
@@ -539,7 +544,7 @@ const planFileShownSchema = EffectSchema.Struct({
   branch: EffectSchema.String,
   firstLine: EffectSchema.Int,
   lineCount: EffectSchema.Int,
-  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+  lines: codeLinesSchema,
 });
 
 export type PlanFileShown = typeof planFileShownSchema.Type;

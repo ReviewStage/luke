@@ -1,4 +1,5 @@
 import type {
+  CodeLines,
   PlanningArchiveParams,
   PlanningBoardSaveParams,
   PlanningEditAnswer,
@@ -62,6 +63,8 @@ export interface PlanningActsDependencies {
   talkAboutPlan: (planId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
+  /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
+  colourCode: (language: string, code: string) => CodeLines;
 }
 
 type PlanningActKind =
@@ -82,6 +85,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
   | typeof ACT_KIND.PLANNING_FILE
+  | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
   | typeof ACT_KIND.PLANNING_RESTORE;
@@ -179,6 +183,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_FILE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);
       return host.planningFile(params);
+    },
+    [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);
+      return dependencies.colourCode(language, code);
     },
     [ACT_KIND.PLANNING_REVISIONS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REVISIONS, sender);

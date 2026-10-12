@@ -38,6 +38,8 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
+  type CodeLines,
+  codeLinesSchema,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
@@ -149,6 +151,8 @@ export const ACT_KIND = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
+  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
+  PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
   PLANNING_REVISIONS: "planning.revisions",
   /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
@@ -322,6 +326,16 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  * value the host would not hold.
  */
 const exactId = exactText(512);
+
+/**
+ * The longest fenced block a transcript asks main to colour. Note that a
+ * longer one is drawn plain rather than cut, because colouring costs main
+ * a pass over every character and a block that long is a log, not a snippet.
+ */
+export const COLOURED_CODE_MAX_CHARS = 20_000;
+
+/** The longest language name a fence may give for its block to be coloured. */
+export const FENCE_LANGUAGE_MAX_CHARS = 32;
 
 /** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
@@ -499,6 +513,14 @@ export const ACT = {
     payload: actSchema(planningFileParamsSchema),
     result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
     refusal: "Could not read that file on this system.",
+  },
+  [ACT_KIND.PLANNING_COLOUR_CODE]: {
+    payload: record({
+      language: exactText(FENCE_LANGUAGE_MAX_CHARS),
+      code: exactText(COLOURED_CODE_MAX_CHARS),
+    }),
+    result: wireResult<CodeLines>(isReadable(codeLinesSchema)),
+    refusal: "Could not colour that code on this system.",
   },
   [ACT_KIND.PLANNING_REVISIONS]: {
     payload: actSchema(planningRevisionsParamsSchema),

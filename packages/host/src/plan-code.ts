@@ -152,13 +152,12 @@ function compactLine(
 }
 
 /**
- * The window's lines coloured as the file's language, and drawn plain for a
- * file of no language the highlighter knows. Note that the colouring starts
- * at the window's first line, which is what the service sent: a window
- * opened inside a comment or a string is coloured from there.
+ * Lines coloured as `language`, one of the highlighter's own, or drawn plain
+ * for none. Note that the colouring starts at the first line given, which is
+ * what the service sent: a window opened inside a comment or a string is
+ * coloured from there.
  */
-function colouredLines(path: string, lines: readonly string[]): CodeToken[][] {
-  const language = LANGUAGE_BY_EXTENSION.get(extname(path).toLowerCase());
+function colouredLines(language: string | undefined, lines: readonly string[]): CodeToken[][] {
   if (language === undefined) {
     return lines.map((text) => (text === "" ? [] : [{ text }]));
   }
@@ -172,6 +171,21 @@ function colouredLines(path: string, lines: readonly string[]): CodeToken[][] {
     themes: { [THEME.DARK]: THEME.DARK, [THEME.LIGHT]: THEME.LIGHT },
   });
   return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
+}
+
+/** The language a file is coloured as, by its extension. */
+function languageOfPath(path: string): string | undefined {
+  return LANGUAGE_BY_EXTENSION.get(extname(path).toLowerCase());
+}
+
+/**
+ * The language a fenced block in a transcript is coloured as, by the name
+ * its fence gives: a language's own name or one of the aliases its grammar
+ * declares (`ts`, `py`, `sh`), and none for a name no grammar here answers to.
+ */
+function languageOfFence(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  return sharedHighlighter().getLoadedLanguages().includes(lower) ? lower : undefined;
 }
 
 /**
@@ -198,7 +212,7 @@ export function codeExcerpt(code: ShownCode): ShownCode {
 
 /** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
 export function highlightFile(window: PlanFileWindow): PlanFileShown {
-  return { ...window, lines: colouredLines(window.path, window.lines) };
+  return { ...window, lines: colouredLines(languageOfPath(window.path), window.lines) };
 }
 
 /** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from, with Luke's note where he wrote one. */
@@ -208,7 +222,16 @@ export function highlightCode(code: ShownCode): PlanCode {
     repository: code.repository,
     firstLine: code.firstLine,
     lineCount: code.lineCount,
-    lines: colouredLines(code.ref.path, code.lines),
+    lines: colouredLines(languageOfPath(code.ref.path), code.lines),
     ...(code.note === undefined ? undefined : { note: code.note }),
   };
+}
+
+/**
+ * A fenced block of a transcript's markdown as the window draws it: its code,
+ * line by line, coloured as the language its fence names, as the Code tab's
+ * lines are, and plain for a language the highlighter does not know.
+ */
+export function highlightSnippet(language: string, code: string): CodeToken[][] {
+  return colouredLines(languageOfFence(language), code.split("\n"));
 }
