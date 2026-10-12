@@ -100,6 +100,8 @@ export interface WorkTurnRow {
   /** Running only while the turn moves; a turn its call left running is drawn as stopped, since nothing more of it will be told. */
   state: PlanWorkState;
   earlierOmitted: boolean;
+  /** The first line of each rollout worker's report the turn was opened by, drawn above Luke's reply; none for any other turn. */
+  reports: readonly string[];
   rows: readonly TurnRow<WorkBlock>[];
   /** What the turn ran on and spent, as far as the service said. */
   record: TurnRecord;
@@ -370,6 +372,7 @@ export function workRowsOf(
       ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
+      reports: turn.reports ?? [],
       record: recordOf(turn),
       rows: rowsOf(
         turn.parts,

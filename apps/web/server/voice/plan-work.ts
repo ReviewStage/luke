@@ -10,13 +10,17 @@ import {
   type PlanWorkTool,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { isTextUIPart } from "ai";
 import { Schema } from "effect";
 import {
   isStoredToolPart,
+  MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   type StoredToolPart,
   type StoredUIMessage,
   storedToolName,
   TOOL_PART_STATE,
+  TURN_ORIGIN,
   TURN_STATUS,
   UI_PART_TYPE,
 } from "../core.js";
@@ -388,6 +392,24 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
 }
 
 /**
+ * The fixed first line of each report among a turn's received lines, cut to
+ * the bound, in the order they stand: a report's words open with the line
+ * `reportLine` drew (`reportText`), so the line is read back off the row
+ * rather than kept beside it. A line of any other source is no report.
+ */
+function reportsOf(received: readonly StoredUIMessage[]): string[] {
+  return received.flatMap((message) => {
+    if (message.role !== MESSAGE_ROLE.USER) return [];
+    const { metadata } = message;
+    if (metadata === undefined || !("source" in metadata)) return [];
+    if (metadata.source !== OBSERVATION_SOURCE.REPORT) return [];
+    const words = message.parts.find(isTextUIPart)?.text ?? "";
+    const line = words.split("\n", 1)[0]?.trim() ?? "";
+    return line === "" ? [] : [cut(line, PLAN_WORK_BOUNDS.SUBJECT_CHARS)];
+  });
+}
+
+/**
  * One planning turn's work, from its row and its journal (absent before the
  * turn wrote any): its state, when it started and, once it ended, when, and
  * the newest of its words, reasoning, and calls in the order the model wrote
@@ -398,7 +420,9 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * where one landed on that child (`titles`, by the call's id), and what
  * its newest task ran on and spent as its turn row recorded them
  * (`records`, by the call's id, `hosted/child-models.ts`). The turn carries
- * what it ran on and spent too, as its own row recorded them.
+ * what it ran on and spent too, as its own row recorded them, and, where a
+ * report opened it, each report's first line from the lines it received
+ * (`received`), which the tab draws above Luke's reply.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
@@ -406,6 +430,7 @@ export function planWorkOf(
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
   records: ReadonlyMap<string, TurnRecord> = new Map(),
+  received: readonly StoredUIMessage[] = [],
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
@@ -424,11 +449,13 @@ export function planWorkOf(
     };
   });
   const ended = turnState === PLAN_WORK_STATE.RUNNING ? null : turn.settledAt;
+  const reports = turn.origin === TURN_ORIGIN.REPORT ? reportsOf(received) : [];
   return {
     turnId: turn.id,
     startedAt: (turn.startedAt ?? turn.queuedAt).getTime(),
     ...(ended === null ? undefined : { endedAt: ended.getTime() }),
     state: turnState,
+    ...(reports.length === 0 ? undefined : { reports }),
     ...newest(parts),
     ...turnRecordOf(turn),
   };

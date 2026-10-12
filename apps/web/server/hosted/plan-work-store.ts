@@ -4,7 +4,7 @@ import {
   type PlanWorkAnswer,
 } from "@sidecar/hosted/planning-view";
 import { Effect, Option } from "effect";
-import { isStoredToolPart, storedToolName } from "../core.js";
+import { isStoredToolPart, storedToolName, TURN_ORIGIN } from "../core.js";
 import {
   callsSendingToEarlierTasks,
   planWorkOf,
@@ -23,6 +23,7 @@ import {
   listJournals,
   listJournalsCalling,
   readMessageByClientId,
+  readReceivedLines,
   type StoredMessageRecord,
   type StoredTurnRecord,
   turnsBefore,
@@ -36,7 +37,8 @@ import {
  * conversation's turns, newest first a page at a time, each projected from
  * its row and its journal exactly as a call tells it live
  * (`voice/plan-work.ts`), a worker's session and its title read from its
- * child conversation beside it. The code is every answered `show_code` call in
+ * child conversation beside it, and a report's turn with the lines it
+ * received, which carry the reports' first lines. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
  * and no secret file, is read back. The plan is read under the account
@@ -52,6 +54,12 @@ const workerJournalsOf = Effect.fnUntraced(function* (userId: string, conversati
     HOSTED_TOOL_SET,
     EVE_DELEGATION_TOOL.WORKER,
   );
+  return read.ok ? read.value.map((row) => row.message) : [];
+});
+
+/** The lines a report's turn received, which carry the reports' first lines; none where they do not read. */
+const receivedLinesOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
+  const read = yield* readReceivedLines(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
   return read.ok ? read.value.map((row) => row.message) : [];
 });
 
@@ -75,7 +83,8 @@ const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnR
   const parent = { userId, conversationId: turn.conversationId };
   const titles = yield* childTitlesByCall(parent, children);
   const records = yield* subagentRecordsByCall(userId, subagents);
-  return { turn, message, subagents, titles, records };
+  const received = turn.origin === TURN_ORIGIN.REPORT ? yield* receivedLinesOf(userId, turn) : [];
+  return { turn, message, subagents, titles, records, received };
 });
 
 /** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first. */
@@ -137,7 +146,14 @@ export function readPlanWork(
     const oldest = page.turns[0];
     return Option.some({
       turns: journaled.map((each) =>
-        planWorkOf(each.turn, each.message, each.subagents, each.titles, each.records),
+        planWorkOf(
+          each.turn,
+          each.message,
+          each.subagents,
+          each.titles,
+          each.records,
+          each.received,
+        ),
       ),
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
       ...(code === undefined ? undefined : { code }),

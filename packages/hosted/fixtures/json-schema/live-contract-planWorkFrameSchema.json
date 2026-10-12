@@ -35,6 +35,13 @@
         "earlierOmitted": {
           "type": "boolean"
         },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
         "parts": {
           "type": "array",
           "items": {

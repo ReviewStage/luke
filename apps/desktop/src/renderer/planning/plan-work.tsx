@@ -51,7 +51,8 @@ import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
  * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
  *
  * Each turn opens at a Checkpoint saying when it began and how far it got,
- * and its rows are `work-model.ts`'s, drawn as one of Luke's turns by the
+ * a turn a rollout worker's report opened shows the report's first line
+ * as the line Luke was handed, and its rows are `work-model.ts`'s, drawn as one of Luke's turns by the
  * blocks every transcript shares (`transcript-blocks.tsx`): the model's
  * words as a reply, its reasoning folded behind one line, each call a row
  * wearing its kind's icon that opens onto its input and output, and the
@@ -282,6 +283,15 @@ function WorkTurnRows({ rows }: { rows: readonly TurnRow<WorkBlock>[] }): React.
   );
 }
 
+/** The reports a turn was opened by, one line each, drawn as the line Luke was handed. */
+function WorkReports({ lines }: { lines: readonly string[] }): React.JSX.Element {
+  return (
+    <Message from={MESSAGE_ROLE.USER}>
+      <MessageContent className="whitespace-pre-line">{lines.join("\n")}</MessageContent>
+    </Message>
+  );
+}
+
 /**
  * A turn's state at the right of its checkpoint, a light sweeping it while
  * the turn works and how long it has worked beside it while the tab is on
@@ -328,6 +338,7 @@ function WorkTurn({
       >
         {callHeading(turn.startedAt, now)}
       </Checkpoint>
+      {turn.reports.length === 0 ? null : <WorkReports lines={turn.reports} />}
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
       <WorkTurnRows rows={turn.rows} />
       {turn.state === PLAN_WORK_STATE.RUNNING || turn.endedAt === undefined ? null : (

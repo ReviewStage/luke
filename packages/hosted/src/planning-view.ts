@@ -265,6 +265,16 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,
+  /**
+   * For a turn a rollout worker's report opened, each report's fixed first
+   * line, `[worker 3] opened #415`, in the order the turn received them,
+   * drawn above Luke's reply; absent for every other turn.
+   */
+  reports: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
+    ),
+  ),
   parts: EffectSchema.Array(planWorkPartSchema),
   ...turnRecordFields,
 });
