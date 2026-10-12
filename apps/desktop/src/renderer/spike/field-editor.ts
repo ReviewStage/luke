@@ -1,17 +1,21 @@
-// field-editor.tsx -- SPIKE: a plan field edited in place on TipTap, drawn as the document draws it.
+// field-editor.ts -- SPIKE: a plan field edited in place on TipTap, drawn as the document draws it; the body of the field editor's own bundle.
 
-import type { Editor, JSONContent } from "@tiptap/core";
+import { Editor, type JSONContent } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
-import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
-import { useLayoutEffect, useRef } from "react";
-import { RULE_EXTENSIONS, type RuleParts, ruleDocument, ruleParts } from "./rule-extension";
+import {
+  FIELD_KIND,
+  type FieldEditorHandle,
+  type FieldEditorProps,
+  type FieldValue,
+} from "./field-editor-contract";
+import { RULE_EXTENSIONS, ruleDocument, ruleParts } from "./rule-extension";
 
 /**
  * SPIKE, not production code. One TipTap editor per field, and no heading in
@@ -22,24 +26,6 @@ import { RULE_EXTENSIONS, type RuleParts, ruleDocument, ruleParts } from "./rule
  * words `plan-field-editor-model.ts` already holds: a text field's Markdown,
  * a list one item a line, a rule's parts.
  */
-
-/** The kinds of field, by what the editor reads and writes. */
-export const FIELD_KIND = {
-  /** A text field's Markdown. */
-  TEXT: "text",
-  /** The open questions: Markdown items, one a line. */
-  QUESTIONS: "questions",
-  /** The assumptions: plain items, one a line, since the document draws them as plain text. */
-  ASSUMPTIONS: "assumptions",
-  RULE: "rule",
-} as const;
-
-export type FieldValue =
-  | {
-      readonly kind: Exclude<(typeof FIELD_KIND)[keyof typeof FIELD_KIND], typeof FIELD_KIND.RULE>;
-      readonly text: string;
-    }
-  | { readonly kind: typeof FIELD_KIND.RULE; readonly rule: RuleParts };
 
 const PLACEHOLDER = {
   [FIELD_KIND.TEXT]: "Unanswered",
@@ -136,34 +122,18 @@ function fieldWordsOf(kind: FieldValue["kind"], editor: Editor): FieldValue {
 }
 
 /**
- * One field in its editor, in place of its drawn words. `at` is where the
- * click that opened it landed, which places the caret; the end without one.
- * `onDraft` hears the field's words after each change, `onFinish` Esc or ⌘↩.
+ * One field's editor mounted into `host`, in place of its drawn words, and
+ * focused with its caret where the click landed, since the editor's words
+ * stand where the drawn words stood.
  */
-export function FieldEditor({
-  value,
-  at,
-  label,
-  className,
-  onDraft,
-  onFinish,
-}: {
-  value: FieldValue;
-  at: { readonly x: number; readonly y: number } | undefined;
-  label: string;
-  className: string;
-  onDraft: (value: FieldValue) => void;
-  onFinish: () => void;
-}): React.JSX.Element {
-  const handlers = useRef({ onDraft, onFinish });
-  handlers.current = { onDraft, onFinish };
+export function mountFieldEditor(host: HTMLElement, props: FieldEditorProps): FieldEditorHandle {
+  const { value, at, label, className, onDraft, onFinish } = props;
   const { content, contentType } = contentOf(value);
-  const editor = useEditor({
+  const editor = new Editor({
+    element: host,
     extensions: extensionsOf(value.kind),
     content,
     contentType,
-    immediatelyRender: true,
-    shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: {
         class: `${className} spike-editor`,
@@ -173,19 +143,14 @@ export function FieldEditor({
       },
       handleKeyDown: (_view, event) => {
         if (event.key !== "Escape" && !(event.key === "Enter" && event.metaKey)) return false;
-        handlers.current.onFinish();
+        onFinish();
         return true;
       },
     },
-    onUpdate: ({ editor: updated }) => handlers.current.onDraft(fieldWordsOf(value.kind, updated)),
+    onUpdate: ({ editor: updated }) => onDraft(fieldWordsOf(value.kind, updated)),
   });
-
-  // The caret lands where the pointer did, since the editor's words stand where the drawn words stood.
-  useLayoutEffect(() => {
-    const pos =
-      at === undefined ? undefined : editor.view.posAtCoords({ left: at.x, top: at.y })?.pos;
-    editor.commands.focus(pos ?? "end");
-  }, [editor]);
-
-  return <EditorContent editor={editor} className="ph-no-capture" />;
+  const pos =
+    at === undefined ? undefined : editor.view.posAtCoords({ left: at.x, top: at.y })?.pos;
+  editor.commands.focus(pos ?? "end");
+  return { destroy: () => editor.destroy() };
 }

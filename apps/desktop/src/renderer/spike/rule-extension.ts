@@ -3,6 +3,7 @@
 import { type Editor, Extension, type JSONContent, Node } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
+import type { RuleParts } from "./field-editor-contract";
 
 /**
  * SPIKE, not production code. The one shape no library knows: a rule is its
@@ -12,12 +13,6 @@ import StarterKit from "@tiptap/starter-kit";
  * an empty example strikes it. Each part's words are inline Markdown, read
  * and written by TipTap's own Markdown manager.
  */
-
-/** A rule's parts as `plan-field-editor-model.ts` holds them. */
-export interface RuleParts {
-  readonly statement: string;
-  readonly examples: readonly { given: string; when: string; then: string }[];
-}
 
 /** TipTap's Markdown for one part's inline words, with StarterKit's marks. */
 const markdown = new MarkdownManager({ extensions: [StarterKit] });

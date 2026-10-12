@@ -156,6 +156,25 @@ await Promise.all([
     logLevel: "info",
     define: { "process.env.NODE_ENV": '"production"' },
   }),
+  // SPIKE (seamless plan editing): a plan field's in-place editor, its own
+  // bundle so the bundle every window parses never carries TipTap or its
+  // grammars; the document loads it the first time a field is hovered or
+  // opened (`src/renderer/spike/field-editor-contract.ts`). It mounts with
+  // TipTap's own DOM, so no React rides along.
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/spike/field-editor-bundle.ts")],
+    outfile: path.join(outputRoot, "renderer/field-editor.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    conditions: ["production"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"' },
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),

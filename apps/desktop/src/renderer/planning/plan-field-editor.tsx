@@ -1,4 +1,4 @@
-import { useAtom } from "@effect/atom-react";
+import { useAtom, useAtomValue } from "@effect/atom-react";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
@@ -6,10 +6,17 @@ import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { PencilIcon, PlusIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { bundleAtom } from "../bundle-loader";
 import { MarkdownMessage } from "../markdown-message";
-import { rendererRuntime } from "../renderer-runtime";
-import { FIELD_KIND, type FieldValue, FieldEditor as InPlaceEditor } from "../spike/field-editor";
+import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
+import {
+  FIELD_EDITOR_ASSET,
+  FIELD_KIND,
+  type FieldEditorModule,
+  type FieldEditorProps,
+  type FieldValue,
+} from "../spike/field-editor-contract";
 import {
   CONFLICT_NOTE,
   EDIT_DRAFT,
@@ -326,40 +333,88 @@ function useCoalescedDrafts(editing: FieldEditing): DraftDoors {
   };
 }
 
+/** SPIKE: what a field says while the editor's bundle could not be loaded. */
+const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+
+/** SPIKE: the field editor's own bundle, loaded once per window (`../spike/field-editor-contract.ts`). */
+const fieldEditorAtom = bundleAtom(
+  { script: FIELD_EDITOR_ASSET.SCRIPT },
+  () => window.lukeFieldEditor,
+  EDITOR_LOAD_FAILED,
+);
+
+/** SPIKE: starts the editor's bundle loading as the pointer or the keyboard comes onto a field, so it is there by the click. */
+function prefetchFieldEditor(): void {
+  rendererRegistry.get(fieldEditorAtom);
+}
+
+/** SPIKE: the bundle's editor mounted in place, built once, on the words it opened with. */
+function MountedEditor({
+  module,
+  props,
+}: {
+  module: FieldEditorModule;
+  props: FieldEditorProps;
+}): React.JSX.Element {
+  const host = useRef<HTMLDivElement>(null);
+  const latest = useRef(props);
+  latest.current = props;
+  useLayoutEffect(() => {
+    if (host.current === null) return;
+    const handle = module.mount(host.current, {
+      ...latest.current,
+      onDraft: (value) => latest.current.onDraft(value),
+      onFinish: () => latest.current.onFinish(),
+    });
+    return handle.destroy;
+  }, [module]);
+  return <div ref={host} className="ph-no-capture" />;
+}
+
 /**
  * SPIKE: one field in its in-place editor. The heading stays drawn above it
  * as the document draws it, since the formatter owns every heading; a rule
  * keeps its number in the gutter, the way the read view draws it. The editor
  * wears the read view's own classes, so nothing moves as it opens, and the
- * caret lands where the click did. What the developer types reaches the same
- * model the text boxes fed (`plan-field-editor-model.ts`), which still
- * decides every save, the conflict, and the retry.
+ * caret lands where the click did. Until the editor's bundle has loaded,
+ * which a hover usually starts before the click, the field stays `drawn` as
+ * the document drew it, so the click's point still lands on the same word.
+ * What the developer types reaches the same model the text boxes fed
+ * (`plan-field-editor-model.ts`), which still decides every save, the
+ * conflict, and the retry.
  */
 export function PlanFieldEditor({
   heading,
   editor,
   ruleCount,
   editing,
+  drawn,
 }: {
   heading: string | undefined;
   editor: FieldEditor;
   ruleCount: number;
   editing: FieldEditing;
+  drawn: ReactNode;
 }): React.JSX.Element {
   const label = targetLabel(editor.target, ruleCount);
   const value = useRef(inPlaceValue(editor)).current;
   const { onDraft, onFinish } = useCoalescedDrafts(editing);
+  const module = useAtomValue(fieldEditorAtom);
   const rule = value.kind === FIELD_KIND.RULE;
-  const words = (
-    <InPlaceEditor
-      value={value}
-      at={editing.at}
-      label={label}
-      className={classOf(value)}
-      onDraft={onDraft}
-      onFinish={onFinish}
-    />
-  );
+  if (!AsyncResult.isSuccess(module)) {
+    return (
+      <section className="plan-field-editor spike-seamless ph-no-capture" aria-busy="true">
+        {drawn}
+        {AsyncResult.isFailure(module) ? (
+          <p className="plan-field-note" role="alert">
+            {EDITOR_LOAD_FAILED}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+  const props = { value, at: editing.at, label, className: classOf(value), onDraft, onFinish };
+  const words = <MountedEditor module={module.value} props={props} />;
   return (
     <section
       className="plan-field-editor spike-seamless ph-no-capture"
@@ -418,6 +473,8 @@ export function EditableUnit({
     // biome-ignore lint/a11y/useKeyWithClickEvents: the button beside the words is the keyboard's way into the same editor.
     <div
       className="plan-unit-editable"
+      onPointerEnter={prefetchFieldEditor}
+      onFocus={prefetchFieldEditor}
       onClick={(event) => {
         if (editsOnClick(event.target))
           editing.open(target, host, { x: event.clientX, y: event.clientY });

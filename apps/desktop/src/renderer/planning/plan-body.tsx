@@ -355,7 +355,13 @@ function BodyUnit({
   if (editor !== undefined && host === view.id) {
     const heading = editorHeading(editor.target, view.words, ruleCount);
     return (
-      <PlanFieldEditor heading={heading} editor={editor} ruleCount={ruleCount} editing={editing} />
+      <PlanFieldEditor
+        heading={heading}
+        editor={editor}
+        ruleCount={ruleCount}
+        editing={editing}
+        drawn={drawn}
+      />
     );
   }
   if (editor !== undefined && sameTarget(editor.target, target)) return null;
@@ -438,7 +444,13 @@ function PlanAssumptions({
   const { editor, host } = editing;
   const body =
     editor !== undefined && host === EDITOR_PLACE.ASSUMPTIONS ? (
-      <PlanFieldEditor heading={undefined} editor={editor} ruleCount={0} editing={editing} />
+      <PlanFieldEditor
+        heading={undefined}
+        editor={editor}
+        ruleCount={0}
+        editing={editing}
+        drawn={list}
+      />
     ) : editable ? (
       <EditableUnit
         target={target}
@@ -560,6 +572,7 @@ export function PlanBody({
             editor={editing.editor}
             ruleCount={ruleCount}
             editing={editing}
+            drawn={null}
           />
         ) : null}
         {content === undefined ? null : <AddSections fields={content.fields} editing={editing} />}

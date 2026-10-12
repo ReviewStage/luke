@@ -68,6 +68,9 @@ kind):
 - **The caret where you clicked.** One `posAtCoords` call.
 - **Drafts coalesced.** One per 150 ms pause, flushed on close, so the
   document stops re-rendering on every keystroke.
+- **The door to the editor's bundle.** `field-editor-contract.ts` (types and
+  one asset name, no values from TipTap), the shared `bundleAtom` loader, and
+  a prefetch on hover.
 - **Nothing else.** The save model is untouched: the editor feeds the same
   `typeText` and `typeRule` as the text boxes did, so the merge, the
   conflict, the retry, the hold, and attribution behave as shipped.
@@ -81,12 +84,10 @@ kind):
   `######` (`packages/hosted/src/plan-template.ts`). Nothing cuts the body at
   anything below `###`, the stored field keeps the developer's `##`, and the
   read view draws it as a heading in the field.
-- **Highlighted code in the read view.** `rehype-highlight` in
-  `markdown-message.tsx`, on the same `lowlight` grammars as the editor and
-  guessing the language where a fence names none, as the editor does. So
-  code reads the same before and during an edit, and every Markdown message
-  in the app gains highlighting with it. The colours are highlight.js's
-  GitHub themes, dark and light.
+- **The editor loads lazily.** TipTap, its grammars, and the rule's nodes
+  ship as `field-editor.js`, a bundle of their own, which the document loads
+  the first time a field is hovered or opened (see "Loading the editor
+  lazily" below). The read view's code stays plain, as it is on `main`.
 
 ## Should a rule just be a numbered list?
 
@@ -159,22 +160,22 @@ faster.
 
 ### Bundle
 
-| `renderer.js` gz | |
-| --- | --- |
-| `main` (#2086) | 736,347 (baseline 733,811, ceiling 770,501) |
-| With TipTap inside | 905,662 (+169 KB) |
-| With syntax highlighting too | **961,262 (+225 KB)**, recorded as this branch's baseline so it builds; `lowlight`'s 37 common languages and `highlight.js` are +55.6 KB of it, shared by the editor and the read view |
-| As a lazy `field-editor.js` instead | `renderer.js` unmoved; the new bundle is ~226 KB gz, since it carries its own React |
+Measured with `scripts/build.mjs` against the `main` commit this branch
+merged (#2085), whose `renderer.js` is 738,427 gz (baseline 733,811, ceiling
+770,501).
 
-What the 169 KB is (minified, before gzip): the editor engine
+| | `renderer.js` gz | `field-editor.js` gz |
+| --- | --- | --- |
+| **The editor lazily, read view plain (this branch)** | **738,641 (+214 B)** | 213,106 (budget entry) |
+| The same, with the editor's code blocks plain (no `lowlight`) | ~+214 B | 159,737 |
+| Earlier: TipTap inside `renderer.js` | 905,662 (+169 KB) | — |
+| Earlier: TipTap inside, and `rehype-highlight` in the read view | 961,262 (+225 KB) | — |
+
+What the editor's bundle is (minified, before gzip): the editor engine
 (`prosemirror-*` and `@tiptap/core`, ~330 KB), `marked` (88 KB),
+`lowlight` and `highlight.js`'s 37 common grammars (~53 KB gz on their own),
 tables (`prosemirror-tables` and the extension, 48 KB), lists (22 KB),
-`@tiptap/markdown` (21 KB), and `linkifyjs` for links (20 KB), before the
-highlighting above. A smaller language set (`lowlight`'s per-language
-imports) would cut the highlighting cost, at the price of choosing the
-languages ourselves. Dropping
-tables would save about 14 KB gz. The cost is that a field holding a table
-would lose it on its first edit, because the whole field is re-printed.
+`@tiptap/markdown` (21 KB), and `linkifyjs` for links (20 KB).
 
 ### What relying on the library costs
 
@@ -192,6 +193,87 @@ would lose it on its first edit, because the whole field is re-printed.
   agent's edit or a paste.
 - **TipTap parses with `marked`; the read view draws with remark.** Both
   follow CommonMark and GFM, so they disagree only at the edges.
+
+## Loading the editor lazily
+
+The editor ships as its own chunk, as the whiteboard and a File tab's tree
+already do, and the spike now builds it that way:
+
+- **The chunk.** `field-editor.js` is built by `scripts/build.mjs` from
+  `spike/field-editor-bundle.ts`. It holds TipTap, its extensions,
+  `lowlight`, and the rule's nodes, and sets one global,
+  `window.lukeFieldEditor = { mount }`. It mounts with TipTap's own DOM
+  (`new Editor({ element })`) rather than `@tiptap/react`, so no second copy
+  of React rides along. That is the difference from `whiteboard.js`.
+- **The door.** `plan-field-editor.tsx` reads the chunk through the shared
+  `bundleAtom` (`bundle-loader.ts`). The renderer imports only
+  `field-editor-contract.ts`, whose types and one asset name carry no value
+  from TipTap.
+- **When it loads.** The pointer or the keyboard coming onto an editable
+  field starts the load, so it is usually done before the click. A click
+  before it is done keeps the field drawn as it was, with no spinner and no
+  flash. The editor mounts the moment the chunk arrives, and the click's
+  point still lands the caret on the same word, because nothing moved. A
+  failed load says "The editor could not be loaded." under the field.
+- **Budget.** A new entry, `renderer/field-editor.js` at 213,106 (5% slack
+  like the others), beside `whiteboard.js` and `file-tree.js`.
+  `renderer.js` keeps `main`'s baseline of 733,811.
+
+**Expected main-renderer delta: +214 bytes gz.** That is the door, the
+contract, and the spike's glue (coalescing, the field-kind mapping). The
+production PR lands in the same place.
+
+| Cost of the first open on this VM (headless Chrome, Linux) | 1× CPU | 4× CPU throttle |
+| --- | --- | --- |
+| Load and evaluate `field-editor.js` | 86–93 ms | 306–326 ms |
+| …without `lowlight` | 29–32 ms | 62–72 ms |
+| First mount (warms up) | 36–43 ms | 153–165 ms |
+| Every later mount | ~6 ms | ~25 ms |
+
+With the hover prefetch, the load overlaps the time between hovering and
+clicking, so the first open usually costs only the first mount. A field
+opened from the keyboard before any hover waits for the load with its words
+still drawn. Behaviour is unchanged by the split: the suite passes as it
+did, with typing at 4.4 ms p50 and 0 px of layout shift on every field kind.
+
+### Can the read view drop lowlight, so nothing grows `renderer.js`?
+
+Yes, and on this branch it already has. `rehype-highlight` is gone from
+`markdown-message.tsx`, so the read view draws code plain, as `main` does,
+and `lowlight` lives only in the editor's chunk. There are two ways to give
+the read view colour without growing `renderer.js`:
+
+- **Host Shiki.** The panel already asks main to colour fenced code
+  (`ACT_KIND.PLANNING_COLOUR_CODE`, `highlightSnippet` in
+  `packages/host/src/plan-code.ts`). The transcript does this today
+  (`transcript-markdown.tsx`, with its colouring cache and `runColours`).
+  Doing the same for the plan's read view adds no dependency, and an
+  estimated ≤1 KB gz of glue in `markdown-message.tsx`. The colours would
+  match the Code tab and the transcript. The caveats:
+  - **Fences without a language** stay plain, because Shiki does not guess.
+  - **The chase** must draw a unit plain while it is typing it, because its
+    caret and marks sit on the text runs.
+- **Plain.** As now. It costs nothing.
+
+Either way, the editor and the read view should colour code the same, or a
+code block changes colour as it opens. The editor's `lowlight` uses
+highlight.js's GitHub theme and guesses unlabelled fences; host Shiki uses
+GitHub Dark/Light Default and does not guess. That leaves three consistent
+pairings:
+
+1. **Both plain.** Drop `CodeBlockLowlight` from the editor (StarterKit's
+   plain code block). The chunk is 160 KB and loads in ~30 ms. This is the
+   smallest and fastest.
+2. **Both host Shiki.** The editor colours its code blocks through the same
+   act as ProseMirror decorations: about 60 lines, because TipTap ships no
+   async highlighter. The chunk is 160 KB and colours match the rest of the
+   app. This is the most consistent, but not out of the box.
+3. **Both `lowlight`.** As the branch was one commit ago. Puts ~55 KB gz back
+   into `renderer.js`, so it is ruled out by the budget.
+
+**Recommendation:** ship option 1 with the lazy chunk (renderer +214 B, chunk
+~160 KB, ~30 ms to load). Take option 2 as a follow-up if coloured code in
+plans matters.
 
 ## Coexistence
 
@@ -242,20 +324,21 @@ on the same edge cases. In short:
 
 ## Bundle approval
 
-Dean approved moving the renderer baseline for this branch, where it now
-stands at 961,262. The production PR either records the same move, or ships
-the editor lazily, as `whiteboard.js` and `file-tree.js` are, at the cost of
-a loader and a second copy of React in that bundle. That choice is Dean's.
+`renderer.js` does not move: this branch is back on `main`'s baseline
+(733,811) and measures +214 B over `main`. What needs Dean's OK is the new
+lazy budget entry, `renderer/field-editor.js`: 213,106 with `lowlight`, or
+~160,000 without it.
 
 ## Migration plan
 
 1. **Stop re-rendering the document on every keystroke.** S. Memoise
    `BodyUnit`, fix bug 1 and the rule-label CSS (bug 2). Worth shipping even
    alone.
-2. **The field opens in place on TipTap.** M, ~300 lines with tests:
-   `field-editor.tsx` and `rule-extension.ts` as the spike has them, the glue
-   in `plan-field-editor.tsx`, the dependencies, and the bundle baseline
-   (**Dean's OK**). Rewrite `plan-field-editor.test.ts` for the editor:
+2. **The field opens in place on TipTap, loaded lazily.** M, ~350 lines with
+   tests: `field-editor.ts`, `rule-extension.ts`, `field-editor-contract.ts`,
+   and `field-editor-bundle.ts` as the spike has them, the `build.mjs` entry,
+   the glue in `plan-field-editor.tsx`, the dependencies, and the
+   `field-editor.js` budget entry (**Dean's OK**). Rewrite `plan-field-editor.test.ts` for the editor:
    jsdom runs TipTap; a test drives it through its commands and asserts what
    `onDraft` hears and what saves. Amend `docs/PLANNING.md` and
    `docs/DESIGN.md`. Needs `verify.sh` evidence on a Mac (IME, VoiceOver,

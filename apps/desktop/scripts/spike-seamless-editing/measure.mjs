@@ -39,7 +39,6 @@ const RENDERER_OPTIONS = {
 
 const VARIANTS = {
   main: "",
-  "+ TipTap field editor (spike/field-editor)": `import { FieldEditor } from "./spike/field-editor"; globalThis.__spike = FieldEditor;`,
 };
 
 async function gzipped(extra) {
@@ -57,9 +56,9 @@ async function gzipped(extra) {
   return { raw: bytes.length, gz: gzipSync(bytes, { level: 9 }).length };
 }
 
-/** The editor as a bundle of its own, loaded on first use as `whiteboard.js` and `file-tree.js` are; it carries its own React. */
+/** The editor as the bundle of its own the document loads, as `whiteboard.js` and `file-tree.js` are. */
 const LAZY = {
-  "TipTap field editor as field-editor.js": `import { createRoot } from "react-dom/client"; import { FieldEditor } from "./spike/field-editor"; globalThis.__spike = [createRoot, FieldEditor];`,
+  "field-editor.js": `import "./spike/field-editor-bundle";`,
 };
 
 async function lazyGzipped(entry) {
@@ -104,6 +103,11 @@ async function demo(out) {
     outfile: path.join(out, "demo.js"),
   });
   await fs.copyFile(path.join(appRoot, "dist/renderer/styles.css"), path.join(out, "styles.css"));
+  // The field editor's own bundle, which the document loads beside the page as the app does.
+  await fs.copyFile(
+    path.join(appRoot, "dist/renderer/field-editor.js"),
+    path.join(out, "field-editor.js"),
+  );
   await fs.writeFile(
     path.join(out, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Spike</title>
