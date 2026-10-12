@@ -104,10 +104,10 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
     Effect.forkScoped(
       Stream.runForEach(state.changes, () =>
         Effect.catchDefect(
-          // The theme is steered first, so a window handed new settings
-          // already draws under the appearance they name.
+          // The theme and the zoom are steered first, so a window handed new
+          // settings already draws under the appearance they name.
           Effect.andThen(
-            windows.applyTheme(),
+            windows.applyAppearance(),
             Effect.sync(() => windows.publishAppState()),
           ),
           (defect) =>
