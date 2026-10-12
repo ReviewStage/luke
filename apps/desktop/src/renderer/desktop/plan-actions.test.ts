@@ -363,6 +363,25 @@ test("a sidebar plan's end offers Pin and Archive, Unpin when pinned and Unarchi
   assert.equal(document.querySelector('[role="menu"]'), null, "no press opened the menu");
 });
 
+test("a right-click on a sidebar plan's Pin or Archive offers the plan's menu, ringing the row", () => {
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const [, archive] = rowMarks(row);
+  assert.ok(archive);
+
+  rightClick(archive, 40, 60);
+
+  assert.deepEqual(labels(), [
+    "Rename",
+    "Pin",
+    "Archive",
+    "Change repository…",
+    "Permanently delete",
+  ]);
+  assert.equal(row.dataset.menuOpen, "true");
+  assert.deepEqual(asked.marked, []);
+});
+
 test("only the open plan's row names Command-Shift-A on its Archive, the chord archiving the open plan alone", () => {
   const { plans, asked } = openTab();
   const [, openArchive] = rowMarks(mountSidebarPlan(plans, PLAN, asked, true));

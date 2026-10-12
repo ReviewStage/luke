@@ -103,11 +103,14 @@ function SidebarPlanMarks({
   plan,
   current,
   disabled,
+  onContextMenu,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
   current: boolean;
   disabled: boolean;
+  /** Offers the row's own menu, so a right-click on a button over its end still reaches it. */
+  onContextMenu: (event: React.MouseEvent) => void;
 }): React.JSX.Element {
   return (
     <span className="sidebar-plan-marks">
@@ -123,6 +126,7 @@ function SidebarPlanMarks({
             aria-label={label}
             disabled={disabled}
             onClick={() => plans.onMarkPlan(plan.id, mark)}
+            onContextMenu={onContextMenu}
           >
             {icon}
           </button>
@@ -327,6 +331,13 @@ export function SidebarPlan({
     refocus.current = false;
     row.current?.focus();
   }, [rename.editing]);
+  // Note that the row is what the menu rings and hands focus back to, even
+  // when the right-click lands on Pin or Archive over its end.
+  const showMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    if (row.current === null) return;
+    actions.show({ x: event.clientX, y: event.clientY, align: MENU_ALIGN.START }, row.current);
+  };
   const repository =
     repositoryShown && plan.repository !== null ? (
       <span className="sidebar-plan-repository">{plan.repository}</span>
@@ -357,13 +368,7 @@ export function SidebarPlan({
             actions.close(false);
             onOpen();
           }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            actions.show(
-              { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
-              event.currentTarget,
-            );
-          }}
+          onContextMenu={showMenu}
         >
           <span className="sidebar-plan-line">
             <span className="sidebar-plan-name">{plan.name}</span>
@@ -378,6 +383,7 @@ export function SidebarPlan({
           plan={plan}
           current={current}
           disabled={actions.deletion.busy}
+          onContextMenu={showMenu}
         />
       )}
       {rename.note !== undefined ? (
