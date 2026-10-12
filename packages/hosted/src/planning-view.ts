@@ -25,6 +25,14 @@ import {
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
+import {
+  availableWorkspaceSchema,
+  workspaceJoinRequestSchema,
+  workspaceLeaveRequestSchema,
+  workspaceMemberRemovalSchema,
+  workspaceMemberSchema,
+  workspaceSchema,
+} from "./workspace-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -35,7 +43,9 @@ import { planTranscriptSchema } from "./transcript-wire.js";
  * open, and it is the plan a voice session binds to. The view carries plan
  * names, documents, and what was said on the active plan's calls from the
  * service, and nothing of this Mac's own: a plan's repository is the
- * service's, named on the plan itself.
+ * service's, named on the plan itself. Beside the plans it carries the
+ * workspaces the account is a member of and those it may join, and the
+ * shapes the window asks a join, a members read, a removal, and a leave in.
  */
 
 /** Where one read of the service stands, as the window draws it. */
@@ -363,6 +373,10 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
+  /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
+  workspaces: EffectSchema.Array(workspaceSchema),
+  /** The workspaces of GitHub App installations the account reaches and may join, as the last list read answered; none before the first lands. */
+  available: EffectSchema.Array(availableWorkspaceSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -407,6 +421,8 @@ export type PlanningView = typeof planningViewSchema.Type;
 export const IDLE_PLANNING_VIEW: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.IDLE,
+  workspaces: [],
+  available: [],
   document: { status: PLANNING_READ.IDLE },
 };
 
@@ -414,6 +430,13 @@ export const IDLE_PLANNING_VIEW: PlanningView = {
 export const planningStartRequestSchema = planCreateRequestSchema;
 
 export type PlanningStartRequest = typeof planningStartRequestSchema.Type;
+
+/** The repository chip's read, as the window asks it: the workspace the listing is for, where one is chosen; every repository the account reaches otherwise. */
+export const planningRepositoriesParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.optionalKey(workspaceSchema.fields.id),
+});
+
+export type PlanningRepositoriesParams = typeof planningRepositoriesParamsSchema.Type;
 
 /** Renaming a plan, as the window asks it: the plan, and the name the service keeps. */
 export const planningRenameParamsSchema = EffectSchema.Struct({
@@ -628,3 +651,63 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
+
+/** Why a workspace call answered nothing a window can draw. */
+export const WORKSPACE_CALL_FAILURE = {
+  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
+  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+  /** The account's role does not allow it, or the workspace is a personal one: a member removing someone, an owner removed or leaving. */
+  NOT_PERMITTED: "not-permitted",
+} as const;
+
+export type WorkspaceCallFailure =
+  (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];
+
+const workspaceCallFailureSchema = EffectSchema.Struct({
+  failure: EffectSchema.Literals(Object.values(WORKSPACE_CALL_FAILURE)),
+});
+
+/** Joining the workspace of a GitHub App installation, as the window asks it: the installation, by GitHub's id. */
+export const planningWorkspaceJoinParamsSchema = workspaceJoinRequestSchema;
+
+export type PlanningWorkspaceJoinParams = typeof planningWorkspaceJoinParamsSchema.Type;
+
+/** A join, as the window hears it: the workspace joined, which the view's list then holds, or why none was. */
+export const planningWorkspaceJoinAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ workspace: workspaceSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceJoinAnswer = typeof planningWorkspaceJoinAnswerSchema.Type;
+
+/** A workspace's members, as the window asks for them: the workspace. */
+export const planningWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspaceMembersParams = typeof planningWorkspaceMembersParamsSchema.Type;
+
+/** Removing one member of a workspace, as the window asks it: the workspace and the member's account. */
+export const planningWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalSchema;
+
+export type PlanningWorkspaceMemberRemoveParams =
+  typeof planningWorkspaceMemberRemoveParamsSchema.Type;
+
+/** A workspace's members, as the window hears them after a read or a removal: the members as they then stand, or why there are none. */
+export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceMembersAnswer = typeof planningWorkspaceMembersAnswerSchema.Type;
+
+/** Leaving a workspace, as the window asks it: the workspace. */
+export const planningWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspaceLeaveParams = typeof planningWorkspaceLeaveParamsSchema.Type;
+
+/** A leave, as the window hears it: left, the view's list then without it, or why not. */
+export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ left: EffectSchema.Literal(true) }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;

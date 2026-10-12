@@ -110,4 +110,5 @@ export {
 export {
   HostedWorkspaceClient,
   type HostedWorkspaceClientOptions,
+  type WorkspaceCallResult,
 } from "./workspace-client.js";
