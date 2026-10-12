@@ -1,3 +1,4 @@
+import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
 import {
   PLAN_FILE_REFUSAL,
   type PlanFileAnswer,
@@ -14,7 +15,6 @@ import {
 } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { readRepositoryFile } from "../github/repository-file.js";
-import { type PlanStoreFailure, readPlan } from "./plan-store.js";
 import {
   fileLines,
   holdsNul,

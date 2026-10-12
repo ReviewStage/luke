@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { planBoard } from "@sidecar/database/schemas/plan";
 import { turns } from "@sidecar/database/schemas/storage";
@@ -66,7 +67,6 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
-import { createPlan } from "../server/hosted/plan-store";
 import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,

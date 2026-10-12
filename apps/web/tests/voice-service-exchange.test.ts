@@ -4,6 +4,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
+import {
+  createPlan,
+  openPlanConversation,
+  readPlan,
+  savePlanText,
+  updatePlan,
+} from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
@@ -25,13 +32,6 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { saveNotes } from "../server/hosted/plan-notes";
-import {
-  createPlan,
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-  updatePlan,
-} from "../server/hosted/plan-store";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,

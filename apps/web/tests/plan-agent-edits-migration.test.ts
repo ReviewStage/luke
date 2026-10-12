@@ -4,13 +4,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { readPlan } from "../server/hosted/plan-store";
 
 /**
  * plan-agent-edits-migration.test.ts -- migration 0084 carries a coding agent's journaled notes onto the new template.

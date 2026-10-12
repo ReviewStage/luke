@@ -1,5 +1,6 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -10,7 +11,6 @@ import {
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import type { PlanStoreEffect } from "./plan-store.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
 
 /**

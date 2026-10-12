@@ -1,12 +1,12 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { repositoryPin } from "@sidecar/database/schemas/repository-pin";
 import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { PlanStoreEffect } from "./plan-store.js";
 
 /**
  * repository-pin-store.ts -- the repositories an account pinned in the sidebar, read and written for `/api/repository-pins`.

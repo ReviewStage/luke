@@ -8,6 +8,12 @@ import {
   type PlanWriter,
   readRevision,
 } from "@sidecar/database/models/plan-revisions";
+import {
+  createPlan,
+  deletePlan,
+  readPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import { voiceSessions } from "@sidecar/database/schemas/voice";
@@ -31,7 +37,6 @@ import {
   saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
 

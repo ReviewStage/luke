@@ -18,6 +18,7 @@
     "./models/ids": "./src/models/ids.js",
     "./models/message-reads": "./src/models/message-reads.js",
     "./models/plan-revisions": "./src/models/plan-revisions.js",
+    "./models/plan-store": "./src/models/plan-store.js",
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/soft-delete": "./src/models/soft-delete.js",

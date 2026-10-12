@@ -2,6 +2,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@sidecar/database/models/account-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -30,7 +31,6 @@ import {
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
-import { readPlan } from "../plan-store.js";
 
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.

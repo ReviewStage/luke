@@ -8,6 +8,7 @@ import {
 } from "@sidecar/database/models/account-store";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
+import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -119,7 +120,6 @@ import {
   readInboxItem,
 } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { createPlan, savePlanText, updatePlan } from "../server/hosted/plan-store";
 import {
   type FakeGitHub,
   githubReaching,

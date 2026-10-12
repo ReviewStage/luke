@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  createPlan,
+  deletePlan,
+  openPlanConversation,
+  readPlan,
+} from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
@@ -27,12 +33,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  createPlan,
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-} from "../server/hosted/plan-store";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,

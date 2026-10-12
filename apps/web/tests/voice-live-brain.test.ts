@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
@@ -45,7 +46,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { fillChildTitle } from "../server/hosted/child-titles";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import {
   SEARCH_WEB_REFUSAL,

@@ -4,6 +4,7 @@ import { db } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listJournals } from "@sidecar/database/models/message-reads";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
@@ -40,7 +41,6 @@ import {
   READ_CODING_AGENT_TOOL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";

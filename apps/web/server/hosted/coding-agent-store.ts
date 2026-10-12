@@ -7,6 +7,7 @@ import {
   type TurnUsageRow,
   turnUsagesOf,
 } from "@sidecar/database/models/message-reads";
+import { PlanArchived } from "@sidecar/database/models/plan-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import {
   codingAgent,
@@ -30,7 +31,6 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
-import { PlanArchived } from "./plan-store.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.

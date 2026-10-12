@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
 import { getTestDB } from "@sidecar/database/testing";
@@ -33,7 +34,6 @@ import {
 } from "../server/hosted/coder-host/inbox-image";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
-import { createPlan, deletePlan } from "../server/hosted/plan-store";
 
 /**
  * The coding agent's inbox tools, through their public functions against a

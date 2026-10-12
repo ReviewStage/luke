@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import {
+  createPlan,
+  openPlanConversation,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -9,7 +14,6 @@ import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createPlan, openPlanConversation, savePlanText } from "../server/hosted/plan-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, insertMessage } from "./support/store-rows";
 

@@ -1,3 +1,4 @@
+import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { Effect, type Redacted, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -7,7 +8,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "./http.js";
-import type { PlanStoreEffect } from "./plan-store.js";
 import { type KeyRing, parseKeyRing, rewrapProviderKey } from "./provider-key-seal.js";
 import { listEveryProviderKeyRow, rewrapProviderKeyRow } from "./provider-key-store.js";
 
