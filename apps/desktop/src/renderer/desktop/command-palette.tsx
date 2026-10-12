@@ -207,18 +207,33 @@ function planRows(plans: PlansControl, open: (planId: string) => void): readonly
 /**
  * The open plan's coding agents, as the column's "+" lists them, then its
  * subagents, as the side panel's "+" lists them, each beside the plan's
- * name; none while no plan is open.
+ * name; none while no plan is open. An agent opens as its notification's
+ * click opens it, and a subagent's tab as the "+" opens it, the version
+ * history giving way to either, so neither opens behind what covers it.
  */
 function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
-  if (plans.activePlanId === undefined) return [];
-  const planName = [...plans.plans, ...plans.archived].find(
-    (plan) => plan.id === plans.activePlanId,
-  )?.name;
+  const planId = plans.activePlanId;
+  if (planId === undefined) return [];
+  const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
   const workers = planWorkers(plans.work.turns, workRowsOf(plans.work.turns, plans.work.callLive));
-  const entries = [
-    ...agentEntries(plans.mainTabs, plans.agents, true),
-    ...panelEntries({ panel: plans.sidePanel, kinds: [], workers, files: [], standing: true }),
-  ];
+  const agents = agentEntries(plans.mainTabs, plans.agents, true).map(({ row }) => ({
+    row,
+    onPick: () => plans.onShowAgent(planId, row.id),
+  }));
+  const subagents = panelEntries({
+    panel: plans.sidePanel,
+    kinds: [],
+    workers,
+    files: [],
+    standing: true,
+  }).map(({ row, onPick }) => ({
+    row,
+    onPick: () => {
+      if (plans.history.open) plans.history.onClose();
+      onPick();
+    },
+  }));
+  const entries = [...agents, ...subagents];
   return entries.map(({ row, onPick }) => ({
     icon: row.icon,
     label: row.label,
@@ -406,11 +421,19 @@ export function CommandPalette({
       if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
       run();
     });
+  // The seek for a setting's row gives itself up once another is asked
+  // for or Settings is left, so it never lands on a later visit's page.
+  const landing = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => {
+    if (tab !== PANEL_TAB.SETTINGS) landing.current?.();
+  }, [tab]);
+  useEffect(() => () => landing.current?.(), []);
   const land = (page: SettingsView, id: string) =>
     choose(() => {
       onTabChange(PANEL_TAB.SETTINGS);
       settings.onViewChange(page);
-      landOnSettingsRow(id);
+      landing.current?.();
+      landing.current = landOnSettingsRow(id);
     });
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {

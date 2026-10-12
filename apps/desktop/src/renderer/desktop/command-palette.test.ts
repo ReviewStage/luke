@@ -3,17 +3,23 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import {
+  codingAgentsControl,
+  plansControl,
+  UNPINNED_SUMMARY,
+  versionHistoryControl,
+} from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
-import { isAgentTab } from "../planning/tab-strip-model";
+import { isSubagentTab } from "../planning/tab-strip-model";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { settingsRowsInput } from "../settings/settings-panel";
@@ -69,6 +75,33 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
+/** Luke's planning model at work on the open plan: one worker, counting routes. */
+const WORK: PlansControl["work"] = {
+  callLive: true,
+  earlier: undefined,
+  onLoadEarlier: () => Promise.resolve(),
+  turns: [
+    {
+      turnId: "turn-1",
+      startedAt: 1_000,
+      state: PLAN_WORK_STATE.RUNNING,
+      earlierOmitted: false,
+      parts: [
+        {
+          type: PLAN_WORK_PART.TOOL,
+          id: "call-worker",
+          tool: PLAN_WORK_TOOL.WORKER,
+          name: "worker",
+          state: PLAN_WORK_STATE.RUNNING,
+          subject: "Count the routes.",
+          input: "{}",
+          session: { earlierOmitted: false, parts: [] },
+        },
+      ],
+    },
+  ],
+};
+
 const PALETTE = '[cmdk-root=""]';
 
 let root: Root | undefined;
@@ -97,7 +130,8 @@ interface Asked {
   selected: string[];
   tabs: PanelTab[];
   ran: string[];
-  agents: string[];
+  /** Each agent shown, by its plan and its id. */
+  agents: [string, string][];
   views: SettingsView[];
 }
 
@@ -108,7 +142,6 @@ interface Asked {
  */
 function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}): Asked {
   const asked: Asked = { selected: [], tabs: [], ran: [], agents: [], views: [] };
-  const base = plansControl();
   const plans = plansControl({
     page: PLANS_PAGE.DOCUMENT,
     plans: [OPEN, ...TWINS],
@@ -117,12 +150,7 @@ function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}
     region: { kind: DOCUMENT_REGION.READY, plan: OPEN },
     onSelect: (planId) => asked.selected.push(planId),
     agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
-    mainTabs: {
-      ...base.mainTabs,
-      onChoose: (tab) => {
-        if (isAgentTab(tab)) asked.agents.push(tab.agent);
-      },
-    },
+    onShowAgent: (planId, agentId) => asked.agents.push([planId, agentId]),
     ...overrides,
   });
   const rows = settingsRowsInput(settingsPanelProps());
@@ -299,14 +327,31 @@ test("a search finds a plan by its repository, so two plans of one name are told
   );
 });
 
-test("the open plan's coding agent is listed beside the plan's name and opens its tab", () => {
+test("the open plan's coding agent is listed beside the plan's name and opens as its notification would, over whatever covers its tab", () => {
   const asked = mountWindow(PANEL_TAB.SETTINGS);
   openPalette();
   pressFilter("Agents");
   assert.deepEqual(rows(), ["Invite email template · Teammate invitations"]);
   choose("Invite email template");
   assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "an agent opens on the Plans tab");
-  assert.deepEqual(asked.agents, [AGENT.id]);
+  assert.deepEqual(asked.agents, [[OPEN.id, AGENT.id]]);
+});
+
+test("a subagent chosen over the version history opens its tab with the history put away", () => {
+  const seen: string[] = [];
+  const base = plansControl();
+  mountWindow(PANEL_TAB.PLANS, {
+    work: WORK,
+    history: versionHistoryControl({ open: true, onClose: () => seen.push("history closed") }),
+    sidePanel: {
+      ...base.sidePanel,
+      onChoose: (tab) => seen.push(isSubagentTab(tab) ? tab.subagent : "?"),
+    },
+  });
+  openPalette();
+  pressFilter("Agents");
+  choose("Count the routes.");
+  assert.deepEqual(seen, ["history closed", "call-worker"]);
 });
 
 test("no plan open lists no agents", () => {
