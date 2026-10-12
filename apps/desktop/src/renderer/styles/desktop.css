@@ -1399,6 +1399,35 @@ body,
   flex-direction: column;
 }
 
+/* Laid out still, but not drawn, while an agent's tab is the column's
+   chosen one, so the plan is found where it was left. */
+.desktop-document[hidden] {
+  display: none;
+}
+
+/* An agent's or the draft's tab in the plan's column: its transcript and
+   its composer, each keeping to the document's measure in the middle of
+   the column, as they keep to it in a wide side panel. */
+.desktop-agent {
+  --reading-room: calc((100% - var(--reading-width)) / 2);
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.desktop-agent [role="log"],
+.desktop-agent .agent-composer {
+  padding-inline: max(var(--content-inset), var(--reading-room));
+}
+
+/* The transcript's way back to its newest line stands on the column's own
+   ground rather than the panel's. */
+.desktop-agent .conversation-scroll {
+  --button-ground: var(--desktop-ground);
+}
+
 /* The "Edited by" line opens the version history, so it is a press drawn as
    the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
@@ -2872,8 +2901,9 @@ body,
   color: var(--text-primary);
 }
 
-/* A quiet tab, the plan column's lone one, wears no fill at rest even
-   chosen, and the hover fill under the pointer, as a title does. */
+/* A quiet tab, the plan's while it is its column's lone one, wears no fill
+   at rest even chosen, and the hover fill under the pointer, as a title
+   does. */
 .tab[data-quiet="true"]:not(:hover) {
   background: none;
 }
@@ -3111,11 +3141,26 @@ body,
   font-weight: 680;
 }
 
-/* The plan's column holds its one tab, so the tab takes the room the
-   heading has rather than a most of its own, and gives way to the toolbar's
-   buttons by truncating its label, down to a few of its characters, rather
-   than by scrolling. */
-.desktop-toolbar-heading .tab {
+/* The plan's column's tabs and their "+" take what the toolbar leaves
+   beside the plan's actions, as the side panel's row's do beside its
+   full-screen button: the strip scrolls its tabs within that room and the
+   "+" stands pinned after it. */
+.main-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--list-gap);
+}
+
+/* A tab dragged in the plan's column is lifted on the column's ground. */
+.main-tabs .tab[data-dragging="true"] {
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-ground);
+}
+
+/* The plan's tab alone in its column takes the room the heading has rather
+   than a most of its own, and gives way to the toolbar's buttons by
+   truncating its label, down to a few of its characters, rather than by
+   scrolling. Beside an agent's it is a tab like any other. */
+.desktop-toolbar-heading .tab[data-quiet="true"] {
   min-width: calc(
     var(--tab-start) +
     var(--control-glyph) +

@@ -228,9 +228,9 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.doesNotMatch(toolbar?.textContent ?? "", /Copy plan/u);
   assert.match(toolbar?.textContent ?? "", /Start/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
-  // The toolbar is one row: the title alone in its heading, and the plan's
-  // chip in the actions row ahead of Start, waiting on a pick.
-  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  // The toolbar is one row: the plan's tab alone in its heading's strip, and
+  // the plan's chip in the actions row ahead of Start, waiting on a pick.
+  assert.equal(document.querySelectorAll('.desktop-toolbar-heading [role="tab"]').length, 1);
   assert.equal(document.querySelector(".desktop-toolbar-subtitle"), null);
   const chip = document.querySelector(".desktop-toolbar-actions .plan-compose-chip");
   assert.equal(chip?.textContent, "Choose repository");
@@ -261,7 +261,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.ok(deleteItem?.previousElementSibling instanceof HTMLHRElement);
   // A plan with a repository shows it in the sidebar's row, not in the toolbar.
   assert.equal(document.querySelector(".desktop-toolbar .plan-compose-chip"), null);
-  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  assert.equal(document.querySelectorAll('.desktop-toolbar-heading [role="tab"]').length, 1);
 
   choose("Open on GitHub");
   assert.deepEqual(kept.asked.openedOnGitHub, [PLAN.id]);
@@ -565,7 +565,7 @@ test("a press on the plan's tab only chooses it, while its right-click and the �
   assert.equal(title().getAttribute("aria-selected"), "true");
 
   rightClick(title(), 40, 12);
-  assert.deepEqual(labels(), ["Rename"]);
+  assert.deepEqual(labels(), ["Close others", "Rename"]);
   act(() => title().click());
   assert.deepEqual(labels(), [], "a press on the tab closes its menu");
   rightClick(title(), 40, 12);
