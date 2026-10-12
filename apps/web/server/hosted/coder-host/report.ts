@@ -1,5 +1,10 @@
-import { CODING_AGENT_REPORT_TOOL } from "@sidecar/hosted/coding-agent-wire";
 import {
+  CODING_AGENT_FAILURE,
+  CODING_AGENT_REPORT_TOOL,
+  type CodingAgentFailure,
+} from "@sidecar/hosted/coding-agent-wire";
+import {
+  REPORT_KIND,
   type Report,
   reportLine,
   WORKER_REPORT_KIND,
@@ -8,6 +13,7 @@ import {
 } from "@sidecar/hosted/rollout-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 
 /**
@@ -24,7 +30,10 @@ import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../..
  * refused, since no rollout waits on it. Note that a question or a block
  * answers by telling the worker to end its turn, because a coding agent's
  * turn is its whole run and Luke's answer can only reach it as its next
- * message; any other report tells it to carry on.
+ * message; any other report tells it to carry on. Beside the tool, the
+ * host reports how each of a worker's turns ended, finished, failed with
+ * its failure word, or stopped, so Luke hears of a worker that died
+ * without reporting.
  */
 
 /** The words the tool is shown, when to report and when to ask among them, since the worker reads them every step. */
@@ -100,4 +109,43 @@ export function reportTaken(report: Report): ReportToolResult {
     reported: reportLine(report),
     next: AWAITING_ANSWER.has(report.kind) ? REPORT_NEXT.WAIT : REPORT_NEXT.CARRY_ON,
   };
+}
+
+/** eve's events for a turn's end, the ones the host reports a worker's end on. */
+export type TurnEndEvent = Extract<
+  MessageStreamEvent,
+  { readonly type: "turn.completed" | "turn.failed" | "turn.cancelled" }
+>;
+
+/** The words Luke reads under the first line of a turn's end, by how it ended. */
+const TURN_END_TEXT = {
+  FINISHED:
+    "Its turn ended. read_coding_agent shows what it did and where its pull request stands.",
+  STOPPED: "Its turn was stopped before it ended.",
+} as const;
+
+/**
+ * How a worker's turn ended as the report Luke hears: finished, failed
+ * with the word the agent's status reads its failure as, or stopped. The
+ * failure word is the caller's to read from the settled turn, since eve's
+ * event alone does not carry the host's own refusals; a turn whose word
+ * could not be read fails as `other`.
+ */
+export function turnEndReport(
+  position: number,
+  event: TurnEndEvent,
+  failure: CodingAgentFailure | undefined,
+): Report {
+  switch (event.type) {
+    case "turn.completed":
+      return { kind: REPORT_KIND.FINISHED, position, text: TURN_END_TEXT.FINISHED };
+    case "turn.failed":
+      return {
+        kind: REPORT_KIND.FAILED,
+        position,
+        text: `Its turn failed: ${failure ?? CODING_AGENT_FAILURE.OTHER}.`,
+      };
+    case "turn.cancelled":
+      return { kind: REPORT_KIND.STOPPED, position, text: TURN_END_TEXT.STOPPED };
+  }
 }

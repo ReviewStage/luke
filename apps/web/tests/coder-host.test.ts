@@ -2141,4 +2141,55 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         });
       }),
   );
+
+  it.effect(
+    "a worker's turn that finishes, fails, or is stopped is reported to Luke once relayed, the failure by its word and each keyed by the turn, and a plain agent's end reports nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const ends = [
+          [1, "turn.completed"],
+          [2, "turn.failed"],
+          [3, "turn.cancelled"],
+          [undefined, "turn.completed"],
+        ] as const;
+
+        for (const [position, end] of ends) {
+          const rollout = position === undefined ? {} : { position };
+          const opened = yield* openAgent(host, undefined, undefined, undefined, rollout);
+          const { agent, auth, sessionId, admitted } = opened;
+          const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
+          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+          const events = codingTurn("turn_0", end);
+          for (const event of events) {
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            yield* host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+          }
+          const ended = events.at(-1);
+          assert.ok(
+            ended?.type === "turn.completed" ||
+              ended?.type === "turn.failed" ||
+              ended?.type === "turn.cancelled",
+          );
+          // An end eve hands the hook again is the report already taken.
+          yield* host.reportEnd(admitted, sessionId, ended);
+          yield* host.reportEnd(admitted, sessionId, ended);
+        }
+
+        assert.deepEqual(eve.sent, []);
+        assert.deepEqual(
+          eve.opened.map((each) => [each.message.turn, each.message.message]),
+          [
+            [
+              BRAIN_HOST_TURN.REPORT,
+              "[worker 1] finished\n\nIts turn ended. read_coding_agent shows what it did and where its pull request stands.",
+            ],
+            [BRAIN_HOST_TURN.REPORT, "[worker 2] failed\n\nIts turn failed: model."],
+            [BRAIN_HOST_TURN.REPORT, "[worker 3] stopped\n\nIts turn was stopped before it ended."],
+          ],
+        );
+      }),
+  );
 });

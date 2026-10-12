@@ -7,6 +7,7 @@ import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import { CODER } from "../../server/hosted/coder-host/bounds.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
+import type { TurnEndEvent } from "../../server/hosted/coder-host/report.js";
 import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
 import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
 import { runWeb } from "../../server/runtime.js";
@@ -35,17 +36,23 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * The agent's title is generated as one of its first turns completes, once
  * the relay has written the turn's answer it is named from, on a fiber of
  * its own so the hook is not held for it: the title fills in a moment after
- * the turn ends.
+ * the turn ends. A rollout worker's turn end, once relayed, is reported to
+ * Luke on the plan's conversation, finished, failed, or stopped, so a
+ * worker that died without reporting is still heard of.
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
 
-/** eve's event kinds for a turn's end, each of which stops the sandbox. */
+/** eve's event kinds for a turn's end, each of which stops the sandbox and is reported to Luke. */
 const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
   "turn.completed",
   "turn.failed",
   "turn.cancelled",
 ]);
+
+function endsTurn(event: MessageStreamEvent): event is TurnEndEvent {
+  return TURN_END_EVENTS.has(event.type);
+}
 
 /** Whether the credential set at the firewall is old enough to renew: set when the sandbox opened, or when the hook last renewed it. */
 function credentialIsOld(record: SandboxRecord, now: number): boolean {
@@ -120,7 +127,7 @@ export default defineHook({
       }
       // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay and it is stopped after.
       const ending =
-        TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined
+        endsTurn(event) && sandbox.get().openedAt !== undefined
           ? await ctx.getSandbox()
           : undefined;
       if (ending !== undefined) await recordBranch(ctx, ending);
@@ -134,6 +141,8 @@ export default defineHook({
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
           yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
+          // Reported after the relay, so the failure word is read off the turn it settled.
+          if (endsTurn(event)) yield* host.reportEnd(admitted.success, ctx.session.id, event);
           if (event.type === "turn.completed") {
             // The title is asked for off the hook's path; the fiber outlives this hook and ends on its own.
             yield* Effect.forkDetach(host.title(admitted.success));

@@ -19,11 +19,12 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { childConversationId } from "../brain-host/ids.js";
+import { childConversationId, hostTurnId } from "../brain-host/ids.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { reportToPlan } from "../brain-host/report.js";
 import {
   type CodingAgent,
+  latestTurnsOf,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
@@ -78,8 +79,11 @@ import {
   reportAt,
   reportRejected,
   reportTaken,
+  type TurnEndEvent,
+  turnEndReport,
   workerReport,
 } from "./report.js";
+import { codingAgentFailureOf } from "./status.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -257,6 +261,18 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     call: ReportCall,
   ): Effect.Effect<ReportToolResult, never, SqlClient.SqlClient | HttpClient.HttpClient>;
+  /**
+   * Hands Luke how one of a worker's turns ended, once the relay has
+   * settled it: finished, failed with its failure word, or stopped, keyed
+   * by the turn's id so an end eve replays is one report. An agent with no
+   * position reports nothing, and a report that cannot be handed on is
+   * logged, so the caller's stop of the sandbox follows either way.
+   */
+  reportEnd(
+    admitted: AdmittedConversation,
+    sessionId: string,
+    event: TurnEndEvent,
+  ): Effect.Effect<void, never, SqlClient.SqlClient | HttpClient.HttpClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -616,6 +632,34 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(reportRejected(REPORT_REFUSAL.UNAVAILABLE))),
+      ),
+
+    reportEnd: (admitted, sessionId, event) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return;
+        const { id: agentId, position, planId } = found.success;
+        if (position === null) return;
+        const { userId, conversationId } = admitted.target;
+        const eve = yield* seams.planEve(userId);
+        if (eve === undefined) {
+          yield* Effect.logWarning(`The end of agent ${agentId} found no eve to reach.`);
+          return;
+        }
+        const turnId = hostTurnId(sessionId, event.data.turnId);
+        // The failure word is read off the row the relay settled, where the host's own refusals are named.
+        const latest = (yield* latestTurnsOf(userId, [conversationId])).get(conversationId);
+        const failure = latest?.id === turnId ? codingAgentFailureOf(latest) : undefined;
+        const reported = yield* reportToPlan(
+          { asks: askRecord(), eve },
+          { userId, planId, report: turnEndReport(position, event, failure), clientKey: turnId },
+        );
+        if (Result.isFailure(reported)) {
+          yield* Effect.logWarning(`The end of agent ${agentId} was not reported to Luke.`);
+        }
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.void),
       ),
 
     title: (admitted) =>
