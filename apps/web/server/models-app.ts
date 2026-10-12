@@ -18,7 +18,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * `GET /api/models` answers the instance's cached read of AI Gateway's
  * public catalog, filtered to what Luke offers (`hosted/model-catalog.ts`):
- * each model's id, name, provider, and the efforts it lists. The catalog is
+ * each model's id, name, provider, the efforts it lists, and its two
+ * context windows where it offers a choice of them. The catalog is
  * public and the same for every account, and the bearer is still resolved
  * first, as every hosted endpoint resolves it, so the read is answered to a
  * signed-in desktop alone. A catalog the instance cannot read is an outage,

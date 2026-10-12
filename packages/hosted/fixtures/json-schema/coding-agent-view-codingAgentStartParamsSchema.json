@@ -20,6 +20,13 @@
       "minLength": 1,
       "maxLength": 200
     },
+    "contextWindow": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "long"
+      ]
+    },
     "task": {
       "type": "string",
       "minLength": 1,

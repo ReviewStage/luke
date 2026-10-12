@@ -2,6 +2,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -144,6 +145,9 @@ export function codingAgentSummary(
     planId: agent.planId,
     model: agent.model,
     effort: agent.effort,
+    ...(agent.contextWindow === CONTEXT_WINDOW.STANDARD
+      ? { contextWindow: agent.contextWindow }
+      : undefined),
     title: agent.title,
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -17,6 +18,8 @@ import {
   listCodingAgents,
   type NewCodingAgent,
   readCodingAgent,
+  readCodingAgentContext,
+  updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
@@ -116,6 +119,40 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
       });
       assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.some(agent));
     }),
+  );
+
+  it.effect(
+    "an agent runs on its model's whole window unless its Start or a later change names the standard one, which a change naming none takes back",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const long = started(yield* createCodingAgent(userId, start(planId)));
+        assert.equal(long.contextWindow, CONTEXT_WINDOW.LONG);
+
+        const standard = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { model: "openai/gpt-5.5", contextWindow: CONTEXT_WINDOW.STANDARD }),
+          ),
+        );
+        assert.equal(standard.contextWindow, CONTEXT_WINDOW.STANDARD);
+        const context = yield* readCodingAgentContext(userId, standard.id);
+        assert.equal(Option.getOrUndefined(context)?.contextWindow, CONTEXT_WINDOW.STANDARD);
+
+        const changed = yield* updateCodingAgentChoice(userId, long.id, {
+          model: "openai/gpt-5.5",
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        });
+        assert.equal(Option.getOrUndefined(changed)?.contextWindow, CONTEXT_WINDOW.STANDARD);
+        yield* updateCodingAgentChoice(userId, long.id, {
+          model: "openai/gpt-5.5",
+          effort: "low",
+        });
+        const read = yield* readCodingAgent(userId, long.id);
+        assert.equal(Option.getOrUndefined(read)?.contextWindow, CONTEXT_WINDOW.LONG);
+        assert.equal(Option.getOrUndefined(read)?.effort, "low");
+      }),
   );
 
   it.effect("a Start on a task holds the task it was handed and no copy of the plan", () =>

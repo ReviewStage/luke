@@ -1,3 +1,4 @@
+import { CONTEXT_WINDOW, type ContextWindow } from "@sidecar/hosted/coding-agent-wire";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -9,8 +10,11 @@ import { conversations } from "./storage-schema.js";
  *
  * A coding agent is a `coding_agent` conversation: its transcript is that
  * conversation's `messages` rows and its status its latest `turns` row, so
- * this row holds only what the conversation does not. The model and effort
- * are read on every step, so switching later is a row update; the snapshot
+ * this row holds only what the conversation does not. The model, effort,
+ * and context window are read on every step, so switching later is a row
+ * update; the window is the model's whole one unless the developer chose
+ * the smaller standard one, which is also what an agent started before the
+ * window could be chosen ran on and keeps; the snapshot
  * is the exact plan text the agent was handed, kept whole because the plan
  * keeps being edited after, or where the developer started it on a task of
  * their own, the snapshot is null and the task is what it was handed, so
@@ -70,6 +74,11 @@ export const codingAgent = pgTable(
     /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
     model: text("model").notNull(),
     effort: text("effort").notNull(),
+    /** Which of the model's context windows the agent runs on; a model with one window runs on it whatever this says. */
+    contextWindow: text("context_window")
+      .$type<ContextWindow>()
+      .notNull()
+      .default(CONTEXT_WINDOW.LONG),
     /** The plan's document exactly as the agent was given it; null for an agent handed a task instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */

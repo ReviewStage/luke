@@ -40,6 +40,7 @@ const EFFECT_MODULE_SCHEMAS = {
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "coding-agent-wire": {
+    contextWindowSchema: codingAgentWire.contextWindowSchema,
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
     codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
     codingAgentRenameRequestSchema: codingAgentWire.codingAgentRenameRequestSchema,
@@ -96,6 +97,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
   "models-wire": {
+    contextWindowsSchema: modelsWire.contextWindowsSchema,
     catalogModelSchema: modelsWire.catalogModelSchema,
     modelsAnswerSchema: modelsWire.modelsAnswerSchema,
     modelChoiceSchema: modelsWire.modelChoiceSchema,

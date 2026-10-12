@@ -1,3 +1,4 @@
+import type { ContextWindow } from "@sidecar/hosted/coding-agent-wire";
 import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -18,9 +19,13 @@ export const accountPreference = pgTable("account_preference", {
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.
+   * The context window beside them is null for the model's whole window,
+   * which is also what a choice written before the window could be chosen
+   * reads as, and `standard` where the smaller window was chosen.
    */
   codingAgentModel: text("coding_agent_model"),
   codingAgentEffort: text("coding_agent_effort"),
+  codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
   createdAt: instant("created_at").notNull().defaultNow(),
   /**
    * When the preferences part was last written; null on a row only a

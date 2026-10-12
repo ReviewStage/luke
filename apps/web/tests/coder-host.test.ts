@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -111,6 +111,19 @@ const CATALOG: readonly OfferedModel[] = [
     name: "GPT-6.1 Sol",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
+  },
+];
+
+/** The catalog with a model offering two windows beside it: priced apart past 272K, as OpenAI prices its long context. */
+const WINDOWED_CATALOG: readonly OfferedModel[] = [
+  ...CATALOG,
+  {
+    id: "openai/gpt-5.5",
+    name: "GPT-5.5",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+    contextWindow: 1_050_000,
+    contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
   },
 ];
 
@@ -493,6 +506,71 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(unlisted.success.modelOptions, {
           providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
         });
+      }),
+  );
+
+  it.effect(
+    "a step on a model with two windows is told its whole window until the agent chooses the standard one, and its context is told against the window chosen",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(
+          host,
+          "openai/gpt-5.5",
+        );
+        const windowNow = Effect.map(
+          host.model(admitted, undefined).pipe(Effect.provide(modelCatalogOf(WINDOWED_CATALOG))),
+          (selected) =>
+            Result.isSuccess(selected)
+              ? selected.success.modelContextWindowTokens
+              : assert.fail("the step was refused"),
+        );
+        const contextNow = Effect.map(
+          transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(WINDOWED_CATALOG)),
+          ),
+          (page) => page.context,
+        );
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relay = (event: MessageStreamEvent) =>
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash });
+        const data = { turnId: "turn_0", sequence: 0 };
+        yield* relay(stamped({ type: "turn.started", data }));
+        yield* relay(stamped({ type: "message.received", data: { ...data, message: PLAN_TEXT } }));
+        yield* relay(
+          stamped({
+            type: "step.completed",
+            data: {
+              ...data,
+              stepIndex: 0,
+              finishReason: "tool-calls",
+              usage: { inputTokens: 300_000, outputTokens: 400 },
+            },
+          }),
+        );
+        assert.equal(yield* windowNow, 1_050_000);
+        const long = yield* contextNow;
+        assert.equal(long?.windowTokens, 1_050_000);
+        assert.equal(long?.compactionThresholdTokens, 945_000);
+
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "openai/gpt-5.5",
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        });
+        assert.equal(yield* windowNow, 272_000);
+        const standard = yield* contextNow;
+        assert.equal(standard?.windowTokens, 272_000);
+        assert.equal(standard?.compactionThresholdTokens, 244_800);
+
+        // A change naming no window is the model's whole window again.
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "openai/gpt-5.5",
+          effort: "low",
+        });
+        assert.equal(yield* windowNow, 1_050_000);
       }),
   );
 

@@ -24,9 +24,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the agent is idle; it shows in the transcript at once as the developer's
  * own row. Every send carries a key the client made, so a send repeated
  * after a lost answer finds the message it already sent and sends nothing
- * again. An agent's model and effort can be changed while it stands: the
- * change is read at its next step, and the answer is the agent as it then
- * stands. An agent's title is generated once from its plan as it starts,
+ * again. An agent's model, effort, and context window can be changed while
+ * it stands: the change is read at its next step, and the answer is the
+ * agent as it then stands. A context window is named only where it is the
+ * standard one; a choice that names none runs on the model's whole window. An agent's title is generated once from its plan as it starts,
  * and the developer may rename it; a rename is never overwritten, and an
  * empty one clears the title so the tab falls back to the model's name.
  *
@@ -49,6 +50,23 @@ export const CODING_AGENT_BOUNDS = {
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
 } as const;
+
+/**
+ * The context windows a choice may run on: the long one, the model's whole
+ * window, which every choice runs on unless it names the other, and the
+ * standard one, which a model offers apart only where its provider prices
+ * the tokens past it higher (`models-wire.ts`); a model with one window
+ * has the one, whichever a choice names.
+ */
+export const CONTEXT_WINDOW = {
+  STANDARD: "standard",
+  LONG: "long",
+} as const;
+
+export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW];
+
+/** A context window as a choice names it. */
+export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
 /** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
@@ -99,7 +117,8 @@ function trimmedText(maximumChars: number) {
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
- * them; both or neither, since a choice is one thing. A task, where the
+ * them; both or neither, since a choice is one thing, and the context
+ * window beside them where it is the standard one. A task, where the
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is; with none, the agent is handed the plan.
  */
@@ -107,6 +126,7 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+  contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
 });
 
@@ -146,6 +166,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
+  /** The context window the agent runs on where it is the standard one; absent for the model's whole window. */
+  contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** Epoch milliseconds the agent was started. */

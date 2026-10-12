@@ -20,6 +20,13 @@
         "effort": {
           "type": "string"
         },
+        "contextWindow": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "long"
+          ]
+        },
         "title": {
           "anyOf": [
             {

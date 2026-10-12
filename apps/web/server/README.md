@@ -634,7 +634,9 @@ The preferences snapshot carries two parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
 `codingAgent` is the account's default model and effort for a coding agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
-spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses.
+spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses,
+with `contextWindow: "standard"` beside them where the smaller context window
+of a model offering two was chosen (absent is the model's whole window).
 Settings › Coding agents and the Start menu's chevron both write it, as one
 value rather than two that could disagree. A PUT carries either part or both;
 a part left out stands as it was, so the desktop's settings sync never
@@ -642,8 +644,9 @@ resets the chosen model and the Start menu never touches the voice. A
 `codingAgent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
-The store keeps the two columns beside `voice` on `account_preference`, and
-reads a half-written pair as the default. `updated_at` is the preferences
+The store keeps the columns beside `voice` on `account_preference`, and
+reads a half-written pair as the default; `coding_agent_context_window` is
+null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
@@ -653,13 +656,24 @@ over the voice it holds.
 ## The models group
 
 `server/models-app.ts` answers `GET /api/models`: the models a coding agent
-may run on, as `{ models: [{ id, name, provider, efforts }] }`. The list is
+may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
 `server/hosted/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
 boundary and kept to the Anthropic and OpenAI models whose tags carry both
 `tool-use` and `reasoning`; each model's efforts are the `values` of the
 `effort` entry among its `reasoning_options`, and a model listing none is
-left out, since no Start could name an effort for it. The read is the
+left out, since no Start could name an effort for it. A model offers two
+context windows, `contextWindows: { standardTokens, longTokens,
+longInputPriceFactor?, longOutputPriceFactor? }`, where its `pricing` tiers
+its input past a boundary inside its `context_window` — OpenAI's 272K on the
+GPT-5.4 line and after, Anthropic's 100K on Claude Haiku 5.5 — and a model
+priced the same across its whole window has the one window; the boundary is
+the standard window, which a choice opts into, and the whole window is the
+long one, which every choice runs on unless it names the standard one, as
+every agent did before the choice existed; the factors are what the tier
+past the boundary costs beside the first. No offered model needs a request
+option for either window, so the choice is the window eve compacts against
+and the context ring reads, nothing more. The read is the
 `ModelCatalog` service `server/runtime.ts` builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
@@ -669,7 +683,8 @@ it, though the catalog is public and the same for every account.
 The same module holds the functions the coding-agent routes and the coder
 host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
 through `validateModelChoice`, accepts a `(model, effort)` only for an
-offered model at an effort it lists, and `providerModelOf`, which turns a
+offered model at an effort it lists, keeping the standard window only for a
+model that offers two, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
 Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the

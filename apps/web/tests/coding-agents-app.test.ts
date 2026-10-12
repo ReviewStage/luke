@@ -8,6 +8,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
@@ -133,7 +134,10 @@ const SAVED = {
 
 const SOL = "openai/gpt-6.1-sol";
 
-/** The two models offered, each with its prices in dollars per token. */
+/** A model offering two context windows, as OpenAI prices its long context apart. */
+const GPT_LONG = "openai/gpt-5.5";
+
+/** The models offered, each with its prices in dollars per token, one with two windows. */
 const CATALOG: readonly OfferedModel[] = [
   {
     id: CODING_AGENT_DEFAULT_CHOICE.model,
@@ -148,6 +152,14 @@ const CATALOG: readonly OfferedModel[] = [
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
     pricing: { inputUsd: 0.000002, outputUsd: 0.00001, cachedInputUsd: 0.000001 },
+  },
+  {
+    id: GPT_LONG,
+    name: "GPT-5.5",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+    contextWindow: 1_050_000,
+    contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
   },
 ];
 
@@ -945,6 +957,65 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           );
         }
+      }),
+  );
+
+  it.effect(
+    "a Start and a change may name the standard window of a model that offers two, which the agent and the default carry; a change naming none is the model's whole window again, a model with one window drops it, and a window without a model is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const standard = {
+          model: GPT_LONG,
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        };
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), ...standard })),
+        );
+        assert.equal(agent.contextWindow, CONTEXT_WINDOW.STANDARD);
+        assert.deepEqual((yield* readAccountPreferences(owner))?.codingAgent, standard);
+        const chooseAs = (body: WireBoundaryInput) =>
+          ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
+
+        const whole = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chooseAs({ model: GPT_LONG, effort: "high" }),
+        );
+        assert.equal(whole.agent.contextWindow, undefined);
+        assert.equal(
+          Option.getOrUndefined(yield* readCodingAgent(owner, agent.id))?.contextWindow,
+          CONTEXT_WINDOW.LONG,
+        );
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chooseAs(standard),
+        );
+        assert.equal(again.agent.contextWindow, CONTEXT_WINDOW.STANDARD);
+        const one = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chooseAs({ ...standard, model: SOL }),
+        );
+        assert.equal(one.agent.contextWindow, undefined);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.equal(Option.getOrUndefined(stored)?.contextWindow, CONTEXT_WINDOW.LONG);
+
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              contextWindow: CONTEXT_WINDOW.STANDARD,
+            }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(yield* chooseAs({ ...standard, contextWindow: "huge" }), invalid);
       }),
   );
 
