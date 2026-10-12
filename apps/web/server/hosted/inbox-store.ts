@@ -1,4 +1,4 @@
-import { ACCOUNT_INBOX_BOUNDS, type AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
   INBOX_BOUNDS,
   INBOX_STATUS,
@@ -349,7 +349,7 @@ function accountWaiting(userId: string) {
   );
 }
 
-const AccountRequestSchema = Schema.Struct({ userId: Schema.String, limit: Schema.Number });
+const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
 
 /** One open item as the account's read carries it, with its agent as its row names it now. */
 const WaitingRowSchema = Schema.Struct({
@@ -368,7 +368,7 @@ const WaitingRowSchema = Schema.Struct({
 const findWaitingItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: WaitingRowSchema,
-  execute: ({ userId, limit }) =>
+  execute: ({ userId }) =>
     db
       .select({
         id: inboxItem.id,
@@ -386,21 +386,19 @@ const findWaitingItems = SqlSchema.findAll({
       .innerJoin(plan, eq(plan.id, inboxItem.planId))
       .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
       .where(accountWaiting(userId))
-      .orderBy(...LATEST_FIRST)
-      .limit(limit),
+      .orderBy(...LATEST_FIRST),
 });
 
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
-  execute: ({ userId, limit }) =>
+  execute: ({ userId }) =>
     db
       .select(STAMP_COLUMNS)
       .from(inboxItem)
       .innerJoin(plan, eq(plan.id, inboxItem.planId))
       .where(accountWaiting(userId))
-      .orderBy(...LATEST_FIRST)
-      .limit(limit),
+      .orderBy(...LATEST_FIRST),
 });
 
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
@@ -614,13 +612,15 @@ type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
 
 /**
  * Every item that waits on the developer across the account's plans, the
- * latest changed first, as many as a read carries: open, and on a plan the
- * account has not archived.
+ * latest changed first: open, and on a plan the account has not archived.
+ * Note that none is left out for being old, because one left unanswered
+ * while many others changed must still be counted; the open bound per
+ * agent keeps these few.
  */
 export function accountWaitingItems(
   userId: string,
 ): InboxStoreEffect<readonly AccountWaitingRow[]> {
-  return Effect.map(findWaitingItems({ userId, limit: ACCOUNT_INBOX_BOUNDS.MAX_ITEMS }), (rows) =>
+  return Effect.map(findWaitingItems({ userId }), (rows) =>
     rows.map((row) => ({
       ...row,
       postedAt: row.postedAt.getTime(),
@@ -631,7 +631,7 @@ export function accountWaitingItems(
 
 /** Where each item `accountWaitingItems` reads stands, the same items and none of their words: what a held read of the account compares between looks. */
 export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
-  return Effect.map(findWaitingStamps({ userId, limit: ACCOUNT_INBOX_BOUNDS.MAX_ITEMS }), (rows) =>
+  return Effect.map(findWaitingStamps({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }

@@ -336,6 +336,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let waiting:
       | { readonly answer: AccountInboxAnswer; readonly items: ReadonlySet<string> }
       | undefined;
+    /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
+    const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
 
     function publishUnseen(): void {
@@ -445,19 +447,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /**
      * An answer of the inbox read: written whole, and each item that opened
      * since the last answer announced, unless this is the first. Note that
-     * an item opened since is one the last answer did not hold and that
-     * changed after it was read, because a plan brought back from the
-     * archive brings its items back unchanged, and they are not news.
+     * an item opened since is one the last answer did not hold, at a
+     * revision no answer for the account held, that changed after the last
+     * answer was read, because a plan brought back from the archive brings
+     * its items back unchanged, and they are not news; an item posted again
+     * after it was answered or closed moves its revision on, and is.
      */
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
       if (was?.answer.cursor === answer.cursor) return;
       waiting = { answer, items: new Set(answer.items.map((item) => item.id)) };
       publishWaiting(answer.items);
-      if (was === undefined) return;
-      const since = was.answer.readAt - Duration.toMillis(READ_SKEW);
+      const since =
+        was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
       for (const item of answer.items) {
-        if (!was.items.has(item.id) && item.updatedAt > since) announceItem(item);
+        const known = seenRevision.get(item.id);
+        seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
+        if (since === undefined || was?.items.has(item.id) === true) continue;
+        if ((known ?? 0) < item.revision && item.updatedAt > since) announceItem(item);
       }
     }
 
@@ -473,6 +480,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
       Effect.suspend(() => {
         waiting = undefined;
+        seenRevision.clear();
         publishWaiting([]);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;

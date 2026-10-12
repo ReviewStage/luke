@@ -15,18 +15,21 @@
 import { useEffect, useRef } from "react";
 import type { AppInboxPlan } from "#shared/messages/app-state";
 import { TOAST_TONE, useToast, useWithdrawToast } from "../toast";
+import { appStateNow } from "../use-app-state";
 
 /** What an opened item's toast offers, to open its plan's Inbox. */
 const VIEW_LABEL = "View";
 
 /**
  * Says each item main hands the window, `view` opening that plan's Inbox,
- * and withdraws it as it leaves `waiting`, main's word on what waits, or as
- * `shownInbox`, the plan whose Inbox is on screen, comes to hold it.
+ * and withdraws it once `waiting`, main's word on what waits, no longer
+ * holds it, or `shownInbox`, the plan whose Inbox is on screen, is its own.
  */
 export function useInboxToasts(
   view: (planId: string) => void,
   waiting: readonly AppInboxPlan[],
+  /** The version of main's document `waiting` was read from. */
+  version: number,
   shownInbox: string | null,
 ): void {
   const toast = useToast();
@@ -35,9 +38,13 @@ export function useInboxToasts(
   // and the subscription is owed to the window, not to a render.
   const viewing = useRef(view);
   viewing.current = view;
+  // The items said and not yet withdrawn, each by its plan and the version
+  // of main's document the window held as the toast arrived.
+  const told = useRef(new Map<string, { planId: string; heard: number }>());
   useEffect(
     () =>
-      window.sidecar.onInboxItemOpened(({ planId, itemId, words, detail }) =>
+      window.sidecar.onInboxItemOpened(({ planId, itemId, words, detail }) => {
+        told.current.set(itemId, { planId, heard: appStateNow()?.version ?? -1 });
         toast({
           words,
           detail,
@@ -46,20 +53,22 @@ export function useInboxToasts(
           subject: itemId,
           tone: TOAST_TONE.ASK,
           action: { label: VIEW_LABEL, onPress: () => viewing.current(planId) },
-        }),
-      ),
+        });
+      }),
     [toast],
   );
-  // Note that only an item seen to leave what waits is withdrawn, because
-  // what waits may reach the window after the toast for the item does.
-  const was = useRef(waiting);
+  // Note that what waits withdraws a toast only from a version of main's
+  // document newer than the one held as the toast arrived, because main
+  // writes the item into what waits before it hands the window the toast,
+  // so only a word that came after the toast and lacks the item says it no
+  // longer waits; an older one may be drawn after the toast was said.
   useEffect(() => {
     const now = new Set(waiting.flatMap((plan) => plan.items));
-    for (const plan of was.current) {
-      for (const itemId of plan.items) if (!now.has(itemId)) withdraw(itemId);
+    for (const [itemId, { planId, heard }] of told.current) {
+      const gone = version > heard && !now.has(itemId);
+      if (!gone && planId !== shownInbox) continue;
+      withdraw(itemId);
+      told.current.delete(itemId);
     }
-    was.current = waiting;
-    const shown = waiting.find((plan) => plan.planId === shownInbox);
-    for (const itemId of shown?.items ?? []) withdraw(itemId);
-  }, [waiting, shownInbox, withdraw]);
+  }, [waiting, version, shownInbox, withdraw]);
 }

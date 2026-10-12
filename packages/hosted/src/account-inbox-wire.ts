@@ -11,20 +11,14 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * carries no item whole, only what those three draw: the item's id, plan,
  * agent, title, revision, and instants, and the agent as its row names it
  * now, its title or else its model, so an agent this Mac has never listed,
- * one started on another, is still named. An archived plan's items wait
+ * one started on another, is still named. It carries every open item,
+ * however long ago it changed, as a plan's read carries every open one
+ * apart from its bound: the open items an agent may hold at once keep them
+ * few. An archived plan's items wait
  * nowhere, since the developer put the plan out of the way. The read is
  * held open while nothing changed past the cursor, as a plan's inbox read
  * is, and starts from the plan read's own start (`INBOX_CURSOR_START`).
  */
-
-export const ACCOUNT_INBOX_BOUNDS = {
-  /**
-   * The most open items one read carries, the latest changed first: far
-   * more than a person works through, since each agent keeps at most
-   * `INBOX_BOUNDS.MAX_OPEN_PER_AGENT` open.
-   */
-  MAX_ITEMS: 500,
-} as const;
 
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
 export const accountInboxEntrySchema = EffectSchema.Struct({

@@ -25,6 +25,7 @@ interface InboxItemOpened {
 /** What the window stands on: main's word on what waits, and the plan whose Inbox is on screen. */
 interface Standing {
   waiting: readonly AppInboxPlan[];
+  version: number;
   shownInbox: string | null;
 }
 
@@ -48,8 +49,8 @@ function mount(registry: AtomRegistry) {
     },
   });
   const viewed: string[] = [];
-  function Probe({ waiting, shownInbox }: Standing) {
-    useInboxToasts((planId) => viewed.push(planId), waiting, shownInbox);
+  function Probe({ waiting, version, shownInbox }: Standing) {
+    useInboxToasts((planId) => viewed.push(planId), waiting, version, shownInbox);
     return null;
   }
   const container = document.createElement("div");
@@ -65,7 +66,7 @@ function mount(registry: AtomRegistry) {
         ),
       ),
     );
-  stand({ waiting: [], shownInbox: null });
+  stand({ waiting: [], version: 0, shownInbox: null });
   return {
     viewed,
     open: (opened: InboxItemOpened) => {
@@ -125,26 +126,33 @@ it.effect(
 );
 
 it.effect(
-  "an item's toast goes once the item is seen to stop waiting or its plan's Inbox comes on screen, and an item not yet seen waiting takes none away",
+  "an item's toast goes once what waits, as main next says it, no longer holds it, or once its plan's Inbox comes on screen, and stands while the item still waits elsewhere",
   () =>
     Effect.gen(function* () {
       const panel = mount(yield* registryOnTestClock);
-      panel.stand({
-        waiting: [
-          { planId: "plan-1", items: ["item-1"] },
-          { planId: "plan-2", items: ["item-2"] },
-        ],
-        shownInbox: null,
-      });
       panel.open({ planId: "plan-1", itemId: "item-1", words: "Answered elsewhere", detail: "A" });
       panel.open({ planId: "plan-2", itemId: "item-2", words: "Its Inbox shown", detail: "B" });
-      // The third item's word that it waits has not reached the window yet.
       panel.open({ planId: "plan-3", itemId: "item-3", words: "Still asking", detail: "C" });
       yield* landed;
       assert.equal(said().length, 3);
 
-      panel.stand({ waiting: [{ planId: "plan-2", items: ["item-2"] }], shownInbox: null });
-      panel.stand({ waiting: [{ planId: "plan-2", items: ["item-2"] }], shownInbox: "plan-2" });
+      // Main's next word: item-1 was answered before it reached the window.
+      panel.stand({
+        waiting: [
+          { planId: "plan-2", items: ["item-2"] },
+          { planId: "plan-3", items: ["item-3"] },
+        ],
+        version: 1,
+        shownInbox: null,
+      });
+      panel.stand({
+        waiting: [
+          { planId: "plan-2", items: ["item-2"] },
+          { planId: "plan-3", items: ["item-3"] },
+        ],
+        version: 1,
+        shownInbox: "plan-2",
+      });
       yield* TestClock.adjust(Duration.millis(MOTION_DURATION_MS.EXIT));
       yield* landed;
       assert.deepEqual(said(), ["Still asking"]);

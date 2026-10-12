@@ -937,3 +937,27 @@ it.effect(
       assert.equal(f.badges.at(-1), 2);
     }),
 );
+
+it.effect(
+  "an item seen waiting, gone with its plan to the archive and back within the minute, is not announced again, and one posted again after it was answered is",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      f.answerInbox({ items: [], cursor: "2", readAt: READ_AT + 10_000 });
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "3", readAt: READ_AT + 20_000 });
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+
+      f.answerInbox({ items: [], cursor: "4", readAt: READ_AT + 30_000 });
+      f.answerInbox({
+        items: [waitingItem(ITEM_A, { revision: 2, updatedAt: READ_AT + 35_000 })],
+        cursor: "5",
+        readAt: READ_AT + 40_000,
+      });
+      yield* settled;
+      assert.equal(f.posted.length, 1);
+    }),
+);

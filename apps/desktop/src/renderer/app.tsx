@@ -271,7 +271,12 @@ export function App(): React.JSX.Element {
     [changeTab],
   );
   useEffect(() => window.sidecar.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
-  useInboxToasts(openInbox, state?.inbox.waiting ?? NOTHING_WAITING, plans.inboxShown);
+  useInboxToasts(
+    openInbox,
+    state?.inbox.waiting ?? NOTHING_WAITING,
+    state?.version ?? 0,
+    plans.inboxShown,
+  );
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
