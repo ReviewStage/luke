@@ -19,7 +19,7 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
  *
  * The voice writer keeps each call's words as timed fragments
- * (`store/voice-writer.ts`); this reads the newest of them for one plan and
+ * (`@sidecar/database/models/voice-writer`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
  * whose id is its place on the call. Beside its words, each call says what

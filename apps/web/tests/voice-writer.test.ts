@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { type SpokenRowWrite, VOICE_WRITE_REFUSAL } from "@sidecar/database/models/voice-writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { Effect, Result, Schema } from "effect";
@@ -21,7 +22,6 @@ import {
   type VoiceWriter,
   voiceWriter,
 } from "../server/hosted/store";
-import { type SpokenRowWrite, VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
 import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

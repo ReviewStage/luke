@@ -1,30 +1,30 @@
-import { db } from "@sidecar/database/core/query";
 import {
-  type ConversationTarget,
-  type SpokenAskAttach,
-  STORE_WRITE_EFFECT,
-  STORE_WRITE_REFUSAL,
-  type StoreWriter,
-} from "@sidecar/database/models/writer";
-import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import { Effect, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+  LIVE_SERVER_EVENT,
+  type LiveServerEvent,
+  TRANSCRIPT_SPEAKER,
+  type TranscriptSpeaker,
+} from "@sidecar/live";
 import {
   type AssistantMessageMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type SpokenAskMetadata,
-} from "../../core.js";
+} from "@sidecar/wire";
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { Effect, Option, Result, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../voice-vocabulary.js";
 import {
-  LIVE_SERVER_EVENT,
-  type LiveServerEvent,
-  TRANSCRIPT_SPEAKER,
-  type TranscriptSpeaker,
-} from "../../live.js";
+  type ConversationTarget,
+  type SpokenAskAttach,
+  STORE_WRITE_EFFECT,
+  STORE_WRITE_REFUSAL,
+  type StoreWriter,
+} from "./writer.js";
 
 /**
  * The voice writer: what a GPT Live session's event stream leaves in the
