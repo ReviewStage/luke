@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
@@ -39,8 +40,8 @@ import {
   agentStillWriting,
   agentTabLabel,
   endLine,
-  isDelegation,
   messageWords,
+  newestTodosCall,
   opensOnGitHub,
   providerOf,
   settledPlanEdits,
@@ -49,12 +50,20 @@ import {
   workerStatusOf,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
-import { cardTitle, delegationView, toolCallView } from "./tool-call-model";
+import {
+  AGENT_TOOL,
+  cardTitle,
+  delegationView,
+  todosSummary,
+  todosView,
+  toolCallView,
+} from "./tool-call-model";
 import {
   TRANSCRIPT_COMPONENTS,
   TranscriptReasoning,
   TranscriptRows,
   TranscriptSubagent,
+  TranscriptTodos,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
@@ -79,7 +88,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * an error marked in red, each delegation to a worker a subagent's row on
  * a line of its own, as the Work tab draws its worker's, saying the task
  * and the model and effort the worker runs on, the whole line the one
- * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), and its
+ * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), each write
+ * of its to-do list the list on a row of its own where it landed, open
+ * while it is the newest and folded once a newer one stands, and its
  * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
@@ -221,15 +232,46 @@ function DelegationRow({
   );
 }
 
+/**
+ * One write of the agent's to-do list: the list, open while it is the
+ * newest and folded once a newer one stands, or a call's row where its
+ * input does not read as a list. Note that the row is keyed by whether it
+ * is open, because the fold reads `defaultOpen` once.
+ */
+function TodosRow({
+  part,
+  open,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  open: boolean;
+}): ReactNode {
+  const todos = todosView(part.input);
+  if (todos === undefined) return <ToolCallView part={part} />;
+  return (
+    <TranscriptTodos
+      key={String(open)}
+      data-call-id={part.callId}
+      defaultOpen={open}
+      state={part.state}
+      subject={todosSummary(todos)}
+      todos={todos}
+      errorText={part.errorText}
+    />
+  );
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
   components,
   delegation,
+  newestTodos,
 }: {
   part: AgentPart;
   components: Components;
   delegation: DelegationDoors | undefined;
+  /** The call that wrote the newest to-do list, the one list drawn open. */
+  newestTodos: string | undefined;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
@@ -237,11 +279,14 @@ function AgentPartView({
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL:
-      return isDelegation(part) ? (
-        <DelegationRow part={part} doors={delegation} />
-      ) : (
-        <ToolCallView part={part} />
-      );
+      switch (part.tool) {
+        case CODING_AGENT_DELEGATE_TOOL:
+          return <DelegationRow part={part} doors={delegation} />;
+        case AGENT_TOOL.WRITE_TODOS:
+          return <TodosRow part={part} open={part.callId === newestTodos} />;
+        default:
+          return <ToolCallView part={part} />;
+      }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
@@ -285,6 +330,7 @@ function AgentMessage({
   moving,
   components,
   delegation,
+  newestTodos,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -294,6 +340,7 @@ function AgentMessage({
   moving: boolean;
   components: Components;
   delegation: DelegationDoors | undefined;
+  newestTodos: string | undefined;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} components={components} />;
@@ -312,7 +359,14 @@ function AgentMessage({
     <Message from={message.role}>
       <MessageContent>
         <TranscriptRows rows={agentRows(message, moving, lead.grouped)}>
-          {(part) => <AgentPartView part={part} components={components} delegation={delegation} />}
+          {(part) => (
+            <AgentPartView
+              part={part}
+              components={components}
+              delegation={delegation}
+              newestTodos={newestTodos}
+            />
+          )}
         </TranscriptRows>
       </MessageContent>
       {moving || startedAt === undefined || finishedAt === undefined ? null : (
@@ -380,6 +434,7 @@ export function AgentTranscriptView({
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
+    const newestTodos = newestTodosCall(messages);
     // The plan is the first of the developer's messages, unless the agent
     // was handed a task in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
@@ -404,6 +459,7 @@ export function AgentTranscriptView({
               moving={working && index === messages.length - 1}
               components={components}
               delegation={delegation}
+              newestTodos={newestTodos}
             />
           ))}
           {working ? <WorkingLine startedAt={startedAt} /> : null}

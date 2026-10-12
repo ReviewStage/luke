@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "todos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "done"
+            ]
+          }
+        },
+        "required": [
+          "content",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 40
+    }
+  },
+  "required": [
+    "todos"
+  ],
+  "additionalProperties": false
+}

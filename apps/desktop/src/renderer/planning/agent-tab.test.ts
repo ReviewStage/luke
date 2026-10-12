@@ -426,6 +426,145 @@ function unfolded(
   }
 }
 
+/** A to-do write's part: the whole list, as the agent's `write_todos` call stores it. */
+function todosPart(
+  callId: string,
+  todos: readonly { content: string; status: string }[],
+): CodingAgentMessage["parts"][number] {
+  return {
+    type: "tool-write_todos",
+    toolCallId: callId,
+    state: "output-available",
+    input: { todos },
+    output: "The to-dos are updated.",
+  };
+}
+
+/** A turn that writes its to-dos, works, and writes them again with the first done. */
+const LISTING: CodingAgentMessage = {
+  id: "m-listing",
+  role: "assistant",
+  parts: [
+    todosPart("call_t1", [
+      { content: "Read the invitation routes", status: "in_progress" },
+      { content: "Add the invite endpoint", status: "pending" },
+    ]),
+    {
+      type: "tool-bash",
+      toolCallId: "call_b1",
+      state: "output-available",
+      input: { command: "ls apps/web/server/routes" },
+      output: { status: "completed", exitCode: 0, stdout: "invite.ts\n", stderr: "" },
+    },
+    todosPart("call_t2", [
+      { content: "Read the invitation routes", status: "done" },
+      { content: "Add the invite endpoint", status: "in_progress" },
+    ]),
+  ],
+};
+
+/** The same agent's next turn, which writes the list once more with everything done. */
+const FINISHING: CodingAgentMessage = {
+  id: "m-finishing",
+  role: "assistant",
+  parts: [
+    todosPart("call_t3", [
+      { content: "Read the invitation routes", status: "done" },
+      { content: "Add the invite endpoint", status: "done" },
+    ]),
+  ],
+};
+
+/** What each item of a drawn list says: where it stands, and its words. */
+function listed(row: Element): readonly (readonly [string | null, string | null])[] {
+  return [...row.querySelectorAll("[data-todo-status]")].map((item) => [
+    item.getAttribute("data-todo-status"),
+    item.textContent,
+  ]);
+}
+
+test("each write of the agent's to-dos is drawn where it landed as the list on a row of its own, never in a run of calls, and only the newest is open", () => {
+  const container = document.createElement("div");
+  container.innerHTML = drawn([PLAN, LISTING], true);
+  const rows = [...container.querySelectorAll<HTMLDetailsElement>("details[data-todos]")];
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-call-id")),
+    ["call_t1", "call_t2"],
+  );
+  for (const row of rows) assert.equal(row.closest("[data-turn-fold]"), null);
+  const [older, newest] = rows;
+  assert.ok(older && newest);
+  assert.equal(older.open, false);
+  assert.equal(older.querySelector("[data-todo-status]"), null);
+  assert.equal(newest.open, true);
+  assert.match(
+    newest.querySelector("summary")?.textContent ?? "",
+    /Updated the to-dos: 1 of 2 done/u,
+  );
+  assert.deepEqual(listed(newest), [
+    ["done", "Read the invitation routes"],
+    ["in_progress", "Add the invite endpoint"],
+  ]);
+  assert.match(
+    newest.querySelector('[data-todo-status="done"]')?.innerHTML ?? "",
+    /aria-label="Done".*line-through/u,
+  );
+});
+
+test("an older list opens on a click onto the list as it stood, and folds once a newer list lands", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (messages: readonly CodingAgentMessage[]) =>
+    act(() =>
+      root.render(
+        createElement(AgentTranscriptView, {
+          messages,
+          reading: false,
+          failed: false,
+          working: true,
+          onRetry: ignore,
+          openGitHub: ignore,
+        }),
+      ),
+    );
+  render([PLAN, LISTING]);
+  assert.deepEqual(listed(open(container, '[data-call-id="call_t1"]')), [
+    ["in_progress", "Read the invitation routes"],
+    ["pending", "Add the invite endpoint"],
+  ]);
+  const before = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]');
+  assert.equal(before?.open, true);
+  render([PLAN, LISTING, FINISHING]);
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open,
+    false,
+  );
+  const newest = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t3"]');
+  assert.equal(newest?.open, true);
+  assert.match(newest?.querySelector("summary")?.textContent ?? "", /2 of 2 done/u);
+});
+
+test("a to-do write whose input does not read as a list is drawn as a call's row with its JSON, not as a list", () => {
+  const turn: CodingAgentMessage = {
+    id: "m-unreadable",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-write_todos",
+        toolCallId: "call_tx",
+        state: "input-streaming",
+        input: { todos: [{ content: "Read" }] },
+      },
+    ],
+  };
+  const container = mounted([PLAN, turn]);
+  assert.equal(container.querySelector("[data-todos]"), null);
+  const row = open(container, '[data-call-id="call_tx"]');
+  assert.match(row.querySelector("[data-tool-input]")?.textContent ?? "", /"content": "Read"/u);
+});
+
 test("a bash call's row reads as the command it ran, never as the input's JSON", () => {
   const markup = unfolded([TURN]).innerHTML;
   assert.match(markup, /Ran <\/span><span[^>]*>cat AGENTS\.md<\/span>/u);

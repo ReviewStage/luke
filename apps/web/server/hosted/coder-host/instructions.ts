@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { CODER } from "./bounds.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { TODOS_TOOL } from "./todos.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
@@ -95,6 +96,8 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
 7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}.
 8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
+
+For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.
 
 ## Handing work to a worker
 

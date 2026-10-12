@@ -51,6 +51,10 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TITLE_CHARS: 80,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
+  /** The most items one to-do list may hold: a long run of work, never a log of every command. */
+  MAX_TODOS: 40,
+  /** The most characters one to-do may spell: a line of the list, not a paragraph. */
+  MAX_TODO_CHARS: 300,
 } as const;
 
 /**
@@ -291,6 +295,45 @@ export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   result: EffectSchema.String,
 });
+
+/**
+ * The tool an agent writes its to-do list with, by the name its tool part
+ * carries in the transcript (`tool-write_todos`). Each call carries the
+ * whole list, so the newest call's input is the list as it stands, and a
+ * tab draws each call where it landed with the older ones folded. Named
+ * to-dos rather than a plan, because the plan is Luke's own document.
+ */
+export const CODING_AGENT_TODOS_TOOL = "write_todos";
+
+/** Where one to-do stands. */
+export const CODING_AGENT_TODO_STATUS = {
+  PENDING: "pending",
+  IN_PROGRESS: "in_progress",
+  DONE: "done",
+} as const;
+
+export type CodingAgentTodoStatus =
+  (typeof CODING_AGENT_TODO_STATUS)[keyof typeof CODING_AGENT_TODO_STATUS];
+
+/**
+ * What a to-do write's tool part carries as its input: the whole list, in
+ * order, each item its words and where it stands. The model is shown this
+ * schema and eve holds the call to it, and a tab reads the stored part
+ * back through it, so the two read one list.
+ */
+export const codingAgentTodosInputSchema = EffectSchema.Struct({
+  todos: EffectSchema.Array(
+    EffectSchema.Struct({
+      content: EffectSchema.String.check(
+        EffectSchema.isNonEmpty(),
+        EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODO_CHARS),
+      ),
+      status: EffectSchema.Literals(Object.values(CODING_AGENT_TODO_STATUS)),
+    }),
+  ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODOS)),
+});
+
+export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
 
 /**
  * One JSON object as the row holds it, read whole: a message part or the

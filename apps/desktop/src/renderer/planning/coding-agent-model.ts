@@ -755,13 +755,24 @@ export function isDelegation(
   return part.kind === AGENT_PART.TOOL && part.tool === CODING_AGENT_DELEGATE_TOOL;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation on a row of its own as the Work tab's worker is, and every other call grouped with the calls beside it. */
+/** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
+function isTodos(part: AgentPart): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.WRITE_TODOS;
+}
+
+/** The call that wrote the agent's newest to-do list, which is the one its tab draws open; nothing before the first. */
+export function newestTodosCall(messages: readonly CodingAgentMessage[]): string | undefined {
+  const writes = messages.flatMap(agentParts).filter(isTodos);
+  return writes.at(-1)?.callId;
+}
+
+/** How the fold reads a part: its words, its reasoning as a note, a delegation and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
-    return isDelegation(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    return isDelegation(part) || isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&

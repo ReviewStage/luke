@@ -1,6 +1,14 @@
+import {
+  CODING_AGENT_TODO_STATUS,
+  type CodingAgentTodoStatus,
+  type CodingAgentTodos,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   BotIcon,
+  CircleCheckIcon,
+  CircleDotIcon,
+  CircleIcon,
   CircleStopIcon,
   EyeIcon,
   FileCodeIcon,
@@ -9,6 +17,7 @@ import {
   GlobeIcon,
   HourglassIcon,
   ListIcon,
+  ListTodoIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
   PencilLineIcon,
@@ -67,7 +76,8 @@ import { WorkingTime } from "./working-time";
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
  * folded under what it holds, a subagent's row as one line like a call's
- * that opens its tab, and a note between the rows. A
+ * that opens its tab, an agent's to-do list as a call's row that opens onto
+ * the list, and a note between the rows. A
  * tab that drew one of these its own way would be a second transcript
  * style, which is what this file is here to refuse.
  */
@@ -138,6 +148,7 @@ const CALL_ICON = {
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
   [CALL_KIND.EDIT_PLAN]: FilePenIcon,
+  [CALL_KIND.TODOS]: ListTodoIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -182,6 +193,86 @@ export function TranscriptTool({
       <ToolContent>
         <ToolInput block={input} />
         <ToolOutput block={output} errorText={errorText} />
+      </ToolContent>
+    </Tool>
+  );
+}
+
+/** How a to-do of each status is drawn: its mark, the mark's colour, how its words are set, and what the mark says aloud. */
+const TODO_LOOK = {
+  [CODING_AGENT_TODO_STATUS.PENDING]: {
+    Icon: CircleIcon,
+    mark: "text-muted-foreground",
+    words: "",
+    label: "Pending",
+  },
+  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
+    Icon: CircleDotIcon,
+    mark: "text-luke",
+    words: "",
+    label: "In progress",
+  },
+  [CODING_AGENT_TODO_STATUS.DONE]: {
+    Icon: CircleCheckIcon,
+    mark: "text-muted-foreground",
+    words: "text-muted-foreground line-through",
+    label: "Done",
+  },
+} as const satisfies Record<
+  CodingAgentTodoStatus,
+  { Icon: LucideIcon; mark: string; words: string; label: string }
+>;
+
+export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
+  Pick<ToolHeaderProps, "state" | "subject"> & {
+    todos: CodingAgentTodos["todos"];
+    errorText: string | undefined;
+  };
+
+/**
+ * One write of an agent's to-do list: a call's row saying how far the list
+ * has got, which opens onto the list itself, each item behind the mark of
+ * where it stands and a done item struck through. Whether it starts open is
+ * the caller's, since only the newest list is worth reading unasked.
+ */
+export function TranscriptTodos({
+  state,
+  subject,
+  todos,
+  errorText,
+  ...props
+}: TranscriptTodosProps): ReactNode {
+  const words = CALL_WORDS[CALL_KIND.TODOS];
+  return (
+    <Tool data-todos="" {...props}>
+      <ToolHeader
+        state={state}
+        icon={<ListTodoIcon aria-hidden="true" />}
+        label={words.verb}
+        subject={subject}
+        subjectIsCode={words.code}
+      />
+      <ToolContent>
+        <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2">
+          {todos.map((todo, index) => {
+            const look = TODO_LOOK[todo.status];
+            return (
+              <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
+                <span
+                  className="flex h-[1lh] shrink-0 items-center"
+                  role="img"
+                  aria-label={look.label}
+                >
+                  <look.Icon className={cn("size-3.5", look.mark)} aria-hidden="true" />
+                </span>
+                <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
+                  {todo.content}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <ToolOutput block={undefined} errorText={errorText} />
       </ToolContent>
     </Tool>
   );
