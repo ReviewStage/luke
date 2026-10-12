@@ -329,6 +329,7 @@ it.effect(
       const eve = eveAccepting(`wrun_${randomUUID()}`);
       const seams = { asks: askEffects, eve };
       const input = {
+        accountId: userId,
         userId,
         conversationId,
         clientId: randomUUID(),
@@ -464,6 +465,7 @@ it.effect(
       const clientId = randomUUID();
       const accepted = await database.run(
         acceptAsk(seams, {
+          accountId: userId,
           userId,
           conversationId,
           clientId,
@@ -515,6 +517,7 @@ it.effect(
 
       const again = await database.run(
         acceptAsk(seams, {
+          accountId: userId,
           userId,
           conversationId,
           clientId,
@@ -527,7 +530,8 @@ it.effect(
       assert.deepEqual(
         await database.run(
           acceptAsk(seams, {
-            userId: await database.createUser(),
+            accountId: await database.createUser(),
+            userId,
             conversationId,
             clientId: randomUUID(),
             question: "what changed?",
@@ -550,6 +554,7 @@ it.effect(
       const ask = (clientId: string) =>
         database.run(
           acceptAsk(seams, {
+            accountId: userId,
             userId,
             conversationId,
             clientId,
@@ -615,6 +620,7 @@ it.effect(
         acceptAsk(
           { asks: clearingBeforeDispatch, eve },
           {
+            accountId: userId,
             userId,
             conversationId,
             clientId: randomUUID(),

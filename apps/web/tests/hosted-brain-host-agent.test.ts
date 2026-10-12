@@ -35,8 +35,8 @@ test("a follow-up steers the turn under way rather than queueing behind it, and 
   const channel = brainHostChannelInput(
     async () => undefined,
     {
-      sessionOwner: async () => undefined,
-      ownsConversation: async () => false,
+      reachesSession: async () => false,
+      reachesConversation: async () => false,
     },
     { secret: undefined, admits: DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.DEPLOYMENT },
   );

@@ -10,7 +10,10 @@ import {
   BRAIN_HOST_TURN,
   type BrainHostTurn,
 } from "../server/hosted/brain-host/bounds";
-import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
@@ -56,9 +59,10 @@ const seams: BrainHostSeams = {
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
-    sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
-    ownsConversation: (userId, conversationId) =>
-      database.run(conversationOwnedBy(userId, conversationId)),
+    reachesSession: (userId, sessionId) =>
+      database.run(runtimeSessionReachableBy(userId, sessionId)),
+    reachesConversation: (userId, conversationId) =>
+      database.run(conversationReachableBy(userId, conversationId)),
   },
   openAi: () => undefined,
   deploymentSecret: () => undefined,

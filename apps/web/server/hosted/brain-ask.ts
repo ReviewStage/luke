@@ -20,7 +20,7 @@ import {
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
 import { hostTurnId } from "./brain-host/ids.js";
-import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
+import { conversationReachableBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
@@ -28,9 +28,9 @@ import type { StoreWriter } from "./store/writer.js";
 
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before
- * eve is reached — the conversation it names is the caller's and stands, or
- * it is refused as not found, another account's and none at all answering
- * alike — and then handed to the one eve session the conversation runs in,
+ * eve is reached — the conversation it names stands and the caller reaches
+ * it, its own or its workspace's plan's, or it is refused as not found, a
+ * stranger's and none at all answering alike — and then handed to the one eve session the conversation runs in,
  * or the session opened for it. eve folds asks that arrive while a turn runs
  * into the next turn and names no turn at accept time, so the ask stands on
  * its own record from the accept, keyed by the client's id, and the standing
@@ -80,8 +80,9 @@ export interface AskStandingReads {
 }
 
 /**
- * Where the id stands: a turn row the account holds over a standing
- * conversation, or an ask the account holds whose conversation stands, read
+ * Where the id stands: a turn row the conversation's owner holds over a
+ * standing conversation, or an ask held under the owner whose conversation
+ * stands, read
  * through to its turn where one has started. Anything else is not found,
  * another account's and none at all alike. The voice function keys an
  * exchange by the ask's id, so it reads the standing here until the turn's
@@ -99,7 +100,7 @@ export const askStanding = /* @__PURE__ */ Effect.fn("web/askStanding")(function
   const [turn] = yield* reads.store.turns.named(userId, [id]);
   if (turn) return { ask: undefined, turn };
   const ask = yield* reads.asks.named(userId, id);
-  if (!ask || !(yield* conversationOwnedBy(userId, ask.conversationId))) {
+  if (!ask || !(yield* conversationReachableBy(userId, ask.conversationId))) {
     return undefined;
   }
   if (ask.turnId !== undefined) {
@@ -110,8 +111,8 @@ export const askStanding = /* @__PURE__ */ Effect.fn("web/askStanding")(function
 });
 
 /**
- * Why an ask was not accepted: the conversation is not the caller's or does
- * not stand; eve did not take the dispatch; or the store could not write the
+ * Why an ask was not accepted: the caller does not reach the conversation or
+ * it does not stand; eve did not take the dispatch; or the store could not write the
  * ask down, which is the store's own failure and not the caller's.
  */
 export const ASK_REFUSAL = {
@@ -136,12 +137,16 @@ type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
 
 /**
  * An ask as a caller that has already resolved the account hands it over:
- * the question, the origin it opens a turn under, the client's own id, which
- * is the idempotency key — the same id on the same conversation is the same
- * ask, answered again and dispatched once — the conversation it lands in,
- * and, for a spoken one, the voice session it came from.
+ * the account asking, the question, the origin it opens a turn under, the
+ * client's own id, which is the idempotency key — the same id on the same
+ * conversation is the same ask, answered again and dispatched once — the
+ * conversation it lands in under the member who opened it, whose id the ask
+ * is recorded under, and, for a spoken one, the voice session it came from.
  */
 export interface AskInput {
+  /** The account asking, which must reach the conversation. */
+  readonly accountId: string;
+  /** The conversation's owner, the address the ask and its turn are recorded under. */
   readonly userId: string;
   readonly question: string;
   readonly origin: AskOrigin;
@@ -197,8 +202,8 @@ const unreachableSend = () =>
   Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY });
 
 /**
- * Accepts one ask over plain arguments: the conversation is the caller's and
- * stands; the ask is recorded once per client id; and where eve has not yet
+ * Accepts one ask over plain arguments: the conversation stands and the
+ * caller reaches it; the ask is recorded once per client id; and where eve has not yet
  * taken it, it is handed to the session the conversation runs in, or the
  * session opened for it. A retry with the same client id finds the record
  * and dispatches again only where the first dispatch never reached eve.
@@ -207,9 +212,9 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   seams: AskSeams,
   input: AskInput,
 ): Effect.fn.Return<AskOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
-  const { userId, question, origin, clientId, conversationId } = input;
+  const { accountId, userId, question, origin, clientId, conversationId } = input;
   const now = new Date(yield* Clock.currentTimeMillis);
-  if (!(yield* conversationOwnedBy(userId, conversationId))) {
+  if (!(yield* conversationReachableBy(accountId, conversationId))) {
     return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
   }
 

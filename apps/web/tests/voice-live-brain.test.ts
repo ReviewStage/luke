@@ -268,8 +268,8 @@ async function stand(
   const brain = await database.run(
     Scope.provide(
       hostedLiveBrain({
-        userId: target.userId,
-        conversationId,
+        accountId: target.userId,
+        conversation: { userId: target.userId, conversationId },
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
@@ -808,8 +808,8 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       }),
     ],
     {
-      sessionOwner: async (id) => (id === sessionId ? target.userId : undefined),
-      ownsConversation: async (userId, conversationId) =>
+      reachesSession: async (userId, id) => userId === target.userId && id === sessionId,
+      reachesConversation: async (userId, conversationId) =>
         userId === target.userId && conversationId === target.conversationId,
     },
   );
@@ -979,7 +979,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -1030,7 +1031,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -1083,7 +1085,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -1129,7 +1132,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -1198,7 +1202,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -1252,7 +1257,10 @@ it.live(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
             const conversation = yield* openPlanConversation(target.userId, plan.id);
-            return { planId: plan.id, planConversation: Option.getOrThrow(conversation) };
+            return {
+              planId: plan.id,
+              planConversation: Option.getOrThrow(conversation).conversationId,
+            };
           }),
         ),
       );
@@ -1502,8 +1510,8 @@ const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget
   const sql = yield* Scope.provide(Layer.build(database.sql), scope);
   const brain = yield* Scope.provide(
     hostedLiveBrain({
-      userId: target.userId,
-      conversationId: target.conversationId,
+      accountId: target.userId,
+      conversation: target,
       asks: { asks: askEffects, eve },
       store,
       writer,

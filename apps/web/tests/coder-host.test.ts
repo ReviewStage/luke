@@ -148,8 +148,8 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
-        sessionOwner: () => Promise.resolve(undefined),
-        ownsConversation: () => Promise.resolve(false),
+        reachesSession: () => Promise.resolve(false),
+        reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
       keys: () => Effect.succeed(KEYS),
@@ -1011,7 +1011,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
         const plan = yield* startPlan(userId, { name: "Billing export" });
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, plan.id));
+        const conversationId = Option.getOrThrow(
+          yield* openPlanConversation(userId, plan.id),
+        ).conversationId;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
         const starting = yield* host.admitStarting(auth, sessionId);
@@ -1657,8 +1659,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           writer: () => Effect.succeed(writer),
           userInfo: () => Effect.succeed(undefined),
           ownership: {
-            sessionOwner: () => Promise.resolve(undefined),
-            ownsConversation: () => Promise.resolve(false),
+            reachesSession: () => Promise.resolve(false),
+            reachesConversation: () => Promise.resolve(false),
           },
           deploymentSecret: () => undefined,
           keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
