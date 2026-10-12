@@ -5,6 +5,7 @@ import { useFindOpen } from "../find-in-tab";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
+import { type FileNotes, notesBefore } from "./file-note";
 import {
   FILE_READ,
   type FileLines,
@@ -37,7 +38,9 @@ import type { OpenFile } from "./use-side-panel";
  * snippet was read from: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the plan holds them. The tab draws no heading of its
+ * showed of it where the plan holds them. Over the first line of each
+ * range Luke showed with a note stands his note on it (`file-note.tsx`),
+ * on the file and on those lines alike. The tab draws no heading of its
  * own: the File view's bar over it names the file and offers what is done
  * with it (`file-view.tsx`), told how the read stands as it moves. The lines
  * are drawn numbered or not, wrapped or not, as every File tab is
@@ -146,10 +149,12 @@ function firstWindow(file: OpenFile): FileWindow {
 function FileLinesView({
   file,
   held,
+  notes,
   readWindow,
 }: {
   file: OpenFile;
   held: FileLines;
+  notes: FileNotes;
   readWindow: (window: FileWindow) => Promise<boolean>;
 }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
@@ -185,7 +190,12 @@ function FileLinesView({
           onRead={() => readWindow(above)}
         />
       )}
-      <CodeLineRows firstLine={held.firstLine} lines={held.lines} pointed={pointed} />
+      <CodeLineRows
+        firstLine={held.firstLine}
+        lines={held.lines}
+        pointed={pointed}
+        before={notesBefore(notes)}
+      />
       {below === undefined ? null : (
         <EdgeRow
           key={below.firstLine}
@@ -226,12 +236,15 @@ function ReadNotice({
 export function FileTab({
   file,
   snippet,
+  notes,
   readFile,
   onRead,
 }: {
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: PlanCode | undefined;
+  /** Luke's notes on the file's lines, each drawn over the first line of its range. */
+  notes: FileNotes;
   readFile: ReadFileWindow;
   /** Hears how the read of the file stands each time it moves, the bar over the tab offering what it allows. */
   onRead: (read: FileRead) => void;
@@ -329,7 +342,7 @@ export function FileTab({
   return (
     <section className="file-tab ph-no-capture" aria-label={file.path}>
       {read.kind === FILE_READ.READY ? (
-        <FileLinesView file={file} held={read} readWindow={readWindow} />
+        <FileLinesView file={file} held={read} notes={notes} readWindow={readWindow} />
       ) : read.kind === FILE_READ.READING ? (
         <SpinnerRegion label="Loading file" />
       ) : snippet === undefined ? (
@@ -347,6 +360,7 @@ export function FileTab({
               firstLine={snippet.firstLine}
               lines={snippet.lines}
               pointed={snippet.ref}
+              before={notesBefore(notes)}
             />
           </div>
         </>

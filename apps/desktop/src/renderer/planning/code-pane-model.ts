@@ -18,7 +18,7 @@ export interface CodeFeedCall {
 }
 
 /** The lines pointed at, as a card's heading reads them: "Lines 40–58", "Line 7", or nothing for a whole file. */
-export function rangeLabel(ref: CodeRef): string | undefined {
+export function rangeLabel(ref: Pick<CodeRef, "startLine" | "endLine">): string | undefined {
   if (ref.startLine === undefined || ref.endLine === undefined) return undefined;
   return ref.startLine === ref.endLine
     ? `Line ${ref.startLine}`

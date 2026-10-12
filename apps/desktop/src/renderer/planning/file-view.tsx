@@ -6,11 +6,13 @@ import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
+import type { FileNotes } from "./file-note";
 import { FileTab, type ReadFileWindow } from "./file-tab";
 import {
   FILE_READ,
   type FileRead,
   fileUrl,
+  notesOf,
   WHOLE_TEXT,
   type WholeText,
   wholeTextOf,
@@ -134,6 +136,8 @@ export function FileView({
   onToggleTree,
   onBrowse,
   history,
+  onFoldNote,
+  onShowNote,
 }: {
   planId: string;
   /** The plan's repository, `owner/name`, which the tree browses; none draws the tab alone. */
@@ -154,6 +158,10 @@ export function FileView({
   /** A file chosen in the tree or the breadcrumbs, to show in this tab, or in a tab of its own where `newTab` asks. */
   onBrowse: (path: string, newTab: boolean) => void;
   history: FileHistory;
+  /** Folds or opens the note of the call that showed lines of the file, on this tab. */
+  onFoldNote: FileNotes["onFold"];
+  /** Shows the card the call's code stands on in the Code tab. */
+  onShowNote: FileNotes["onShow"];
 }): React.JSX.Element {
   // The view's store of listings, one per plan and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -184,6 +192,14 @@ export function FileView({
   );
 
   const commit = file.commit;
+  // Luke's notes are on the lines of his own checkout, which no commit pins.
+  const notes: FileNotes = {
+    notes: commit === undefined ? notesOf(shownCode, file.path, repository) : [],
+    folded: file.foldedNotes ?? [],
+    onFold: onFoldNote,
+    onShow: onShowNote,
+  };
+
   const [told, setTold] = useState<TabRead | undefined>(undefined);
   const read =
     told?.path === file.path && told.commit === commit ? told.read : { kind: FILE_READ.READING };
@@ -247,6 +263,7 @@ export function FileView({
             key={commit ?? HEAD_READ}
             file={file}
             snippet={commit === undefined ? snippet : undefined}
+            notes={notes}
             readFile={readAt}
             onRead={onRead}
           />

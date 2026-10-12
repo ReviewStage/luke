@@ -109,6 +109,39 @@ export function snippetOf(
   return (opened ?? ofFile.at(-1))?.code;
 }
 
+/** A note Luke wrote on lines of a File tab's file as he showed them: the call that showed them and when, the lines, and his words. */
+export interface FileNote {
+  readonly callId: string;
+  readonly shownAt: number;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly note: string;
+}
+
+/**
+ * The notes Luke wrote on a File tab's file, one a range, in the file's
+ * order: the newest showing of each range speaks for it, since the newer
+ * note is the one he meant last. A showing of the whole file, one from
+ * another repository than the tab reads, and one from before notes were
+ * asked for leave no note.
+ */
+export function notesOf(
+  shown: readonly PlanCodeShowing[] | undefined,
+  path: string,
+  repository: string | null,
+): readonly FileNote[] {
+  const notes: FileNote[] = [];
+  for (const { callId, shownAt, code } of (shown ?? []).toReversed()) {
+    const { startLine, endLine } = code.ref;
+    if (code.ref.path !== path || code.note === undefined) continue;
+    if (startLine === undefined || endLine === undefined) continue;
+    if (repository !== null && code.repository !== repository) continue;
+    if (notes.some((each) => each.startLine === startLine && each.endLine === endLine)) continue;
+    notes.push({ callId, shownAt, startLine, endLine, note: code.note });
+  }
+  return notes.toSorted((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
+}
+
 /**
  * The file's page on GitHub at the branch its lines were read on, its lit
  * lines marked where it still has them: a file shortened past them, which

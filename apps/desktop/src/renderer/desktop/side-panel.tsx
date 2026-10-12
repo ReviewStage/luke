@@ -661,6 +661,10 @@ function TabContent({
   fileTree,
   onBrowseFile,
   onFileHistory,
+  onFoldNote,
+  codeReveal,
+  onShowNote,
+  onRevealed,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -694,6 +698,14 @@ function TabContent({
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
+  /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
+  onFoldNote: (path: string, callId: string, folded: boolean) => void;
+  /** The call whose card the Code tab scrolls to as it is drawn, which a File tab's note asked for. */
+  codeReveal: string | undefined;
+  /** Shows the Code tab on the card of the call a File tab's note is from. */
+  onShowNote: (callId: string) => void;
+  /** Says the Code tab scrolled to the card asked for. */
+  onRevealed: () => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
   if (isFileTab(tab)) {
@@ -724,6 +736,8 @@ function TabContent({
             canGoForward: (file.forward?.length ?? 0) > 0,
             onStep: (step) => onFileHistory(file.path, step),
           }}
+          onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
+          onShowNote={onShowNote}
         />
       </Fragment>
     );
@@ -767,6 +781,8 @@ function TabContent({
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
           onOpenFile={onOpenFile}
+          reveal={codeReveal}
+          onRevealed={onRevealed}
         />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
@@ -1080,6 +1096,16 @@ export function SidePanel({
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
   );
+  // The card a File tab's note asked the Code tab to scroll to, until it has.
+  const [codeReveal, setCodeReveal] = useState<string | undefined>(undefined);
+  const showNote = useCallback(
+    (callId: string) => {
+      setCodeReveal(callId);
+      panel.onChoose(SIDE_PANEL_TAB.CODE);
+    },
+    [panel.onChoose],
+  );
+  const revealed = useCallback(() => setCodeReveal(undefined), []);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
 
   useLayoutEffect(() => {
@@ -1165,6 +1191,10 @@ export function SidePanel({
               fileTree={fileTree}
               onBrowseFile={panel.onBrowseFile}
               onFileHistory={panel.onFileHistory}
+              onFoldNote={panel.onFoldNote}
+              codeReveal={codeReveal}
+              onShowNote={showNote}
+              onRevealed={revealed}
             />
           </FindScope>
         )}

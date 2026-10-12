@@ -10,7 +10,7 @@ import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, onTestFinished, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { CodePane } from "./code-pane";
 import { type CodeFeedCallSource, rangeLabel } from "./code-pane-model";
@@ -135,6 +135,63 @@ test("code shown on the live call lands after every card before it, and the feed
     showing("c", 3_680_000, first.code),
   ]);
   assert.equal(log.scrollTop, 100, "left where the developer scrolled to");
+});
+
+test("the card a File tab's note asks for is scrolled to as the tab is drawn, clear of its call's checkpoint, and said shown, and the feed stays there as more code lands", () => {
+  // Note that jsdom lays nothing out, so the log and each card say where they stand.
+  const at = { log: 100, b: -900 };
+  const { prototype } = HTMLElement;
+  const measures = {
+    scrollHeight: Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight"),
+    clientHeight: Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight"),
+    rect: prototype.getBoundingClientRect,
+  };
+  Object.defineProperty(prototype, "scrollHeight", { configurable: true, get: () => 2_000 });
+  Object.defineProperty(prototype, "clientHeight", { configurable: true, get: () => 400 });
+  prototype.getBoundingClientRect = function (this: HTMLElement) {
+    const top =
+      this.getAttribute("role") === "log" ? at.log : this.dataset.callId === "b" ? at.b : 0;
+    return new DOMRect(0, top, 300, 120);
+  };
+  onTestFinished(() => {
+    Reflect.deleteProperty(prototype, "scrollHeight");
+    Reflect.deleteProperty(prototype, "clientHeight");
+    prototype.getBoundingClientRect = measures.rect;
+  });
+  const revealed: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const shown = [
+    showing("a", 2_000, windowOf("src/invite.ts", 11, 12)),
+    showing("b", 3_000, windowOf("src/invite.ts", 20, 20)),
+    showing("c", 3_660_000, windowOf("src/roles.ts", 4, 6)),
+  ];
+  const draw = (code: readonly PlanCodeShowing[], reveal?: string) =>
+    act(() =>
+      root.render(
+        createElement(CodePane, {
+          shown: code,
+          calls: CALLS,
+          onOpenFile: openNothing,
+          reveal,
+          onRevealed: () => revealed.push(reveal ?? "none"),
+        }),
+      ),
+    );
+
+  draw(shown, "b");
+  const log = container.querySelector<HTMLElement>('[role="log"]');
+  assert.ok(log);
+  // The log first kept to its newest card, 2,000 down, then stood the card 44 under its top.
+  assert.equal(log.scrollTop, 2_000 - 900 - 100 - 44);
+  assert.deepEqual(revealed, ["b"]);
+
+  const kept = log.scrollTop;
+  draw([...shown, showing("d", 3_670_000, windowOf("src/roles.ts", 9, 9))]);
+  assert.equal(log.scrollTop, kept, "left on the card asked for");
+  assert.deepEqual(revealed, ["b"], "asked for once");
 });
 
 test("code shown by a turn that began just before the live call was first heard stands under the live call", () => {
@@ -305,7 +362,7 @@ test("a card's Open file and its path each open the whole file, its lines lit", 
 });
 
 test("the heading names one line, a range, or nothing for a whole file", () => {
-  assert.equal(rangeLabel({ path: "a.ts", startLine: 4, endLine: 4 }), "Line 4");
-  assert.equal(rangeLabel({ path: "a.ts", startLine: 4, endLine: 9 }), "Lines 4–9");
-  assert.equal(rangeLabel({ path: "a.ts" }), undefined);
+  assert.equal(rangeLabel({ startLine: 4, endLine: 4 }), "Line 4");
+  assert.equal(rangeLabel({ startLine: 4, endLine: 9 }), "Lines 4–9");
+  assert.equal(rangeLabel({}), undefined);
 });

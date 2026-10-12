@@ -3475,6 +3475,66 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   assert.equal(tabNamed(page, "roles.ts").getAttribute("aria-selected"), "false");
 });
 
+test("a File tab opened from a card stands Luke's note over its lines, folded as the tab left it when the tab is chosen again, and Show in Code takes the panel to the card", async () => {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      act: () =>
+        Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            file: {
+              path: "src/invite.ts",
+              repository: "acme/relay",
+              branch: "main",
+              firstLine: 1,
+              lineCount: 1,
+              lines: [[{ text: "export function accept() {}" }]],
+            },
+          },
+        }),
+    },
+  });
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+    holds: { [SIDE_PANEL_TAB.CODE]: true },
+    shownCode: [
+      {
+        callId: "show-1",
+        turnId: "turn-1",
+        shownAt: 1,
+        code: { ...CODE, note: "Accepting an invite starts here." },
+      },
+    ],
+  });
+  const openFile = async () => {
+    const open = page.querySelector<HTMLButtonElement>('.code-card button[aria-label="Open file"]');
+    assert.ok(open);
+    await act(async () => {
+      open.click();
+      await Promise.resolve();
+    });
+  };
+  await openFile();
+  assert.equal(
+    page.querySelector(".file-tab .file-note-words")?.textContent,
+    "Accepting an invite starts here.",
+  );
+
+  press(page, ".file-tab .file-note-fold");
+  press(page, ".file-tab .file-note-show");
+  assert.equal(tabNamed(page, "Code").getAttribute("aria-selected"), "true");
+  assert.ok(page.querySelector('.code-card[data-call-id="show-1"]'));
+
+  await openFile();
+  assert.equal(
+    page.querySelector(".file-tab .file-note-fold")?.getAttribute("aria-expanded"),
+    "false",
+    "still folded",
+  );
+});
+
 /** Opens a panel tab's menu with a right-click, answering each item's label and whether it may be chosen. */
 function tabMenu(tab: HTMLElement): [string, boolean][] {
   act(() => {

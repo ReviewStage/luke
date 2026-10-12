@@ -8,13 +8,15 @@ import {
   type PlanFileRequest,
 } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { installHighlights } from "#testing/find-highlights";
 import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
 import { FindScope } from "../find-in-tab";
@@ -118,6 +120,37 @@ function showing(path: string, repository: string): PlanCodeShowing {
   };
 }
 
+/** A range of `FILE` Luke showed by the call given, with his note where given, of the plan's repository unless another is named. */
+function shownLines(
+  callId: string,
+  startLine: number,
+  endLine: number,
+  note: string | undefined,
+  repository = REPOSITORY,
+): PlanCodeShowing {
+  return {
+    callId,
+    turnId: "turn-1",
+    shownAt: 0,
+    code: {
+      ref: { path: FILE, startLine, endLine },
+      repository,
+      firstLine: 1,
+      lineCount: 40,
+      lines: [[]],
+      ...(note === undefined ? undefined : { note }),
+    },
+  };
+}
+
+/** Each note card drawn, as a reader meets it: its name, then the number of the line it stands over. */
+function noteCards(container: HTMLElement): readonly string[] {
+  return [...container.querySelectorAll(".file-note")].map((card) => {
+    const line = card.nextElementSibling?.querySelector(".code-line-number")?.textContent;
+    return `${card.getAttribute("aria-label")} over ${line}`;
+  });
+}
+
 /** A file of `lineCount` lines read a window at a time, each line saying its own number. */
 function numberedFile(lineCount: number): ReadFileWindow {
   return (window) => {
@@ -159,6 +192,7 @@ function mounted(
   const listed: string[] = [];
   const browsed: string[] = [];
   const github: string[] = [];
+  const notesShown: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -167,7 +201,10 @@ function mounted(
     const [treeOpen, setTreeOpen] = useState(false);
     const [walk, setWalk] = useState({ files: [start], at: 0 });
     // The file first drawn follows the draw until the view walks away from it, as the panel's tab does when opened again.
-    const file = walk.files.length === 1 ? start : (walk.files[walk.at] ?? start);
+    const walked = walk.files.length === 1 ? start : (walk.files[walk.at] ?? start);
+    // The tab keeps what it folded, as the panel's record of it does.
+    const [folded, setFolded] = useState<readonly string[]>([]);
+    const file = { ...walked, foldedNotes: folded };
     useAppKeymap(true);
     const view = createElement(FileView, {
       planId: PLAN,
@@ -201,6 +238,9 @@ function mounted(
             at: step === FILE_HISTORY_STEP.BACK ? at - 1 : at + 1,
           })),
       },
+      onFoldNote: (callId, fold) =>
+        setFolded((was) => [...was.filter((call) => call !== callId), ...(fold ? [callId] : [])]),
+      onShowNote: (callId) => notesShown.push(callId),
     });
     // The view stands in the side panel's find, as it does in the window.
     return createElement(
@@ -231,7 +271,7 @@ function mounted(
     });
   const button = (label: string) =>
     container.querySelector<HTMLButtonElement>(`.file-view-bar button[aria-label="${label}"]`);
-  return { container, listed, browsed, github, draw, press, settle, button };
+  return { container, listed, browsed, github, notesShown, draw, press, settle, button };
 }
 
 /** The bar's crumbs, as they read. */
@@ -763,3 +803,133 @@ it.effect(
       assert.match(document.body.textContent ?? "", /too large to copy whole\. Open it on GitHub/);
     }),
 );
+
+test("a range Luke showed with a note stands his note over its first line: his mark and name, the lines, and his words as Markdown; a range shown without one, from another repository, or the whole file shown, stands none", async () => {
+  const whole = shownLines("call-whole", 1, 1, "The whole file.");
+  const view = mounted(
+    [
+      { ...whole, code: { ...whole.code, ref: { path: FILE } } },
+      shownLines("call-guard", 4, 6, "The **invite** guard runs before the plan loads."),
+      shownLines("call-bare", 10, 12, undefined),
+      shownLines("call-elsewhere", 14, 14, "Another repository's line.", "acme/other"),
+    ],
+    undefined,
+    numberedFile(40),
+  );
+  await view.draw(FILE, { startLine: 4, endLine: 6 });
+
+  assert.deepEqual(noteCards(view.container), ["Luke's note on lines 4–6 over 4"]);
+  const card = view.container.querySelector(".file-note");
+  assert.equal(card?.querySelector(".file-note-author")?.textContent, "Luke");
+  assert.ok(card?.querySelector(".luke-face"), "Luke's face as the Transcript draws it");
+  assert.equal(card?.querySelector(".file-note-lines")?.textContent, "Lines 4–6");
+  assert.equal(card?.querySelector(".file-note-words strong")?.textContent, "invite");
+  assert.equal(card?.nextElementSibling?.getAttribute("data-pointed"), "true");
+});
+
+test("a file opened at a commit, as an inbox item's code opens it, stands none of Luke's notes, since his lines are his own checkout's", async () => {
+  const view = mounted(
+    [shownLines("call-guard", 4, 6, "The invite guard.")],
+    undefined,
+    numberedFile(40),
+  );
+  await view.draw(
+    FILE,
+    { startLine: 4, endLine: 6 },
+    1,
+    "0123456789abcdef0123456789abcdef01234567",
+  );
+
+  assert.ok(view.container.querySelector(".code-line"), "the file is drawn");
+  assert.deepEqual(noteCards(view.container), []);
+});
+
+it.effect(
+  "a note's age moves on with the minute while the tab stands open with nothing else drawn anew",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const view = mounted(
+        [shownLines("call-guard", 4, 6, "The invite guard.")],
+        undefined,
+        numberedFile(40),
+        registry,
+      );
+      yield* Effect.promise(() => view.draw(FILE, { startLine: 4, endLine: 6 }));
+      const age = () => view.container.querySelector(".file-note-time")?.textContent;
+      assert.equal(age(), "now");
+
+      yield* TestClock.adjust(Duration.minutes(10));
+      yield* Effect.promise(() => view.settle());
+
+      assert.equal(age(), "10m");
+    }),
+);
+
+test("every range of the file with a note stands its own card, in the file's order, the newest note on a range speaking for it, whichever lines the tab lit", async () => {
+  const view = mounted(
+    [
+      shownLines("call-late", 20, 24, "Where the plan is saved."),
+      shownLines("call-first", 2, 2, "The route's door."),
+      shownLines("call-again", 20, 24, "Where the plan is saved, now twice."),
+    ],
+    undefined,
+    numberedFile(40),
+  );
+  await view.draw(FILE);
+
+  assert.deepEqual(noteCards(view.container), [
+    "Luke's note on line 2 over 2",
+    "Luke's note on lines 20–24 over 20",
+  ]);
+  assert.match(
+    view.container.querySelectorAll(".file-note-words")[1]?.textContent ?? "",
+    /now twice/u,
+  );
+});
+
+test("a note folds to its header, its words cut to one line there, as the tab holds it, and opens again; its link asks for the call's card in the Code tab", async () => {
+  const note = "The invite guard runs before the plan loads.";
+  const view = mounted([shownLines("call-guard", 4, 6, note)], undefined, numberedFile(40));
+  await view.draw(FILE, { startLine: 4, endLine: 6 });
+  const fold = () => view.container.querySelector(".file-note-fold");
+
+  await view.press(fold());
+  assert.equal(fold()?.getAttribute("aria-expanded"), "false");
+  assert.equal(view.container.querySelector(".file-note-words"), null);
+  assert.equal(view.container.querySelector(".file-note-preview")?.textContent, note);
+
+  await view.press(fold());
+  assert.equal(fold()?.getAttribute("aria-expanded"), "true");
+  assert.equal(view.container.querySelector(".file-note-words")?.textContent, note);
+
+  await view.press(view.container.querySelector(".file-note-show"));
+  assert.deepEqual(view.notesShown, ["call-guard"]);
+});
+
+test("⌘F over the tab finds the words of Luke's note", async () => {
+  const highlights = installHighlights();
+  const view = mounted(
+    [shownLines("call-guard", 4, 6, "The invite guard runs first.")],
+    undefined,
+    numberedFile(40),
+  );
+  await view.draw(FILE, { startLine: 4, endLine: 6 });
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+  });
+  await view.settle();
+  const input = view.container.querySelector<HTMLInputElement>(
+    '.find-bar input[aria-label="Find"]',
+  );
+  assert.ok(input);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, "guard");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(view.container.querySelector(".find-bar-tally")?.textContent, "1 of 1");
+  assert.deepEqual(highlights.matches(), ["guard"]);
+});

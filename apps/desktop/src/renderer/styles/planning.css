@@ -869,6 +869,107 @@ button.code-card-path:hover {
   color: var(--text-secondary);
 }
 
+/* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
+   card in the window's own type between the lines, as a review comment
+   stands in a diff. Lines unwrapped scroll sideways under it while it
+   keeps to the tab's width in view. */
+.file-note {
+  margin: var(--space-6) var(--space-12);
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.file-tab-lines[data-wrap="false"] > .file-note {
+  position: sticky;
+  left: var(--space-12);
+}
+
+.file-note-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-2);
+  font-size: 11.5px;
+}
+
+.file-note-fold {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.file-note-fold:hover {
+  background: var(--raised);
+}
+
+.file-note-fold > svg:first-child {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-quick) var(--motion-exit);
+}
+
+.file-note[data-folded="true"] .file-note-fold > svg:first-child {
+  transform: rotate(-90deg);
+}
+
+.file-note-author {
+  flex: 0 0 auto;
+  color: var(--voice-luke);
+  font-weight: 600;
+}
+
+.file-note-lines,
+.file-note-time {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+/* Folded, the note's words stand in the header cut to one line. */
+.file-note-preview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-note-show {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.file-note-show:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.file-note-words {
+  padding: 0 var(--space-12) var(--space-8) 38px;
+  overflow-wrap: anywhere;
+}
+
 /* Luke's note reads as the step's words, so the path above it steps back. */
 .code-card:has(> .code-card-note) .code-card-path {
   color: var(--text-secondary);

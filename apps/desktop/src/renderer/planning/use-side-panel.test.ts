@@ -274,6 +274,27 @@ test("a File tab's Back walks the files it showed before, its lit lines with the
   assert.deepEqual(shown(), [ROLES, README], "one tab per file");
 });
 
+test("a File tab keeps the notes it folded while it stands: through Luke's snippet opening it again and its walk to another file and back; another tab folds none of them", () => {
+  const panel = mount([], [], [INVITE, ROLES]);
+  const folded = (path: string) =>
+    panel.control().files.find((file) => file.path === path)?.foldedNotes ?? [];
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 4, endLine: 6 }));
+  act(() => panel.control().onOpenFile({ path: ROLES, startLine: 1, endLine: 2 }));
+  act(() => panel.control().onFoldNote(INVITE, "call-guard", true));
+  act(() => panel.control().onFoldNote(INVITE, "call-save", true));
+
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 9, endLine: 9 }));
+  assert.deepEqual(folded(INVITE), ["call-guard", "call-save"]);
+  assert.deepEqual(folded(ROLES), []);
+
+  act(() => panel.control().onBrowseFile(INVITE, "README.md", false));
+  act(() => panel.control().onFileHistory("README.md", FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(folded(INVITE), ["call-guard", "call-save"]);
+
+  act(() => panel.control().onFoldNote(INVITE, "call-guard", false));
+  assert.deepEqual(folded(INVITE), ["call-save"]);
+});
+
 test("Luke's snippet opening a File tab again keeps its history, and a step to a file whose tab another plan took moves that tab back here", () => {
   const panel = mountStood({ agents: [], subagents: [], files: [INVITE, ROLES] });
   act(() => panel.control().onOpenFile({ path: INVITE }));
