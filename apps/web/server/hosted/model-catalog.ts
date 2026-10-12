@@ -30,7 +30,9 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
  *
  * Model calls themselves go straight to each provider on Luke's own keys,
  * never through AI Gateway, so `providerModelOf` is the one translation
- * from a catalog id to the id the provider's own API takes. Nothing here
+ * from a catalog id to the id the provider's own API takes. A fast slug is
+ * AI Gateway's own name and no provider's: the provider is asked for the
+ * base model with its fast option on. Nothing here
  * knows which account asked: the catalog is public and the same for every
  * caller.
  */
@@ -64,6 +66,21 @@ const TIER_BOUNDARY_TOKENS = 1_000;
 /** Anthropic spells a version's point as a dash in its own ids; the catalog keeps the point. */
 const CATALOG_VERSION_POINT = ".";
 const ANTHROPIC_VERSION_POINT = "-";
+
+/**
+ * The suffix AI Gateway gives a model's fast version (`anthropic/claude-opus-5.5-fast`
+ * beside `anthropic/claude-opus-5.5`). It is the gateway's slug for the
+ * base model asked to run fast, and the suffix is the one signal of it.
+ */
+const FAST_SLUG_SUFFIX = "-fast";
+
+/**
+ * The providers whose own API is confirmed to run what a fast slug stands
+ * for: Anthropic's fast mode, the base model asked for `speed: "fast"`.
+ * AI Gateway's docs never say what OpenAI's fast slugs are at OpenAI's own
+ * API, so those are not offered rather than guessed at.
+ */
+export const FAST_PROVIDERS: ReadonlySet<ModelProvider> = new Set([MODEL_PROVIDER.ANTHROPIC]);
 
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
@@ -102,10 +119,11 @@ export interface OfferedModel extends CatalogModel {
   readonly pricing?: ModelPricing;
 }
 
-/** A model as its provider's own API names it. */
+/** A model as its provider's own API names it, and whether the catalog id asked for its fast version. */
 export interface ProviderModel {
   readonly provider: ModelProvider;
   readonly modelId: string;
+  readonly fast: boolean;
 }
 
 /** The catalog could not be read as the catalog: the request failed, or the answer is not its shape. */
@@ -276,10 +294,12 @@ function contextWindowsOf(
   };
 }
 
-/** The entry as an offered model, or nothing for one Luke does not offer. */
+/** The entry as an offered model, or nothing for one Luke does not offer: a fast slug among them where its provider's fast option is not confirmed. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
-  const provider = providerOf(splitCatalogId(entry.id)?.provider ?? "");
-  if (provider === undefined) return undefined;
+  const named = providerModelOf(entry.id);
+  if (named === undefined) return undefined;
+  if (named.fast && !FAST_PROVIDERS.has(named.provider)) return undefined;
+  const { provider } = named;
   const tags = entry.tags ?? [];
   if (!REQUIRED_TAGS.every((tag) => tags.includes(tag))) return undefined;
   const efforts =
@@ -407,17 +427,21 @@ export function acceptedModelChoice(
  * The model as its provider's own API names it: Anthropic spells the
  * version's point as a dash (`anthropic/claude-opus-5.5` is
  * `claude-opus-5-5`), and OpenAI's ids are the catalog's after the prefix.
- * Nothing for an id outside the two providers.
+ * Note that a fast slug names the base model with `fast` on, because the
+ * slug is the gateway's name rather than the provider's: Anthropic answers
+ * `claude-opus-5-5-fast` with a refusal at the step's first call, and runs
+ * fast mode as `claude-opus-5-5` asked for its fast speed. Nothing for an
+ * id outside the two providers.
  */
 export function providerModelOf(catalogId: string): ProviderModel | undefined {
   const split = splitCatalogId(catalogId);
   const provider = providerOf(split?.provider ?? "");
   if (split === undefined || provider === undefined) return undefined;
-  if (provider === MODEL_PROVIDER.ANTHROPIC) {
-    return {
-      provider,
-      modelId: split.name.replaceAll(CATALOG_VERSION_POINT, ANTHROPIC_VERSION_POINT),
-    };
-  }
-  return { provider, modelId: split.name };
+  const fast = split.name.endsWith(FAST_SLUG_SUFFIX);
+  const name = fast ? split.name.slice(0, -FAST_SLUG_SUFFIX.length) : split.name;
+  const modelId =
+    provider === MODEL_PROVIDER.ANTHROPIC
+      ? name.replaceAll(CATALOG_VERSION_POINT, ANTHROPIC_VERSION_POINT)
+      : name;
+  return { provider, modelId, fast };
 }

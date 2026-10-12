@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
-import { providerModelOf } from "../model-catalog.js";
+import { FAST_PROVIDERS, type ProviderModel, providerModelOf } from "../model-catalog.js";
 import { PROVIDER_KEY_UNREADABLE, type ProviderKeyUnreadable } from "../provider-key-seal.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
@@ -26,7 +26,9 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * also asks for its reasoning in words, so the agent's tab can show what
  * it thought as the Work tab shows Luke's: OpenAI for a summary, as the
  * planning brain does, and Anthropic for its summarized thinking on a
- * model that thinks whether asked or not. The agent's
+ * model that thinks whether asked or not. A fast version runs as its base
+ * model asked for Anthropic's fast speed, the SDK sending the beta header
+ * that speed needs. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
  * same provider door, always on Luke's own Anthropic key. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
@@ -60,6 +62,9 @@ const ANTHROPIC_SHOWN_THINKING = { type: "adaptive", display: "summarized" } as 
  * no one decided that. The next family that thinks by default joins here.
  */
 const THINKS_BY_DEFAULT = /^claude-[a-z]+-5(?:-|$)/u;
+
+/** Anthropic's word for a step on a model's fast mode. */
+const ANTHROPIC_FAST_SPEED = "fast";
 
 /** OpenAI's word, in a 429's body, for an account out of credit rather than over its rate. */
 const OPENAI_NO_QUOTA = "insufficient_quota";
@@ -110,19 +115,19 @@ export interface CoderModelSelection {
   readonly modelOptions: AgentModelOptionsDefinition;
 }
 
-/** The provider's own options for a step: the effort, and the ask for its reasoning in words where that costs nothing more. */
-function stepOptions(
-  provider: ModelProvider,
-  modelId: string,
-  effort: string,
-): AgentModelOptionsDefinition {
-  switch (provider) {
+/** The provider's own options for a step: the effort, the fast speed where the choice is a fast version, and the ask for its reasoning in words where that costs nothing more. */
+function stepOptions(named: ProviderModel, effort: string): AgentModelOptionsDefinition {
+  switch (named.provider) {
     case MODEL_PROVIDER.ANTHROPIC:
       return {
         providerOptions: {
-          anthropic: THINKS_BY_DEFAULT.test(modelId)
-            ? { effort, thinking: ANTHROPIC_SHOWN_THINKING }
-            : { effort },
+          anthropic: {
+            effort,
+            ...(THINKS_BY_DEFAULT.test(named.modelId)
+              ? { thinking: ANTHROPIC_SHOWN_THINKING }
+              : undefined),
+            ...(named.fast ? { speed: ANTHROPIC_FAST_SPEED } : undefined),
+          },
         },
       };
     case MODEL_PROVIDER.OPENAI:
@@ -216,7 +221,7 @@ export function titleModel(keys: LukeKeys): LanguageModel | undefined {
   return createAnthropic({ apiKey: Redacted.value(keys.anthropic) })(AGENT_TITLE_MODEL_ID);
 }
 
-/** The choice as a step runs it, or why it cannot: a provider Luke does not run, an account's key that cannot be read, or no key at all. */
+/** The choice as a step runs it, or why it cannot: a provider Luke does not run, a fast version Luke cannot ask its provider for, an account's key that cannot be read, or no key at all. */
 export function coderModel(
   choice: ModelChoice,
   keys: ProviderKeys,
@@ -224,12 +229,14 @@ export function coderModel(
 ): Result.Result<CoderModelSelection, CoderRefusal> {
   const named = providerModelOf(choice.model);
   if (named === undefined) return Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER);
+  if (named.fast && !FAST_PROVIDERS.has(named.provider))
+    return Result.fail(CODER_REFUSAL.NO_FAST_VERSION);
   const key = named.provider === MODEL_PROVIDER.ANTHROPIC ? keys.anthropic : keys.openAi;
   if (key === undefined) return Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY);
   if (key === PROVIDER_KEY_UNREADABLE) return Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE);
   return Result.succeed({
     model: modelOnKey(named.provider, named.modelId, key, keys.fetch),
     modelContextWindowTokens: contextWindowTokens,
-    modelOptions: stepOptions(named.provider, named.modelId, choice.effort),
+    modelOptions: stepOptions(named, choice.effort),
   });
 }
