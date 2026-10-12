@@ -34,7 +34,7 @@ export type FileRead =
   | {
       readonly kind: typeof FILE_READ.REFUSED;
       readonly refusal: PlanFileRefusal;
-      /** The branch a missing file was looked for on, where the service named it. */
+      /** The branch GitHub found nothing at the path on, where the service named it. */
       readonly branch: string | undefined;
     }
   | { readonly kind: typeof FILE_READ.FAILED };
@@ -48,7 +48,7 @@ export interface FileWindow {
 /** What a File tab says in its file's place, for each reason the file is not shown. */
 const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
-  [PLAN_FILE_REFUSAL.MISSING]: "This file is not on the repository's default branch.",
+  [PLAN_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
   [PLAN_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
   [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:

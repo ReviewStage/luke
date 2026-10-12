@@ -542,8 +542,8 @@ export const planFileWindowSchema = EffectSchema.Struct({
 export type PlanFileWindow = typeof planFileWindowSchema.Type;
 
 /**
- * Why the File tab's file is not shown, and, where no file stands at the
- * path, the branch GitHub was read on: the snippet came from the planning
+ * Why the File tab's file is not shown, and, where GitHub found nothing at
+ * the path, the branch it was read on: the snippet came from the planning
  * session's checkout, which may hold a file that branch does not.
  */
 export const planFileRefusalSchema = EffectSchema.Struct({

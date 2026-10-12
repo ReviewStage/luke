@@ -1236,7 +1236,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, a missing one on the branch it was looked for on",
+    "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, one GitHub found nothing at naming the branch it was looked for on",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
@@ -1257,12 +1257,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(yield* refusalOf("config/.env.local"), {
           refusal: PLAN_FILE_REFUSAL.SECRET,
         });
-        const missing = { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" };
+        const missing = { refusal: PLAN_FILE_REFUSAL.MISSING };
         assert.deepEqual(yield* refusalOf("src/../../other/secret.ts"), missing);
         assert.equal(asked(), 0, "neither is asked of GitHub");
-        assert.deepEqual(yield* refusalOf("gone.ts"), missing, "named on the branch read");
-        assert.deepEqual(yield* refusalOf("src"), missing);
-        assert.deepEqual(yield* refusalOf("linked.ts"), missing);
+        assert.deepEqual(
+          yield* refusalOf("gone.ts"),
+          { ...missing, branch: "main" },
+          "nothing at the path names the branch it was looked for on",
+        );
+        assert.deepEqual(yield* refusalOf("src"), missing, "a directory is on the branch");
+        assert.deepEqual(yield* refusalOf("linked.ts"), missing, "a link is on the branch");
         assert.deepEqual(yield* refusalOf("big.json"), { refusal: PLAN_FILE_REFUSAL.NOT_TEXT });
         assert.deepEqual(yield* refusalOf("assets/logo.png"), {
           refusal: PLAN_FILE_REFUSAL.NOT_TEXT,

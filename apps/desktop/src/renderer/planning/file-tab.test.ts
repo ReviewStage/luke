@@ -179,7 +179,7 @@ test("a parent drawing the tab again with a fresh door asks nothing more, a refu
   assert.deepEqual(gone.asked, ["1-500"]);
   assert.equal(
     gone.container.querySelector("[role='alert']")?.textContent,
-    "This file is not on the repository's default branch.",
+    "There is no file at this path in the repository.",
   );
 
   const read = mounted(numberedFile(3));

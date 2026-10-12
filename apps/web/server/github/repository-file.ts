@@ -42,12 +42,20 @@ const ContentsSchema = Schema.Union([FileContentsSchema, OtherContentsSchema]);
 /** The encoding GitHub carries a file's bytes in. */
 const BASE64 = "base64";
 
-/** One file of the tree as GitHub holds it: none at the path, or its size and bytes; bytes are absent where GitHub carries none. */
+/**
+ * One file of the tree as GitHub holds it: no regular file at the path, and
+ * whether that is because GitHub found nothing there on the branch; or its
+ * size and bytes, bytes absent where GitHub carries none.
+ */
 export type RepositoryFile =
-  | { readonly regular: false }
+  | { readonly regular: false; readonly notFound: boolean }
   | { readonly regular: true; readonly bytes: number; readonly content: Uint8Array | undefined };
 
-const NO_FILE: RepositoryFile = { regular: false };
+/** Nothing at the path on the branch, as GitHub answered. */
+const NOT_FOUND: RepositoryFile = { regular: false, notFound: true };
+
+/** Something at the path that is no regular file, or a path nothing was asked of. */
+const NOT_REGULAR: RepositoryFile = { regular: false, notFound: false };
 
 /** The path's segments encoded for the URL, or nothing where a segment would leave the repository's contents. */
 function contentsPath(path: string): string | undefined {
@@ -66,7 +74,7 @@ export function readRepositoryFile(
 ): Effect.Effect<RepositoryFile, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const encoded = contentsPath(path);
-    if (encoded === undefined) return NO_FILE;
+    if (encoded === undefined) return NOT_REGULAR;
     const request = githubRead(`/repos/${repository.fullName}/contents/${encoded}`, token).pipe(
       HttpClientRequest.setUrlParams({ ref: repository.defaultBranch }),
     );
@@ -81,9 +89,9 @@ export function readRepositoryFile(
               status: error.response?.status,
             }),
         );
-        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return NO_FILE;
+        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return NOT_FOUND;
         const answer = yield* readBody(response, ContentsSchema);
-        if (!Schema.is(FileContentsSchema)(answer)) return NO_FILE;
+        if (!Schema.is(FileContentsSchema)(answer)) return NOT_REGULAR;
         const decoded =
           answer.encoding === BASE64
             ? Result.getOrUndefined(Encoding.decodeBase64(answer.content.replace(/\s/gu, "")))
