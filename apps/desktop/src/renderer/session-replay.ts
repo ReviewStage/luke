@@ -27,7 +27,7 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * person's screen, the Settings tab's Memory page, a plan's whiteboard,
  * a plan's transcript, a plan's Work tab, the code on screen, a plan's
  * version history's list, the version of the plan drawn beside it, each
- * coding agent's tab, and the editor a field of a plan is edited in, whose masked value
+ * coding agent's tab, and the editor a field of a plan is edited in, whose masked words
  * would still record the rhythm of the typing. The whiteboard is the one
  * surface that draws its words on a canvas, which the text masking cannot
  * reach, so its block is its only

@@ -569,29 +569,42 @@ body is the fixed template formatted from the fields, so every heading stays
 the formatter's and a field is the one unit the service stores, the notetaker
 writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
 
-- **Opening.** A click into a field's words that selects nothing, or the
-  pencil that shows on hover and on focus (the keyboard's way in, named
-  "Edit Problem", "Edit Rule 2", "Edit Assumptions", and so on), opens the
-  field in an editor in place of its answer, the heading still drawn above
-  it. One field is open at a time, and an editor stays where it opened while
-  it stands, so its inputs never move under the typing.
-  - A text field opens its Markdown in a plain text box. An unanswered field
-    opens empty, and leaving it empty keeps it unanswered. A heading typed
+- **Opening.** A click into a field's words that selects nothing opens the
+  field in place, the caret where the click landed; the pencil that shows on
+  hover and on focus (the keyboard's way in, named "Edit Problem", "Edit Rule
+  2", "Edit Assumptions", and so on) opens it with the caret at the end. The
+  heading stays drawn above it. The editor is TipTap, from a bundle of its
+  own (`field-editor.js`) loaded the first time a field is hovered or opened,
+  and it draws the field's words exactly as the document draws them, still
+  formatted and where they stood, with no box around them. A field opened
+  before the bundle has loaded stays drawn until it has. One field is open at
+  a time, and an editor stays where it opened while it stands.
+  - A text field opens its Markdown formatted, and everything TipTap's
+    Markdown holds is edited as it reads: headings, lists, quotes, code,
+    links, bold, italic, strike, task lists, tables, and images, each with
+    TipTap's own typing shortcuts. An unanswered field opens empty, and leaving
+    it empty keeps it unanswered. An edit writes the whole field back in
+    TipTap's Markdown. A heading typed
     into a field is moved below the field's own by the formatter, so it is
     drawn as a heading inside the field and no edit can open a section of
     its own.
-  - The open questions and the assumptions open in one box, one item a line;
-    a line's list marker is dropped, a blank line is none, and an empty box
-    leaves the list empty.
-  - A rule opens as its statement and its examples, Given, When, and Then,
-    each its own input, with Add example, a remove per example, and Delete
-    rule. The rules' own heading carries a plus, "Add rule", which opens a
-    new rule that saves after the rules standing. A rule whose statement is
-    left blank is struck, and an example of blank clauses is dropped.
+  - The open questions and the assumptions open as their list, one item a
+    bullet, and Return starts the next; the assumptions are plain text, as
+    the document draws them. An empty list leaves the field empty.
+  - A rule opens as its statement over its examples, each Given, When, and
+    Then behind a label that is drawn and never typed. Return walks the
+    statement to the first Given and each clause to the next, and adds the
+    next example after Then; Backspace in an empty example strikes it; Delete
+    rule stands under a rule that exists. The rules' own heading carries a
+    plus, "Add rule", which opens a new rule that saves after the rules
+    standing. A rule whose statement is left blank is struck, and an example
+    of blank clauses is dropped.
   - Order and Data and migration, which the body leaves out while they hold
     nothing, are offered after the body as buttons that open their editor
     there.
-- **Saving.** The words save a second after the developer stops typing, and
+- **Saving.** The editor hands its words over once per pause in the typing,
+  so the document is not drawn again on every keystroke. The words save a
+  second after the developer stops typing, and
   again as the editor closes, on Esc, ⌘↩, or focus leaving it; the editor
   waits for that save before it goes. Each save names the answer the words
   were written from (the field as it opened, then the developer's own last
@@ -622,10 +635,10 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
   with Try again; it is tried again when the developer asks or types on, and
   the editor stays open until it saves. Unsaved words live in the window's
   memory alone, never on disk.
-- **Undo.** Inside the editor, the box's own undo. A saved edit is undone
+- **Undo.** Inside the editor, its own undo and redo. A saved edit is undone
   from the plan's history.
-- **Recording.** The editor stands under `ph-no-capture`, and the box is a
-  textarea, whose value the recording masks in any case.
+- **Recording.** The editor stands under `ph-no-capture`, and its words are
+  document text, which the recording masks in any case.
 
 ### History
 

@@ -31,6 +31,7 @@
         "src/renderer/styles/index.css",
         "src/renderer/whiteboard/index.tsx",
         "src/renderer/whiteboard/index.css",
+        "src/renderer/field-editor/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

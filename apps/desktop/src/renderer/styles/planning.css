@@ -298,55 +298,74 @@
 }
 
 /* The field open in its editor: the heading as the document draws it, then
-   a box that grows with its words, in the document's own type, so the words
-   do not jump as it opens or closes. It takes the gap of the unit it stands
-   in for, and opens its box as far under the heading as the unit's words. */
+   the field's words, still formatted and standing exactly where they stood,
+   with nothing around them, so opening a field moves nothing and the caret is
+   the only sign of editing. Only what stands under the words keeps a gap. */
 .plan-field-editor > * + * {
+  margin-top: 0;
+}
+
+.plan-field-editor > .plan-field-note,
+.plan-field-editor > .plan-rule-actions {
   margin-top: 0.5em;
 }
 
-.plan-field-input {
-  width: 100%;
-  min-height: 72px;
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--desktop-well);
-  color: var(--text-primary);
-  font: inherit;
-  line-height: inherit;
-  field-sizing: content;
-  resize: none;
-  transition: border-color var(--duration-hover) ease;
-}
-
-.plan-field-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.plan-field-input:focus {
-  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
+/* The editor's own element (`field-editor/field-editor.ts`) over the read
+   view's classes. TipTap draws headings and paragraphs as their own
+   elements, where the read view draws every block as a margin-less
+   paragraph, so these take the read view's box, and a heading the read
+   view's weight through its class. */
+.plan-field-text {
+  caret-color: var(--accent);
   outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
-/* A rule in its editor: the statement on its own line, each example's
-   Given, When, and Then side by side with its remove, then the buttons that
-   add an example or strike the rule. One-line inputs, so no box grows. */
-.plan-rule-fields {
-  display: grid;
-  gap: var(--space-6);
+.plan-field-text :is(h1, h2, h3, h4, h5, h6),
+.plan-field-text p {
+  margin: 0;
+  font-size: inherit;
 }
 
-.plan-rule-fields .plan-field-input {
-  min-height: 0;
-  padding: var(--space-6) var(--space-8);
+/* A link in the editor is the read view's link, not the browser's blue. */
+.plan-field-text a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--markdown-edge);
+  text-underline-offset: 0.15em;
 }
 
-.plan-rule-example {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-  align-items: center;
-  gap: var(--space-6);
+/* TipTap's placeholder on an empty field. */
+.plan-field-text p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--text-tertiary);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+/* A rule's clauses, one line each of its example as the read view draws
+   them, each label the width of the others, with none of the gap between a
+   list item's blocks. */
+.plan-rule-body.plan-field-text li {
+  white-space: normal;
+}
+
+.plan-rule-body.plan-field-text li > .plan-rule-clause {
+  margin-top: 0;
+}
+
+.plan-rule-clause > strong {
+  display: inline-block;
+  min-width: 3.4em;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  user-select: none;
+}
+
+.plan-rule-body.plan-field-text ul:empty {
+  display: none;
 }
 
 .plan-rule-actions {

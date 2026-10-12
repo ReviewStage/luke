@@ -70,7 +70,7 @@ export type EditTarget =
   | { readonly field: typeof PLAN_FIELD.ASSUMPTIONS };
 
 /** One example of a rule as the editor holds it: each clause as typed, empty while unknown. */
-export interface ExampleDraft {
+interface ExampleDraft {
   readonly given: string;
   readonly when: string;
   readonly then: string;
