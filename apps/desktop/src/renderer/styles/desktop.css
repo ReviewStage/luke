@@ -337,7 +337,7 @@ body,
 /* New plan reads as a row of the list it heads: no ground at rest, the body's
    weight a read plan's name takes, and the plan rows' own hover and selection,
    since its page is a place like theirs. Search beneath it is drawn the same,
-   and the section's gap falls after it. */
+   and a hairline under it parts the two from the list. */
 .sidebar-new-plan,
 .sidebar-search {
   display: flex;
@@ -352,8 +352,12 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
-.sidebar-search {
-  margin-bottom: var(--section-gap);
+.sidebar-rule {
+  height: 1px;
+  flex: 0 0 auto;
+  margin: var(--space-8) var(--row-inset);
+  border: 0;
+  background: var(--hairline);
 }
 
 .sidebar-new-plan:disabled {
@@ -377,8 +381,8 @@ body,
   scrollbar-width: thin;
 }
 
-/* The plans under their heading; the rest stand a section's gap below the
-   pinned ones while any are pinned. */
+/* The plans stand a section's gap below the pinned ones while any are
+   pinned. */
 .sidebar-group + .sidebar-group {
   margin-top: var(--section-gap);
 }

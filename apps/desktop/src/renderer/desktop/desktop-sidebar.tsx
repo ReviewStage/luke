@@ -766,6 +766,7 @@ export function DesktopSidebar({
         Search
         <ShortcutGlyphs command={APP_COMMAND.COMMAND_PALETTE} className="row-shortcut" />
       </button>
+      <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
@@ -779,8 +780,9 @@ export function DesktopSidebar({
             onOpenTab={openPinnedTab}
           />
         ) : null}
+        {/* The rule above heads the list, so it carries no heading of its
+            own; its name is for a screen reader alone. */}
         <nav className="sidebar-group" aria-label="Plans">
-          <h2 className="sidebar-heading">Plans</h2>
           {plans.listFailed ? (
             <p className="sidebar-note" role="alert">
               Your plans could not be read.{" "}
