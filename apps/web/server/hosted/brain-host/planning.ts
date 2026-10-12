@@ -5,7 +5,6 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
-  type PlanFieldWriter,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
@@ -328,15 +327,23 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
   ];
 }
 
-/** The fields the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
-function developerFieldsText(writers: readonly PlanFieldWriter[]): readonly string[] {
-  const written = writers.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
+/**
+ * The fields the developer wrote last, or a document plan's sections, by
+ * heading, each with when; nothing where the developer wrote none.
+ */
+function developerFieldsText(stored: StoredPlan): readonly string[] {
+  const written = (
+    stored.text === undefined
+      ? stored.fieldWriters.map((writer) => ({
+          ...writer,
+          heading: PLAN_FIELD_HEADING[writer.field],
+        }))
+      : stored.sectionWriters.map((writer) => ({ ...writer, heading: writer.section }))
+  ).filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
   if (written.length === 0) return [];
   return [
     DEVELOPER_FIELDS_MARKER,
-    ...written.map(
-      (writer) => `- ${PLAN_FIELD_HEADING[writer.field]}, ${new Date(writer.at).toISOString()}`,
-    ),
+    ...written.map((writer) => `- ${writer.heading}, ${new Date(writer.at).toISOString()}`),
   ];
 }
 
@@ -363,7 +370,7 @@ export function planningStandingContext(
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),
-    ...developerFieldsText(stored.fieldWriters),
+    ...developerFieldsText(stored),
     boardText(board),
   ].join("\n");
 }

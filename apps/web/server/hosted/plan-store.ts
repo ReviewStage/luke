@@ -408,15 +408,17 @@ const replaceText = SqlSchema.findOneOption({
     planId: Schema.String,
     text: Schema.String,
     sectionWriters: Schema.optionalKey(Schema.Array(planSectionWriterSchema)),
+    agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, text, sectionWriters, now }) =>
+  execute: ({ userId, planId, text, sectionWriters, agentEdits, now }) =>
     db
       .update(plan)
       .set({
         document: text,
         ...(sectionWriters ? { sectionWriters } : undefined),
+        ...(agentEdits ? { agentEdits } : undefined),
         updatedAt: now,
       })
       .where(ownedPlan(userId, planId))
@@ -668,26 +670,29 @@ export function savePlanDocument(
   });
 }
 
+/** What a save of a document plan's text writes beside it, each where it is handed. */
+export interface PlanTextSaveExtras {
+  /** Who last changed each section. */
+  readonly sectionWriters?: readonly PlanSectionWriter[];
+  /** The coding agents' journal. */
+  readonly agentEdits?: readonly PlanAgentEdit[];
+}
+
 /**
  * Replaces the text of a plan that is one document, with who last changed
- * each section where it is handed, and answers the plan as saved, or nothing
- * where the account owns no such plan; nothing is ever created here.
+ * each section and the agents' journal where they are handed, and answers
+ * the plan as saved, or nothing where the account owns no such plan; nothing
+ * is ever created here.
  */
 export function savePlanText(
   userId: string,
   planId: string,
   text: string,
-  sectionWriters?: readonly PlanSectionWriter[],
+  extras: PlanTextSaveExtras = {},
 ): PlanStoreEffect<Option.Option<Plan>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const row = yield* replaceText({
-      userId,
-      planId,
-      text,
-      ...(sectionWriters === undefined ? undefined : { sectionWriters }),
-      now,
-    });
+    const row = yield* replaceText({ userId, planId, text, ...extras, now });
     return yield* Effect.transposeOption(Option.map(row, planOf));
   });
 }

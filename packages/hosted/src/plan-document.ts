@@ -41,10 +41,18 @@ export type PlanSectionWriter = typeof planSectionWriterSchema.Type;
 /** Who made a save, as each section it changed keeps them. */
 export type PlanSectionWriterWho = Omit<PlanSectionWriter, "section" | "at">;
 
-/** One section of a document: the heading it is known by, empty for what stands before the first, and its lines, the heading's among them. */
+/**
+ * One section of a document: the heading it is known by, empty for what
+ * stands before the first, its lines, the heading's among them, with the
+ * blank lines after them left out, and where those lines stand in the text.
+ */
 export interface PlanSection {
   readonly heading: string;
   readonly text: string;
+  /** The offset of the section's first character in the text. */
+  readonly from: number;
+  /** The offset just past its last character, before the blank lines that follow it. */
+  readonly to: number;
 }
 
 /** A code fence's opening line: up to three spaces, then three or more backticks or tildes, then any info string. */
@@ -56,9 +64,10 @@ const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
 /** What opens a `#` or `##` heading line: up to three spaces, the hashes, then a space, a tab, or the line's end. */
 const SECTION_OPENER = /^ {0,3}#{1,2}(?=[ \t]|$)/u;
 
-/** A section while its lines are read: its heading, and the lines so far. */
+/** A section while its lines are read: its heading, where it starts, and the lines so far. */
 interface SectionLines {
   readonly heading: string;
+  readonly from: number;
   readonly lines: string[];
 }
 
@@ -94,7 +103,8 @@ function headingOf(line: string): string | undefined {
 export function planSections(text: string): readonly PlanSection[] {
   const sections: SectionLines[] = [];
   let open: string | undefined;
-  let current: SectionLines = { heading: "", lines: [] };
+  let current: SectionLines = { heading: "", from: 0, lines: [] };
+  let offset = 0;
   for (const line of text.split("\n")) {
     const fence = (open === undefined ? FENCE_LINE : CLOSING_FENCE_LINE).exec(line)?.[1];
     const heading = open === undefined ? headingOf(line) : undefined;
@@ -102,9 +112,10 @@ export function planSections(text: string): readonly PlanSection[] {
       if (current.heading !== "" || current.lines.some((each) => each.trim() !== "")) {
         sections.push(current);
       }
-      current = { heading, lines: [] };
+      current = { heading, from: offset, lines: [] };
     }
     current.lines.push(line);
+    offset += line.length + 1;
     if (fence === undefined) continue;
     if (open === undefined) open = fence;
     else if (fence[0] === open[0] && fence.length >= open.length) open = undefined;
@@ -112,7 +123,10 @@ export function planSections(text: string): readonly PlanSection[] {
   if (current.heading !== "" || current.lines.some((each) => each.trim() !== "")) {
     sections.push(current);
   }
-  return sections.map(({ heading, lines }) => ({ heading, text: lines.join("\n").trimEnd() }));
+  return sections.map(({ heading, from, lines }) => {
+    const words = lines.join("\n").trimEnd();
+    return { heading, text: words, from, to: from + words.length };
+  });
 }
 
 /** Each heading's sections' words, in the order they stand, so two sections under one heading are compared one by one. */

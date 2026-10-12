@@ -24,17 +24,26 @@ const TEXT = [
 ].join("\n");
 
 test("a section is a # or ## heading and what stands under it, a deeper heading or a fenced one inside it", () => {
-  assert.deepEqual(planSections(TEXT), [
-    { heading: "", text: "A note before any heading." },
-    {
-      heading: "Context",
-      text: "## Context\n\nOnly an admin can add someone.\n\n### Today\n\nAdmins add people by hand.",
-    },
-    {
-      heading: "Goal",
-      text: "# Goal ##\n\n```md\n## Not a heading\n```\n\n##Not a heading either",
-    },
-  ]);
+  const sections = planSections(TEXT);
+
+  assert.deepEqual(
+    sections.map(({ from, to, text }) => TEXT.slice(from, to) === text),
+    [true, true, true],
+  );
+  assert.deepEqual(
+    sections.map(({ heading, text }) => ({ heading, text })),
+    [
+      { heading: "", text: "A note before any heading." },
+      {
+        heading: "Context",
+        text: "## Context\n\nOnly an admin can add someone.\n\n### Today\n\nAdmins add people by hand.",
+      },
+      {
+        heading: "Goal",
+        text: "# Goal ##\n\n```md\n## Not a heading\n```\n\n##Not a heading either",
+      },
+    ],
+  );
 });
 
 test("a fence is closed only by a run of its own character at least as long", () => {

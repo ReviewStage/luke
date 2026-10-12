@@ -4,6 +4,7 @@ import { test } from "vitest";
 import {
   applyNote,
   applyNotes,
+  applyNotesToText,
   EMPTY_PLAN_CONTENT,
   EMPTY_PLAN_FIELDS,
   NOTE_KIND,
@@ -14,6 +15,7 @@ import {
   type PlanNote,
   planBody,
   planDocumentOf,
+  textNotesInProgress,
   withAgentEdit,
 } from "./plan-template.js";
 import { PLAN_FIELD, type PlanField } from "./plan-wire.js";
@@ -312,4 +314,109 @@ test("a plan of fields becomes one document of its sections, no title, an unansw
       "",
     ].join("\n"),
   );
+});
+
+const DOCUMENT = [
+  "## Context",
+  "",
+  "Only an admin can add someone.",
+  "",
+  "## Goal",
+  "",
+  "- Members invite by email.",
+  "",
+  "## Hard parts",
+  "",
+  "## Assumptions",
+  "",
+  "- Invites expire after 7 days.",
+  "",
+].join("\n");
+
+test("a field's note lands in the document's section under that field's heading: a bullet under a list, a paragraph under prose, a heading alone filled", () => {
+  const { text, missed } = applyNotesToText(DOCUMENT, [
+    { kind: NOTE_KIND.ADD, field: PLAN_FIELD.GOAL, text: "- Admins can withdraw an invite." },
+    { kind: NOTE_KIND.ADD, field: PLAN_FIELD.CONTEXT, text: "It came up in support." },
+    {
+      kind: NOTE_KIND.ADD,
+      field: PLAN_FIELD.HARD_PARTS,
+      text: "- A link opened twice grants once.",
+    },
+    { kind: NOTE_KIND.ADD, field: PLAN_FIELD.ASSUMPTIONS, text: "Members and admins both invite." },
+  ]);
+
+  assert.deepEqual(missed, []);
+  assert.equal(
+    text,
+    [
+      "## Context",
+      "",
+      "Only an admin can add someone.",
+      "",
+      "It came up in support.",
+      "",
+      "## Goal",
+      "",
+      "- Members invite by email.",
+      "- Admins can withdraw an invite.",
+      "",
+      "## Hard parts",
+      "",
+      "- A link opened twice grants once.",
+      "",
+      "## Assumptions",
+      "",
+      "- Invites expire after 7 days.",
+      "- Members and admins both invite.",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("a note under a heading the document does not hold opens that section at the end, and a heading in a note's words is written as words", () => {
+  const { text } = applyNotesToText(DOCUMENT, [
+    {
+      kind: NOTE_KIND.ADD,
+      field: PLAN_FIELD.TESTING,
+      text: "- When an invite expires, then its link says so.\n## Not a heading",
+    },
+  ]);
+
+  assert.ok(
+    text.endsWith(
+      "- Invites expire after 7 days.\n\n## Testing\n\n- When an invite expires, then its link says so.\n\\## Not a heading\n",
+    ),
+  );
+});
+
+test("a correction or a strike names a phrase standing once in the whole document and touching no heading, or it is passed over", () => {
+  const corrected = applyNotesToText(DOCUMENT, [
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find: "an admin", text: "an owner" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.GOAL, find: "invite by email" },
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.GOAL, find: "Goal", text: "Outcome" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.ASSUMPTIONS, find: "days" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.ASSUMPTIONS, find: "an" },
+  ]);
+
+  assert.deepEqual(
+    corrected.missed.map((note) => note.kind),
+    [NOTE_KIND.REPLACE, NOTE_KIND.REMOVE],
+  );
+  assert.ok(corrected.text.includes("Only an owner can add someone."));
+  assert.ok(corrected.text.includes("## Goal\n\n## Hard parts"));
+  assert.ok(corrected.text.endsWith("## Assumptions\n"));
+});
+
+test("a document drawn while notes stream holds every whole note and the point still being written", () => {
+  const partial = unparsedWire({
+    notes: [
+      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.GOAL, text: "- Admins can withdraw." },
+      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.CONTEXT, text: "It came up" },
+    ],
+  });
+
+  const drawn = textNotesInProgress(DOCUMENT, partial);
+
+  assert.ok(drawn.includes("- Members invite by email.\n- Admins can withdraw.\n"));
+  assert.ok(drawn.includes("Only an admin can add someone.\n\nIt came up\n"));
 });

@@ -669,22 +669,47 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect(
-    "a plan that is one document is not written on its template's fields: no model call, no draft, and its text stands",
+    "a plan that is one document is handed to the model as its text, drafted and saved in its sections, and its saved draft names the sections it moved",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
-          yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+          yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
+            { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, at: 1 },
+          ]);
           const { scribe, asked, drafts } = yield* scribeFor(userId, planId, [
             { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_500));
           yield* quiet;
+          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
 
-          assert.deepEqual(asked, []);
-          assert.deepEqual(drafts, []);
-          assert.equal(yield* savedBody(userId, planId), INVITATIONS_TEXT);
+          const prompt = promptText(asked[0]);
+          assert.ok(prompt.includes(INVITATIONS_TEXT));
+          assert.ok(prompt.includes("one document"));
+          assert.ok(prompt.includes("[fields the developer wrote]\nGoal"));
+          assert.ok(
+            body.startsWith(
+              "## Context\n\nOnly an admin can add someone to a workspace today.\n\n" +
+                `${PROBLEM}\n\n## Goal`,
+            ),
+          );
+          const saved = drafts.at(-1);
+          assert.equal(saved?.document.body, body);
+          assert.deepEqual(saved?.document.assumptions, []);
+          assert.equal(saved?.fields, undefined);
+          assert.deepEqual(
+            saved?.sectionEdits?.map(({ section, actor, duringCall }) => ({
+              section,
+              actor,
+              duringCall,
+            })),
+            [
+              { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, duringCall: false },
+              { section: "Context", actor: PLAN_ACTOR.NOTETAKER, duringCall: true },
+            ],
+          );
         }),
       ),
   );

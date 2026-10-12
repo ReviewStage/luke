@@ -9,7 +9,12 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema, planFieldEditSchema, planFieldsSchema } from "./plan-wire.js";
+import {
+  planDocumentSchema,
+  planFieldEditSchema,
+  planFieldsSchema,
+  planSectionEditSchema,
+} from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -375,6 +380,8 @@ export const planDraftFrameSchema = Schema.Struct({
   readAt: Schema.optionalKey(Schema.Number),
   /** The save that last changed each field, as the plan names them after the save; absent while it is a draft, and from a service before them. */
   fieldEdits: Schema.optionalKey(Schema.Array(planFieldEditSchema)),
+  /** For a plan that is one document, the save that last changed each section after the save; absent while it is a draft, and for any other plan. */
+  sectionEdits: Schema.optionalKey(Schema.Array(planSectionEditSchema)),
 });
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;

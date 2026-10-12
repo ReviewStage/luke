@@ -60,7 +60,7 @@ import {
   recordCodingAgentPublished,
 } from "../server/hosted/coding-agent-store";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
+import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { PLAN_REVISION } from "../server/hosted/plan-revisions";
 import { createPlan } from "../server/hosted/plan-store";
 import { plansApp } from "../server/plans-app";
@@ -2220,7 +2220,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan that is one document takes no field edit and none of the template's notes, and its text stands",
+    "a plan that is one document takes no field edit, and Luke's notes land in its sections as a revision naming him on each section they moved",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -2237,7 +2237,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           }),
         );
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.GOAL, "Members invite by email."),
+          added(PLAN_FIELD.GOAL, "- Admins can withdraw an invite."),
+          added(PLAN_FIELD.TESTING, "- When an invite expires, then its link says so."),
         ]);
         const { plan } = readAnswer(
           planAnswerSchema,
@@ -2249,12 +2250,25 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           edited,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(noted, {
-          status: PLAN_SAVE_STATUS.NOT_SAVED,
-          reason: PLAN_SAVE_REFUSAL.DOCUMENT,
-        });
-        assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
-        assert.equal(plan.lastEdit, undefined);
+        assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
+        assert.ok(
+          plan.document.body.includes(
+            "- Any member can invite a teammate by email.\n- Admins can withdraw an invite.\n",
+          ),
+        );
+        assert.ok(
+          plan.document.body.endsWith(
+            "\n\n## Testing\n\n- When an invite expires, then its link says so.\n",
+          ),
+        );
+        assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.NOTETAKER);
+        assert.deepEqual(
+          plan.sectionEdits?.map(({ section, actor }) => [section, actor]),
+          [
+            ["Goal", PLAN_ACTOR.NOTETAKER],
+            ["Testing", PLAN_ACTOR.NOTETAKER],
+          ],
+        );
       }),
   );
 

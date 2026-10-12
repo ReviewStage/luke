@@ -134,10 +134,14 @@ function sessionsInput(frame: SessionCreateFrame): readonly InitialItem[] | unde
 const PLAN_SEED_MARKER = "[plan]";
 
 /**
- * Whether a plan is still as it was started: the untouched template, which
- * is what the store reads a never-saved body as, and no assumption.
+ * Whether a plan is still as it was started. Note that a plan that is one
+ * document, which answers no fields, is untouched while nobody has written
+ * it, because it starts as the account's own template and no text marks it
+ * unanswered; any other is the untouched template, which is what the store
+ * reads a never-saved body as, with no assumption.
  */
 function planUntouched(plan: Plan): boolean {
+  if (plan.fields === undefined) return plan.lastEdit === undefined;
   return (
     plan.document.assumptions.length === 0 &&
     plan.document.body === planBody({ name: plan.name }, EMPTY_PLAN_FIELDS)

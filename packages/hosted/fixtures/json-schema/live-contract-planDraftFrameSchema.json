@@ -236,6 +236,46 @@
         ],
         "additionalProperties": false
       }
+    },
+    "sectionEdits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "actor": {
+            "type": "string",
+            "enum": [
+              "developer",
+              "notetaker",
+              "agent",
+              "earlier"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          },
+          "duringCall": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "section",
+          "actor",
+          "at",
+          "duringCall"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

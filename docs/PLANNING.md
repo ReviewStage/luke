@@ -819,9 +819,18 @@ holds both prompts to those words.
   (`packages/hosted/src/plan-document.ts`). A restore puts back any of its
   revisions, one kept as the template's fields as the text those fields
   become (`planDocumentOf`: each section under its heading, an unanswered
-  one its heading alone, the assumptions last). Until the notes learn the
-  text, it takes none of the template's notes or field edits, and its call's
-  notetaker writes nothing on it. Nothing makes a plan one document yet.
+  one its heading alone, the assumptions last). It takes no field edit.
+  Luke's notes land in its text (`applyNotesToText` in `plan-template.ts`): a
+  note still names a field, and lands in the section under that field's
+  heading, an addition at the end of the section, or as a new section at the
+  end of the text where it has none; a correction or a strike names a phrase
+  standing once in the whole text and touching no heading, since the
+  headings are the developer's. The notetaker is handed the text rather than
+  the fields, its drafts are the text with the notes so far, and a saved
+  draft names who last changed each section (`sectionEdits` on `plan.draft`);
+  the planning model and the notetaker are told the sections the developer
+  wrote by heading; and a call about a document plan nobody has written yet
+  opens it as a new plan. Nothing makes a plan one document yet.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
   is understood, true, or agreed. Resolving each section, or agreeing that one

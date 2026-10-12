@@ -8,6 +8,7 @@ import {
 } from "@sidecar/hosted/plan-edit";
 import {
   applyNotes,
+  applyNotesToText,
   changedFields,
   type PlanAgentEdit,
   type PlanContent,
@@ -24,6 +25,7 @@ import {
   type PlanDocument,
   type PlanFieldEdit,
   type PlanFields,
+  type PlanSectionEdit,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -112,7 +114,7 @@ export const PLAN_SAVE_REFUSAL = {
   NO_PLAN: "Not saved: this plan no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
   ARCHIVED: "Not saved: this plan is archived.",
-  /** The plan is one document, which takes none of the template's notes or field edits. */
+  /** The plan is one document, which takes no field edit. */
   DOCUMENT: "Not saved: this plan is a document, not the template's fields.",
   /** The plan is the template's fields, which takes no edit of a document's text. */
   NOT_DOCUMENT: "Not saved: this plan is the template's fields, not a document.",
@@ -124,16 +126,18 @@ export type PlanSaveResult =
       readonly status: typeof PLAN_SAVE_STATUS.SAVED;
       /** The document exactly as it now stands saved. */
       readonly document: PlanDocument;
-      /** The fields the saved document was formatted from. */
-      readonly fields: PlanFields;
+      /** The fields the saved document was formatted from; none for a plan that is one document. */
+      readonly fields?: PlanFields;
       /** Epoch milliseconds of the save. */
       readonly savedAt: number;
       /** The notes that could not be taken, passed over while the rest were saved. */
       readonly missed: readonly PlanNote[];
       /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
       readonly moved: boolean;
-      /** The save that last changed each field, this one among them, as the plan now names them. */
-      readonly fieldEdits: readonly PlanFieldEdit[];
+      /** The save that last changed each field, this one among them, as the plan now names them; none for a document plan. */
+      readonly fieldEdits?: readonly PlanFieldEdit[];
+      /** The save that last changed each section of a document plan, this one among them. */
+      readonly sectionEdits?: readonly PlanSectionEdit[];
     }
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
@@ -175,10 +179,11 @@ interface PlanTaken {
   readonly agentEdits?: readonly PlanAgentEdit[];
 }
 
-/** What a change made of a document plan's text under its lock: the text to save, and how many changes it made. */
+/** What a change made of a document plan's text under its lock: the text to save, how many changes it made, and the agents' journal where it moved. */
 interface TextTaken {
   readonly text: string;
   readonly changes: number;
+  readonly agentEdits?: readonly PlanAgentEdit[];
 }
 
 /** A save under the plan's lock, before the change it took is named: the plan as saved and whether its words moved, or why nothing was saved. */
@@ -296,10 +301,19 @@ function textWritten(
         savedBefore: savedBeforeOf(stored),
       });
     }
-    const sectionWriters = moved
-      ? withSectionWriters(stored.sectionWriters, { before, after }, fieldWriterOf(writer), now)
-      : undefined;
-    const saved = yield* savePlanText(binding.userId, binding.planId, after, sectionWriters);
+    const saved = yield* savePlanText(binding.userId, binding.planId, after, {
+      ...(taken.agentEdits === undefined ? undefined : { agentEdits: taken.agentEdits }),
+      ...(moved
+        ? {
+            sectionWriters: withSectionWriters(
+              stored.sectionWriters,
+              { before, after },
+              fieldWriterOf(writer),
+              now,
+            ),
+          }
+        : undefined),
+    });
     if (Option.isNone(saved)) return NO_PLAN_RESULT;
     return { status: PLAN_SAVE_STATUS.SAVED, plan: saved.value, moved };
   });
@@ -397,8 +411,11 @@ export function saveNotes(
   writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
   const take = (stored: StoredPlan, now: number) => {
-    const { content, missed } = applyNotes(contentOf(stored), notes);
-    const taken = notes.filter((note) => !missed.includes(note));
+    const noted =
+      stored.text === undefined
+        ? applyNotes(contentOf(stored), notes)
+        : applyNotesToText(stored.text, notes);
+    const taken = notes.filter((note) => !noted.missed.includes(note));
     // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
     const journaled =
       writer.actor === PLAN_ACTOR.AGENT && taken.length > 0
@@ -410,19 +427,21 @@ export function saveNotes(
             }),
           }
         : undefined;
-    return Result.succeed({ content, changes: taken.length, missed, ...journaled });
+    return Result.succeed({ ...noted, changes: taken.length, ...journaled });
   };
   // Notes never refuse the plan they find: one naming a phrase the plan does not hold is passed over.
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
     if (result.status === PLAN_SAVE_STATUS.NOT_SAVED) return result;
+    const { plan, taken } = result;
     return {
       status: PLAN_SAVE_STATUS.SAVED,
-      document: result.plan.document,
-      fields: result.taken.content.fields,
-      savedAt: result.plan.updatedAt,
-      missed: result.taken.missed,
+      document: plan.document,
+      ...("content" in taken
+        ? { fields: taken.content.fields, fieldEdits: plan.fieldEdits ?? [] }
+        : { sectionEdits: plan.sectionEdits ?? [] }),
+      savedAt: plan.updatedAt,
+      missed: taken.missed,
       moved: result.moved,
-      fieldEdits: result.plan.fieldEdits ?? [],
     };
   });
   return reachedStore(saved);
