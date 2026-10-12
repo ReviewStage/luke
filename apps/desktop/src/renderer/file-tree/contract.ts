@@ -50,7 +50,12 @@ export interface FileTreeProps {
   readonly readFolder: ReadFolder;
   /** A file chosen in the tree, by a press or Return: open it, in a tab of its own where ⌘ was held. */
   readonly onOpen: (path: string, newTab: boolean) => void;
-  /** How many rows the tree shows, each time a folder listed, opened, or closed changes it, which a breadcrumb's tree sizes its box by. */
+  /**
+   * How many rows the repository's tree shows, each time a folder listed,
+   * opened, or closed changes it, which a breadcrumb's tree sizes its box
+   * by. Note that a search or the filter is not counted, because only the
+   * pane narrows its tree and the pane sizes nothing by its rows.
+   */
   readonly onRows?: (rows: number) => void;
 }
 
