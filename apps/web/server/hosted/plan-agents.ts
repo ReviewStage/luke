@@ -13,10 +13,10 @@ import {
 import { Clock, Effect } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
 import {
-  awaitingLinesOf,
+  awaitingLinesOfReached,
   type CodingAgentLatestTurn,
   type CodingAgentStoreEffect,
-  latestTurnsOf,
+  latestTurnsOfReached,
   listPublishedCodingAgents,
   type PublishedCodingAgent,
 } from "./coding-agent-store.js";
@@ -111,7 +111,7 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   };
 }
 
-/** The account's listed plans, each carrying its agents in brief where it has any; the plans' order and every other field as listed. */
+/** The account's listed plans, each carrying its agents in brief, whichever member started each, where it has any; the plans' order and every other field as listed. */
 export function withPlanAgents(
   userId: string,
   plans: readonly PlanSummary[],
@@ -122,8 +122,9 @@ export function withPlanAgents(
       plans.map((plan) => plan.id),
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
-    const turns = yield* latestTurnsOf(userId, conversationIds);
-    const awaiting = yield* awaitingLinesOf(userId, conversationIds);
+    // The agents were read through the plans' gate, and each conversation is its starter's, a teammate's as often as the account's.
+    const turns = yield* latestTurnsOfReached(conversationIds);
+    const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const now = yield* Clock.currentTimeMillis;
     const byPlan = new Map<string, ReadAgent[]>();
     for (const agent of held) {
