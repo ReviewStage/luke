@@ -87,6 +87,7 @@ const DECLARED_TABLES = [
   "oauth_resource",
   "observation_pass",
   "organization",
+  "personal_workspace",
   "plan",
   "plan_board",
   "plan_revision",
