@@ -2,12 +2,15 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
+import { TranscriptSubagent } from "./transcript-blocks";
 
 /**
  * The Work tab and a coding agent's tab draw a turn's reasoning and its
@@ -42,6 +45,8 @@ function foldSaying(container: HTMLElement, words: string): HTMLDetailsElement {
 }
 
 const REASONING = "List the sources first.";
+/** The reasoning as a model sends it: a blank line around its words, which keep their indent. */
+const REASONING_SENT = `\n  ${REASONING}\n\n`;
 const COMMAND = "ls src";
 const OUTPUT = "invite.ts";
 
@@ -92,14 +97,14 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
         earlierOmitted: false,
         parts: callsFirst
           ? [
-              { type: PLAN_WORK_PART.REASONING, text: REASONING },
+              { type: PLAN_WORK_PART.REASONING, text: REASONING_SENT },
               workCall("call-1", COMMAND),
               workCall("call-2", "cat src/invite.ts"),
               { type: PLAN_WORK_PART.TEXT, text: "One file." },
             ]
           : [
               { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
-              { type: PLAN_WORK_PART.REASONING, text: REASONING },
+              { type: PLAN_WORK_PART.REASONING, text: REASONING_SENT },
               workCall("call-1", COMMAND),
             ],
       },
@@ -112,14 +117,14 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
         role: "assistant",
         parts: callsFirst
           ? [
-              { type: "reasoning", text: REASONING },
+              { type: "reasoning", text: REASONING_SENT },
               agentCall("call-1", COMMAND),
               agentCall("call-2", "cat src/invite.ts"),
               { type: "text", text: "One file." },
             ]
           : [
               { type: "text", text: "Looking at the sources." },
-              { type: "reasoning", text: REASONING },
+              { type: "reasoning", text: REASONING_SENT },
               agentCall("call-1", COMMAND),
             ],
       },
@@ -204,3 +209,46 @@ test.each(surfaces(true))(
     assert.equal(call.open, false);
   },
 );
+
+test.each(surfaces(false))(
+  "on %s an opened reasoning starts on its first line and ends on its last word, with no blank line around it",
+  (_surface, element) => {
+    const container = mounted(element);
+    const thought = foldSaying(container, "Thought");
+    act(() => thought.querySelector("summary")?.click());
+    assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
+  },
+);
+
+const GPT: CatalogModel = {
+  id: "openai/gpt-5.6-sol",
+  name: "GPT-5.6 Sol",
+  provider: MODEL_PROVIDER.OPENAI,
+  efforts: ["low", "medium", "high"],
+};
+
+const HAIKU: CatalogModel = {
+  id: "anthropic/claude-haiku-5.5",
+  name: "Claude Haiku 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "medium", "high"],
+};
+
+test.each([
+  ["Claude Code's Clawd for an Anthropic model", HAIKU.id, "svg.provider-mark"],
+  ["Codex's cloud for an OpenAI model", GPT.id, 'img.provider-mark[src="marks/codex-16.png"]'],
+  ["the robot for a model the catalog does not list", "anthropic/claude-haiku-9", "svg.lucide-bot"],
+] as const)("a subagent's row leads with %s", (_glyph, model, drawn) => {
+  const container = mounted(
+    createElement(TranscriptSubagent, {
+      callId: "call_d1",
+      job: "Count the routes.",
+      pair: { choice: { model, effort: "low" }, models: [HAIKU, GPT] },
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      errorText: undefined,
+      onOpen: () => undefined,
+    }),
+  );
+  const row = container.querySelector("[data-subagent-row]");
+  assert.ok(row?.firstElementChild?.matches(`${drawn}, :has(> ${drawn})`));
+});
