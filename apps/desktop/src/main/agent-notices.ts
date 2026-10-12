@@ -411,8 +411,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         observe(agent.id, heldOf(agent));
         // The line awaits the turn it opens: the plan is watched until that turn names itself.
         const held = ledger.get(agent.id);
-        if (held !== undefined && !stillWriting(held.status)) {
+        if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
           ledger.set(agent.id, { ...held, awaiting: true });
+          // The service reads the agent running from the message on, so the list is read again now.
+          dependencies.onPlanAgentsMoved();
         }
       },
       observeStatus: (agentId, status) => {

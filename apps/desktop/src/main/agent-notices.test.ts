@@ -160,7 +160,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
 };
 
 it.effect(
-  "the plan list is asked for again as an agent starts and as its turn ends, and not for an answer that says nothing new",
+  "the plan list is asked for again as an agent starts, as its turn ends, and as a message wakes it, and not for an answer that says nothing new",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -176,6 +176,12 @@ it.effect(
       assert.equal(f.listReads(), 2);
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
       assert.equal(f.listReads(), 2);
+
+      // A message to the ended agent reads it running under the ended turn, which the list says too.
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID }));
+      assert.equal(f.listReads(), 3);
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID }));
+      assert.equal(f.listReads(), 3);
     }),
 );
 

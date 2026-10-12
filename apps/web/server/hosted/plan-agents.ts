@@ -1,4 +1,8 @@
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentStatus,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_AGENTS_BOUNDS,
   type PlanAgentLine,
@@ -69,10 +73,20 @@ function agentLine(
   };
 }
 
+/** The order the pull requests a row names stand in: those still to act on first, then merged, then closed. */
+const PULL_REQUEST_RANK = {
+  [PULL_REQUEST_STATE.OPEN]: 0,
+  [PULL_REQUEST_STATE.DRAFT]: 0,
+  [PULL_REQUEST_STATE.MERGED]: 1,
+  [PULL_REQUEST_STATE.CLOSED]: 2,
+} as const satisfies Record<PlanPullRequestLine["state"], number>;
+
 /**
  * One plan's agents in brief: those at work named first, then the rest,
- * newest started first within each; the pull requests newest agent's
- * first, each number once, since two agents on one branch share theirs.
+ * newest started first within each; the pull requests each number once,
+ * since two agents on one branch share theirs, those still open first, then
+ * merged, then closed, newest agent's first within each, so the few a row
+ * names always hold the one its mark is drawn for.
  */
 function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
@@ -91,7 +105,9 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
       .slice(0, PLAN_AGENTS_BOUNDS.MAX_AGENTS)
       .map((agent) => agent.line),
     pullRequestTotal: pullRequests.size,
-    pullRequests: [...pullRequests.values()].slice(0, PLAN_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+    pullRequests: [...pullRequests.values()]
+      .sort((a, b) => PULL_REQUEST_RANK[a.state] - PULL_REQUEST_RANK[b.state])
+      .slice(0, PLAN_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
   };
 }
 

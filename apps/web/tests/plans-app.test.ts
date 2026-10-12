@@ -354,6 +354,47 @@ const PULL_REQUEST: CodingAgentPullRequest = {
 
 it.layer(testSqlClient)("the plan routes", (it) => {
   it.effect(
+    "a listed plan names its open pull request among the few it carries, ahead of newer merged and closed ones",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const plan = yield* createPlan(owner, { name: RELAY.name });
+        const states = [
+          PULL_REQUEST_STATE.OPEN,
+          PULL_REQUEST_STATE.CLOSED,
+          PULL_REQUEST_STATE.MERGED,
+          PULL_REQUEST_STATE.CLOSED,
+        ];
+        for (const [index, state] of states.entries()) {
+          const agent = yield* startAgent(owner, plan.id);
+          yield* recordCodingAgentPublished(owner, agent.id, {
+            ...PULL_REQUEST,
+            number: index + 1,
+            state,
+          });
+          yield* TestClock.adjust("1 minute");
+        }
+
+        const { plans } = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+
+        const agents = plans.find((listed) => listed.id === plan.id)?.agents;
+        assert.equal(agents?.pullRequestTotal, 4);
+        assert.deepEqual(
+          agents?.pullRequests.map((pullRequest) => [pullRequest.number, pullRequest.state]),
+          [
+            [1, PULL_REQUEST_STATE.OPEN],
+            [3, PULL_REQUEST_STATE.MERGED],
+            [4, PULL_REQUEST_STATE.CLOSED],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a listed plan says what its coding agents are doing and what they published, and a plan with none says nothing",
     () =>
       Effect.gen(function* () {
