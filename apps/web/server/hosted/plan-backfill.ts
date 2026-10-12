@@ -7,7 +7,7 @@ import {
   planFieldWriterSchema,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_BOUNDS, planAssumptionSchema, planFieldsSchema } from "@sidecar/hosted/plan-wire";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { planRevision } from "../db/plan-revision-schema.js";
@@ -124,7 +124,7 @@ const findFieldsRevisions = SqlSchema.findAll({
         assumptions: planRevision.assumptions,
       })
       .from(planRevision)
-      .where(isNull(planRevision.document)),
+      .where(and(isNull(planRevision.document), isNotNull(planRevision.fields))),
 });
 
 const setRevisionDocument = SqlSchema.void({
