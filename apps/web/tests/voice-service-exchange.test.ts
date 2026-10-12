@@ -65,6 +65,7 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
+import { createFieldsPlan } from "./support/plan-documents";
 import {
   insertVoiceTranscriptSegment,
   readMessagesByConversationTyped,
@@ -1319,7 +1320,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(createFieldsPlan(context.target.userId, PLAN));
       await database.run(
         savePlanDocument(context.target.userId, plan.id, {
           body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
@@ -1341,7 +1342,7 @@ it.effect(
       await hangUpConnection(saved.desktop, saved.attach, saved.upstream);
 
       const long = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        createFieldsPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const tail = "The last line of a very long plan.";
       await database.run(
@@ -1363,7 +1364,7 @@ it.effect(
       // more than twice the room, where four characters to a token let all of
       // them through.
       const wide = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
+        createFieldsPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
       );
       await database.run(
         savePlanDocument(context.target.userId, wide.id, {
@@ -1392,12 +1393,12 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const fresh = await database.run(createPlan(context.target.userId, PLAN));
+      const fresh = await database.run(createFieldsPlan(context.target.userId, PLAN));
       const freshCall = await openSession(context, fresh.id);
       const [freshSeed] = seededTexts(context, 0);
       await hangUpConnection(freshCall.desktop, freshCall.attach, freshCall.upstream);
 
-      const saved = await database.run(createPlan(context.target.userId, PLAN));
+      const saved = await database.run(createFieldsPlan(context.target.userId, PLAN));
       await database.run(
         savePlanDocument(context.target.userId, saved.id, {
           body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",

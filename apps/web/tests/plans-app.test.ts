@@ -77,6 +77,7 @@ import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import {
   INVITATIONS_TEXT,
   makeDocumentPlan,
+  makeFieldsPlan,
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
@@ -759,6 +760,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
+        yield* makeFieldsPlan(planId);
         yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
         const change = (body: WireBoundaryInput) =>
           ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
@@ -851,6 +853,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
+        yield* makeFieldsPlan(planId);
 
         const edited = yield* ask(
           request(EDIT, owner, {
@@ -885,6 +888,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
+        yield* makeFieldsPlan(planId);
         yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
         const edit = (body: WireBoundaryInput) =>
           ask(request(EDIT, owner, { id: planId, method: "POST", body }));
@@ -961,6 +965,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      yield* makeFieldsPlan(planId);
 
       const renamed = yield* ask(
         request(ONE_PLAN, owner, {
@@ -1116,6 +1121,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       ]);
       const { owner, ask } = yield* openAccounts(github);
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      yield* makeFieldsPlan(planId);
       const change = (body: WireBoundaryInput) =>
         ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
 
@@ -2336,6 +2342,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const fieldsPlanId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })),
         );
+        yield* makeFieldsPlan(fieldsPlanId);
         const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
         yield* makeDocumentPlan(planId, lukes);
         const edit = (id: string, value: string) =>
@@ -2390,6 +2397,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
+        yield* makeFieldsPlan(planId);
         yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         yield* recordDocumentRevision(
@@ -2439,6 +2447,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
+        yield* makeFieldsPlan(planId);
         yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
         yield* recordDocumentRevision(
           planId,

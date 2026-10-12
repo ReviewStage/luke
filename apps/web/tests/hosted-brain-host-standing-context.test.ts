@@ -9,9 +9,10 @@ import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createPlan, openPlanConversation, savePlanDocument } from "../server/hosted/plan-store";
+import { openPlanConversation, savePlanDocument } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { createFieldsPlan } from "./support/plan-documents";
 import { insertConversation, insertMessage } from "./support/store-rows";
 
 /**
@@ -116,7 +117,7 @@ async function said(target: ConversationTarget, words: string): Promise<void> {
 
 test("a turn of a plan's conversation is handed the plan's name and the document saved as it starts, and none of the conversation's words", async () => {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  const plan = await database.run(createFieldsPlan(userId, { name: PLAN_NAME }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
   );
@@ -138,7 +139,7 @@ test("a turn of a plan's conversation is handed the plan's name and the document
 
 test("a conversation no plan names is handed no name and no document", async () => {
   const userId = await database.createUser();
-  const elsewhere = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  const elsewhere = await database.run(createFieldsPlan(userId, { name: PLAN_NAME }));
   await database.run(savePlanDocument(userId, elsewhere.id, FIRST));
   const target = { userId, conversationId: await insertConversation(database.run, { userId }) };
 

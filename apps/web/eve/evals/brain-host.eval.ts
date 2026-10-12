@@ -29,7 +29,7 @@ import {
   createPlan,
   openPlanConversation,
   readPlan,
-  savePlanDocument,
+  savePlanText,
 } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
@@ -66,10 +66,9 @@ const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 const PLAN = {
   name: "Teammate invitations",
 } as const;
-const PLAN_SAVED = {
-  body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",
-  assumptions: [{ text: "Invites reuse `memberships` with a `pending` state." }],
-} as const;
+const PLAN_TEXT =
+  "## Open questions\n\n- Who may invite?\n\n## Assumptions\n\n- Invites reuse `memberships` with a `pending` state.\n";
+const PLAN_SAVED = { body: PLAN_TEXT, assumptions: [] } as const;
 const PLAN_WORDS = {
   FIRST: "Any member should be able to invite, not only admins.",
 } as const;
@@ -177,7 +176,7 @@ export default defineEval({
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
       const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
-      await run(savePlanDocument(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_SAVED));
+      await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
       const planConversationId = await planConversation(run, plan.id);
       const planning = await openSession(planConversationId, PLAN_WORDS.FIRST);
       const planningSession = await t.target.attachSession(planning.sessionId);
