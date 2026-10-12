@@ -60,14 +60,15 @@ const quiet = Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_
 
 /**
  * What `read` answers once it reads as `expected`, settling again between reads
- * within a bound, since how many turns of the loop a run's store work takes
- * is the machine's; what it last read either way, so a failed assertion shows
- * the value.
+ * for as long as that takes. Note that no count of the loop's turns bounds the
+ * wait, because a run's store work is answered by a real database on its own
+ * time: a count of turns is a wall-clock budget the machine spends at its own
+ * speed, and a loaded Postgres on CI outlasted it. The test's timeout is the bound.
  */
 const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A) => boolean) =>
   Effect.gen(function* () {
     let value = yield* read;
-    for (let attempt = 0; attempt < 50 && !expected(value); attempt += 1) {
+    while (!expected(value)) {
       yield* settle;
       value = yield* read;
     }
