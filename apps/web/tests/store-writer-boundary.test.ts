@@ -53,7 +53,7 @@ const WRITER = "server/hosted/store/writer.ts";
 const WRITER_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 
 /** The read module: the message and turn reads the brain and the voice make select from those tables and insert into none. */
-const READER = "server/hosted/store/message-reads.ts";
+const READER = `${DATABASE_SOURCES}/models/message-reads.ts`;
 
 /** The abandoned-turns module: lists the turns still running past the bound and settles each through the writer. */
 const ABANDONED_TURNS_READER = "server/hosted/store/abandoned-turns.ts";

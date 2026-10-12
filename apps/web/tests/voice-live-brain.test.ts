@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { childConversationId } from "@sidecar/database/models/ids";
+import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -54,7 +55,6 @@ import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hoste
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import type { MessageListRead } from "../server/hosted/store/message-reads";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,

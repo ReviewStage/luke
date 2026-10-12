@@ -1,3 +1,4 @@
+import type { StoredMessageRecord, StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -32,7 +33,6 @@ import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.j
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { SHOW_CODE_TOOL } from "../hosted/show-code.js";
-import type { StoredMessageRecord, StoredTurnRecord } from "../hosted/store/message-reads.js";
 import { turnRecordOf } from "../hosted/turn-record.js";
 
 /**

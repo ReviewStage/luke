@@ -1,6 +1,13 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import {
+  awaitingLinesOf,
+  type LatestTurn,
+  latestTurnsOf,
+  type TurnUsageRow,
+  turnUsagesOf,
+} from "@sidecar/database/models/message-reads";
+import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
@@ -24,13 +31,6 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
 import { PlanArchived } from "./plan-store.js";
 import type { ConversationTarget } from "./store/index.js";
-import {
-  awaitingLinesOf,
-  type LatestTurn,
-  latestTurnsOf,
-  type TurnUsageRow,
-  turnUsagesOf,
-} from "./store/message-reads.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.

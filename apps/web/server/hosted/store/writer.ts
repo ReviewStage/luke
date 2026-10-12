@@ -8,6 +8,7 @@ import {
   TurnUsageColumnSchema,
 } from "@sidecar/database/models/columns";
 import { sentLineId } from "@sidecar/database/models/ids";
+import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "@sidecar/database/models/message-reads";
 import { asks, conversations, messages, turns } from "@sidecar/database/schemas/storage";
 import { voiceSessions } from "@sidecar/database/schemas/voice";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -61,7 +62,6 @@ import {
   type UnparsedWireValue,
 } from "../../core.js";
 import { lineParts, receivedPartsOf } from "../attached-files.js";
-import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is

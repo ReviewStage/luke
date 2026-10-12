@@ -1,5 +1,13 @@
 import { childConversationId } from "@sidecar/database/models/ids";
 import {
+  listJournals,
+  listJournalsCalling,
+  readMessageByClientId,
+  type StoredMessageRecord,
+  type StoredTurnRecord,
+  turnsBefore,
+} from "@sidecar/database/models/message-reads";
+import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
   type PlanWorkAnswer,
@@ -19,14 +27,6 @@ import { subagentRecordsByCall } from "./child-models.js";
 import { childTitlesByCall } from "./child-titles.js";
 import { type PlanStoreEffect, readPlan } from "./plan-store.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
-import {
-  listJournals,
-  listJournalsCalling,
-  readMessageByClientId,
-  type StoredMessageRecord,
-  type StoredTurnRecord,
-  turnsBefore,
-} from "./store/message-reads.js";
 
 /**
  * plan-work-store.ts -- a plan's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.
