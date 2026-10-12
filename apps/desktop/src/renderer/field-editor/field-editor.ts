@@ -1,4 +1,4 @@
-import { Editor, type EditorOptions, type JSONContent } from "@tiptap/core";
+import { type AnyExtension, Editor, type EditorOptions, type JSONContent } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
@@ -11,6 +11,7 @@ import {
   type FieldEditorProps,
   type FieldValue,
 } from "./contract";
+import { RawBlock } from "./document-source";
 import { RULE_EXTENSIONS, ruleDocument, ruleParts } from "./rule-extension";
 
 /**
@@ -68,6 +69,11 @@ function extensionsOf(kind: FieldValue["kind"], limit: number | undefined) {
   }
   // The assumptions' items wear the read view's own class, so they stand where its items stood.
   const item = kind === FIELD_KIND.ASSUMPTIONS ? { class: "plan-assumption" } : {};
+  return [...markdownExtensions(item), placeholder, bound];
+}
+
+/** What a Markdown document may hold, read and written as the editor reads and writes it. */
+export function markdownExtensions(item: Record<string, string> = {}): AnyExtension[] {
   const kit = StarterKit.configure({
     underline: false,
     trailingNode: false,
@@ -75,16 +81,7 @@ function extensionsOf(kind: FieldValue["kind"], limit: number | undefined) {
     listItem: { HTMLAttributes: item },
     link: { openOnClick: false },
   });
-  return [
-    kit,
-    Markdown,
-    TaskList,
-    TaskItem,
-    TableKit,
-    Image.configure({ inline: true }),
-    placeholder,
-    bound,
-  ];
+  return [kit, Markdown, TaskList, TaskItem, TableKit, Image.configure({ inline: true }), RawBlock];
 }
 
 /** The field's words as the editor opens on them. */
