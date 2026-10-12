@@ -228,6 +228,7 @@ export const ACT_KIND = {
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
+  WINDOW_SAVE_FILE: "window.saveFile",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -351,6 +352,16 @@ const exactId = exactText(512);
  * a pass over every character and a block that long is a log, not a snippet.
  */
 export const COLOURED_CODE_MAX_CHARS = 20_000;
+
+/**
+ * The longest text a File tab copies or saves of its file: the service
+ * reads a file of a megabyte at most, and its text, a character to a byte
+ * at least, is no longer.
+ */
+const FILE_TEXT_MAX_CHARS = 1024 * 1024;
+
+/** A file's name as a save offers it: one name, no folder, so the dialog alone says where it goes. */
+const savedFileName = exactText(255).check(EffectSchema.isPattern(/^[^/\\]+$/u));
 
 /** The longest language name a fence may give for its block to be coloured. */
 export const FENCE_LANGUAGE_MAX_CHARS = 32;
@@ -697,11 +708,21 @@ export const ACT = {
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
-    // A plan's whole document is copied through this act, so it admits the
-    // longest one the store can hold, and an empty document copies as the empty text it is.
-    payload: record({ words: exactTextAllowingEmpty(PLAN_MARKDOWN_MAX_CHARS) }),
+    // A plan's whole document and a File tab's whole file are copied
+    // through this act, so it admits the longer of the two the service
+    // holds, and an empty document copies as the empty text it is.
+    payload: record({
+      words: exactTextAllowingEmpty(Math.max(PLAN_MARKDOWN_MAX_CHARS, FILE_TEXT_MAX_CHARS)),
+    }),
     result: answersNothing,
     refusal: "Could not copy that to the clipboard on this system.",
+  },
+  [ACT_KIND.WINDOW_SAVE_FILE]: {
+    // A File tab's file, saved where the developer chooses in the system's
+    // save dialog; answers whether it was saved rather than the dialog cancelled.
+    payload: record({ name: savedFileName, text: exactTextAllowingEmpty(FILE_TEXT_MAX_CHARS) }),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not save that file on this system.",
   },
   [ACT_KIND.FEEDBACK_SEND]: {
     payload: fields<{ submission: FeedbackSubmission }>({

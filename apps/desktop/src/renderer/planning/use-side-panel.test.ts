@@ -7,6 +7,7 @@ import { afterEach, test } from "vitest";
 import { usedPlan } from "#testing/plans-control";
 import { sameTab } from "./tab-strip-model";
 import {
+  FILE_HISTORY_STEP,
   type OpenPlan,
   type PlanHolds,
   SIDE_PANEL_TAB,
@@ -241,6 +242,36 @@ test("a file browsed to from a File tab takes that tab's place, opens a tab of i
     { file: STYLE },
     "closing returns to the tab viewed before",
   );
+});
+
+test("a File tab's Back walks the files it showed before, its lit lines with them, and Forward walks them again until it browses on; a step to a file with a tab of its own chooses that tab", () => {
+  const panel = mount([], [], [INVITE, ROLES]);
+  const README = "README.md";
+  const STYLE = "docs/STYLE.md";
+  const shown = () => panel.control().files.map((file) => file.path);
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 4, endLine: 6 }));
+  act(() => panel.control().onBrowseFile(INVITE, README, false));
+  act(() => panel.control().onBrowseFile(README, STYLE, false));
+
+  act(() => panel.control().onFileHistory(STYLE, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(panel.control().tab, { file: README });
+  act(() => panel.control().onFileHistory(README, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(panel.control().tab, { file: INVITE });
+  assert.deepEqual(panel.control().files[0]?.range, { startLine: 4, endLine: 6 });
+  act(() => panel.control().onFileHistory(INVITE, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(shown(), [INVITE], "nothing further back");
+
+  act(() => panel.control().onFileHistory(INVITE, FILE_HISTORY_STEP.FORWARD));
+  assert.deepEqual(shown(), [README]);
+  act(() => panel.control().onBrowseFile(README, ROLES, false));
+  act(() => panel.control().onFileHistory(ROLES, FILE_HISTORY_STEP.FORWARD));
+  assert.deepEqual(shown(), [ROLES], "browsing on lets go of the way forward");
+
+  act(() => panel.control().onBrowseFile(ROLES, README, true));
+  act(() => panel.control().onChoose({ file: ROLES }));
+  act(() => panel.control().onFileHistory(ROLES, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(panel.control().tab, { file: README });
+  assert.deepEqual(shown(), [ROLES, README], "one tab per file");
 });
 
 test("a file browsed to stands on the plan it was browsed on, though Luke never showed it, and on no other", () => {

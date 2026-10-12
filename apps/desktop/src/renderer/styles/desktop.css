@@ -1307,6 +1307,15 @@ body,
   font-size: 12px;
 }
 
+/* A setting's check at its end while it is on. */
+.plan-menu-check {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: 0 0 auto;
+  margin-left: var(--space-24);
+  color: var(--text-secondary);
+}
+
 .plan-menu-rule {
   height: 1px;
   margin: var(--menu-inset) var(--row-inset);

@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { PLAN_FILE_REFUSAL, PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import { Effect } from "effect";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import type { FileTreeProps } from "../file-tree/contract";
+import type { ReadFileWindow } from "./file-tab";
 import { FileView } from "./file-view";
-import type { OpenFile } from "./use-side-panel";
+import { FILE_HISTORY_STEP, type OpenFile } from "./use-side-panel";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const REPOSITORY = "acme/relay";
@@ -53,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
 });
 
 /** Each folder's listing as the service answers it, by path. */
@@ -104,95 +111,221 @@ function showing(path: string, repository: string): PlanCodeShowing {
   };
 }
 
-/** The view over a file, its tree closed, every folder listed and every file browsed to written down. */
+/** A file of `lineCount` lines read a window at a time, each line saying its own number. */
+function numberedFile(lineCount: number): ReadFileWindow {
+  return (window) => {
+    const last = Math.min(window.lastLine, lineCount);
+    return Promise.resolve({
+      file: {
+        path: window.path,
+        repository: REPOSITORY,
+        branch: "release/2026",
+        firstLine: window.firstLine,
+        lineCount,
+        lines: Array.from({ length: Math.max(0, last - window.firstLine + 1) }, (_, at) => [
+          { text: `line ${window.firstLine + at}` },
+        ]),
+      },
+    });
+  };
+}
+
+/**
+ * The view over a file, its tree closed, every folder listed, every file
+ * browsed to, and every page opened on GitHub written down. The file browsed
+ * to is shown in the view, and the view's history walks them as the panel's
+ * does.
+ */
 function mounted(
   shownCode: readonly PlanCodeShowing[] = [],
   whole: () => Promise<PlanningTreeAnswer> = () => Promise.resolve(wholeListing(false)),
+  readFile: ReadFileWindow = numberedFile(1),
+  registry?: AtomRegistry.AtomRegistry,
 ) {
   const listed: string[] = [];
   const browsed: string[] = [];
+  const github: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  function View({ file }: { file: OpenFile }) {
+  function View({ start }: { start: OpenFile }) {
     const [treeOpen, setTreeOpen] = useState(false);
+    const [walk, setWalk] = useState({ files: [start], at: 0 });
+    const file = walk.files[walk.at] ?? start;
     return createElement(FileView, {
       planId: PLAN,
       repository: REPOSITORY,
       file,
       snippet: undefined,
       shownCode,
-      readFile: (window) =>
-        Promise.resolve({
-          file: { ...window, repository: REPOSITORY, branch: "main", lineCount: 1, lines: [[]] },
-        }),
+      readFile,
       readFolder: (path) => {
         listed.push(path);
         return Promise.resolve(FOLDERS.get(path) ?? { failure: "unanswered" as const });
       },
       readWhole: whole,
-      openGitHub: () => undefined,
+      openGitHub: (url) => github.push(url),
       treeOpen,
       onToggleTree: () => setTreeOpen((was) => !was),
-      onBrowse: (path, newTab) => browsed.push(newTab ? `${path} in a new tab` : path),
+      onBrowse: (path, newTab) => {
+        browsed.push(newTab ? `${path} in a new tab` : path);
+        if (newTab) return;
+        setWalk(({ files, at }) => ({
+          files: [...files.slice(0, at + 1), { path, range: undefined, opened: 1 }],
+          at: at + 1,
+        }));
+      },
+      history: {
+        canGoBack: walk.at > 0,
+        canGoForward: walk.at < walk.files.length - 1,
+        onStep: (step) =>
+          setWalk(({ files, at }) => ({
+            files,
+            at: step === FILE_HISTORY_STEP.BACK ? at - 1 : at + 1,
+          })),
+      },
     });
   }
-  const draw = async (path: string) => {
+  const draw = async (path: string, range?: OpenFile["range"], opened = 1) => {
     await act(async () => {
-      root.render(createElement(View, { file: { path, range: undefined, opened: 1 } }));
-      await Promise.resolve();
+      const view = createElement(View, { key: path, start: { path, range, opened } });
+      root.render(registry === undefined ? view : onRegistry(registry, view));
+      for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
     });
   };
   const press = async (element: Element | null | undefined) => {
     assert.ok(element instanceof HTMLElement, "nothing to press");
     await act(async () => {
       element.click();
-      for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+      for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
     });
   };
-  return { container, listed, browsed, draw, press };
+  // Lets the reads a change asked for land and their drawing settle.
+  const settle = () =>
+    act(async () => {
+      for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+    });
+  const button = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`.file-view-bar button[aria-label="${label}"]`);
+  return { container, listed, browsed, github, draw, press, settle, button };
 }
 
-test("the heading's breadcrumbs name the repository, each folder, and the file; a folder's press opens the tree and reveals the folder there, and the file shown is revealed as it changes", async () => {
+/** The bar's crumbs, as they read. */
+function crumbsOf(container: HTMLElement): readonly string[] {
+  return [...container.querySelectorAll(".file-breadcrumb")].map(
+    (crumb) => crumb.textContent ?? "",
+  );
+}
+
+test("one bar spans the file and its tree: Back and Forward, the path, then GitHub, the file's actions, and the tree's toggle, which shows the tree under the bar", async () => {
   const view = mounted();
   await view.draw(FILE);
 
-  const crumbs = [...view.container.querySelectorAll(".file-breadcrumb")];
+  const bar = view.container.querySelector(".file-view-bar");
   assert.deepEqual(
-    crumbs.map((crumb) => crumb.textContent),
-    [REPOSITORY, "apps", "web", "server", "plans-app.ts"],
+    [...(bar?.querySelectorAll("button[aria-label]") ?? [])].map((button) =>
+      button.getAttribute("aria-label"),
+    ),
+    ["Back", "Forward", "Open on GitHub", "File actions", "Show files"],
   );
   assert.equal(view.container.querySelector(".file-tree-pane"), null, "the tree starts closed");
-
-  await view.press(crumbs[2]);
-  assert.ok(view.container.querySelector(".file-tree-pane"), "the press opened the tree");
-  assert.deepEqual(tree.reveals, [FILE, "apps/web/ focused"]);
-
-  await view.press(view.container.querySelector(".file-breadcrumb"));
-  await view.draw("apps/web/README.md");
-  assert.deepEqual(tree.reveals, [FILE, "apps/web/ focused", "/ focused", "apps/web/README.md"]);
+  await view.press(view.button("Show files"));
+  assert.equal(view.button("Hide files")?.getAttribute("aria-expanded"), "true");
+  assert.ok(view.container.querySelector(".file-view-body > .file-tree-pane"));
+  assert.equal(
+    document.querySelectorAll(".file-view-bar").length,
+    1,
+    "the tree has no bar of its own",
+  );
 });
 
-test("a chevron lists its folder's entries, folders first, a file chosen there browsed to in the tab and a folder revealed in the tree; a folder is listed once however often it is asked", async () => {
+test("each crumb lists the folder it stands in, itself checked, the repository the root; the chevrons between are no controls; a file chosen is browsed to and a folder revealed in the tree; a folder is listed once however often it is asked", async () => {
   const view = mounted();
-  await view.draw(FILE);
-  const chevron = () => view.container.querySelector('[aria-label="Entries of apps/web"]');
+  await view.draw("apps/web/README.md");
+  assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "README.md"]);
+  assert.equal(view.container.querySelectorAll(".file-breadcrumbs button").length, 4);
+  assert.ok(
+    [...view.container.querySelectorAll(".file-breadcrumb-separator")].every(
+      (separator) =>
+        separator.getAttribute("aria-hidden") === "true" && !separator.querySelector("button"),
+    ),
+  );
 
-  await view.press(chevron());
-  const items = () => [...document.querySelectorAll('[role="menuitem"]')];
+  const crumb = (name: string) =>
+    [...view.container.querySelectorAll(".file-breadcrumb")].find(
+      (each) => each.textContent === name,
+    );
+  const items = () => [...document.querySelectorAll('[role="menu"] button')];
+  await view.press(crumb("README.md"));
+  assert.equal(crumb("README.md")?.getAttribute("aria-expanded"), "true");
   assert.deepEqual(
-    items().map((item) => item.textContent),
-    ["lib/", "server/", "package.json", "README.md"],
+    items().map(
+      (item) => `${item.textContent}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}`,
+    ),
+    ["lib/", "server/", "package.json", "README.md ✓"],
   );
   await view.press(items()[2]);
   assert.deepEqual(view.browsed, ["apps/web/package.json"]);
+  assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "package.json"]);
 
-  await view.press(chevron());
+  await view.press(crumb("package.json"));
   await view.press(items()[0]);
   assert.ok(view.container.querySelector(".file-tree-pane"), "the folder opened the tree");
   assert.ok(tree.reveals.includes("apps/web/lib/ focused"));
   assert.equal(view.listed.filter((path) => path === "apps/web").length, 1);
+});
+
+test("Back and Forward walk the files this tab showed, each dimmed while its way holds none", async () => {
+  const view = mounted();
+  await view.draw(FILE);
+  assert.equal(view.button("Back")?.disabled, true);
+  assert.equal(view.button("Forward")?.disabled, true);
+
+  await view.press(view.button("Show files"));
+  act(() => tree.props?.onOpen("apps/web/README.md", false));
+  await view.settle();
+  assert.deepEqual(crumbsOf(view.container).at(-1), "README.md");
+  await view.press(view.button("Back"));
+  assert.deepEqual(crumbsOf(view.container).at(-1), "plans-app.ts");
+  assert.equal(view.button("Back")?.disabled, true);
+  await view.press(view.button("Forward"));
+  assert.deepEqual(crumbsOf(view.container).at(-1), "README.md");
+  assert.equal(view.button("Forward")?.disabled, true);
+});
+
+test("the GitHub button opens the file on the branch it was read on, its lit lines marked where it still has them, and is dimmed over a file not read", async () => {
+  // The rows reading more of a long file watch for their scroll into view, which jsdom never sees.
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const lit = mounted([], undefined, numberedFile(1_200));
+  await lit.draw("src/invite #2.ts", { startLine: 600, endLine: 604 });
+  await lit.press(lit.button("Open on GitHub"));
+  const plain = mounted([], undefined, numberedFile(1_200));
+  await plain.draw("src/invite #2.ts");
+  await plain.press(plain.button("Open on GitHub"));
+  const shortened = mounted([], undefined, numberedFile(20));
+  await shortened.draw("src/invite.ts", { startLine: 21, endLine: 22 });
+  await shortened.press(shortened.button("Open on GitHub"));
+
+  assert.deepEqual(
+    [...lit.github, ...plain.github, ...shortened.github],
+    [
+      "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L600-L604",
+      "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts",
+      "https://github.com/acme/relay/blob/release/2026/src/invite.ts",
+    ],
+  );
+  const refused = mounted([], undefined, () =>
+    Promise.resolve({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }),
+  );
+  await refused.draw("src/moved.ts");
+  assert.equal(refused.button("Open on GitHub")?.disabled, true);
 });
 
 test("the tree hears a folder in the File tab's words, a refusal saying whether listing again may help, and a file it opens is browsed to", async () => {
@@ -278,7 +411,8 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
   assert.equal(document.activeElement, field);
 
   type("web");
-  await view.press(view.container.querySelectorAll(".file-breadcrumb")[1]);
+  await view.press(view.container.querySelectorAll(".file-breadcrumb")[3]);
+  await view.press(document.querySelector('[role="menu"] button'));
   assert.equal(field.value, "");
   assert.equal(filter?.getAttribute("aria-pressed"), "false");
   assert.equal(
@@ -289,7 +423,7 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
     tree.narrowed.findLast((asked) => asked.startsWith("only")),
     "only all",
   );
-  assert.equal(tree.reveals.at(-1), "apps/ focused");
+  assert.equal(tree.reveals.at(-1), "apps/web/lib/ focused");
 });
 
 test("the filter offers nothing while Luke has shown no file of the repository", async () => {
@@ -375,4 +509,115 @@ test("a whole read that did not land leaves the search on the folders opened wit
     tree.narrowed.filter((narrowing) => narrowing.startsWith("within")),
     [],
   );
+});
+
+/** Main's save dialog on the act channel, every file saved written down by its name. */
+function installSaveDialog(): string[] {
+  const saved: string[] = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind !== ACT_KIND.WINDOW_SAVE_FILE) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        }
+        saved.push(`${request.payload.name}: ${request.payload.text.split("\n").length} lines`);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: true });
+      },
+    },
+  });
+  return saved;
+}
+
+/** The ⋯'s items as they read, a setting's check marked. */
+function menuItems(): readonly string[] {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] button')].map(
+    (item) =>
+      `${item.textContent}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}${item.disabled ? " (dimmed)" : ""}`,
+  );
+}
+
+/** Chooses the ⋯'s item that reads `label`, opening the menu first. */
+async function chooseInMenu(view: ReturnType<typeof mounted>, label: string): Promise<void> {
+  await view.press(view.button("File actions"));
+  await view.press(
+    [...document.querySelectorAll('[role="menu"] button')].find(
+      (item) => item.textContent === label,
+    ),
+  );
+}
+
+it.effect(
+  "the ⋯ copies the file's name and its whole text, read past the window drawn, saves the file through the save dialog, and offers neither text over a file not read",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal(
+        "IntersectionObserver",
+        class {
+          observe() {}
+          disconnect() {}
+        },
+      );
+      const saved = installSaveDialog();
+      const clipboard = installClipboard();
+      const registry = yield* registryOnTestClock;
+      const view = mounted([], undefined, numberedFile(1_200), registry);
+      yield* Effect.promise(() => view.draw("src/invite.ts", { startLine: 4, endLine: 6 }));
+
+      yield* Effect.promise(() => chooseInMenu(view, "Copy file name"));
+      yield* Effect.promise(() => chooseInMenu(view, "Copy file contents"));
+      yield* Effect.promise(() => view.settle());
+      yield* Effect.promise(() => chooseInMenu(view, "Download file"));
+      yield* Effect.promise(() => view.settle());
+
+      const [name, text] = clipboard.copied;
+      assert.equal(name, "invite.ts");
+      assert.equal(text?.split("\n").length, 1_200);
+      assert.equal(text?.split("\n").at(-1), "line 1200");
+      assert.deepEqual(saved, ["invite.ts: 1200 lines"]);
+
+      const refused = mounted(
+        [],
+        undefined,
+        () => Promise.resolve({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }),
+        registry,
+      );
+      yield* Effect.promise(() => refused.draw("src/moved.ts"));
+      yield* Effect.promise(() => refused.press(refused.button("File actions")));
+      assert.deepEqual(menuItems().slice(0, 3), [
+        "Copy file name",
+        "Copy file contents (dimmed)",
+        "Download file (dimmed)",
+      ]);
+    }),
+);
+
+test("Line numbers and Word wrap are checks under the ⋯ that redraw every File tab at once and are kept for the next launch", async () => {
+  const one = mounted();
+  const other = mounted();
+  await one.draw(FILE);
+  await other.draw("apps/web/README.md");
+  const drawn = () =>
+    [...document.querySelectorAll<HTMLElement>(".file-tab-lines")].map(
+      (lines) => `${lines.dataset.lineNumbers} ${lines.dataset.wrap}`,
+    );
+  assert.deepEqual(drawn(), ["true true", "true true"]);
+
+  await one.press(one.button("File actions"));
+  assert.deepEqual(menuItems().slice(3), ["Line numbers ✓", "Word wrap ✓"]);
+  await one.press(
+    [...document.querySelectorAll('[role="menu"] button')].find(
+      (item) => item.textContent === "Line numbers",
+    ),
+  );
+  await chooseInMenu(other, "Word wrap");
+
+  assert.deepEqual(drawn(), ["false false", "false false"]);
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.file-view") ?? "null"), {
+    lineNumbers: false,
+    wordWrap: false,
+  });
+  await chooseInMenu(one, "Line numbers");
+  await chooseInMenu(one, "Word wrap");
+  assert.deepEqual(drawn(), ["true true", "true true"]);
 });

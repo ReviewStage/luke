@@ -149,3 +149,33 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   }
   return window;
 }
+
+/** The text of a run of lines, as the file holds them, one to a line. */
+function linesText(lines: PlanCode["lines"]): string {
+  return lines.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
+}
+
+/** Reads one window of a file: the lines it holds and the file's length, or nothing where the read did not land. */
+export type ReadWindowLines = (
+  window: FileWindow,
+) => Promise<{ readonly lines: PlanCode["lines"]; readonly lineCount: number } | undefined>;
+
+/**
+ * The whole file's text, read a window at a time from its first line to
+ * its last, for a copy or a download of it; nothing where any window did
+ * not land. Note that each line is as the service carries it, so a line
+ * past the length it cuts lines to is cut here too.
+ */
+export async function readWholeText(read: ReadWindowLines): Promise<string | undefined> {
+  const lines: PlanCode["lines"][number][] = [];
+  let lineCount = 1;
+  while (lines.length < lineCount) {
+    const window = await read(windowAt(lines.length + 1));
+    if (window === undefined) return undefined;
+    // A file shortened between two reads ends where the latest read says.
+    lineCount = window.lineCount;
+    if (window.lines.length === 0) break;
+    lines.push(...window.lines);
+  }
+  return linesText(lines.slice(0, lineCount));
+}

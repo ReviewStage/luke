@@ -199,6 +199,10 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: { kind: ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: { kind: ACT_KIND.WINDOW_FOCUS_PANEL },
   [ACT_KIND.WINDOW_COPY_TEXT]: { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "checkout" } },
+  [ACT_KIND.WINDOW_SAVE_FILE]: {
+    kind: ACT_KIND.WINDOW_SAVE_FILE,
+    payload: { name: "invite.ts", text: "export {};" },
+  },
   [ACT_KIND.FEEDBACK_SEND]: {
     kind: ACT_KIND.FEEDBACK_SEND,
     payload: { submission: { kind: "feedback", message: "it works", images: [] } },

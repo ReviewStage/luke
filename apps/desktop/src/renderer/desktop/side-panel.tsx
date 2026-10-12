@@ -60,6 +60,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type DrawnTabs,
   drawsSubagent,
+  type FileHistoryStep,
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
@@ -646,6 +647,7 @@ function TabContent({
   onOpenFile,
   fileTree,
   onBrowseFile,
+  onFileHistory,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -675,6 +677,8 @@ function TabContent({
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
+  onFileHistory: (from: string, step: FileHistoryStep) => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
   if (isFileTab(tab)) {
@@ -700,6 +704,11 @@ function TabContent({
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
+          history={{
+            canGoBack: (file.back?.length ?? 0) > 0,
+            canGoForward: (file.forward?.length ?? 0) > 0,
+            onStep: (step) => onFileHistory(file.path, step),
+          }}
         />
       </Fragment>
     );
@@ -1128,6 +1137,7 @@ export function SidePanel({
               onOpenFile={panel.onOpenFile}
               fileTree={fileTree}
               onBrowseFile={panel.onBrowseFile}
+              onFileHistory={panel.onFileHistory}
             />
           </div>
         )}
