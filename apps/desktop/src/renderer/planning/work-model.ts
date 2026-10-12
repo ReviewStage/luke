@@ -175,7 +175,7 @@ export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined):
 }
 
 /** The fields of a call's input the tab reads apart from the rest. */
-const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message" } as const;
+const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message", TASK: "taskId" } as const;
 
 type InputField = (typeof INPUT_FIELD)[keyof typeof INPUT_FIELD];
 
@@ -280,12 +280,17 @@ function rowsOf(
   return turnRows(blocks, WORK_READING, { key, moving, done, grouped });
 }
 
-/** The job of each subagent the turns started, by its task, so a stop in a later turn still names it. */
+/**
+ * The job of each subagent the turns started, by its task, so a stop in a
+ * later turn still names it. Note that only a start names a task's job,
+ * never a call that sent the task more work, whose message is no job of the
+ * subagent's, so a task whose start is on a page not read names none.
+ */
 function jobsOf(turns: readonly PlanWorkTurn[]): JobsByTask {
   const jobs = new Map<string, string>();
   for (const part of turns.flatMap((turn) => turn.parts)) {
     if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) continue;
-    if (part.task === undefined || jobs.has(part.task)) continue;
+    if (part.task === undefined || inputField(part.input, INPUT_FIELD.TASK) !== undefined) continue;
     jobs.set(part.task, workerJob(callRowOf(part, false, jobs)));
   }
   return jobs;
