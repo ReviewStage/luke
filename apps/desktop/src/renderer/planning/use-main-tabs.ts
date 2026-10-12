@@ -46,15 +46,17 @@ import {
  * The plan's Inbox tab, everything its agents need of the developer,
  * answered in place (`inbox-board.tsx`), stands only once it has something
  * to show: it is closed on a plan until an item the developer has not seen
- * is posted there (`onInboxPosted`), and then opens as a tab the "+" opens
- * does, after every tab standing, chosen. It is a tab like an agent's in
- * every other way: it closes, and then stays closed on that plan until a
- * newer item is posted, and it is dragged among the others. The "+" opens it
- * again at any time, after every tab, and chooses it where it stands open,
- * moving it nowhere; an item posted while it stands open only counts on
- * it. Each plan keeps whether its Inbox is open and the latest item it has
- * seen posted, so a closed Inbox stays closed across a launch. A plan with
- * no agent has no Inbox, since only an agent posts.
+ * waits there (`onInboxRead`), and then opens as a tab the "+" opens does,
+ * after every tab standing, chosen. An item has not been seen where it did
+ * not wait at the plan's last read: one just posted, or one answered and
+ * posted again, but not one its agent changed while it waited. It is a tab
+ * like an agent's in every other way: it closes, and then stays closed on
+ * that plan until such an item waits, and it is dragged among the others.
+ * The "+" opens it again at any time, after every tab, and chooses it where
+ * it stands open, moving it nowhere; an item arriving while it stands open
+ * only counts on it. Each plan keeps whether its Inbox is open and the
+ * items that waited at its last read, so a closed Inbox stays closed across
+ * a launch. A plan with no agent has no Inbox, since only an agent posts.
  *
  * The tabs after the plan's are dragged or moved from the keyboard among
  * themselves, and the plan keeps the order from then on: an agent's tab
@@ -122,14 +124,14 @@ const keptTabSchema = Schema.Union([
 
 /**
  * One plan's choices: the tabs viewed on it, the latest last, its order
- * since a tab was first moved on it, whether its Inbox is open, and when
- * the latest item its Inbox has seen was posted.
+ * since a tab was first moved on it, whether its Inbox is open, and the
+ * items that waited in its inbox at its last read, by id.
  */
 const planChoicesSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(keptTabSchema)),
   order: Schema.optional(Schema.Array(keptTabSchema)),
   inboxOpen: Schema.optional(Schema.Boolean),
-  inboxSeen: Schema.optional(Schema.Number),
+  inboxSeen: Schema.optional(Schema.Array(Schema.String)),
 });
 
 /** The agents whose tabs were closed, every plan's, and each plan's choices, by plan id. */
@@ -145,7 +147,7 @@ interface PlanChoices {
   readonly recent?: readonly MainTab[] | undefined;
   readonly order?: readonly MainTab[] | undefined;
   readonly inboxOpen?: boolean | undefined;
-  readonly inboxSeen?: number | undefined;
+  readonly inboxSeen?: readonly string[] | undefined;
 }
 
 /** The state the hook holds: the kept one, with a draft's tab possibly among a plan's choices. */
@@ -185,6 +187,9 @@ const NO_CHOICES: PlanChoices = {};
 /** A plan no tab was moved on, or viewed. */
 const NO_TABS: readonly MainTab[] = [];
 
+/** An inbox read with nothing waiting, or never read. */
+const NO_ITEMS: readonly string[] = [];
+
 /** What the column draws and hands back. */
 export interface MainTabsControl {
   /** The column's tabs in the strip's order: the plan's first, then the open agents', the draft's, and the Inbox where open, in the plan's order. */
@@ -201,8 +206,8 @@ export interface MainTabsControl {
   onShow: (planId: string, tab: MainTab) => void;
   /** Closes the tab, and only the view: an agent goes on as it was, and the Inbox keeps its items. The plan's tab never closes. */
   onClose: (tab: MainTab) => void;
-  /** Hears the latest posted of the items waiting in the plan's inbox, opening and choosing its Inbox where it is newer than any the plan has seen. */
-  onInboxPosted: (planId: string, postedAt: number) => void;
+  /** Hears what a read of the plan's inbox found waiting, by id, opening and choosing its Inbox where an item did not wait at the last read. */
+  onInboxRead: (planId: string, waiting: readonly string[]) => void;
   /** Moves a tab other than the plan's to the place `to` among them, after the plan's, leaving the chosen one chosen. */
   onMove: (tab: MainTab, to: number) => void;
   /** Asks the column's "+" to open its menu, as ⌘T does. */
@@ -351,21 +356,24 @@ function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs):
 }
 
 /**
- * The state with the plan's Inbox opened and chosen where an item posted at
- * `postedAt` is newer than any it has seen, and that item seen; an Inbox
- * already open only sees it. Note that a plan that has seen nothing has
- * seen no item, so its first opens its Inbox.
+ * The state with `waiting`, the items waiting in the plan's inbox by id,
+ * seen, and its Inbox opened and chosen where one did not wait at its last
+ * read; an Inbox already open only sees them. Note that an item answered
+ * leaves what is kept as it settles, so posted again it is new, and that a
+ * plan that has read nothing has seen no item, so its first opens its Inbox.
  */
-function withInboxPosted(
+function withInboxRead(
   held: HeldState,
   on: string,
-  postedAt: number,
+  waiting: readonly string[],
   drawn: DrawnTabs,
 ): HeldState {
   const was = choicesOn(held, on);
-  if (was.inboxSeen !== undefined && postedAt <= was.inboxSeen) return held;
-  const seen = withChoices(held, on, (choices) => ({ ...choices, inboxSeen: postedAt }));
-  return was.inboxOpen === true ? seen : withShown(seen, on, MAIN_TAB.INBOX, drawn);
+  const seen = was.inboxSeen ?? NO_ITEMS;
+  const fresh = waiting.some((item) => !seen.includes(item));
+  if (!fresh && waiting.length === seen.length) return held;
+  const read = withChoices(held, on, (choices) => ({ ...choices, inboxSeen: waiting }));
+  return fresh && was.inboxOpen !== true ? withShown(read, on, MAIN_TAB.INBOX, drawn) : read;
 }
 
 /**
@@ -518,8 +526,9 @@ export function useMainTabs(
     (tab: MainTab) => update((held) => withoutTab(held, tab, drawn)),
     [update, drawn],
   );
-  const onInboxPosted = useCallback(
-    (on: string, postedAt: number) => update((held) => withInboxPosted(held, on, postedAt, drawn)),
+  const onInboxRead = useCallback(
+    (on: string, waiting: readonly string[]) =>
+      update((held) => withInboxRead(held, on, waiting, drawn)),
     [update, drawn],
   );
   const onMove = useCallback(
@@ -536,7 +545,7 @@ export function useMainTabs(
     onChoose,
     onShow,
     onClose,
-    onInboxPosted,
+    onInboxRead,
     onMove,
     onNewTab,
     onNewTabAnswered,

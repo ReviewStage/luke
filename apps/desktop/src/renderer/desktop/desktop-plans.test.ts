@@ -18,6 +18,7 @@ import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
+  type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
@@ -4171,7 +4172,7 @@ test("a coding agent's start on the Work tab opens the agent's tab in the plan's
 });
 
 /** An item waiting on the developer, posted by the plan's running agent at `postedAt`. */
-function waitingItem(id: string, postedAt = 1) {
+function waitingItem(id: string, postedAt = 1): InboxItem {
   return {
     id,
     agentId: RUNNING_AGENT.id,
@@ -4216,7 +4217,7 @@ test("the Inbox tab counts what waits on the developer after its name, dimmed an
   assert.equal(tabNamed(empty, "Inbox").querySelector(".tab-detail"), null);
 });
 
-test("the Inbox tab stands nowhere until an item the developer has not seen arrives, which opens it after every tab, chosen; closed, it stays closed until a newer item arrives, and the + opens it at any time", async () => {
+test("the Inbox tab stands nowhere until an item the developer has not seen arrives, which opens it after every tab, chosen; closed, it stays closed until another such item, and the + opens it at any time", async () => {
   // Each read past the first is held, as the service holds it, until the inbox changes.
   let answer: ((items: readonly ReturnType<typeof waitingItem>[]) => void) | undefined;
   let reads = 0;
@@ -4250,8 +4251,17 @@ test("the Inbox tab stands nowhere until an item the developer has not seen arri
   await post([{ ...waitingItem(FIRST_ITEM, 1), revision: 2 }]);
   assert.equal(inboxShown(), false, "an item already seen opens nothing");
 
-  await post([waitingItem(FIRST_ITEM, 1), waitingItem(SECOND_ITEM, 2)]);
+  // Another item opens it, though posted the same moment as the first.
+  await post([waitingItem(FIRST_ITEM, 1), waitingItem(SECOND_ITEM, 1)]);
   assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "Inbox 2"]);
+  assert.equal(columnChosen(page), "Inbox 2");
+
+  // The first answered, then posted again under its key, opens it again.
+  press(page, '[aria-label="Close Inbox"]');
+  const answered = { ...waitingItem(FIRST_ITEM, 1), status: INBOX_STATUS.ANSWERED, revision: 3 };
+  await post([answered, waitingItem(SECOND_ITEM, 1)]);
+  assert.equal(inboxShown(), false);
+  await post([{ ...waitingItem(FIRST_ITEM, 1), revision: 4 }, waitingItem(SECOND_ITEM, 1)]);
   assert.equal(columnChosen(page), "Inbox 2");
 
   press(page, '[aria-label="Close Inbox"]');

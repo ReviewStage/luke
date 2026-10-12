@@ -125,7 +125,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,
-      onInboxPosted: ignore,
+      onInboxRead: ignore,
       onMove: ignore,
       onNewTab: ignore,
       onNewTabAnswered: ignore,

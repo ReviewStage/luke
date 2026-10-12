@@ -55,6 +55,8 @@ export interface PlanInboxControl {
   readonly board: InboxBoardView;
   /** Whether a read is out, with nothing held yet to draw. */
   readonly reading: boolean;
+  /** Whether a read of the plan's inbox has answered, so the board is what it holds rather than nothing yet. */
+  readonly read: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
   readonly failed: boolean;
   readonly onRetry: () => void;
@@ -267,6 +269,7 @@ export function usePlanInbox(input: {
     draftOf,
     onDraft,
     reading: active && !held.read,
+    read: held.read,
     failed: held.failed,
     onRetry,
     sending,

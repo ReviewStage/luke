@@ -1,6 +1,6 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { Fragment, useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -159,13 +159,15 @@ function PlanDocument({
     };
   }, [area]);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
-  // The latest posted of what waits in the plan's inbox opens its Inbox tab
-  // where the plan has not seen it, without choosing it (`use-main-tabs.ts`).
-  const latestPosted = inbox.board.open.at(-1)?.postedAt;
-  const { onInboxPosted } = plans.mainTabs;
+  // What waits in the plan's inbox opens its Inbox tab where an item did
+  // not wait at the last read (`use-main-tabs.ts`). Note that only a read
+  // that answered counts, because a plan just opened holds nothing yet, and
+  // nothing would forget what waited there.
+  const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
+  const { onInboxRead } = plans.mainTabs;
   useEffect(() => {
-    if (planId !== undefined && latestPosted !== undefined) onInboxPosted(planId, latestPosted);
-  }, [planId, latestPosted, onInboxPosted]);
+    if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
+  }, [planId, inbox.read, waiting, onInboxRead]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because

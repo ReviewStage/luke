@@ -12,6 +12,9 @@ const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 const THIRD = "3b8f4e5d-7c6a-4b9f-9eaf-4a5b6c7d8e9f";
 const DRAFT = "draft-key-1";
+const ITEM = "a1b2c3d4-0000-4000-8000-000000000001";
+const OTHER_ITEM = "a1b2c3d4-0000-4000-8000-000000000002";
+const THIRD_ITEM = "a1b2c3d4-0000-4000-8000-000000000003";
 
 const roots: Root[] = [];
 
@@ -59,11 +62,13 @@ test("the plan's tab stands first and alone on a plan with no agent, and is show
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN]);
 });
 
-test("the plan's Inbox tab stands nowhere until an item it has not seen is posted, which opens it after every tab, chosen; it closes and stays closed until a newer item", () => {
+test("the plan's Inbox tab stands nowhere until an item it has not seen waits, which opens it after every tab, chosen; it closes and stays closed until another such item", () => {
   const column = mount({ agents: [AGENT, OTHER] });
+  const inboxStands = () => column.control().tabs.includes(MAIN_TAB.INBOX);
+  act(() => column.control().onInboxRead(PLAN, []));
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }, { agent: OTHER }]);
 
-  act(() => column.control().onInboxPosted(PLAN, 10));
+  act(() => column.control().onInboxRead(PLAN, [ITEM]));
   assert.deepEqual(column.control().tabs, [
     MAIN_TAB.PLAN,
     { agent: AGENT },
@@ -72,23 +77,35 @@ test("the plan's Inbox tab stands nowhere until an item it has not seen is poste
   ]);
   assert.equal(column.control().tab, MAIN_TAB.INBOX);
 
-  // A newer item while it stands open only counts on it: the tab shown stays shown.
+  // An item arriving while it stands open only counts on it: the tab shown stays shown.
   act(() => column.control().onChoose({ agent: AGENT }));
-  act(() => column.control().onInboxPosted(PLAN, 11));
+  act(() => column.control().onInboxRead(PLAN, [ITEM, OTHER_ITEM]));
   assert.deepEqual(column.control().tab, { agent: AGENT });
 
   act(() => column.control().onClose(MAIN_TAB.INBOX));
-  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }, { agent: OTHER }]);
+  assert.equal(inboxStands(), false);
   assert.deepEqual(column.control().tab, { agent: AGENT });
 
-  // What it had seen opens nothing, on this launch or the next; a newer item does.
-  act(() => column.control().onInboxPosted(PLAN, 11));
-  assert.equal(column.control().tabs.includes(MAIN_TAB.INBOX), false);
+  // What already waited opens nothing, on this launch or the next, however its agent changed it.
+  act(() => column.control().onInboxRead(PLAN, [ITEM, OTHER_ITEM]));
+  assert.equal(inboxStands(), false);
   const next = mount({ agents: [AGENT, OTHER] });
-  act(() => next.control().onInboxPosted(PLAN, 11));
+  act(() => next.control().onInboxRead(PLAN, [OTHER_ITEM, ITEM]));
   assert.equal(next.control().tabs.includes(MAIN_TAB.INBOX), false);
-  act(() => next.control().onInboxPosted(PLAN, 12));
+
+  // One more item opens it, though posted the same moment as one that waited.
+  act(() => next.control().onInboxRead(PLAN, [OTHER_ITEM, ITEM, THIRD_ITEM]));
   assert.equal(next.control().tab, MAIN_TAB.INBOX);
+});
+
+test("an item answered and then posted again under its agent's key opens the closed Inbox again", () => {
+  const column = mount({ agents: [AGENT] });
+  act(() => column.control().onInboxRead(PLAN, [ITEM]));
+  act(() => column.control().onClose(MAIN_TAB.INBOX));
+  act(() => column.control().onInboxRead(PLAN, []));
+  assert.equal(column.control().tabs.includes(MAIN_TAB.INBOX), false, "answered");
+  act(() => column.control().onInboxRead(PLAN, [ITEM]));
+  assert.equal(column.control().tab, MAIN_TAB.INBOX);
 });
 
 test("the Inbox moves as an agent's tab does, opens again after every tab wherever it stood, and choosing it where it stands open moves it nowhere", () => {
@@ -117,7 +134,7 @@ test("the Inbox moves as an agent's tab does, opens again after every tab wherev
 
 test("the Inbox is the posting plan's alone and stands only on a plan with an agent", () => {
   const column = mount({ agents: [AGENT] });
-  act(() => column.control().onInboxPosted(OTHER_PLAN, 5));
+  act(() => column.control().onInboxRead(OTHER_PLAN, [ITEM]));
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }]);
   column.render({ plan: OTHER_PLAN, agents: [] });
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN], "only an agent posts");
