@@ -383,6 +383,53 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "a rollout's worker handed no task runs under the pull request's brief, told to build that one pull request and leave the rest out, and still records in the plan",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const worker = {
+          ...agent,
+          task: null,
+          position: 2,
+          baseBranch: "luke/invitations/1-schema",
+        };
+
+        const briefed = yield* composedPrompt(host, admitted, worker);
+        const tasked = yield* composedPrompt(host, admitted, { ...worker, task: "Fix the typo." });
+        const planned = yield* composedPrompt(host, admitted, { ...agent, task: null });
+
+        assert.ok(briefed.text.includes("build the one pull request of the plan's rollout"));
+        assert.ok(briefed.text.includes("Build nothing the brief lists as out of scope"));
+        assert.ok(briefed.text.includes("`edit_plan`"));
+        assert.ok(tasked.text.includes("carry out the task the developer gave"));
+        assert.ok(planned.text.includes("implement the plan given as the first message"));
+        assert.ok(!planned.text.includes("pull request of the plan's rollout"));
+      }),
+  );
+
+  it.effect(
+    "the rollout's keeper runs under the keeper's instructions, which cut no branch and publish nothing of its own, whatever its row holds, and an agent with no role handed no task runs under the plan's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const keeper = { ...agent, task: null, position: null, role: ROLLOUT_ROLE.KEEPER };
+
+        const kept = yield* composedPrompt(host, admitted, keeper);
+        const tasked = yield* composedPrompt(host, admitted, { ...keeper, task: "Fix the typo." });
+        const planned = yield* composedPrompt(host, admitted, { ...keeper, role: null });
+
+        assert.ok(kept.text.includes("keep the stacks of the plan's rollout"));
+        assert.ok(kept.text.includes("Cut no branch of your own"));
+        assert.ok(!kept.text.includes("worth publishing"));
+        assert.equal(tasked.text, kept.text);
+        assert.ok(planned.text.includes("implement the plan given as the first message"));
+        assert.notEqual(kept.hash, planned.hash);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
