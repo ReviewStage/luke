@@ -420,6 +420,17 @@ test("New plan names its chord, which it shows at its end only while hovered or 
   assert.equal(hint?.getAttribute("aria-hidden"), "true");
 });
 
+test("New plan and Search read in the weight of a read plan's name", async () => {
+  const styled = await sheetStyle();
+  const container = mount(DEAN, { plans: { plans: [listedPlan("Billing")] } });
+  const name = container.querySelector(".sidebar-plan-name");
+  assert.ok(name, "the list draws Billing");
+  const weight = (element: Element) => styled(element, "font-weight");
+
+  assert.equal(weight(newPlanButton(container)), weight(name));
+  assert.equal(weight(searchButton(container)), weight(name));
+});
+
 function searchButton(container: ParentNode): HTMLButtonElement {
   const button = container.querySelector<HTMLButtonElement>(".sidebar-search");
   assert.ok(button, "the sidebar draws Search");
@@ -821,6 +832,98 @@ test("Archived's header is drawn as a repository's, led by the Archive action's 
   assert.deepEqual(box(archived), box(repository));
   assert.ok(archived.parentElement?.matches(".sidebar-repository-header"));
   assert.equal(leading?.innerHTML, archiveAction.innerHTML);
+});
+
+/** Pinned's header, which folds and unfolds it. */
+function pinnedToggle(container: ParentNode): HTMLButtonElement {
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "nav[aria-label='Pinned'] .sidebar-repository-toggle",
+  );
+  assert.ok(toggle, "Pinned draws its header");
+  return toggle;
+}
+
+test("Pinned's header is drawn as Archived's, led by the Pin action's own glyph", async () => {
+  const styled = await sheetStyle();
+  const container = mount(DEAN, {
+    plans: {
+      plans: [listedPlan("Invites", { pinnedAt: 5 }), listedPlan("Billing")],
+      archived: [listedPlan("Old", { archivedAt: 9 })],
+    },
+  });
+  const pinned = pinnedToggle(container);
+  const archived = container.querySelector<HTMLElement>(".sidebar-archived-row");
+  const pinAction = container.querySelector('.sidebar-plan-marks button[aria-label="Pin"] svg');
+  assert.ok(archived && pinAction);
+  const box = (toggle: HTMLElement) =>
+    ["padding", "font-size", "font-weight", "gap", "color"].map((property) =>
+      styled(toggle, property),
+    );
+
+  assert.deepEqual(box(pinned), box(archived));
+  assert.equal(pinned.querySelector(".sidebar-repository-name")?.textContent, "Pinned");
+  assert.equal(
+    pinned.querySelector(".sidebar-repository-glyph > svg")?.innerHTML,
+    pinAction.innerHTML,
+  );
+  assert.ok(pinned.querySelector(".sidebar-repository-glyph > .settings-chevron"));
+});
+
+test("a press folds Pinned for the next launch too, counting its pins, and the open plan and the pinned tab on show still stand under it", () => {
+  const billing = listedPlan("Billing", { pinnedAt: 5 });
+  const invites = listedPlan("Invites", { pinnedAt: 4 });
+  const plans = withPins(
+    [
+      { plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 3 },
+      { plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 2 },
+    ],
+    {
+      plans: [billing, invites],
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: billing.id,
+      agents: codingAgentsControl({ agents: [agentOn("agent-1")] }),
+      mainTabs: { ...plansControl().mainTabs, tab: { agent: "agent-1" } },
+    },
+  );
+  const container = mount(DEAN, { plans });
+  const unfolded = pinnedSection(container);
+
+  act(() => pinnedToggle(container).click());
+  const relaunched = mount(DEAN, { plans });
+
+  assert.deepEqual(unfolded, [
+    "Billing",
+    "Invites",
+    "◆ Invite flow · Billing",
+    "◆ Board · Billing",
+  ]);
+  for (const sidebar of [container, relaunched]) {
+    assert.equal(pinnedToggle(sidebar).getAttribute("aria-expanded"), "false");
+    assert.deepEqual(pinnedSection(sidebar), ["Billing", "◆ Invite flow · Billing"]);
+    assert.equal(
+      pinnedToggle(sidebar).querySelector(".sidebar-repository-count")?.textContent,
+      "4 pins",
+    );
+  }
+  act(() => pinnedToggle(relaunched).click());
+  assert.deepEqual(pinnedSection(relaunched), unfolded);
+  assert.equal(pinnedToggle(relaunched).querySelector(".sidebar-repository-count"), null);
+});
+
+test("walking the list passes over the pinned plans Pinned folded away", () => {
+  const opened: string[] = [];
+  const container = mount(DEAN, {
+    plans: {
+      page: PLANS_PAGE.NEW,
+      plans: [listedPlan("Invites", { pinnedAt: 5 }), listedPlan("Billing")],
+      onSelect: (planId) => opened.push(planId),
+    },
+  });
+
+  act(() => pinnedToggle(container).click());
+
+  assert.equal(walk("ArrowDown"), true);
+  assert.deepEqual(opened, ["plan-Billing"]);
 });
 
 test("with every plan archived, the list says nothing of having none, and with none archived it draws no Archived row", () => {
