@@ -467,3 +467,28 @@ it.effect(
       assert.equal(pill(), null);
     }),
 );
+
+it.effect(
+  "a selection dragged past a card's edge leaves it standing until the press ends, and then it lingers",
+  () =>
+    Effect.gen(function* () {
+      mountCardBeside(yield* registryOnTestClock);
+      const card = shownCard();
+      cross(control("Fix the flaky test"), card);
+
+      act(() => {
+        card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      });
+      cross(card, document.body);
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS, "the press still selecting holds it");
+
+      act(() => {
+        window.dispatchEvent(new MouseEvent("pointerup"));
+      });
+      yield* advance(100);
+      assert.equal(says(), CARD_WORDS);
+      yield* advance(100);
+      assert.equal(says(), undefined);
+    }),
+);

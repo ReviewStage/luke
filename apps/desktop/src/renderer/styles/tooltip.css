@@ -8,7 +8,9 @@
    motion keeps the wait, which is not motion, and drops the fade with the
    tokens. A pill takes no presses: it never stands between the pointer and
    the control beside it. A card is a surface the pointer crosses onto, so it
-   takes the pointer once it is placed, and its words can be selected. */
+   takes the pointer once it is placed, and its words can be selected; it is
+   hidden, not only clear, while it waits, so nothing under a card not yet
+   shown loses the pointer to it. */
 
 .tooltip {
   position: fixed;
@@ -70,6 +72,7 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
 
 @keyframes tooltip-in {
   from {
+    visibility: hidden;
     opacity: 0;
     transform: scale(0.96);
   }

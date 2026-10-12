@@ -199,6 +199,7 @@ function TooltipPill({
   card,
   cardBeside,
   onCard,
+  onCardPress,
 }: {
   id: string;
   shown: Shown;
@@ -208,6 +209,8 @@ function TooltipPill({
   cardBeside: boolean;
   /** The pointer arriving on the card, or leaving it. */
   onCard: (over: boolean) => void;
+  /** A press begun on the card. */
+  onCardPress: () => void;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
@@ -234,6 +237,7 @@ function TooltipPill({
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
       onPointerEnter={carded ? () => onCard(true) : undefined}
       onPointerLeave={carded ? () => onCard(false) : undefined}
+      onPointerDown={carded ? onCardPress : undefined}
     >
       {carded ? card : label}
       {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
@@ -273,6 +277,7 @@ export function Tooltip({
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
   const overCard = useRef(false);
+  const pressingCard = useRef(false);
   // A pill that was on screen warms the window for the next; one still
   // waiting leaves it as it was.
   const hide = useCallback(() => {
@@ -309,9 +314,23 @@ export function Tooltip({
     if (card !== undefined && standing !== undefined && visible(standing)) linger({ leave: hide });
     else hide();
   };
+  // A selection dragged past the card's edge leaves it standing until the
+  // press ends, and the pointer then off the card lets it linger.
   const onCard = (over: boolean) => {
     overCard.current = over;
-    linger(over ? Atom.Interrupt : { leave: hide });
+    if (over) linger(Atom.Interrupt);
+    else if (!pressingCard.current) linger({ leave: hide });
+  };
+  const onCardPress = () => {
+    pressingCard.current = true;
+    const end = () => {
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      pressingCard.current = false;
+      if (latest() !== undefined && !overCard.current) linger({ leave: hide });
+    };
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
   };
   // A control that goes while its card stands takes the card, and its linger, with it.
   useEffect(
@@ -387,6 +406,7 @@ export function Tooltip({
           card={card}
           cardBeside={cardBeside}
           onCard={onCard}
+          onCardPress={onCardPress}
         />
       )}
     </>
