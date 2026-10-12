@@ -6,6 +6,7 @@ import {
   readPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
+import { readTranscript } from "@sidecar/database/models/transcript-store";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
@@ -58,7 +59,6 @@ import {
 } from "./hosted/plan-notes.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
-import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
