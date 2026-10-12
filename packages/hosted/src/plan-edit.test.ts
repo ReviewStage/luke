@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { applyDeveloperEdit, type PlanEditOutcome } from "./plan-edit.js";
-import { EMPTY_PLAN_CONTENT, PLAN_FIELD, type PlanContent, planBody } from "./plan-template.js";
+import { EMPTY_PLAN_CONTENT, type PlanContent, planBody } from "./plan-template.js";
+import { PLAN_FIELD } from "./plan-wire.js";
 
 const HEADER = { name: "Teammate invitations" } as const;
 

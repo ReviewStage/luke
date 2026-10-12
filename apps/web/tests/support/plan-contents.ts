@@ -1,12 +1,10 @@
 import {
   EMPTY_PLAN_FIELDS,
   NOTE_KIND,
-  PLAN_FIELD,
   type PlanContent,
-  type PlanField,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
-import type { PlanFields } from "@sidecar/hosted/plan-wire";
+import { PLAN_FIELD, type PlanField, type PlanFields } from "@sidecar/hosted/plan-wire";
 
 /**
  * plan-contents.ts -- synthetic plans in the fixed template, and the notes a notetaker would take to write each.

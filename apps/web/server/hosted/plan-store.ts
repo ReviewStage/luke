@@ -11,6 +11,7 @@ import {
   PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
+  type PlanFieldEdit,
   type PlanFields,
   type PlanLastEdit,
   type PlanSummary,
@@ -141,23 +142,39 @@ const findAgentLabels = SqlSchema.findAll({
 });
 
 /**
- * The journal's agents named as their rows name them now, so a renamed agent
- * reads renamed everywhere: the label is the row's title, or its model while
- * it has none.
+ * The agents the journal and the fields' writers name, by id, as their rows
+ * name them now, so a renamed agent reads renamed everywhere: the label is
+ * the row's title, or its model while it has none. The row's own account is
+ * the one they are read under.
  */
-function labelledEdits(
-  row: PlanRow,
-  userId: string,
-): PlanStoreEffect<readonly LabelledAgentEdit[]> {
-  const agentIds = [...new Set(row.agentEdits.map((edit) => edit.agentId))];
-  if (agentIds.length === 0) return Effect.succeed([]);
-  return Effect.map(findAgentLabels({ userId, agentIds }), (agents) => {
-    const labels = new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model]));
-    return row.agentEdits.map((edit) => ({
-      ...edit,
-      label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
-    }));
-  });
+function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string>> {
+  const named = [
+    ...row.agentEdits.map((edit) => edit.agentId),
+    ...row.fieldWriters.flatMap((writer) => (writer.agentId === undefined ? [] : [writer.agentId])),
+  ];
+  const agentIds = [...new Set(named)];
+  if (agentIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findAgentLabels({ userId: row.userId, agentIds }),
+    (agents) => new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model])),
+  );
+}
+
+/**
+ * Who last changed each field, as the window's section lines read it: a
+ * coding agent named by its label, or as an agent whose row is gone, or
+ * whose writer was kept before agents were.
+ */
+function fieldEditOf(writer: PlanFieldWriter, labels: ReadonlyMap<string, string>): PlanFieldEdit {
+  const { field, actor, at } = writer;
+  const label = writer.agentId === undefined ? undefined : labels.get(writer.agentId);
+  return {
+    field,
+    actor,
+    ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    at,
+    duringCall: writer.duringCall === true,
+  };
 }
 
 /**
@@ -175,13 +192,17 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
  * template formatted here rather than stored, so it is always the current
  * template's. The row's own account is the one its agents are read under.
  * Its last edit is its newest revision, or, before its history begins, the
- * newest save a coding agent made.
+ * newest save a coding agent made; each field it has a writer for says who.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
     const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
-    const agentEdits = yield* labelledEdits(row, row.userId);
+    const labels = yield* agentLabelsOf(row);
+    const agentEdits = row.agentEdits.map((edit) => ({
+      ...edit,
+      label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
+    }));
     const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
       Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
     );
@@ -193,6 +214,7 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         fields,
+        fieldEdits: row.fieldWriters.map((writer) => fieldEditOf(writer, labels)),
       },
       fields,
       agentEdits,

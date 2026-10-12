@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
-import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
+import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import type { WebContents } from "electron";

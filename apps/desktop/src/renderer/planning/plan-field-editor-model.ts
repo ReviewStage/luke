@@ -4,7 +4,6 @@ import {
   type PlanEditValue,
 } from "@sidecar/hosted/plan-edit";
 import {
-  PLAN_FIELD,
   PLAN_FIELD_HEADING,
   PLAN_TEXT_FIELDS,
   type PlanContent,
@@ -13,6 +12,7 @@ import {
 } from "@sidecar/hosted/plan-template";
 import {
   PLAN_BOUNDS,
+  PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
   type PlanFields,
   type PlanRule,

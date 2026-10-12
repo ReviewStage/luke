@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "enum": [
+        "problem",
+        "outcome",
+        "included",
+        "excluded",
+        "constraints",
+        "rules",
+        "changeMap",
+        "contracts",
+        "patterns",
+        "order",
+        "decisions",
+        "verification",
+        "leftToAgent",
+        "openQuestions",
+        "dataAndMigration",
+        "assumptions"
+      ]
+    },
+    "actor": {
+      "type": "string",
+      "enum": [
+        "developer",
+        "notetaker",
+        "agent",
+        "earlier"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "at": {
+      "type": "number",
+      "minimum": 0
+    },
+    "duringCall": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "field",
+    "actor",
+    "at",
+    "duringCall"
+  ],
+  "additionalProperties": false
+}

@@ -13,6 +13,7 @@ import type {
   PlanMarks,
 } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { changedFields } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -174,6 +175,35 @@ export interface PlanningComposer extends Composer {
 }
 
 /**
+ * The held plan's field edits after the notetaker's save on its call: each
+ * field the save changed now names Luke, on the call, at the save, and every
+ * other field keeps its own. A plan from a service that names no field's
+ * writer, or a draft carrying no fields, moves none.
+ */
+function fieldEditsAfterSave(
+  held: Plan,
+  draft: PlanDraftFrame,
+  savedAt: number,
+): Pick<Plan, "fieldEdits"> | undefined {
+  if (held.fieldEdits === undefined || held.fields === undefined || draft.fields === undefined) {
+    return undefined;
+  }
+  const changed = changedFields(
+    { fields: held.fields, assumptions: held.document.assumptions },
+    { fields: draft.fields, assumptions: draft.document.assumptions },
+  );
+  if (changed.length === 0) return undefined;
+  const kept = held.fieldEdits.filter((edit) => !changed.includes(edit.field));
+  const saved = changed.map((field) => ({
+    field,
+    actor: PLAN_ACTOR.NOTETAKER,
+    at: savedAt,
+    duringCall: true,
+  }));
+  return { fieldEdits: [...kept, ...saved] };
+}
+
+/**
  * The panel's plans as one concern. The view is told to every client whole
  * whenever it moves, and exactly one plan is active at a time: opening or
  * starting one replaces whichever was, and a read still out for the replaced
@@ -260,6 +290,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     agentEdits: _agentEdits,
     lastEdit: _lastEdit,
     fields: _fields,
+    fieldEdits: _fieldEdits,
     ...summary
   }: Plan): PlanningView["plans"][number] {
     return summary;
@@ -378,6 +409,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         : {
             updatedAt: draft.savedAt,
             lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: draft.savedAt, duringCall: true },
+            ...fieldEditsAfterSave(held, draft, draft.savedAt),
           }),
       ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
     };

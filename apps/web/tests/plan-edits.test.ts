@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { NOTE_KIND, PLAN_FIELD, PLAN_HEADING } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, PLAN_FIELD_BOUNDS } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR, PLAN_FIELD, PLAN_FIELD_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";

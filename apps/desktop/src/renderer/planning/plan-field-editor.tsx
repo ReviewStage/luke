@@ -1,6 +1,7 @@
 import { useAtom } from "@effect/atom-react";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
-import { PLAN_FIELD, PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { PencilIcon, PlusIcon, RemoveIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";

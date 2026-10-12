@@ -22,7 +22,12 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { type PlanWriter, readRevisionContent, recordRevision } from "./plan-revisions.js";
+import {
+  fieldWriterOf,
+  type PlanWriter,
+  readRevisionContent,
+  recordRevision,
+} from "./plan-revisions.js";
 import { readPlanForUpdate, type StoredPlan, savePlanDocument } from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
@@ -198,7 +203,7 @@ function savedUnderLock<T extends PlanTaken, F>(
               fieldWriters: withFieldWriters(
                 stored.value.fieldWriters,
                 { before, after: content },
-                writer.actor,
+                fieldWriterOf(writer),
                 now,
               ),
             }

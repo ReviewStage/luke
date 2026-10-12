@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  NOTE_KIND,
-  PLAN_EMPTY_TEXT,
-  PLAN_FIELD,
-  type PlanNote,
-} from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND, PLAN_EMPTY_TEXT, type PlanNote } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

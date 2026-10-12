@@ -2,13 +2,12 @@ import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
   NOTE_KIND,
-  PLAN_FIELD,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
   type PlanFieldWriter,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";

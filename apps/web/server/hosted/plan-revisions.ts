@@ -1,4 +1,4 @@
-import { type PlanContent, planBody } from "@sidecar/hosted/plan-template";
+import { type PlanContent, type PlanFieldWriterWho, planBody } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -332,6 +332,16 @@ function recordEarlier(
         1,
       ),
   });
+}
+
+/** The writer as each field their save changed keeps them: the actor, the agent where one wrote, and whether on a call. */
+export function fieldWriterOf(writer: PlanWriter): PlanFieldWriterWho {
+  const agentId = agentOf(writer);
+  return {
+    actor: writer.actor,
+    ...(agentId === null ? undefined : { agentId }),
+    ...(callOf(writer) === null ? undefined : { duringCall: true }),
+  };
 }
 
 /**

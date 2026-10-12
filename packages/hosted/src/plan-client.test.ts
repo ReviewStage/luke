@@ -3,8 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
-import { PLAN_FIELD } from "./plan-template.js";
-import { PLAN_FILE_REFUSAL } from "./plan-wire.js";
+import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 

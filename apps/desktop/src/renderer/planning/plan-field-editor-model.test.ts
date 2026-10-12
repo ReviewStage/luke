@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
-import { EMPTY_PLAN_CONTENT, PLAN_FIELD, type PlanContent } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_CONTENT, type PlanContent } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import {

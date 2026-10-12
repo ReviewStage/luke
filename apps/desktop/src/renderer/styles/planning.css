@@ -192,6 +192,69 @@
   opacity: 1;
 }
 
+/* Who last changed a section, and when: a quiet line at the end of its
+   heading's row, shown with the pencil while the pointer or the keyboard is
+   on the section. It fades on opacity alone, so nothing moves. */
+.plan-unit-attributed,
+.plan-assumptions {
+  position: relative;
+}
+
+/* Note that it ends short of the pencil, which hangs past the column's edge
+   by `--space-6` and is a control's width wide. */
+.plan-unit-byline {
+  position: absolute;
+  top: 0.35em;
+  right: calc(var(--control-height) - var(--space-6) + var(--space-4));
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-attributed:hover .plan-unit-byline,
+.plan-unit-editable:hover .plan-unit-byline,
+.plan-unit-editable:focus-within .plan-unit-byline,
+.plan-assumptions:hover > .plan-unit-byline,
+.plan-assumptions:focus-within > .plan-unit-byline {
+  opacity: 1;
+}
+
+/* A section changed since the developer last looked: a still wash of Luke's
+   accent behind it, the hover wash's shape, standing until they dismiss it.
+   Nothing about it moves, so reduced motion has nothing to hold. */
+.plan-changed {
+  position: relative;
+  isolation: isolate;
+}
+
+.plan-changed::after {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+/* How many sections changed since the last look, under the "Edited by"
+   line in the same muted weight, with its dismissal. */
+.plan-changed-note {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: -6px 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 /* The field open in its editor: the heading as the document draws it, then
    a box that grows with its words, in the document's own type, so the words
    do not jump as it opens or closes. It takes the gap of the unit it stands

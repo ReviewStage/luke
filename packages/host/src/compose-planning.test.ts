@@ -19,9 +19,10 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD,
   PLAN_FILE_REFUSAL,
   type Plan,
   type PlanFileAnswer,
@@ -75,7 +76,14 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
 /** The instant the fake service stamps every pin and archive with. */
 const MARKED_AT = 5_000;
 
-function summary({ document: _document, ...rest }: Plan): PlanSummary {
+function summary({
+  document: _document,
+  agentEdits: _agentEdits,
+  lastEdit: _lastEdit,
+  fields: _fields,
+  fieldEdits: _fieldEdits,
+  ...rest
+}: Plan): PlanSummary {
   return rest;
 }
 
@@ -443,6 +451,42 @@ it.effect(
           lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
         },
       });
+    }),
+);
+
+it.effect(
+  "a saved draft names Luke, on the call, as the writer of each field it changed, and leaves every other field's writer",
+  () =>
+    Effect.gen(function* () {
+      const fields = { ...EMPTY_PLAN_FIELDS, decisions: "Invites expire." };
+      const yours = { actor: PLAN_ACTOR.DEVELOPER, at: 5, duringCall: false } as const;
+      const invites: Plan = {
+        ...plan(INVITES, "Teammate invitations", "# Teammate invitations", 10),
+        fields,
+        fieldEdits: [
+          { field: PLAN_FIELD.DECISIONS, ...yours },
+          { field: PLAN_FIELD.PROBLEM, ...yours },
+        ],
+      };
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: {
+          body: "# Teammate invitations\n\nOnly admins invite.",
+          assumptions: invites.document.assumptions,
+        },
+        fields: { ...fields, goal: { problem: "Only admins invite.", outcome: null } },
+        savedAt: 11,
+      });
+
+      assert.deepEqual(last()?.document.plan?.fieldEdits, [
+        { field: PLAN_FIELD.DECISIONS, ...yours },
+        { field: PLAN_FIELD.PROBLEM, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
+      ]);
     }),
 );
 

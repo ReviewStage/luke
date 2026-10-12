@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { NOTE_KIND, PLAN_FIELD } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND } from "@sidecar/hosted/plan-template";
+import {
+  PLAN_ACTOR,
+  PLAN_FIELD,
+  type PlanDocument,
+  planDocumentSchema,
+} from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {

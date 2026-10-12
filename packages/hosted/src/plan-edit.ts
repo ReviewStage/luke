@@ -1,7 +1,6 @@
 import { applyPatch, structuredPatch } from "diff";
 import { Schema as EffectSchema, Result } from "effect";
 import {
-  PLAN_FIELD,
   PLAN_TEXT_FIELDS,
   type PlanContent,
   type PlanTextField,
@@ -10,6 +9,7 @@ import {
 } from "./plan-template.js";
 import {
   PLAN_BOUNDS,
+  PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
   planAssumptionSchema,
   planFieldsSchema,
