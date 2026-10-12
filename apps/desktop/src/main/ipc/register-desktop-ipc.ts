@@ -41,7 +41,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     callWindow,
-    planShown: windows.planShown,
     state,
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,

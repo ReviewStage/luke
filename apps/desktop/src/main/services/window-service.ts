@@ -57,7 +57,7 @@ export interface WindowServiceDependencies {
 export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
   readonly voiceWindow: VoiceWindow;
-  /** The floating call pill, shown while a call stands and its plan is off screen. */
+  /** The floating call window, shown while a call stands and no Luke window has the keyboard. */
   readonly callWindow: CallWindow;
   readonly hotkeys: HotkeyRegistrar;
   /**
@@ -91,8 +91,6 @@ export interface WindowService extends DesktopService {
    * only the panels are reported.
    */
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
-  /** A panel saying which plan it has on screen, or none: what the call pill stands down for. */
-  planShown: (sender: WebContents, planId: string | undefined) => void;
   /**
    * The opaque name one window's writes travel to the host under. It names
    * nothing about the window to anyone else, and the host records it beside
@@ -108,7 +106,7 @@ export interface WindowService extends DesktopService {
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panel, the hidden voice window, the call pill, the keys, the Dock, the login
+ * behalf: the panel, the hidden voice window, the call window, the keys, the Dock, the login
  * item, the media permissions, and the display and power changes the panel
  * answers.
  * It is the one concern that opens a window, and it opens none until `start`.
@@ -135,7 +133,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call pill's document, on the same terms: the one bundle, no host.
+  // The call window's document, on the same terms: the one bundle, no host.
   const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
   const callUrl = pathToFileURL(callHtmlPath).href;
 
@@ -227,8 +225,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
     const call = callWindow.current();
     if (call) send(call.webContents, voiceWindowState(held));
-    // The pill follows the document it draws, so it stands and goes on the
-    // same version every window is told.
+    // The call window follows the document it draws, so it stands and goes
+    // on the same version every window is told.
     callPresence.voiceChanged(held.voice.view);
   }
 
@@ -260,8 +258,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     };
   }
 
-  // Which panel has the keyboard, for the pill: the call bar is only in front
-  // of the developer in the panel they are using.
+  // Which panel has the keyboard, for the call window: while one does, that
+  // panel draws the call itself, as its call bar or its own call card.
   const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
     if (panels.owns(window.webContents)) callPresence.panelFocused(window.webContents);
   };
@@ -377,7 +375,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showAgent,
     toastAgentEnd,
     onPanelFocusChanged,
-    planShown: (sender, planId) => callPresence.planShown(sender, planId),
     reporterOf,
     trustedSender: (event) => {
       const url = event.senderFrame?.url ?? event.sender.getURL();

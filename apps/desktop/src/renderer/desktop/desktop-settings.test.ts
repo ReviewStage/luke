@@ -46,6 +46,7 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       staged: false,
     },
     history: navigationHistory(),
+    call: undefined,
     settings: settingsPanelProps({
       view,
       onViewChange: setView,

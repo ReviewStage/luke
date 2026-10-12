@@ -21,6 +21,7 @@ import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { runAppCommand, useAppCommand } from "../app-commands";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
@@ -646,6 +647,7 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
+  call,
 }: {
   sidebar: SidebarCollapse;
   identity: LukeIdentityProps;
@@ -655,6 +657,8 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
+  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
+  call: CallCardInput | undefined;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const composing = onPlans && plans.page === PLANS_PAGE.NEW;
@@ -817,6 +821,7 @@ export function DesktopSidebar({
       </div>
 
       <div className="sidebar-foot">
+        <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
         <SidebarUpdate updates={updates} />
         <AccountButton
           account={account}

@@ -14,6 +14,9 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { type CallCardInput, callControls } from "./call/call-card";
+import { callCard, callCardShown } from "./call/call-card-model";
+import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
@@ -214,7 +217,7 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
-  // The call pill's way back: the Plans tab, on the call's plan, opening it
+  // The call card's way back: the Plans tab, on the call's plan, opening it
   // where another plan, or none, is open.
   const selectPlan = useRef(plans.onSelect);
   selectPlan.current = plans.onSelect;
@@ -228,13 +231,21 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
-  // The plan this window has on screen, or none on Settings and the new-plan
-  // page: the call pill stands down while a focused window shows the call's.
+  // The call card, while this window has the keyboard and shows anything but
+  // the call's plan: another plan, the new-plan page, Settings.
+  const focused = useWindowFocused();
   const planShown =
-    !accountGated && tab === PANEL_TAB.PLANS && plans.page === PLANS_PAGE.DOCUMENT
+    tab === PANEL_TAB.PLANS && plans.page === PLANS_PAGE.DOCUMENT
       ? state?.planning.activePlanId
       : undefined;
-  useEffect(() => window.sidecar.reportPlanShown(planShown), [planShown]);
+  const call: CallCardInput | undefined =
+    !accountGated && callCardShown({ view: voiceView, focused, planShown })
+      ? {
+          card: callCard({ view: voiceView, planning: state?.planning ?? IDLE_PLANNING_VIEW }),
+          speakerMuted: voiceView.speakerMuted,
+          controls: callControls(tell, voiceView.speakerMuted),
+        }
+      : undefined;
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
@@ -437,6 +448,7 @@ export function App(): React.JSX.Element {
           plans={plans}
           history={history}
           sidebar={sidebar}
+          call={call}
           captions={{
             caption,
             volumeHint: {

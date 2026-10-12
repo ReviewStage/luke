@@ -203,8 +203,8 @@ await Promise.all([
     path.join(appRoot, "src/renderer/voice.html"),
     path.join(outputRoot, "renderer/voice.html"),
   ),
-  // The floating call pill's document, on the same terms as the voice
-  // window's, with the stylesheet the pill is drawn in.
+  // The floating call window's document, on the same terms as the voice
+  // window's, with the stylesheet the call card is drawn in.
   fs.copyFile(
     path.join(appRoot, "src/renderer/call.html"),
     path.join(outputRoot, "renderer/call.html"),

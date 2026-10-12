@@ -11,6 +11,8 @@ import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
+import type { CallCardInput } from "../call/call-card";
+import { CALL_CARD_TONE } from "../call/call-card-model";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE, type PlansPage } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
@@ -30,10 +32,12 @@ function Window({
   tab,
   fixture,
   plans,
+  call,
 }: {
   tab: PanelTab;
   fixture: boolean;
   plans: Partial<PlansControl>;
+  call: CallCardInput | undefined;
 }): React.JSX.Element {
   const sidebar = useSidebarCollapse(fixture);
   useAppKeymap(true);
@@ -56,6 +60,7 @@ function Window({
     plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW), ...plans }),
     history: navigationHistory(),
     sidebar,
+    call,
     captions: captionStripProps(),
     settings: settingsPanelProps(),
   });
@@ -63,10 +68,15 @@ function Window({
 
 let root: Root | undefined;
 
-function show(tab: PanelTab, fixture = false, plans: Partial<PlansControl> = {}): void {
+function show(
+  tab: PanelTab,
+  fixture = false,
+  plans: Partial<PlansControl> = {},
+  call: CallCardInput | undefined = undefined,
+): void {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Window, { tab, fixture, plans }));
+    root.render(createElement(Window, { tab, fixture, plans, call }));
   });
 }
 
@@ -205,6 +215,49 @@ test("Settings keeps its page list whatever the fold, and hands the plans back a
 
   show(PANEL_TAB.PLANS);
   assert.equal(sidebar().hasAttribute("inert"), true, "the plans come back still folded");
+});
+
+/** A call card as a window hands it to the shell, its presses inert. */
+const CALL: CallCardInput = {
+  card: {
+    planName: "Parser cache migration",
+    status: { words: "Listening", tone: CALL_CARD_TONE.DEVELOPER },
+    microphoneMuted: false,
+  },
+  speakerMuted: false,
+  controls: {
+    onReturn: ignore,
+    onToggleMicrophone: ignore,
+    onToggleSpeaker: ignore,
+    onEnd: ignore,
+  },
+};
+
+/** The card standing in the window now, by where it is drawn, ignoring one on its way out. */
+function callCards(): string[] {
+  return [...document.body.querySelectorAll<HTMLElement>('.call-card[data-leaving="false"]')].map(
+    (card) => card.dataset.surface ?? "",
+  );
+}
+
+test("the call card stands at the sidebar's foot above the account row, floats in the corner once the sidebar is folded, and is at the foot of Settings' page list", () => {
+  show(PANEL_TAB.PLANS);
+  assert.deepEqual(callCards(), []);
+
+  show(PANEL_TAB.PLANS, false, {}, CALL);
+  assert.deepEqual(callCards(), ["sidebar"]);
+  const foot = document.body.querySelector(".sidebar-foot");
+  assert.ok(foot?.firstElementChild?.matches(".call-card"), "the card heads the foot");
+  assert.ok(foot?.querySelector(".sidebar-account"), "the account row stays under it");
+
+  press();
+  assert.deepEqual(callCards(), ["floating"]);
+  press();
+  assert.deepEqual(callCards(), ["sidebar"]);
+
+  show(PANEL_TAB.SETTINGS, false, {}, CALL);
+  assert.deepEqual(callCards(), ["sidebar"]);
+  assert.ok(document.body.querySelector(".settings-pages .call-card"));
 });
 
 test("a fixture run starts open over a kept fold and keeps none of its own", () => {
@@ -445,6 +498,7 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps({ view, onViewChange: setView }),
   });

@@ -204,7 +204,7 @@ export const ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   VOICE_COMMAND: "voice.command",
-  /** The floating call pill's way back: Luke's window brought forward on the call's own plan. */
+  /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,

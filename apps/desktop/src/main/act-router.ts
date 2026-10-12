@@ -22,7 +22,7 @@ export interface ActSender {
   panel: boolean;
   /** The hidden window the conversation lives in, and the one receiver of replies. */
   voice: boolean;
-  /** The floating call pill, which sends the call's controls and nothing else. */
+  /** The floating call window, which sends the call's controls and nothing else. */
   call: boolean;
 }
 

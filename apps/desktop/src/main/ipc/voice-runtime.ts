@@ -10,7 +10,7 @@ import type { ReportHandlers } from "../bridge-host";
 import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
-/** A window this file sends to or reads the sender of: the hidden voice window, and the call pill. */
+/** A window this file sends to or reads the sender of: the hidden voice window, and the call window. */
 interface WindowSurface {
   current(): BrowserWindow | undefined;
   owns(webContents: WebContents): boolean;
@@ -29,10 +29,8 @@ type LiveSessionActs = Pick<
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
   voiceWindow: WindowSurface;
-  /** The floating call pill, which presses the call's controls and draws its levels. */
+  /** The floating call window, which presses the call's controls and draws its levels. */
   callWindow: WindowSurface;
-  /** A panel saying which plan it has on screen, which the pill stands down for. */
-  planShown: (sender: WebContents, planId: string | undefined) => void;
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
@@ -59,15 +57,15 @@ export function voiceRuntimeActRows(
 ): Pick<ActRows, VoiceRuntimeActKind> {
   const { panels, voiceWindow, liveSession, state } = dependencies;
   return {
-    // A panel's or the call pill's command to the voice window. The act's
+    // A panel's or the call window's command to the voice window. The act's
     // schema has already bounded it; here it is checked to come from one of
     // the two — the voice window does not command itself — and handed on.
     [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel, call }) => {
       if (!panel && !call) return;
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
     },
-    // The pill's way back names no plan: the call's is read here, so the
-    // pill cannot bring forward a plan the call is not about.
+    // The call window's way back names no plan: the call's is read here, so
+    // it cannot bring forward a plan the call is not about.
     [ACT_KIND.CALL_SHOW_PLAN]: (_payload, { call }) => {
       const planId = state.snapshot().voice.view?.callPlanId;
       if (!call || planId === undefined) return;
@@ -105,10 +103,7 @@ export function voiceRuntimeActRows(
 
 export function voiceRuntimeReports(
   dependencies: VoiceRuntimeDependencies,
-): Pick<
-  ReportHandlers,
-  "reportVoiceView" | "reportVoiceLevel" | "reportPlanShown" | "setShortcutCapturing"
-> {
+): Pick<ReportHandlers, "reportVoiceView" | "reportVoiceLevel" | "setShortcutCapturing"> {
   const { panels, voiceWindow, callWindow } = dependencies;
   return {
     // The voice window's snapshot: written to the document, from which every
@@ -136,10 +131,6 @@ export function voiceRuntimeReports(
       if (!voiceWindow.owns(context.sender)) return;
       panels.broadcast(channels.onVoiceLevelChanged, levels);
       callWindow.current()?.webContents.send(channels.onVoiceLevelChanged, levels);
-    },
-    reportPlanShown(context, planId) {
-      if (!panels.owns(context.sender)) return;
-      dependencies.planShown(context.sender, planId);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;

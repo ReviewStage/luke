@@ -1,5 +1,5 @@
 /**
- * call-window.ts -- the floating call pill's window: on top, on every Space, and never focused.
+ * call-window.ts -- the floating call card's window: on top, on every Space, and never focused.
  */
 
 import fs from "node:fs";
@@ -19,7 +19,7 @@ export interface CallWindowOptions {
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
-  /** The file the place the developer last dragged the pill to is kept in. */
+  /** The file the place the developer last dragged the card to is kept in. */
   placementPath: string;
 }
 
@@ -27,7 +27,7 @@ const decodePlacement = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
 );
 
-/** Where the pill was last left, or nothing for a first run or a file that is not one. */
+/** Where the card was last left, or nothing for a first run or a file that is not one. */
 function readPlacement(file: string): CallWindowPoint | undefined {
   let text: string;
   try {
@@ -39,17 +39,17 @@ function readPlacement(file: string): CallWindowPoint | undefined {
 }
 
 /**
- * The one floating window that draws the standing call while its plan is off
- * screen. It loads the same renderer bundle as the panels from a document of
- * its own (`call.html`, which may reach no host), under the same hardening,
- * and mounts the pill by the role main answers it. It is transparent and
- * frameless, so the pill is the whole of what is seen; a non-activating
+ * The one floating window that draws the standing call while no Luke window
+ * has the keyboard. It loads the same renderer bundle as the panels from a
+ * document of its own (`call.html`, which may reach no host), under the same
+ * hardening, and mounts the call card by the role main answers it. It is
+ * transparent and frameless, so the card is the whole of what is seen; a non-activating
  * panel, so pressing a control leaves the developer's editor in front; and it
  * floats over every Space and full-screen app, out of Mission Control.
  *
- * It is opened the first time it is wanted and kept, hidden, after: a pill
- * that comes and goes with every plan switch would reload its renderer each
- * time. A renderer that dies is let go of, and the next show opens a fresh
+ * It is opened the first time it is wanted and kept, hidden, after: a card
+ * that comes and goes with every switch of app would reload its renderer
+ * each time. A renderer that dies is let go of, and the next show opens a fresh
  * one. Like the voice window it never counts toward the app's lifetime.
  */
 export class CallWindow implements CallWindowSurface {
@@ -111,6 +111,9 @@ export class CallWindow implements CallWindowSurface {
     this.#window = window;
     this.#ready = false;
     window.setAlwaysOnTop(true, "floating");
+    // Kept out of the Window menu's list, where a window nobody chose to open
+    // would read as one of Luke's own.
+    window.excludedFromShownWindowsMenu = true;
     // Note that the process type is left alone, because transforming it is
     // what hides and re-shows the Dock icon each time the window is raised.
     window.setVisibleOnAllWorkspaces(true, {

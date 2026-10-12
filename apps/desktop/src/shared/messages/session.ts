@@ -9,8 +9,9 @@ export const WINDOW_ROLE = {
   /** The one hidden window that will hold the live conversation; it draws nothing. */
   VOICE: "voice",
   /**
-   * The floating call pill, shown while a call stands and its plan is off
-   * screen: it draws the call and sends its controls, and records nothing.
+   * The floating call window, shown while a call stands and no Luke window
+   * has the keyboard: it draws the call card and sends its controls, and
+   * records nothing.
    */
   CALL: "call",
 } as const;
