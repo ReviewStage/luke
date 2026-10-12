@@ -2759,6 +2759,16 @@ body,
   color: var(--text-primary);
 }
 
+/* A quiet tab, the plan column's lone one, wears no fill at rest even
+   chosen, and the hover fill under the pointer, as a title does. */
+.tab[data-quiet="true"]:not(:hover) {
+  background: none;
+}
+
+.tab[data-quiet="true"]:hover {
+  background: var(--raised);
+}
+
 /* A tab being dragged is lifted over the tabs it passes: the chosen tab's
    fill made opaque on the panel's ground, and a shadow beneath. It follows
    the pointer frame for frame, so its own transform eases nothing. */
