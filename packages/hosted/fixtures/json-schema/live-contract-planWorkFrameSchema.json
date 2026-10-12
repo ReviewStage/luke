@@ -129,6 +129,10 @@
                     "type": "string",
                     "maxLength": 300
                   },
+                  "task": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
                   "input": {
                     "type": "string",
                     "maxLength": 4000
@@ -236,6 +240,10 @@
                                 "subject": {
                                   "type": "string",
                                   "maxLength": 300
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "maxLength": 64
                                 },
                                 "input": {
                                   "type": "string",

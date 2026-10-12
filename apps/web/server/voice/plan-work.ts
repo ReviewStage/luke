@@ -78,6 +78,7 @@ const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWithdrawalInput = Schema.is(WITHDRAW_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
+const isCancelInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.TASK_CANCEL]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
@@ -218,6 +219,7 @@ function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolea
   const tool = TOOL_OF_NAME.get(name) ?? PLAN_WORK_TOOL.OTHER;
   const called = callStateOf(part, state);
   const subject = subjectOf(tool, part);
+  const task = taskOf(tool, part);
   const output = outputOf(tool, part);
   return {
     type: PLAN_WORK_PART.TOOL,
@@ -231,6 +233,7 @@ function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolea
     ...(subject === undefined
       ? undefined
       : { subject: cut(subject, PLAN_WORK_BOUNDS.SUBJECT_CHARS) }),
+    ...(task === undefined || task.length > PLAN_WORK_BOUNDS.NAME_CHARS ? undefined : { task }),
     input: inputOf(tool, part),
     ...(output === undefined ? undefined : { output: cut(output, PLAN_WORK_BOUNDS.TEXT_CHARS) }),
   };
@@ -307,6 +310,15 @@ function startedTaskOf(part: StoredToolPart): string | undefined {
     return undefined;
   }
   return STARTED_TASK.exec(part.output)?.[1];
+}
+
+/** The subagent task a call started, sent work to, or stopped; nothing for a call that touches no task, or a start that has not answered. */
+function taskOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined {
+  if (tool === PLAN_WORK_TOOL.WORKER_CANCEL) {
+    return isCancelInput(part.input) ? part.input.taskId : undefined;
+  }
+  if (tool !== PLAN_WORK_TOOL.WORKER) return undefined;
+  return sentTaskOf(part) ?? startedTaskOf(part);
 }
 
 /**
