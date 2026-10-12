@@ -19,8 +19,8 @@ import { Tooltip } from "../tooltip";
  * shows the catalog as it stands and the default the last change wrote. A
  * plan with no repository has nothing for an agent to check out, so Start
  * is unavailable and says why on hover instead. The menu closes on a pick,
- * on Escape, and on focus leaving it; Escape stops there, so it closes the
- * menu and not the plan behind it.
+ * on Escape, on a press of the main part, and on focus leaving the button;
+ * Escape stops there, so it closes the menu and not the plan behind it.
  */
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
@@ -81,7 +81,11 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     });
   };
 
+  // A press of the main part closes the menu whether or not it starts
+  // anything: the main part sits inside the button, so the focus moving to it
+  // is not focus leaving, and nothing else would close the menu.
   const press = () => {
+    setOpen(false);
     if (unavailable || start.busy) return;
     start.onPress();
   };

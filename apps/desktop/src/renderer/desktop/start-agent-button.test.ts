@@ -258,6 +258,28 @@ test("the main part starts on the default, naming nothing, and says the default 
   assert.deepEqual(presses, [undefined], "nothing in the menu started anything");
 });
 
+test("a press of Start with the menu open closes the menu and starts on the default", async () => {
+  const { presses, control } = standing();
+  const page = mount(control);
+  await openMenu(page);
+  const main = buttonNamed(page, "Start a coding agent");
+  // A real click focuses the main part first, which lies inside the button, then presses it.
+  act(() => main.focus());
+  assert.ok(page.querySelector(".plan-compose-menu"), "focus moving to Start alone keeps it open");
+  act(() => main.click());
+  assert.ok(page.querySelector(".plan-compose-menu") === null, "the menu closed");
+  assert.deepEqual(presses, [undefined], "and Start started on the default");
+});
+
+test("a press of Start under way still closes an open menu, starting nothing", async () => {
+  const { presses, control } = standing();
+  const page = mount({ ...control, start: { ...control.start, busy: true } });
+  await openMenu(page);
+  act(() => buttonNamed(page, "Start a coding agent").click());
+  assert.ok(page.querySelector(".plan-compose-menu") === null, "the menu closed");
+  assert.deepEqual(presses, []);
+});
+
 test("a pick of a model keeps it as the default at the effort it was running, or the model's first where it lacks that one, and closes the menu", async () => {
   const { presses, writes, control } = standing();
   const page = mount(control);
