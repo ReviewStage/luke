@@ -275,6 +275,20 @@ test("the session is told to put what it needs from the developer in their inbox
   }
 });
 
+test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    assert.ok(
+      coderInstructions("Acme/Relay", brief, false).includes(
+        "Never ask for a credential or a secret in a form",
+      ),
+      brief,
+    );
+  }
+  assert.ok(
+    INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
+  );
+});
+
 test("the post tool tells the model how an answer it needs opens, as the service writes it", () => {
   const message = inboxAnswerMessage(
     { key: "branch-protection", title: "Turn on branch protection" },

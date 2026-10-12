@@ -21,7 +21,7 @@ import {
 } from "../server/db/effect-migrator";
 import { db } from "../server/db/query";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { answerInboxItem, planInboxItems } from "../server/hosted/inbox-store";
+import { answerInboxItem, planInboxItems, postInboxItem } from "../server/hosted/inbox-store";
 import { createPlan } from "../server/hosted/plan-store";
 import { unmigratedPgliteSqlClient } from "./support/sql-client";
 
@@ -36,7 +36,10 @@ import { unmigratedPgliteSqlClient } from "./support/sql-client";
  * before it still serves while it migrates and still writes the old shape,
  * so a row that deployment writes afterwards, naming the old columns and
  * none of the new, is filled the same way as it lands, and an answer it
- * writes with one choice reads as choices.
+ * writes with one choice reads as choices. A row this deployment writes is
+ * projected back onto the old columns the same way, so that deployment
+ * reads an approval as an approval and a choice with its options rather
+ * than every new item as a question.
  *
  * Synthetic accounts, plans, and words throughout.
  */
@@ -162,8 +165,19 @@ const OLD_ROWS: readonly OldRow[] = [
   },
 ];
 
+/** A choice as this deployment posts one, under a key the old rows hold, which replaces that row. */
+const NEW_CHOICE = {
+  title: "Which queue, now?",
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Which one?" }],
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Postgres outbox" }, { label: "Redis" }],
+    recommended: "Redis",
+  },
+} as const;
+
 it.effect(
-  "every item written before 0088 reads after it as the blocks and the response it meant, its answer's choice as its choices, and still takes its answer; a row written and answered in the old shape after it reads the same way",
+  "every item written before 0088 reads after it as the blocks and the response it meant, its answer's choice as its choices, and still takes its answer; a row written and answered in the old shape after it reads the same way, and a row written in the new shape is projected onto the old columns",
   () =>
     Effect.provide(
       Effect.scoped(
@@ -239,6 +253,48 @@ it.effect(
             reply: INBOX_REPLY.CHOSE,
             choices: ["Postgres outbox"],
           });
+
+          // What this deployment writes, the deployment before it reads through the old columns.
+          yield* postInboxItem(agent, {
+            key: "ship",
+            title: "Ship it?",
+            blocks: [
+              { type: INBOX_BLOCK.MARKDOWN, text: "Two files." },
+              {
+                type: INBOX_BLOCK.LINK,
+                url: "https://github.com/acme/relay/pull/7",
+                label: "The PR",
+              },
+            ],
+            response: { type: INBOX_RESPONSE.APPROVAL },
+          });
+          yield* postInboxItem(agent, { ...NEW_CHOICE, key: "invite-queue" });
+          const legacy = yield* sql<{
+            key: string;
+            kind: string;
+            details: string | null;
+            options: unknown;
+            recommended: string | null;
+          }>`
+            select key, kind, details, options, recommended from inbox_item
+            where agent_id = ${agent.agentId} and key in ('ship', 'invite-queue') order by key
+          `;
+          assert.deepEqual(legacy, [
+            {
+              key: "invite-queue",
+              kind: "choice",
+              details: "Which one?",
+              options: [{ label: "Postgres outbox" }, { label: "Redis" }],
+              recommended: "Redis",
+            },
+            {
+              key: "ship",
+              kind: "approval",
+              details: "Two files.\n\nThe PR: https://github.com/acme/relay/pull/7",
+              options: null,
+              recommended: null,
+            },
+          ]);
         }),
       ),
       Layer.provideMerge(unmigratedPgliteSqlClient, NodeServices.layer),

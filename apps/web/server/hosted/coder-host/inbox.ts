@@ -63,8 +63,9 @@ export const INBOX_TOOLS = {
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
       "answer in their words), task (something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
       "say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
-      "boolean, each named by its label and required where it must be filled), or none (something they should know; they " +
-      "acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a task you only " +
+      "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
+      "form, since the answer reaches your transcript: that is a task the developer does by hand), or none (something they " +
+      "should know; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a task you only " +
       "need done or an item that asks nothing, and its answer is kept for you to read. " +
       `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
