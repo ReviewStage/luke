@@ -197,12 +197,6 @@ function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): Re
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
     },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: false },
-      voiceActive: { developer: false, luke: false },
-      fixtureSpeaking: false,
-      voiceOpening: false,
-    },
     tab: PANEL_TAB.PLANS,
     onTabChange: ignore,
     plans: plansControl({

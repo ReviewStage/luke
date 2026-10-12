@@ -3,13 +3,7 @@ import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
-import {
-  fixtureVoice,
-  voiceActiveFor,
-  voiceErrorToShow,
-  voiceNoticeToShow,
-} from "./use-voice-view";
-import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
+import { fixtureVoice, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 
 const NOBODY = { listening: false, lukeSpeaking: false };
 const LUKE = { listening: false, lukeSpeaking: true };
@@ -83,23 +77,4 @@ test("a notice yields to Luke's voice alone, because the developer's draws nothi
     undefined,
   );
   assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
-});
-
-test("a quiet level lets the hangover run out from the last loud one, never past it", () => {
-  const loud = voiceActiveFor({ level: 0.8, now: 1_000, lastLoudAt: undefined });
-  assert.equal(loud.lastLoudAt, 1_000);
-  assert.equal(loud.remainingMs, VOICE_ACTIVITY_HANGOVER_MS);
-  // A quiet report mid-hangover keeps the clock the loud one started.
-  const quiet = voiceActiveFor({ level: 0.01, now: 1_100, lastLoudAt: 1_000 });
-  assert.equal(quiet.lastLoudAt, 1_000);
-  assert.equal(quiet.remainingMs, VOICE_ACTIVITY_HANGOVER_MS - 100);
-  // A quiet report past it ends the voice at once.
-  const late = voiceActiveFor({
-    level: 0.01,
-    now: 1_000 + VOICE_ACTIVITY_HANGOVER_MS,
-    lastLoudAt: 1_000,
-  });
-  assert.equal(late.remainingMs, 0);
-  // Silence with no loud frame ever is not a voice.
-  assert.equal(voiceActiveFor({ level: 0, now: 5, lastLoudAt: undefined }).remainingMs, 0);
 });

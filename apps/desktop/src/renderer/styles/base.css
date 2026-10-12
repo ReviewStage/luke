@@ -323,44 +323,6 @@ body,
   user-select: text;
 }
 
-/* Luke's meter arrives beside his name in the sidebar when he starts to
-   speak: a short fade and an 8px travel, late enough on the shape's beat that
-   a reply arriving reads as one gesture. A mount animation rather than a
-   transition, because the live reply is the meter's first style and a
-   transition has nothing to start from. The developer's meter has nothing to
-   wait behind, so it appears at once — the key answers on the frame it lands. */
-.wing-meter[data-turn="luke"] {
-  animation:
-    wing-mount-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards,
-    wing-mount-travel var(--duration-shape) var(--spring)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards;
-}
-
-@keyframes wing-mount-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes wing-mount-travel {
-  from {
-    transform: translateX(8px);
-  }
-}
-
-/* Voice meters ----------------------------------------------------------- */
-
-/* A meter's seat, rather than the meter itself: arriving is the seat's
-   gesture, while the opacity and scale inside it are the meter's own answer
-   to speech. One element cannot carry both. A meter is drawn only while its
-   speaker is heard, so the seat's arrival is its mount, choreographed per
-   speaker above. */
-.wing-meter {
-  display: flex;
-  align-items: center;
-}
-
 /* Luke's face ------------------------------------------------------------ */
 
 /* Drawn in the primary ink because it is the app rather than one of the
@@ -663,68 +625,6 @@ body,
 
 .volume-hint-dismiss:hover {
   background: var(--raised-strong);
-}
-
-/* Waveform --------------------------------------------------------------- */
-
-/* The meter takes the face's own place while the microphone is live and stays
-   drawn for the whole of that — silence is a thing it reports, not a reason to
-   disappear. Speech only raises it from idle to full. Exactly the face's
-   18px, because it stands where the face stands: five bars at 2px with 2px
-   between them. */
-.waveform {
-  display: flex;
-  width: 18px;
-  height: 22px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  opacity: 0.5;
-  transform: scale(0.86);
-  transition:
-    opacity var(--duration-quick) var(--motion-exit),
-    transform var(--duration-fast) var(--spring-fast);
-}
-
-.waveform[data-speaking="true"] {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* Your own meter is fully drawn from its first frame. It stands where the
-   marks stood as the answer to "am I being heard", and a half-faded answer
-   reads as no — the quiet-versus-speaking distinction stays with the bars,
-   which move to the voice. Luke's meter keeps the fade: it sits beside the
-   face, and dim at rest is how a pause mid-reply should read. */
-.wing-meter[data-turn="developer"] .waveform {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.waveform-bar {
-  width: 2px;
-  height: var(--bar-height, 19px);
-  border-radius: 999px;
-  background: var(--state-working);
-  transform: scaleY(0.2);
-  transform-origin: center;
-  /* Linear rather than a spring, because the bars are smoothing between
-     analyser samples rather than travelling anywhere: each frame's level is
-     data, and an overshoot would report a louder voice than was heard. */
-  transition: transform var(--duration-exit) linear;
-}
-
-.waveform-bar:nth-child(1),
-.waveform-bar:nth-child(5) {
-  --bar-height: 9px;
-}
-.waveform-bar:nth-child(2),
-.waveform-bar:nth-child(4) {
-  --bar-height: 15px;
-}
-.waveform-bar:nth-child(3) {
-  --bar-height: 23px;
 }
 
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,

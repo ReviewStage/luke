@@ -1,37 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   IDLE_VOICE_VIEW,
-  SILENT_VOICE_LEVELS,
   VOICE_COMMAND,
-  type VoiceLevels,
   type VoiceSpeakers,
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
 import { useCallCommands } from "./call-commands";
 import { useAppState } from "./use-app-state";
-import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
-import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/**
- * How long a voice has been active, read off the relayed levels with the
- * meter's own hangover: a loud report starts it, a quiet one lets it run out
- * from the last loud report rather than from itself, so the panel's edge
- * lands where the voice window's did.
- */
-export function voiceActiveFor(input: {
-  level: number;
-  now: number;
-  lastLoudAt: number | undefined;
-}) {
-  const lastLoudAt = input.level > VOICE_ACTIVITY_THRESHOLD ? input.now : input.lastLoudAt;
-  const remainingMs =
-    lastLoudAt === undefined ? 0 : Math.max(0, lastLoudAt + VOICE_ACTIVITY_HANGOVER_MS - input.now);
-  return { lastLoudAt, remainingMs };
-}
 
 /**
  * The conversation a capture run stages, since no voice window stands in one:
@@ -109,53 +88,6 @@ export function voiceNoticeToShow(input: {
   return input.notice;
 }
 
-/**
- * Whether each speaker is audibly talking, read off their relayed level with
- * the same hangover the voice window's own meters keep, so each meter's bars
- * settle on the edge the voice window measured rather than on a frame of
- * their own.
- */
-export type VoiceActivity = { readonly [voice in WaveformVoice]: boolean };
-
-/**
- * A fresh object per report even at a repeated loudness, so a hangover
- * re-arms on every arrival rather than only on a changed number.
- */
-interface LevelReport {
-  levels: VoiceLevels;
-}
-
-/**
- * One speaker's edge over the relayed levels. Live is the speaker's own
- * standing — a voice whose meter is not drawn is not active, whatever the
- * last level said — and a press whose call is still opening counts as live
- * for the developer, whose device is already heard.
- */
-function useVoiceActive(report: LevelReport, voice: WaveformVoice, live: boolean): boolean {
-  const level = report.levels[voice];
-  const [active, setActive] = useState(false);
-  const lastLoudAt = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const decided = voiceActiveFor({
-      level,
-      now: performance.now(),
-      lastLoudAt: lastLoudAt.current,
-    });
-    lastLoudAt.current = decided.lastLoudAt;
-    if (decided.remainingMs === 0) {
-      setActive(false);
-      return;
-    }
-    setActive(true);
-    const timer = window.setTimeout(() => setActive(false), decided.remainingMs);
-    return () => window.clearTimeout(timer);
-  }, [report, level]);
-  useEffect(() => {
-    if (!live) setActive(false);
-  }, [live]);
-  return live && active;
-}
-
 interface VoiceViewState {
   /** The live conversation as the voice window last reported it. */
   view: VoiceView;
@@ -163,10 +95,6 @@ interface VoiceViewState {
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
   listening: boolean;
-  /** How loud each speaker is, in the unit interval, as last relayed. */
-  levels: VoiceLevels;
-  /** Which speakers are audibly talking, on the relayed levels' own hangover. */
-  voiceActive: VoiceActivity;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
@@ -186,20 +114,6 @@ export function useVoiceView(): VoiceViewState {
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
   const view = state?.voice.view ?? IDLE_VOICE_VIEW;
-  const [levelReport, setLevelReport] = useState<LevelReport>({ levels: SILENT_VOICE_LEVELS });
-  useEffect(
-    () => window.sidecar.onVoiceLevelChanged((reported) => setLevelReport({ levels: reported })),
-    [],
-  );
-  const voiceActive: VoiceActivity = {
-    developer: useVoiceActive(
-      levelReport,
-      WAVEFORM_VOICE.DEVELOPER,
-      view.listening || view.talkOpening,
-    ),
-    luke: useVoiceActive(levelReport, WAVEFORM_VOICE.LUKE, view.lukeSpeaking),
-  };
-
   useCallCommands(view, state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED, (command) =>
     tell(ACT_KIND.VOICE_COMMAND, { command }),
   );
@@ -214,8 +128,6 @@ export function useVoiceView(): VoiceViewState {
     view,
     speaking: view.lukeSpeaking,
     listening: view.listening,
-    levels: levelReport.levels,
-    voiceActive,
     stopSpeaking,
     requestMicrophoneAccess,
   };

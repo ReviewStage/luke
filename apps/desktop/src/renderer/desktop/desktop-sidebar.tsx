@@ -43,7 +43,7 @@ import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { updateInSidebar, updateRow } from "../update-row";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
-import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
+import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -641,7 +641,6 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  */
 export function DesktopSidebar({
   sidebar,
-  identity,
   history,
   plans,
   tab,
@@ -651,7 +650,6 @@ export function DesktopSidebar({
   call,
 }: {
   sidebar: SidebarCollapse;
-  identity: LukeIdentityProps;
   history: NavigationHistory;
   plans: PlansControl;
   tab: PanelTab;
@@ -745,7 +743,7 @@ export function DesktopSidebar({
     <aside className="desktop-sidebar" inert={sidebar.collapsed}>
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} />
-      <LukeIdentity {...identity} />
+      <LukeIdentity />
 
       <button
         type="button"

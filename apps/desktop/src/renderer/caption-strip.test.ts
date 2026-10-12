@@ -81,12 +81,6 @@ function Window({
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
     },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: true },
-      voiceActive: { developer: false, luke: true },
-      fixtureSpeaking: false,
-      voiceOpening: false,
-    },
     tab,
     onTabChange: ignore,
     plans: plansControl({
