@@ -755,6 +755,48 @@ export function latestTurnsOfReached(
   return latestTurnsRead(null, conversationIds);
 }
 
+/** How one turn ended as the store settled it: its status and, where it failed, the failure word and the detail behind it. */
+export type TurnEnding = Pick<LatestTurn, "status" | "failure" | "failureDetail">;
+
+const findTurnEnding = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    turnId: Schema.String,
+  }),
+  Result: Schema.Struct({
+    status: Schema.String,
+    failure: Schema.NullOr(Schema.String),
+    failureDetail: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, conversationId, turnId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          status: turns.status,
+          failure: turns.failure,
+          failureDetail: turns.failureDetail,
+        })
+        .from(turns)
+        .where(
+          and(
+            eq(turns.userId, userId),
+            eq(turns.conversationId, conversationId),
+            eq(turns.id, turnId),
+          ),
+        ),
+    ),
+});
+
+/** The turn the id names in the conversation as it stands now, settled or not; nothing where no such turn stands. */
+export function turnEndingOf(
+  userId: string,
+  conversationId: string,
+  turnId: string,
+): Effect.Effect<Option.Option<TurnEnding>, MessageReadFailure, DatabaseServices> {
+  return findTurnEnding({ userId, conversationId, turnId });
+}
+
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
   lines: Schema.Number,

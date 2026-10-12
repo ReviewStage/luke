@@ -873,4 +873,108 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         });
       }),
   );
+
+  it.effect(
+    "a builder's or the keeper's turn that finishes, fails, or is stopped is reported to Luke once relayed, the builder by its position and the keeper by its role, the failure by its word and each keyed by the turn, and a plain agent's end reports nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const builder = (position: number) => ({ position, role: ROLLOUT_ROLE.BUILDER });
+        const keeper = { role: ROLLOUT_ROLE.KEEPER };
+        const ends = [
+          [builder(1), "turn.completed"],
+          [builder(2), "turn.failed"],
+          [builder(3), "turn.cancelled"],
+          [keeper, "turn.completed"],
+          [keeper, "turn.failed"],
+          [keeper, "turn.cancelled"],
+          [{}, "turn.completed"],
+        ] as const;
+
+        for (const [rollout, end] of ends) {
+          const opened = yield* openAgent(host, undefined, undefined, undefined, rollout);
+          const { agent, auth, sessionId, admitted } = opened;
+          const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
+          const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+          const events = codingTurn("turn_0", end);
+          for (const event of events) {
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            yield* host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+          }
+          const ended = events.at(-1);
+          assert.ok(
+            ended?.type === "turn.completed" ||
+              ended?.type === "turn.failed" ||
+              ended?.type === "turn.cancelled",
+          );
+          // An end eve hands the hook again is the report already taken.
+          yield* host.reportEnd(admitted, sessionId, ended);
+          yield* host.reportEnd(admitted, sessionId, ended);
+        }
+
+        assert.deepEqual(eve.sent, []);
+        assert.deepEqual(
+          eve.opened.map((each) => [each.message.turn, each.message.message]),
+          [
+            [
+              BRAIN_HOST_TURN.REPORT,
+              "[worker 1] finished\n\nIts turn ended. read_coding_agent shows what it did.",
+            ],
+            [BRAIN_HOST_TURN.REPORT, "[worker 2] failed\n\nIts turn failed: model."],
+            [BRAIN_HOST_TURN.REPORT, "[worker 3] stopped\n\nIts turn was stopped before it ended."],
+            [
+              BRAIN_HOST_TURN.REPORT,
+              "[keeper] finished\n\nIts turn ended. read_coding_agent shows what it did.",
+            ],
+            [BRAIN_HOST_TURN.REPORT, "[keeper] failed\n\nIts turn failed: model."],
+            [BRAIN_HOST_TURN.REPORT, "[keeper] stopped\n\nIts turn was stopped before it ended."],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn's end is reported as the store settled it: nothing while the relay has not settled it, a failure the store recorded under an end eve called completed, and the failure's word after a later turn has begun",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const { agent, auth, sessionId, admitted } = yield* openAgent(
+          host,
+          undefined,
+          undefined,
+          undefined,
+          { position: 1, role: ROLLOUT_ROLE.BUILDER },
+        );
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relay = (event: MessageStreamEvent) =>
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+        const events = codingTurn("turn_0", "turn.failed");
+        const completed = stamped({
+          type: "turn.completed",
+          data: { turnId: "turn_0", sequence: 0 },
+        });
+        assert.ok(completed.type === "turn.completed");
+
+        for (const event of events.slice(0, -1)) yield* relay(event);
+        yield* host.reportEnd(admitted, sessionId, completed);
+        assert.equal(eve.opened.length + eve.sent.length, 0);
+
+        const failed = events.at(-1);
+        assert.ok(failed !== undefined);
+        yield* relay(failed);
+        yield* relay(stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }));
+        yield* host.reportEnd(admitted, sessionId, completed);
+
+        assert.deepEqual(
+          [...eve.opened, ...eve.sent].map((each) => each.message.message),
+          ["[worker 1] failed\n\nIts turn failed: model."],
+        );
+      }),
+  );
 });

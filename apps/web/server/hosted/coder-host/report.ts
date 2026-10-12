@@ -1,4 +1,6 @@
+import type { TurnEnding } from "@sidecar/database/models/message-reads";
 import {
+  CODING_AGENT_FAILURE,
   CODING_AGENT_REPORT_TOOL,
   ROLLOUT_ROLE,
   type RolloutRole,
@@ -6,6 +8,7 @@ import {
 import {
   BUILDER_REPORT_KIND,
   KEEPER_REPORT_KIND,
+  REPORT_KIND,
   type Report,
   reportLine,
   WORKER_REPORT_KIND,
@@ -14,7 +17,14 @@ import {
 } from "@sidecar/hosted/rollout-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
-import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
+import type { MessageStreamEvent } from "eve/client";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  TURN_STATUS,
+  type UnparsedWireValue,
+} from "../../core.js";
+import { codingAgentFailureOf } from "./status.js";
 
 /**
  * report.ts -- a rollout agent's `report` tool: a builder's milestones and asks, or the stack keeper's restacks, merges, and conflicts, handed to Luke on the plan's conversation.
@@ -35,7 +45,10 @@ import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../..
  * or a block answers by telling the agent to end its turn, because a
  * coding agent's turn is its whole run and Luke's answer can only reach it
  * as its next message; any other report tells it to carry on, the keeper
- * after a conflict included, since its other stacks still want it.
+ * after a conflict included, since its other stacks still want it. Beside
+ * the tool, the host reports how each builder's and keeper's turn ended,
+ * finished, failed with its failure word, or stopped, so Luke hears of one that
+ * died without reporting.
  */
 
 /** The words the tool is shown, for both roles, since each reads them every step. */
@@ -160,4 +173,41 @@ export function reportTaken(report: Report): ReportToolResult {
     reported: reportLine(report),
     next: AWAITING_ANSWER.has(report.kind) ? REPORT_NEXT.WAIT : REPORT_NEXT.CARRY_ON,
   };
+}
+
+/** eve's events for a turn's end, the ones the host reports a rollout agent's end on. */
+export type TurnEndEvent = Extract<
+  MessageStreamEvent,
+  { readonly type: "turn.completed" | "turn.failed" | "turn.cancelled" }
+>;
+
+/** The words Luke reads under the first line of a turn's end, by how it ended. */
+const TURN_END_TEXT = {
+  FINISHED: "Its turn ended. read_coding_agent shows what it did.",
+  STOPPED: "Its turn was stopped before it ended.",
+} as const;
+
+/**
+ * How a builder's or the keeper's turn ended as the report Luke hears,
+ * read off the turn as the store settled it rather than eve's event, since
+ * the relay may fail a turn eve completed: finished, failed with the word
+ * the agent's status reads its failure as, or stopped, named as the
+ * reporter its row stands for. A turn not yet settled reports nothing, so
+ * the end eve replays once it settles is the one Luke hears.
+ */
+export function turnEndReport(reporter: RolloutReporter, turn: TurnEnding): Report | undefined {
+  switch (turn.status) {
+    case TURN_STATUS.SETTLED:
+      return { ...reporter, kind: REPORT_KIND.FINISHED, text: TURN_END_TEXT.FINISHED };
+    case TURN_STATUS.FAILED:
+      return {
+        ...reporter,
+        kind: REPORT_KIND.FAILED,
+        text: `Its turn failed: ${codingAgentFailureOf(turn) ?? CODING_AGENT_FAILURE.OTHER}.`,
+      };
+    case TURN_STATUS.CANCELLED:
+      return { ...reporter, kind: REPORT_KIND.STOPPED, text: TURN_END_TEXT.STOPPED };
+    default:
+      return undefined;
+  }
 }
