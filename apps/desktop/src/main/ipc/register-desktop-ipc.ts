@@ -6,6 +6,7 @@ import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { callInProgress, IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
@@ -99,6 +100,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
         );
       },
+      callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),

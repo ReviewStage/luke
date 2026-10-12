@@ -13,7 +13,14 @@ import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
+import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
+import {
+  DIALOG_TONE,
+  type DialogConfirm,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
@@ -178,6 +185,8 @@ export interface PlansControl {
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
+  /** The question a Talk press or a start asks before it ends the call standing about another plan. */
+  secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a plan on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowPlan: (planId: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -296,6 +305,17 @@ const DELETE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: DELETE_REFUSED_NOTE,
 };
+
+/** What the second call's question says: the call it ends, and what the act does. */
+function secondCallQuestion(planName: string): DialogQuestion {
+  return {
+    title: `End your call on ${planName} and start one here?`,
+    body: "Only one plan is talked through at a time. What was said on that call stays in its transcript.",
+    verb: "Start new call",
+    running: "Starting",
+    tone: DIALOG_TONE.PRIMARY,
+  };
+}
 
 /** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
@@ -731,13 +751,52 @@ export function usePlansTab(input: {
     voiceStatus: voice.view.voiceStatus,
   });
   const live = callInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
+  // A press that would open a call here while one stands about another plan
+  // ends that call, so it asks first; the answer is the same Talk press, and
+  // Cancel leaves the call standing as it was. The talk key never asks: it
+  // speaks into the call standing, whatever plan is open. The question is the
+  // plan's it was asked on, so it goes the moment another plan opens (the
+  // press would talk about whichever plan the host has open), and its surface
+  // is the plan's page, which a version history covers.
+  const callElsewhere =
+    callInProgress(voice.view) && voice.view.callPlanId !== planning.activePlanId;
+  const [askedFor, setAskedFor] = useState<string>();
+  const secondCallFor = callElsewhere && askedFor !== undefined ? askedFor : undefined;
+  const secondCall = useConfirmDialog(
+    { subject: secondCallFor === planning.activePlanId, surfaceOpen: shown && !historyOpen },
+    () =>
+      act(ACT_KIND.PLANNING_TALK).then(
+        (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+        (refused: Error): ActionResult => ({
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: refused.message,
+        }),
+      ),
+  );
+  // A started plan asks once it is the plan open, which the host may say
+  // only after the start's own answer has come back.
+  const askOnOpen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (askOnOpen.current === undefined || askOnOpen.current !== secondCallFor) return;
+    if (secondCallFor !== planning.activePlanId) return;
+    askOnOpen.current = undefined;
+    secondCall.ask();
+  });
+  const callingNow = useRef(callElsewhere);
+  callingNow.current = callElsewhere;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
     if (microphone.press === MICROPHONE_PRESS.ASK_ACCESS) voice.requestMicrophoneAccess();
     if (microphone.press === MICROPHONE_PRESS.OPEN_SETTINGS)
       tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
-    if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
+    if (microphone.press === MICROPHONE_PRESS.TALK) {
+      if (!callElsewhere) tell(ACT_KIND.PLANNING_TALK);
+      else {
+        setAskedFor(planning.activePlanId);
+        secondCall.ask();
+      }
+    }
   };
 
   // A fixture's staged plan has nothing arriving on it, and code arrives
@@ -842,12 +901,21 @@ export function usePlansTab(input: {
   });
 
   // A started plan becomes the host's open one, which turns the page to it.
+  // A start opens its plan's call at once, except over a call standing about
+  // another plan, which main leaves for this question to end or keep.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
       ...(repository === null ? undefined : { repository }),
     }).then(
-      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (answer) => {
+        if ("failure" in answer) return repositoryFailureNote(answer.failure);
+        if (callingNow.current) {
+          askOnOpen.current = answer.planId;
+          setAskedFor(answer.planId);
+        }
+        return undefined;
+      },
       (refused: Error) => refused.message,
     );
 
@@ -952,6 +1020,10 @@ export function usePlansTab(input: {
       mainTabs.onShow(planId, { agent: agentId });
     },
     // The call card's way back lands where the plan's call bar is in sight.
+    secondCall: {
+      confirm: secondCall,
+      question: secondCallQuestion(callCard({ view: voice.view, planning }).planName),
+    },
     onShowPlan: (planId) => {
       if (planId !== planning.activePlanId) select(planId);
       setHistoryFor(undefined);

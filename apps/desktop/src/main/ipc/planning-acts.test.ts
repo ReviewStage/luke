@@ -31,6 +31,8 @@ interface OpenPlan {
 interface StartScript {
   answer: PlanningStartAnswer;
   voiceReady: boolean;
+  /** Whether a call is already in progress, about whichever plan. */
+  callStanding: boolean;
 }
 
 function fixture() {
@@ -41,6 +43,7 @@ function fixture() {
   const start: StartScript = {
     answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
+    callStanding: false,
   };
   const rows = planningActRows({
     host: {
@@ -136,6 +139,7 @@ function fixture() {
       talked.push(planId);
     },
     voiceReady: () => start.voiceReady,
+    callStanding: () => start.callStanding,
     colourCode: highlightSnippet,
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
@@ -508,7 +512,7 @@ it.effect(
 );
 
 it.effect(
-  "a start that failed, or one where the microphone would first have to be asked for, opens no call",
+  "a start that failed, one where the microphone would first have to be asked for, or one made while a call stands opens no call",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -516,6 +520,11 @@ it.effect(
 
       f.start.answer = { planId: PLAN_ID };
       f.start.voiceReady = false;
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_START, payload: REQUEST }, PANEL);
+
+      // A call already standing is left for the panel to ask about ending.
+      f.start.voiceReady = true;
+      f.start.callStanding = true;
       yield* f.router.performAct({ kind: ACT_KIND.PLANNING_START, payload: REQUEST }, PANEL);
 
       assert.deepEqual(f.talked, []);

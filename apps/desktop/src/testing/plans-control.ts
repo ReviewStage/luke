@@ -14,6 +14,7 @@ import {
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
 } from "../renderer/planning/use-side-panel";
+import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
 
@@ -172,6 +173,19 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onSelect: ignore,
     onShowAgent: ignore,
     onShowPlan: ignore,
+    secondCall: {
+      confirm: {
+        stage: CONFIRM_STAGE.RESTING,
+        rejection: undefined,
+        busy: false,
+        ask: ignore,
+        keep: ignore,
+        clear: ignore,
+        run: ignore,
+        standing: false,
+      },
+      question: { title: "", body: "", verb: "", running: "" },
+    },
     onOpenPinnedTab: ignore,
     repositories: {
       recent: [],
