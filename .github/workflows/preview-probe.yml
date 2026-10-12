@@ -36,13 +36,40 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      # The head commit, not the merge commit: Vercel builds the branch, and
-      # the caller list the probe derives has to be the one that preview built.
+      # The merge commit first, two deep, so that its first parent is the base
+      # and the web service's own `ignoreCommand` (`apps/web/vercel.json`)
+      # answers for the PR's whole change rather than its last commit. Vercel
+      # asks that command whether to build at all, and a skipped build may
+      # leave no deployment record for twenty minutes or ever (2026-10-12,
+      # #2088 and #2090), so a PR it finds nothing in has no preview to wait
+      # on and passes here without one.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: ./.github/actions/setup
-      - run: pnpm --dir apps/web exec tsx scripts/preview-probe.ts
+          fetch-depth: 2
+      - id: web
+        name: Ask whether the PR changes what the web service deploys
+        run: |
+          ignore=$(jq --raw-output --exit-status .services.web.ignoreCommand apps/web/vercel.json)
+          if sh -c "$ignore"; then
+            echo "preview skipped: web not affected (apps/web/vercel.json's ignoreCommand finds nothing of the deployed tree changed by this PR)" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+          else
+            status=$?
+            # git diff --quiet answers 1 for a change; anything else is a broken command, not an answer.
+            if [ "$status" -ne 1 ]; then exit "$status"; fi
+            echo "affected=true" >> "$GITHUB_OUTPUT"
+          fi
+      # The head commit, not the merge commit: Vercel builds the branch, and
+      # the caller list the probe derives has to be the one that preview built.
+      # The merge commit's second parent is the head, so it is already here.
+      - if: steps.web.outputs.affected == 'true'
+        run: git checkout --quiet --detach "$HEAD_SHA"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - if: steps.web.outputs.affected == 'true'
+        uses: ./.github/actions/setup
+      - if: steps.web.outputs.affected == 'true'
+        run: pnpm --dir apps/web exec tsx scripts/preview-probe.ts
         env:
           PREVIEW_PROBE_DOOR: ${{ vars.PREVIEW_PROBE_DOOR }}
           PREVIEW_PROBE_SHA: ${{ github.event.pull_request.head.sha }}
