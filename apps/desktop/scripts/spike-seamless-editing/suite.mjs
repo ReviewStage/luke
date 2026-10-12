@@ -319,6 +319,29 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${mode}-${name}.png
   await page.close();
 }
 
+// L. Opening a field and leaving it without typing saves nothing, for every field kind.
+{
+  const page = await open();
+  const before = JSON.stringify(await stored(page));
+  for (const [needle, unit] of [
+    ["members wait", "Only an admin"],
+    ["Inviting by email", "Inviting by email"],
+    ["opens the link", "Any member may invite"],
+    ["Who can withdraw", "Who can withdraw"],
+    ["7 days", "7 days"],
+    ["invite(by", "invite(by"],
+  ]) {
+    const p = await pointAt(page, needle, unit);
+    if (p === null) continue;
+    await page.mouse.click(p.x, p.y);
+    await sleep(250);
+    await page.keyboard.press("Escape");
+    await sleep(1300);
+  }
+  results.openCloseSavesNothing = JSON.stringify(await stored(page)) === before;
+  await page.close();
+}
+
 // K. Session replay: is every editable node inside a blocked subtree?
 {
   const page = await open();
