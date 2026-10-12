@@ -178,6 +178,7 @@ test("a plan's card is titled by its first heading, or its first line of words",
   assert.equal(cardTitle("# Teammate invitations\n\nInvite by email."), "Teammate invitations");
   assert.equal(cardTitle("\n\nInvite by email.\n# Later"), "Invite by email.");
   assert.equal(cardTitle("   "), "");
+  assert.equal(cardTitle("```ts\nconst seats = plan.seats;\n```"), "const seats = plan.seats;");
 });
 
 test("a card's title is plain words: the marks a markdown line opens on, strong emphasis, code spans, and a link's destination are left out, and an identifier keeps its underscores", () => {

@@ -471,18 +471,19 @@ const INLINE_MARKS = /\*\*|`/gu;
 /** A markdown link, whose words a title keeps and whose destination it leaves out. */
 const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
 
-/**
- * How a plan, or a worker's task, is named on its card, its line, and its
- * tab: its first line of words, as plain words, since the line is drawn as
- * text and the markdown is the opened card's.
- */
-export function cardTitle(text: string): string {
-  const first = text.split("\n").find((line) => line.trim().length > 0);
-  return first === undefined ? "" : plainLine(first);
-}
-
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
+
+/**
+ * How a plan, a worker's task, or a thought is named on its card, its line,
+ * and its tab: its first line of words, as plain words, since the line is
+ * drawn as text and the markdown is the opened card's. A fence's line is
+ * passed over, since its language tag is no words of the text's.
+ */
+export function cardTitle(text: string): string {
+  const first = text.split("\n").find((line) => line.trim().length > 0 && !FENCE_LINE.test(line));
+  return first === undefined ? "" : plainLine(first);
+}
 
 function plainLine(line: string): string {
   return line.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();

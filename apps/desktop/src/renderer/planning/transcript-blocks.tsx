@@ -37,6 +37,7 @@ import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/messa
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import {
+  TOOL_BLOCK,
   TOOL_LINE_CLASS,
   TOOL_STATE,
   Tool,
@@ -54,6 +55,7 @@ import { cn } from "../ai-elements/utils";
 import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
 import { ModelLabel } from "./model-label";
+import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
@@ -76,8 +78,8 @@ import { WorkingTime } from "./working-time";
  * (`transcript-model.ts`, `work-model.ts`, `coding-agent-model.ts` with
  * `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
- * markdown at the panel's scale, reasoning folded under one quiet line,
- * a tool call as one collapsible row wearing its kind's icon and verb
+ * markdown at the panel's scale, reasoning folded under one quiet line
+ * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
  * folded under what it holds, a subagent's row as one line like a call's
@@ -121,15 +123,32 @@ export function TranscriptWords({
 const LEADING_BLANK_LINES = /^(?:[^\S\n]*\n)+/u;
 
 /**
+ * How many characters of a thought its closed line is handed: more than the
+ * widest column shows, since the line cuts the rest itself. Note that the
+ * words are cut here as well, because a transcript holds hundreds of closed
+ * thoughts, and a long first paragraph whole in each line would put back in
+ * the page what the fold keeps out of it.
+ */
+const REASONING_PREVIEW_LENGTH = 400;
+
+/**
  * A model's reasoning, folded under one line until opened, its words as they
  * are but for the blank lines a model leaves around them. Note that only
  * whole blank lines go at the start, because the words keep their line breaks
  * and indents, and a trailing break would draw as an empty line under the last.
+ *
+ * The closed line previews the thought by its first line of words, as
+ * plain words, as a task is named on its card: a model's thought often opens
+ * on a bold title of its own, which a preview of every paragraph would run
+ * into the sentence after it. Note that the preview keeps to that first line
+ * rather than following the newest words while the thought streams, so it
+ * stands still once the line fills the row, because a line rewritten word by
+ * word draws the eye from the reply it sits in.
  */
 export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
-      <ReasoningTrigger />
+      <ReasoningTrigger preview={cardTitle(text).slice(0, REASONING_PREVIEW_LENGTH)} />
       <ReasoningContent>
         <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
           {text.replace(LEADING_BLANK_LINES, "").trimEnd()}
@@ -180,7 +199,13 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     errorText: string | undefined;
   };
 
-/** One tool call: its row saying what it did, closed until clicked, and its input and answer under it once opened. */
+/**
+ * One tool call: its row saying what it did, closed until clicked, and its
+ * input and answer under it once opened. An undescribed command is the
+ * closed row's preview, dropped once the body under it shows the command
+ * whole behind its prompt; a description stays, since the body does not say
+ * it.
+ */
 export function TranscriptTool({
   state,
   kind,
@@ -193,6 +218,7 @@ export function TranscriptTool({
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
   const line = callLine(kind, subject, description);
+  const command = kind === CALL_KIND.COMMAND;
   return (
     <Tool {...props}>
       <ToolHeader
@@ -201,6 +227,7 @@ export function TranscriptTool({
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}
+        subjectInBody={command && description === undefined && input.kind === TOOL_BLOCK.COMMAND}
       />
       <ToolContent>
         <ToolInput block={input} />
@@ -410,10 +437,10 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
 
 /**
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
- * or finished: one line drawn as a call's row is, wearing the mark of the
- * harness its model runs in (the worker's robot where the model is
- * unknown), the job, fading where the line cuts it, the model and effort it
- * runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
+ * or finished: one line drawn as a call's row is, in its muted ink, wearing
+ * the mark of the harness its model runs in (the worker's robot where the
+ * model is unknown), the job, fading where the line cuts it, the model and
+ * effort it runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
  * the one button that opens the subagent's tab, which is where its steps
@@ -439,7 +466,7 @@ export function TranscriptSubagent({
         {job}
       </span>
       {pair === undefined ? null : (
-        <span className="shrink-0 text-foreground" data-subagent-pair="">
+        <span className="shrink-0" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}

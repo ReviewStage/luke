@@ -6,8 +6,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { installHighlights } from "#testing/find-highlights";
 import { Fold, FoldBody, FoldSummary } from "./ai-elements/fold";
+import { TOOL_BLOCK, TOOL_STATE } from "./ai-elements/tool";
 import { useAppKeymap } from "./app-commands";
 import { FindScope, type FindSubject } from "./find-in-tab";
+import { TranscriptReasoning, TranscriptTool } from "./planning/transcript-blocks";
+import { CALL_KIND } from "./planning/turn-rows";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -245,6 +248,34 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   key(field(tab.container), { key: "Escape" });
   assert.equal(ran.open, true, "a fold the find opened stays open");
   assert.equal(read.querySelector("pre"), null, "the closed fold draws nothing again");
+});
+
+test("a closed thought's or command's words are found once, in the body the line previews, and showing them opens its fold", () => {
+  installHighlights();
+  const tab = mounted([
+    createElement(TranscriptReasoning, { key: "thought", text: "List the sources first." }),
+    createElement(TranscriptTool, {
+      key: "command",
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind: CALL_KIND.COMMAND,
+      subject: "ls src",
+      input: { kind: TOOL_BLOCK.COMMAND, text: "ls src" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "invite.ts" },
+      errorText: undefined,
+    }),
+  ]);
+  const [thought, command] = [...tab.container.querySelectorAll("details")];
+  assert.ok(thought && command);
+
+  chord(FIND);
+  typeInto(field(tab.container), "sources");
+  assert.equal(tally(tab.container), "1 of 1");
+  assert.equal(thought.open, true);
+  assert.ok(thought.querySelector("summary + div")?.textContent?.includes("sources"));
+
+  typeInto(field(tab.container), "ls src");
+  assert.equal(tally(tab.container), "1 of 1");
+  assert.equal(command.open, true);
 });
 
 test("text arriving in the tab while the bar is open is found without moving the match the find is at", async () => {

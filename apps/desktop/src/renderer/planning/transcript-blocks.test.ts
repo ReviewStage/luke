@@ -7,10 +7,17 @@ import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool";
+import { sheetStyle } from "#testing/css-rules";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
-import { TranscriptSubagent } from "./transcript-blocks";
+import {
+  TranscriptOpeningCall,
+  TranscriptReasoning,
+  TranscriptSubagent,
+  TranscriptTool,
+} from "./transcript-blocks";
+import { CALL_KIND } from "./turn-rows";
 
 /**
  * The Work tab and a coding agent's tab draw a turn's reasoning and its
@@ -152,39 +159,51 @@ function surfaces(
 }
 
 test.each(surfaces(false))(
-  "on %s a tool call is one row saying what it ran, closed until clicked, and the reasoning folds the same way",
+  "on %s a command is one row saying what it ran, closed until clicked, and the reasoning folds the same way, each line dropping its preview while open",
   (_surface, element) => {
     const container = mounted(element);
     const said = () => container.textContent ?? "";
+    const line = (fold: HTMLDetailsElement) => fold.querySelector("summary")?.textContent;
+    const click = (fold: HTMLDetailsElement) => act(() => fold.querySelector("summary")?.click());
 
     const call = foldSaying(container, COMMAND);
-    assert.equal(call.querySelector("summary")?.textContent, `Ran ${COMMAND}`);
+    assert.equal(line(call), `Ran ${COMMAND}`);
     assert.equal(call.open, false);
     assert.equal(call.querySelector("[data-tool-output]"), null);
     assert.equal(said().includes(OUTPUT), false);
-    act(() => call.querySelector("summary")?.click());
+    click(call);
     assert.equal(call.open, true);
+    assert.equal(line(call), "Ran");
     assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
     assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
+    click(call);
+    assert.equal(line(call), `Ran ${COMMAND}`);
 
     const thought = foldSaying(container, "Thought");
     assert.equal(thought.open, false);
-    assert.equal(said().includes(REASONING), false);
-    act(() => thought.querySelector("summary")?.click());
-    assert.ok(said().includes(REASONING));
+    assert.equal(line(thought), `Thought ${REASONING}`);
+    assert.equal(thought.querySelector("summary + div"), null);
+    click(thought);
+    assert.equal(line(thought), "Thought");
+    assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
+    click(thought);
+    assert.equal(line(thought), `Thought ${REASONING}`);
   },
 );
 
 test.each(surfaces(false, DESCRIPTION))(
-  "on %s a command the model described is a row saying what it is for, in words, and the command is what it opens onto",
+  "on %s a command the model described is a row saying what it is for, in words, which it keeps open, and the command is what it opens onto",
   (_surface, element) => {
     const container = mounted(element);
 
-    const call = foldSaying(container, DESCRIPTION);
+    // Note that the row is found by its call, because the thought's preview opens on the same words.
+    const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
+    assert.ok(call);
     const line = call.querySelector("summary");
     assert.equal(line?.textContent, DESCRIPTION);
     assert.equal(line?.querySelector(".font-mono"), null);
     act(() => line?.click());
+    assert.equal(line?.textContent, DESCRIPTION);
     assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
     assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
   },
@@ -228,7 +247,8 @@ test.each(surfaces(true))(
       // A summary is in the tab order, and Enter and Space press it as a click.
       assert.equal(row.tabIndex, 0);
     }
-    const call = foldSaying(container, COMMAND);
+    const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
+    assert.ok(call);
     act(() => call.querySelector("summary")?.click());
     assert.equal(call.querySelector("summary")?.getAttribute("aria-expanded"), "false");
     assert.equal(call.open, false);
@@ -244,6 +264,173 @@ test.each(surfaces(false))(
     assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
   },
 );
+
+/** The closed line of a thought with these words. */
+function thoughtLine(text: string): string | null | undefined {
+  return mounted(createElement(TranscriptReasoning, { text })).querySelector("summary")
+    ?.textContent;
+}
+
+test("a thought's closed line previews its first line as plain words, its markdown's marks left out", () => {
+  assert.equal(
+    thoughtLine("\n**Reading the route**\n\nStart with the seat check."),
+    "Thought Reading the route",
+  );
+  assert.equal(
+    thoughtLine(
+      "Start with `invite.ts`, then [the docs](https://example.com/docs).\nThen the tests.",
+    ),
+    "Thought Start with invite.ts, then the docs.",
+  );
+});
+
+test("a long thought's preview is one line, cut short of its end", () => {
+  const steps = Array.from({ length: 60 }, (_, index) => `Step ${index + 1} of the plan.`);
+  const line = thoughtLine(steps.join(" ")) ?? "";
+  assert.ok(line.startsWith("Thought Step 1 of the plan. Step 2 of the plan."));
+  assert.equal(line.includes("Step 60"), false);
+});
+
+test("a thought with no words says Thought alone", () => {
+  assert.equal(thoughtLine(""), "Thought");
+  assert.equal(thoughtLine("\n  \n"), "Thought");
+});
+
+test("a call that is not a command keeps its subject on the open row", () => {
+  const container = mounted(
+    createElement(TranscriptTool, {
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind: CALL_KIND.READ_FILE,
+      subject: "src/invite.ts",
+      input: { kind: TOOL_BLOCK.TEXT, text: "src/invite.ts" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "export {};" },
+      errorText: undefined,
+    }),
+  );
+  const summary = container.querySelector("summary");
+  assert.ok(summary);
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+  assert.equal(summary.textContent, "Read src/invite.ts");
+});
+
+/** The inks a muted line is drawn in: the utility's token, and the token it names, which a row written in CSS uses. */
+const MUTED_INK = new Set(["var(--color-muted-foreground)", "var(--text-secondary)"]);
+
+/** One turn of an agent's: words, then a call of each shape a row draws, one of them failed, then a subagent and a to-do list. */
+const MIXED_TURN: CodingAgentMessage = {
+  id: "m-mixed",
+  role: "assistant",
+  parts: [
+    { type: "text", text: "Looking at the sources." },
+    agentCall("call-1", COMMAND),
+    {
+      type: "tool-read_file",
+      toolCallId: "call-2",
+      state: "output-available",
+      input: { filePath: "src/invite.ts" },
+      output: { content: "export const seats = 3;" },
+    },
+    {
+      type: "tool-apply_patch",
+      toolCallId: "call-3",
+      state: "output-available",
+      input: { patchText: "*** Update File: src/invite.ts\n-a\n+b" },
+      output: { files: [{ operation: "update", path: "src/invite.ts" }] },
+    },
+    {
+      type: "tool-grep",
+      toolCallId: "call-4",
+      state: "output-error",
+      input: { pattern: "seats" },
+      errorText: "grep exited 2",
+    },
+    {
+      type: "tool-delegate",
+      toolCallId: "call-5",
+      state: "input-available",
+      input: { task: "Read the docs" },
+    },
+    {
+      type: "tool-write_todos",
+      toolCallId: "call-6",
+      state: "output-available",
+      input: { todos: [{ content: "Count pending invites", status: "pending" }] },
+      output: {},
+    },
+  ],
+};
+
+test("every call's line is drawn in the muted ink, its subject included, while the model's words, an opened body, and an error keep their own", async () => {
+  const style = await sheetStyle();
+  const inkOf = (node: Node): string | undefined => {
+    for (let element = node.parentElement; element !== null; element = element.parentElement) {
+      const color = style(element, "color");
+      if (color !== undefined) return color;
+    }
+    return undefined;
+  };
+  const texts = (root: Element): Text[] => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const found: Text[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node instanceof Text && node.data.trim() !== "") found.push(node);
+    }
+    return found;
+  };
+  const container = mounted(
+    createElement("div", null, [
+      createElement(AgentTranscriptView, {
+        key: "agent",
+        messages: [MIXED_TURN],
+        reading: false,
+        failed: false,
+        working: true,
+        onRetry: () => undefined,
+        openGitHub: () => undefined,
+      }),
+      createElement(TranscriptOpeningCall, {
+        key: "opening",
+        callId: "call-7",
+        kind: CALL_KIND.START_AGENT,
+        subject: "Invite flow",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        onOpen: () => undefined,
+      }),
+    ]),
+  );
+  for (
+    let fold = container.querySelector("[data-turn-fold]:not([open]) > summary");
+    fold instanceof HTMLElement;
+    fold = container.querySelector("[data-turn-fold]:not([open]) > summary")
+  ) {
+    act(() => fold.click());
+  }
+  const lines = [
+    ...container.querySelectorAll(
+      "details[data-call-id] > summary, [data-subagent-row], button[data-call-id]",
+    ),
+  ];
+  assert.equal(lines.length, 7, "a line for every call");
+  for (const line of lines) {
+    for (const text of texts(line)) {
+      assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
+    }
+  }
+
+  const words = texts(container).find((text) => text.data.includes("Looking at the sources."));
+  assert.ok(words);
+  assert.equal(MUTED_INK.has(inkOf(words) ?? ""), false, "the model's words are in full ink");
+  for (const id of ["call-2", "call-4"]) {
+    act(() => container.querySelector<HTMLElement>(`[data-call-id="${id}"] > summary`)?.click());
+  }
+  const answer = container.querySelector('[data-call-id="call-2"] [data-tool-output]');
+  const error = container.querySelector('[data-call-id="call-4"] [role="alert"]');
+  assert.ok(answer && error);
+  for (const text of [...texts(answer), ...texts(error)]) {
+    assert.equal(MUTED_INK.has(inkOf(text) ?? ""), false, `"${text.data}" keeps its own ink`);
+  }
+});
 
 const GPT: CatalogModel = {
   id: "openai/gpt-5.6-sol",

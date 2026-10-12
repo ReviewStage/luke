@@ -1975,9 +1975,9 @@ svg.lucide {
 }
 
 /* A subagent's row, on the Work tab and an agent's tab alike: a line drawn
-   as a call's row is (ai-elements/tool.tsx), unboxed, the whole of it the
-   button that opens the subagent's tab, with the same hover fill and the
-   focus ring every button of ours draws. Note that it is written here
+   as a call's row is (ai-elements/tool.tsx), in its muted ink, unboxed, the
+   whole of it the button that opens the subagent's tab, with the same hover
+   fill and the focus ring every button of ours draws. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
    colour outside the utilities' layer. */
 .subagent-line {
@@ -1985,7 +1985,7 @@ svg.lucide {
   padding: 0 4px;
   border-radius: 6px;
   background: none;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.5;
   text-align: left;

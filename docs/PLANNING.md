@@ -444,8 +444,10 @@ panel.
   plan it was handed, the first of the developer's messages, as a Plan card
   folded under its title; any message the developer sent it since as the
   developer's bubble; and each of its own turns with its text as Markdown,
-  its reasoning folded under one line, each tool call one row saying what
-  it did with the input and the output under it once opened, a call that
+  its reasoning folded under one line that previews its first words, each
+  tool call one row saying what it did with the input and the output under
+  it once opened (a command's row, drawn muted as the reasoning's line is,
+  drops its command while open, since the body shows it whole), a call that
   ended in an error said in red, and a link to the pull request it opened,
   which opens on GitHub in the browser. A copy of a turn's words waits
   under it. While the agent may still write, a shimmering "Working…" stands
