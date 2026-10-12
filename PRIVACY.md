@@ -372,6 +372,9 @@ only when you press Send.
   the App acting on a repository you gave it.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
+- GitHub, for the picture of each repository owner the app names, an
+  organization's logo or a person's avatar. Your Mac asks for them itself,
+  unauthenticated, and each request carries only the owner's name.
 
 We do not sell your information or use it for advertising.
 

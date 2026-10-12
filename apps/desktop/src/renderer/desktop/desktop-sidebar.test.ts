@@ -566,3 +566,21 @@ test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps n
   assert.equal(window.localStorage.getItem("luke.sidebarFoldedGroups"), '["acme/ledger"]');
   window.localStorage.clear();
 });
+
+test("a plan row naming its repository leads the name with its owner's picture, and a fixture run with the GitHub mark", () => {
+  const plans = { plans: [{ ...onRepository("Invites", "acme/relay"), pinnedAt: 9 }] };
+  const live = mount(DEAN, { plans });
+  const staged = mount(DEAN, {
+    plans: { ...plans, repositories: { ...plansControl().repositories, pictures: false } },
+  });
+
+  const named = (container: HTMLElement) =>
+    container.querySelector("nav[aria-label='Pinned'] .sidebar-plan-repository");
+  assert.equal(named(live)?.textContent, "acme/relay");
+  assert.equal(
+    named(live)?.querySelector("img")?.getAttribute("src"),
+    "https://github.com/acme.png?size=32",
+  );
+  assert.equal(named(staged)?.querySelector("img"), null);
+  assert.ok(named(staged)?.querySelector("svg.account-mark"));
+});

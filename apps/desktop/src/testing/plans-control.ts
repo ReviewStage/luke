@@ -138,6 +138,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       recent: [],
       read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
       openGitHub: ignore,
+      pictures: true,
     },
     repositoryMenu: undefined,
     onChangeRepository: ignore,

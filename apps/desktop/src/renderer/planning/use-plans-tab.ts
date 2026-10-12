@@ -758,6 +758,7 @@ export function usePlansTab(input: {
       recent: recentRepositories(planning.plans),
       read: readRepositories,
       openGitHub,
+      pictures: fixture === undefined,
     },
     repositoryMenu,
     onChangeRepository: changeRepository,

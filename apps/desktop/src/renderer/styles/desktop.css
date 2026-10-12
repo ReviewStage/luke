@@ -405,7 +405,7 @@ body,
 }
 
 .sidebar-plan-name,
-.sidebar-plan-repository,
+.sidebar-plan-repository-name,
 .sidebar-account-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -554,10 +554,31 @@ body,
   transform: rotate(90deg);
 }
 
+/* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
+   slot sizes it, and its corners are rounded and edged so a logo drawn on
+   white does not bleed into the ground around it. */
+.repository-picture {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  outline: 1px solid var(--hairline);
+  outline-offset: -1px; /* off-scale */
+  object-fit: cover;
+}
+
+/* A row's repository, led by its owner's picture at the size of its words. */
 .sidebar-plan-repository {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
   color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px;
+}
+
+.sidebar-plan-repository :is(.repository-picture, .account-mark) {
+  width: 12px;
+  height: 12px;
 }
 
 .sidebar-foot {
@@ -1457,7 +1478,7 @@ body,
   left: auto;
 }
 
-.plan-compose-chip .account-mark {
+.plan-compose-chip :is(.account-mark, .repository-picture) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
@@ -1669,7 +1690,7 @@ body,
   flex: 0 0 auto;
 }
 
-.plan-compose-menu-row svg {
+.plan-compose-menu-row :is(svg, .repository-picture) {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;

@@ -17,6 +17,7 @@ import { useAppCommand } from "../app-commands";
 import { momentText, sinceText } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { RepositoryPicture } from "../repository-picture";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
@@ -272,7 +273,14 @@ export function SidebarPlan({
   }, [rename.editing]);
   const repository =
     repositoryShown && plan.repository !== null ? (
-      <span className="sidebar-plan-repository">{plan.repository}</span>
+      <span className="sidebar-plan-repository">
+        <RepositoryPicture
+          repository={plan.repository}
+          pictures={plans.repositories.pictures}
+          fallback={<GitHubMark />}
+        />
+        <span className="sidebar-plan-repository-name">{plan.repository}</span>
+      </span>
     ) : null;
   const updated = (
     <Tooltip label={`Updated ${momentText(plan.updatedAt)}`}>
