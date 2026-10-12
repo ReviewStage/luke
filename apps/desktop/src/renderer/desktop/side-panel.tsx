@@ -57,6 +57,7 @@ import {
   type DrawnTabs,
   drawsSubagent,
   type FixedSidePanelTab,
+  inPlanOrder,
   isAgentTab,
   isDraftTab,
   isFileTab,
@@ -759,11 +760,11 @@ function stripTabs(input: {
  * page, and an agent's tab wears the dot for where the agent stands in its
  * glyph's place; no agent's or subagent's tab has a chord. A tab something
  * arrived on while another was shown, and an agent's whose end no one was
- * looking at, wear the note at their corner until shown. The fixed tabs are
- * dragged or stepped among themselves into the order the panel keeps; the
- * agent tabs stand after them in the order the agents started, and the
+ * looking at, wear the note at their corner until shown. The agent tabs
+ * stand after the fixed ones in the order the agents started, and the
  * subagent tabs after those in the order opened, each wearing the worker's
- * glyph, lit while it runs, so neither is dragged. A tab pinned to the
+ * glyph, lit while it runs, until the developer drags or steps any tab to
+ * any place, which the plan keeps (`inPlanOrder`). A tab pinned to the
  * sidebar is drawn and moved as any other. Every tab's right-click offers
  * Close, Close others, which closes every tab but it and chooses it, and a
  * fixed tab's, an agent's, and a file's Pin tab or Unpin tab, which puts
@@ -801,7 +802,8 @@ function PanelTabs({
   shownFiles: readonly CodeRef[];
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const strip = stripTabs({ panel, unread, agents, subagents, files, copied });
+  const kinds = stripTabs({ panel, unread, agents, subagents, files, copied });
+  const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // is left to fall through to nothing rather than to the window.
   const chosen = strip.find((entry) => entry.look.selected);
@@ -834,11 +836,9 @@ function PanelTabs({
     <div className="side-panel-tabs">
       <TabStrip
         label="Panel"
-        movable={panel.tabs.length}
         onMove={(from, to) => {
-          // Only the fixed tabs move, and only among themselves.
-          const tab = panel.tabs[from];
-          if (tab !== undefined) panel.onMove(tab, to);
+          const entry = strip[from];
+          if (entry !== undefined) panel.onMove(entry.tab, to);
         }}
       >
         {strip.map((entry, at) =>

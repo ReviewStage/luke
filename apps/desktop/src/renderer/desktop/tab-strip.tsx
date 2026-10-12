@@ -150,21 +150,17 @@ function underTab(tab: HTMLElement): MenuPlacement {
  * is gone by then; with none left, it goes on to the button after the
  * strip, or the first in what follows it: the side panel's "+". `onMove`,
  * while given, lets the tabs be moved, and hears each move as the tab's
- * place before and after it; `movable` is how many of them, from the
- * first, move, among themselves, while the rest stand where they are.
- * Every tab moves unless said.
+ * place before and after it; every tab moves, to any place among them all.
  */
 export function TabStrip({
   label,
   className,
   onMove,
-  movable = Number.POSITIVE_INFINITY,
   children,
 }: {
   label: string;
   className?: string;
   onMove?: TabMove | undefined;
-  movable?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
@@ -224,16 +220,14 @@ export function TabStrip({
           setMovedSaid(movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
-  const onPointerDown = useTabDrag(move, movable);
+  const onPointerDown = useTabDrag(move);
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
     const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(TAB) ?? [])];
     const tab = tabs.find((each) => each === document.activeElement);
     const at = tab === undefined ? -1 : tabs.indexOf(tab);
-    const end = Math.min(tabs.length, movable);
-    if (tab === undefined || move === undefined || at >= end || at + by < 0 || at + by >= end)
-      return;
+    if (tab === undefined || move === undefined || at + by < 0 || at + by >= tabs.length) return;
     flushSync(() => move(at, at + by));
     focusTab(strip.current, tab);
   };

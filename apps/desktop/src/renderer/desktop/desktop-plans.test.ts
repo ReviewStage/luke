@@ -2253,38 +2253,84 @@ test("a tab let go anywhere short of the first tab's middle lands first, and pas
   assert.deepEqual(panelTabs(page), ["Work", "Code", "Transcript", "Board"]);
 });
 
-test("only the fixed tabs move: one dragged on among the agents' tabs lands last of the fixed, and an agent's tab is not dragged nor stepped", () => {
-  const agent: CodingAgentSummary = {
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    planId: PLAN.id,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    title: null,
-    createdAt: 3,
-    status: CODING_AGENT_STATUS.RUNNING,
-    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  };
-  const agents = codingAgentsControl({ agents: [agent], agentIds: [agent.id] });
-  const page = mountOpenPlan({ agents });
+const MOVE_RIGHT = { key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true };
+
+test("an agent's tab dragged before the fixed tabs lands there chosen and says where, a tab opened since stands last, and the next launch keeps the mixed order", () => {
+  const job = "Compare the two queue libraries.";
+  const agents = codingAgentsControl({ agents: [RUNNING_AGENT], agentIds: [RUNNING_AGENT.id] });
+  const page = mountOpenPlan({ agents, work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
   layOutTabs({ width: 6 * TAB_PITCH });
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5"]);
 
-  // Let go at 480, past the agent's middle at 445.
-  const moved = dragTab(tabNamed(page, "Board"), 45, [200, 480], DRAG_END.DROP);
-  assert.deepEqual(moved, ["Board", "Code", "Transcript", "Work"], "the agent's tab stands still");
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
-  assert.equal(movedSaid(page), "Board moved to position 4 of 5");
+  // Let go at 40, short of Board's middle at 45.
+  const moved = dragTab(tabNamed(page, "Opus 5.5"), 445, [300, 40], DRAG_END.DROP);
+  assert.deepEqual(moved, ["Board", "Code", "Transcript", "Work", "Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Opus 5.5", "Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Opus 5.5");
+  assert.equal(movedSaid(page), "Opus 5.5 moved to position 1 of 5");
+
+  // Board, now at 100 to 190, let go at 350 past Transcript's middle.
+  dragTab(tabNamed(page, "Board"), 145, [250, 350], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Opus 5.5", "Code", "Transcript", "Board", "Work"]);
+
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  assert.deepEqual(panelTabs(page), ["Opus 5.5", "Code", "Transcript", "Board", "Work", job]);
+  unmountAll();
+
+  const next = mountOpenPlan({ agents });
+  assert.deepEqual(panelTabs(next), ["Opus 5.5", "Code", "Transcript", "Board", "Work"]);
+});
+
+test("a subagent's tab is dragged and stepped as any other, closed and opened again stands where it stood, and a launch drops it, leaving the rest where they stood", () => {
+  const job = "Compare the two queue libraries.";
+  const page = mountOpenPlan({ work: workerWork(job) });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  layOutTabs({ width: 6 * TAB_PITCH });
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+
+  dragTab(tabNamed(page, job), 445, [300, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), [job, "Board", "Code", "Transcript", "Work"]);
+  const subagent = tabNamed(page, job);
+  act(() => subagent.focus());
+  keydown(MOVE_RIGHT);
+  assert.deepEqual(panelTabs(page), ["Board", job, "Code", "Transcript", "Work"]);
+  assert.equal(document.activeElement, subagent);
+  assert.equal(movedSaid(page), `${job} moved to position 2 of 5`);
+
+  // Work, at 400 to 490, let go at 40, short of Board's middle.
+  dragTab(tabNamed(page, "Work"), 445, [300, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Work", "Board", job, "Code", "Transcript"]);
+  press(page, `[aria-label="Close ${job}"]`);
+  press(page, "[data-subagent-row]");
+  assert.deepEqual(panelTabs(page), ["Work", "Board", job, "Code", "Transcript"]);
+  unmountAll();
+
+  const next = mountOpenPlan({ work: workerWork(job) });
+  assert.deepEqual(panelTabs(next), ["Work", "Board", "Code", "Transcript"]);
+});
+
+test("Shift-Command-Arrow moves an agent's tab past the fixed tabs as it moves any other", () => {
+  const agents = codingAgentsControl({ agents: [RUNNING_AGENT], agentIds: [RUNNING_AGENT.id] });
+  const page = mountOpenPlan({ agents });
+  press(page, '[aria-label="Show panel"]');
+  const left = { ...MOVE_RIGHT, key: "ArrowLeft", code: "ArrowLeft" };
 
   const claude = tabNamed(page, "Opus 5.5");
-  assert.deepEqual(dragTab(claude, 445, [300, 100], DRAG_END.DROP), []);
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
+  act(() => claude.focus());
+  keydown(left);
+  keydown(left);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Opus 5.5", "Transcript", "Work"]);
+  assert.equal(document.activeElement, claude);
+  assert.equal(movedSaid(page), "Opus 5.5 moved to position 3 of 5");
 
   const board = tabNamed(page, "Board");
   act(() => board.focus());
-  keydown({ key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true });
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
-  assert.equal(movedSaid(page), "Board moved to position 4 of 5", "no move is said");
+  for (const _ of SIDE_PANEL_TABS) keydown(MOVE_RIGHT);
+  assert.deepEqual(panelTabs(page), ["Code", "Opus 5.5", "Transcript", "Work", "Board"]);
 });
 
 test("Shift-Command-Arrow moves the focused tab along the strip, focus and choice staying put, and says where", () => {

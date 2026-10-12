@@ -9,8 +9,8 @@
  * tabs beyond, it runs the strip along toward them, as VS Code's does.
  * Letting go puts it there and chooses it, as Chrome and VS Code choose a
  * tab the developer drags; Escape, or the system taking the pointer away,
- * puts every tab back and changes nothing. Only the first `movable` tabs
- * move, and only among themselves; a press on another is a click.
+ * puts every tab back and changes nothing. Every tab moves, to any place
+ * among them all.
  *
  * The drag is drawn on the tabs' own `transform` and nothing else, and the
  * stylesheet (desktop.css) times every slide from the motion tokens, so
@@ -199,12 +199,10 @@ function settleDropped(tab: HTMLElement, left: number): void {
  * The strip's drag: spread `onPointerDown` on the strip. A press is heard at
  * the window from then on, so it outlives the pointer leaving the strip, and
  * the pointer is captured only once the press is a drag, so a press that
- * stays a click lands on the tab as any click does. `movable` is how many
- * of the strip's tabs, from the first, may be dragged.
+ * stays a click lands on the tab as any click does.
  */
 export function useTabDrag(
   onMove: TabMove | undefined,
-  movable: number,
 ): React.PointerEventHandler<HTMLElement> | undefined {
   const latest = useRef(onMove);
   const release = useRef<(() => void) | undefined>(undefined);
@@ -255,7 +253,7 @@ export function useTabDrag(
       if (!press.dragging || tab === undefined) return;
       // A tab opened or closed under the drag leaves its places stale, so
       // the drag is put back rather than dropped at a place that moved.
-      const now = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)].slice(0, movable);
+      const now = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
       if (now.length !== press.tabs.length || now.some((each, at) => each !== press.tabs[at])) {
         lower(press, strip, true);
         return;
@@ -310,7 +308,7 @@ export function useTabDrag(
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
     if (target.closest(".tab-close, [data-editing]") !== null) return;
-    const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)].slice(0, movable);
+    const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
     const at = tabs.findIndex((tab) => tab.contains(target));
     if (at < 0 || tabs.length < 2) return;
     const shown = strip.getBoundingClientRect();
