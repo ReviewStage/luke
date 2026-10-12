@@ -91,10 +91,11 @@ export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW]
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
-/** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
+/** What an agent was handed as its first message: the plan's document, a task the developer wrote in its place, or one pull request of the plan's rollout. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
   TASK: "task",
+  PULL_REQUEST: "pull_request",
 } as const;
 
 export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
@@ -372,7 +373,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
    * What the agent was handed as its first message, so its tab draws a
-   * plan as the plan's card and a task as the developer's own message.
+   * plan or a pull request's brief as the plan's card and a task as the
+   * developer's own message.
    * Absent from a service older than the task, which handed every agent
    * the plan.
    */

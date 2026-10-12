@@ -17,8 +17,9 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  *
  * The plan is the session's first message, or where the developer started
  * the agent on words of their own, their task is, and the agent never sees
- * the plan; these are the standing rules around it, worded for whichever it
- * was handed. Note that publishing is the agent's own judgment, as the plan
+ * the plan, or where it is a worker of the plan's rollout, the brief for its
+ * one pull request is (`brief.ts`); these are the standing rules around it,
+ * worded for whichever it was handed. Note that publishing is the agent's own judgment, as the plan
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
  * which the plan also decided. The repository's name and the checkout's
@@ -37,7 +38,17 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * (`brain-host/planning.ts`).
  */
 
-/** The words the instructions say of what the agent was handed, a plan or a task, where the two differ. */
+/** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
+const DECIDED_WORDS = ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`;
+
+/** How an agent handed the plan, or a pull request cut from it, records what it learned in the plan. */
+const UPDATING_WORDS = `
+
+## Updating the plan
+
+\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
+
+/** The words the instructions say of what the agent was handed, a plan, a task, or one pull request of the plan's rollout, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
@@ -46,13 +57,8 @@ const BRIEF_WORDS = {
     whole: "implements the plan whole",
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
-    /** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
-    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
-    updating: `
-
-## Updating the plan
-
-\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`,
+    decided: DECIDED_WORDS,
+    updating: UPDATING_WORDS,
   },
   [CODING_AGENT_BRIEF.TASK]: {
     job: "carry out the task the developer gave as the first message of this conversation",
@@ -64,6 +70,16 @@ const BRIEF_WORDS = {
     /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
     decided: "",
     updating: "",
+  },
+  [CODING_AGENT_BRIEF.PULL_REQUEST]: {
+    job: "build the one pull request of the plan's rollout given as the first message of this conversation, and no other",
+    reread:
+      "Reread the code the brief names before you change it. The brief was cut from the plan as it stood when the rollout started; the code, and the pull requests below yours, may have moved since. Where the code no longer fits the brief, say so plainly in your final message, decide whether what it asks still makes sense, and do not publish work the code has outgrown. Build nothing the brief lists as out of scope, even where it would help: another worker builds it.",
+    whole: "builds the pull request whole, to its acceptance where the brief sets one",
+    none: "the pull request could not be built",
+    describe: "name the plan and the pull request's position in its rollout in its description",
+    decided: DECIDED_WORDS,
+    updating: UPDATING_WORDS,
   },
 } as const satisfies Record<
   CodingAgentBrief,

@@ -68,7 +68,8 @@
       "type": "string",
       "enum": [
         "plan",
-        "task"
+        "task",
+        "pull_request"
       ]
     },
     "archivedAt": {

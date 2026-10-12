@@ -1,6 +1,7 @@
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { ROLLOUT_BASE } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -14,7 +15,13 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type CodingAgent, createCodingAgent, discardCodingAgent } from "../coding-agent-store.js";
+import {
+  type CodingAgent,
+  type CodingAgentBriefText,
+  createCodingAgent,
+  discardCodingAgent,
+  listCodingAgents,
+} from "../coding-agent-store.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -27,7 +34,8 @@ import {
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
-import { readPlan } from "../plan-store.js";
+import { readPlan, type StoredPlan } from "../plan-store.js";
+import { type BriefPlan, pullRequestBrief } from "./brief.js";
 
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
@@ -47,7 +55,11 @@ import { readPlan } from "../plan-store.js";
  * A Start at a position of the plan's rollout makes that pull request's
  * worker, on the base branch the ask names, and is refused as
  * `position-taken` where a live worker already holds the position; a retry
- * under the same key still answers the worker it made.
+ * under the same key still answers the worker it made. A worker handed no
+ * task is handed its pull request's brief (`brief.ts`) in the plan's place,
+ * naming the branch each pull request below it stands on: the ask's base for
+ * the one it builds on, and the branch an earlier worker last stood on for
+ * the rest. A position the rollout does not name is refused as invalid.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -105,6 +117,50 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** What the brief reads of a stored plan. */
+function briefPlanOf(stored: StoredPlan): BriefPlan {
+  return { text: stored.text, rollout: stored.plan.rollout };
+}
+
+/** The branch each earlier pull request of the rollout stands on where it is known: the newest worker's at each position, and the ask's base for the one the worker builds on. */
+const branchesBelow = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  planId: string,
+  base: number | undefined,
+  baseBranch: string | undefined,
+) {
+  const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, planId));
+  const branches = new Map<number, string>();
+  // The agents come oldest first at each position, so the newest worker's branch stands.
+  for (const agent of agents) {
+    if (agent.position === null || agent.branch === null) continue;
+    branches.set(agent.position, agent.branch);
+  }
+  if (base !== undefined && baseBranch !== undefined) branches.set(base, baseBranch);
+  return branches;
+});
+
+/** What the agent is handed: the ask's task, the brief for the position it names, or the plan whole; undefined for a position the rollout does not name. */
+const briefTextOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  stored: StoredPlan,
+  ask: StartAsk,
+) {
+  const task =
+    ask.task === undefined ? undefined : ({ planSnapshot: null, task: ask.task } as const);
+  if (ask.position === undefined) {
+    return task ?? ({ planSnapshot: planMarkdown(stored.plan), task: null } as const);
+  }
+  const plan = briefPlanOf(stored);
+  const item = plan.rollout[ask.position - 1];
+  if (item === undefined) return undefined;
+  if (task !== undefined) return task;
+  const base = item.base === ROLLOUT_BASE.MAIN ? undefined : item.base;
+  const branches = yield* branchesBelow(userId, ask.planId, base, ask.baseBranch);
+  const brief = pullRequestBrief(plan, ask.position, branches);
+  return brief === undefined ? undefined : ({ planSnapshot: brief, task: null } as const);
+});
+
 /** Starts the account's agent on the plan, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
@@ -119,10 +175,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const app = yield* GitHubApp;
   const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, repository));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  const brief =
-    ask.task === undefined
-      ? { planSnapshot: planMarkdown(plan.value.plan), task: null }
-      : { planSnapshot: null, task: ask.task };
+  const brief: CodingAgentBriefText | undefined = yield* briefTextOf(userId, plan.value, ask);
+  if (brief === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       planId: ask.planId,

@@ -33,6 +33,7 @@ import {
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { ROLLOUT_BASE, type RolloutItem } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
@@ -126,6 +127,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
+import { cutRollout } from "./support/plan-rollouts";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -154,6 +156,22 @@ const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as con
 
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
+
+/** A rollout of two pull requests, the second on the first. */
+const ROLLOUT: readonly RolloutItem[] = [
+  {
+    title: "Invitation table",
+    scope: "Add the `invitation` table and its store.",
+    base: ROLLOUT_BASE.MAIN,
+    acceptance: null,
+  },
+  {
+    title: "Invite route",
+    scope: "POST /api/invitations over the store.",
+    base: 1,
+    acceptance: "A teammate invited by email gets the mail.",
+  },
+];
 
 /** The saved plan as Copy writes it, its name as a title over its text and its rollout after, which is what an agent started on the plan is handed. */
 const SNAPSHOT = `# Teammate invitations
@@ -427,6 +445,8 @@ const openPlan = (
     readonly github?: RepositoryScript;
     /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
     readonly titles?: boolean;
+    /** The pull requests the plan's rollout names; none where it is not given. */
+    readonly rollout?: readonly RolloutItem[];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -437,6 +457,7 @@ const openPlan = (
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
     yield* savePlanText(owner, plan.id, SAVED);
+    if (options.rollout !== undefined) yield* cutRollout(plan.id, options.rollout);
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
@@ -712,7 +733,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
     "a Start at a rollout position a live worker holds is refused as position-taken and opens nothing, though its own retry still answers it; once that worker's turn fails, the position starts again",
     () =>
       Effect.gen(function* () {
-        const { owner, plan, eve, ask } = yield* openPlan();
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: ROLLOUT });
         const key = randomUUID();
         const worker = readAnswer(
           codingAgentAnswerSchema,
@@ -780,6 +801,78 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.notEqual(restarted.id, worker.id);
         assert.equal(restarted.position, 1);
         assert.equal(eve.opened.length, 4);
+      }),
+  );
+
+  it.effect(
+    "a Start at a rollout position with no task hands the worker its pull request's brief on the base it names, keeps the brief as its snapshot, and reads as a pull request; a position the rollout does not name is refused and opens nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: ROLLOUT });
+        const base = "luke/invitations/1-schema";
+
+        const started = yield* ask(
+          startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 2, baseBranch: base }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.brief, CODING_AGENT_BRIEF.PULL_REQUEST);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const brief = stored.value.planSnapshot;
+        assert.ok(brief !== null);
+        assert.ok(brief.startsWith("# Pull request 2 of 2: Invite route\n"));
+        assert.ok(brief.includes("POST /api/invitations over the store."));
+        assert.ok(brief.includes("Done when: A teammate invited by email gets the mail."));
+        assert.ok(brief.includes(`#1 Invitation table on \`${base}\``));
+        assert.ok(brief.includes("## Out of scope"));
+        assert.ok(!brief.includes("Invites expire after 7 days."));
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [brief],
+        );
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 3 })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a worker of a plan that is one document is handed its Context and Goal sections verbatim, and none of the rest of its text",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const context = "## Context\n\nAdmins add every teammate by hand.";
+        const goal = "## Goal\n\nInvite a teammate by email.";
+        yield* savePlanText(
+          owner,
+          plan.id,
+          `${context}\n\n${goal}\n\n## Approach\n\nA table and a route.\n`,
+          {
+            rollout: ROLLOUT,
+          },
+        );
+
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+        );
+
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const brief = stored.value.planSnapshot;
+        assert.ok(brief !== null);
+        assert.ok(brief.startsWith("# Pull request 1 of 2: Invitation table\n"));
+        assert.ok(brief.includes(`${context}\n\n${goal}\n`));
+        assert.ok(!brief.includes("A table and a route."));
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [brief],
+        );
       }),
   );
 
