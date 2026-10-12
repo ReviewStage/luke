@@ -30,6 +30,45 @@
     "finishedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "model": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "effort": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "inputTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cachedInputTokens": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "cachedInputTokens"
+      ],
+      "additionalProperties": false
+    },
+    "ending": {
+      "type": "string",
+      "enum": [
+        "stopped",
+        "failed",
+        "abandoned"
+      ]
     }
   },
   "required": [

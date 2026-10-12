@@ -416,7 +416,12 @@ function AgentMessage({
         </TranscriptRows>
       </MessageContent>
       {moving || startedAt === undefined || finishedAt === undefined ? null : (
-        <WorkedFor startedAt={startedAt} endedAt={finishedAt} />
+        <WorkedFor
+          startedAt={startedAt}
+          endedAt={finishedAt}
+          record={message}
+          models={delegation?.models}
+        />
       )}
       {words === "" ? null : <CopyMessageAction words={words} />}
     </Message>

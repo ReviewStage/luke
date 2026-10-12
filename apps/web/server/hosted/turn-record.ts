@@ -1,0 +1,85 @@
+/**
+ * turn-record.ts -- what a turn ran on and spent, read off its row as a turn's footer card says it.
+ *
+ * Every turn row names the model eve resolved it to and the effort it ran
+ * at where its session named one, and once it settles, the tokens its steps
+ * summed and how it ended. A tab draws those on the card its "Worked for"
+ * line hangs, so the reads that answer a tab's turns carry them beside the
+ * turn's span: the Work tab's planning turns and its workers' sessions, and
+ * a coding agent's journals. A leaf over the row alone, so it reads nothing.
+ */
+
+import {
+  CODING_AGENT_BOUNDS,
+  TURN_ENDING,
+  type TurnEnding,
+  type TurnRecord,
+  type TurnTokens,
+} from "@sidecar/hosted/coding-agent-wire";
+import { CATALOG_ID_SEPARATOR } from "@sidecar/hosted/model-label";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { Option, Schema } from "effect";
+import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
+import { TurnUsageColumnSchema } from "./store/database.js";
+import type { StoredTurnRecord } from "./store/message-reads.js";
+
+/** The row's fields a record is read from. */
+export type RecordedTurn = Pick<
+  StoredTurnRecord,
+  "status" | "model" | "reasoningEffort" | "usage" | "failure"
+>;
+
+const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
+
+/**
+ * A recorded model as the catalog names it. Note that the brain reaches
+ * OpenAI directly (`brain-host/model.ts`), so its turn rows record OpenAI's
+ * own id, which the catalog names under its provider; an id that already
+ * names one is kept.
+ */
+function catalogIdOf(model: string): string {
+  return model.includes(CATALOG_ID_SEPARATOR)
+    ? model
+    : `${MODEL_PROVIDER.OPENAI}${CATALOG_ID_SEPARATOR}${model}`;
+}
+
+/** A recorded name the wire carries: one it bounds, and nothing for an empty or overlong one. */
+function choiceOf(recorded: string | null): string | undefined {
+  return recorded === null ||
+    recorded === "" ||
+    recorded.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
+    ? undefined
+    : recorded;
+}
+
+/** How the turn ended where it did not simply answer; nothing for one that did or still runs. */
+function endingOf(turn: RecordedTurn): TurnEnding | undefined {
+  if (turn.status === TURN_STATUS.CANCELLED) return TURN_ENDING.STOPPED;
+  if (turn.status !== TURN_STATUS.FAILED) return undefined;
+  return turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED
+    ? TURN_ENDING.ABANDONED
+    : TURN_ENDING.FAILED;
+}
+
+/** The turn's tokens as its row summed them, or nothing where it recorded none or a shape this build cannot read. */
+function tokensOf(turn: RecordedTurn): TurnTokens | undefined {
+  if (turn.usage === null) return undefined;
+  const usage = decodeUsage(turn.usage);
+  if (Option.isNone(usage)) return undefined;
+  const { inputTokens, outputTokens, cachedInputTokens } = usage.value;
+  return { inputTokens, outputTokens, cachedInputTokens };
+}
+
+/** What the turn ran on and spent, each as far as its row recorded it. */
+export function turnRecordOf(turn: RecordedTurn): TurnRecord {
+  const model = choiceOf(turn.model === null ? null : catalogIdOf(turn.model));
+  const effort = choiceOf(turn.reasoningEffort);
+  const tokens = tokensOf(turn);
+  const ending = endingOf(turn);
+  return {
+    ...(model === undefined ? undefined : { model }),
+    ...(effort === undefined ? undefined : { effort }),
+    ...(tokens === undefined ? undefined : { tokens }),
+    ...(ending === undefined ? undefined : { ending }),
+  };
+}

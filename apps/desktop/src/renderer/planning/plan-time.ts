@@ -36,6 +36,10 @@ const DAY_WITH_YEAR = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 const MOMENT = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
+const TIME_OF_DAY = new Intl.DateTimeFormat("en-US", { timeStyle: "short" });
+
+/** What parts a span's start from its end. */
+const SPAN_ARROW = " → ";
 
 /**
  * How long ago `at` was, in a row's few letters: "now" inside a minute, then
@@ -55,6 +59,13 @@ export function sinceText(at: number, now: number): string {
 /** The moment `at` in full, for the hover over a row's few letters. */
 export function momentText(at: number): string {
   return MOMENT.format(at);
+}
+
+/** A span from one moment to another, each in full, the end's day left unsaid where it is the start's: "Oct 12, 2026, 2:32 PM → 2:41 PM". */
+export function spanText(startedAt: number, endedAt: number): string {
+  const sameDay = new Date(startedAt).toDateString() === new Date(endedAt).toDateString();
+  const ended = sameDay ? TIME_OF_DAY.format(endedAt) : MOMENT.format(endedAt);
+  return `${MOMENT.format(startedAt)}${SPAN_ARROW}${ended}`;
 }
 
 /** The time now, and again on every minute after, on whatever clock the stream runs under. */

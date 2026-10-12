@@ -1,3 +1,4 @@
+import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
@@ -77,14 +78,14 @@ export type WorkBlock =
 
 export type WorkWorkerBlock = Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
 
-/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, its title, and the catalog id of the model it ran on, where the service said. */
+/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, its title, and what that task ran on and spent, as far as the service said. */
 interface WorkSessionRow {
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
   title?: string;
-  model?: string;
   startedAt?: number;
   endedAt?: number;
+  record: TurnRecord;
 }
 
 /** One turn as the tab draws it. */
@@ -97,6 +98,8 @@ export interface WorkTurnRow {
   state: PlanWorkState;
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
+  /** What the turn ran on and spent, as far as the service said. */
+  record: TurnRecord;
 }
 
 /** Each of the planning model's tools as a kind of call. */
@@ -148,12 +151,22 @@ export function workerJob(call: WorkCallRow): string {
   return job === "" ? CALL_WORDS[call.kind].verb : job;
 }
 
+/** What a turn or a subagent's task ran on and spent, as the service said, apart from the rest the wire carries beside it. */
+function recordOf({ model, effort, tokens, ending }: TurnRecord): TurnRecord {
+  return {
+    ...(model === undefined ? undefined : { model }),
+    ...(effort === undefined ? undefined : { effort }),
+    ...(tokens === undefined ? undefined : { tokens }),
+    ...(ending === undefined ? undefined : { ending }),
+  };
+}
+
 /** The effort a worker's pair says: none, because the planning model's turns record none, which the label leaves unsaid. */
 const UNRECORDED_EFFORT = "";
 
 /** What a subagent runs on, as its row and its tab's card name it, an agent's subagent alike: the model its session ran on; none where the service named none. */
 export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
-  const model = worker.session?.model;
+  const model = worker.session?.record.model;
   return model === undefined ? undefined : { model, effort: UNRECORDED_EFFORT };
 }
 
@@ -300,7 +313,7 @@ function rowsOf(
                 ? undefined
                 : { endedAt: part.session.endedAt }),
               ...(part.session.title === undefined ? undefined : { title: part.session.title }),
-              ...(part.session.model === undefined ? undefined : { model: part.session.model }),
+              record: recordOf(part.session),
             },
           }),
     };
@@ -343,6 +356,7 @@ export function workRowsOf(
       ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
+      record: recordOf(turn),
       rows: rowsOf(
         turn.parts,
         turn.turnId,
