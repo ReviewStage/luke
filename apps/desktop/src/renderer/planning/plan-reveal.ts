@@ -134,9 +134,11 @@ export interface UnitView {
   readonly fresh: boolean;
 }
 
-/** How a newer document lands: shown at once under reduced motion. */
+/** How a newer document lands: shown at once under reduced motion, and lit or not. */
 export interface ChaseAim {
   readonly reduced: boolean;
+  /** Whether what changed is lit as it lands: an edit someone else made, never the developer's own, which they watched being typed. */
+  readonly lit: boolean;
 }
 
 /** Whether a fence line closes the fence standing: the same character, at least as long. */
@@ -479,8 +481,8 @@ export function chaseOpened(body: string): ChaseState {
  * words from there. A unit the newer document added starts empty where it
  * stands; a unit it dropped stays, aimed at nothing, until it is erased. A
  * selection the newer words no longer erase is dropped rather than finished.
- * Under reduced motion every change is shown at once and lit, the caret left
- * at the end of the last.
+ * Under reduced motion every change is shown at once, the caret left at the
+ * end of the last, and lit unless the aim says it is the developer's own.
  */
 export function chaseRetargeted(
   state: ChaseState,
@@ -512,10 +514,10 @@ export function chaseRetargeted(
     if (previous?.target !== target) changed = units.length;
     if (previous === undefined) {
       const shown = aim.reduced ? target : "";
-      units.push({ id: nextId, key, target, shown, fresh: aim.reduced });
+      units.push({ id: nextId, key, target, shown, fresh: aim.reduced && aim.lit });
       nextId += 1;
     } else if (aim.reduced && previous.shown !== target) {
-      units.push({ ...previous, key, target, shown: target, fresh: true });
+      units.push({ ...previous, key, target, shown: target, fresh: aim.lit });
     } else {
       units.push({ ...previous, key, target });
     }
@@ -523,7 +525,7 @@ export function chaseRetargeted(
   const before = new Set(added.before);
   const freshAssumptions = new Set<number>();
   added.after.forEach((text, index) => {
-    if (!before.has(text)) freshAssumptions.add(index);
+    if (aim.lit && !before.has(text)) freshAssumptions.add(index);
   });
   const caret =
     aim.reduced && changed !== undefined

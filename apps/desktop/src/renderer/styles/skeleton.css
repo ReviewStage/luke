@@ -4,8 +4,7 @@
    centred in their line, so a column of blocks sits where the lines will.
    Only opacity moves, in step across every block, and the loop answers
    `--loop-motion` like every animation with no end of its own, so reduced
-   motion and a capture hold it on one frame. The plan's writing mark
-   breathes on the same loop (`planning.css`). */
+   motion and a capture hold it on one frame. */
 
 .skeleton {
   display: block;

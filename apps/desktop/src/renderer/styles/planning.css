@@ -93,29 +93,10 @@
   animation-play-state: var(--loop-motion);
 }
 
-/* The field the caret is typing in: a small ring in the accent turning after
-   its heading on the window's one spinner turn (`spinner.tsx`), held by
-   `--loop-motion` like every animation with no end of its own and still
-   reading as work under way while held. */
-.plan-writing > .markdown-heading:first-child::after {
-  display: inline-block;
-  box-sizing: border-box;
-  width: 9px;
-  height: 9px;
-  margin-left: 6px;
-  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  vertical-align: 0.05em;
-  animation: spinner-turn 900ms linear infinite;
-  animation-play-state: var(--loop-motion);
-  content: "";
-}
-
 /* A rule as an item of a numbered list (`plan-rule.tsx`): its number muted
    in a gutter of its own, its statement in the body's weight beside it, and
-   its examples beneath the statement. The number takes the writing mark's
-   accent while the caret types in its rule. */
+   its examples beneath the statement. The number takes the accent while the
+   caret types in its rule. */
 .plan-rule {
   display: grid;
   grid-template-columns: 1.6em minmax(0, 1fr);
@@ -173,10 +154,11 @@
   isolation: isolate;
 }
 
+/* The tint takes the box a field's hover wash takes, a little past its words. */
 .plan-fresh::before {
   position: absolute;
   z-index: -1;
-  inset: -2px;
+  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
   border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;

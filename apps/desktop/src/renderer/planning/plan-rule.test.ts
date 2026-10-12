@@ -26,7 +26,7 @@ function drawn(words: string, edit: Parameters<typeof PlanUnitWords>[0]["edit"])
 test("a rule being typed in draws its number, and the caret in its statement", () => {
   const before = ruled(["Only admins invite."]);
   const after = ruled(["Only admins invite.", "Links expire in a week."]);
-  const aim = { reduced: false };
+  const aim = { reduced: false, lit: true };
   const typing = chaseStepped(chaseRetargeted(chaseOpened(before), after, NO_ADDED, aim), 550);
   const view = chaseView(typing, true).find((unit) => unit.words.startsWith("### Rule 2"));
   assert.ok(view?.edit !== undefined, "the new rule is being typed");

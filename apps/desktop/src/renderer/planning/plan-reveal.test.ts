@@ -64,7 +64,7 @@ function drawn(state: ChaseState): readonly string[] {
 }
 
 function retarget(state: ChaseState, words: string): ChaseState {
-  return chaseRetargeted(state, words, NO_ASSUMPTIONS, { reduced: false });
+  return chaseRetargeted(state, words, NO_ASSUMPTIONS, { reduced: false, lit: true });
 }
 
 /** Every frame's views until the caret has nothing left, and the state it ends in. */
@@ -211,6 +211,7 @@ test("a unit is lit as it catches up, and reduced motion shows and lights a chan
 
   const reduced = chaseRetargeted(before, body("Only an admin."), NO_ASSUMPTIONS, {
     reduced: true,
+    lit: true,
   });
   assert.equal(chaseBehind(reduced), false);
   assert.equal(chaseView(reduced, false)[PROBLEM]?.fresh, true);
@@ -222,9 +223,22 @@ test("only an assumption the newer document added is lit", () => {
     chaseOpened(body(null)),
     body(null),
     { before: ["Members can invite."], after: ["Members can invite.", "Invites expire."] },
-    { reduced: false },
+    { reduced: false, lit: true },
   );
   assert.deepEqual([...state.freshAssumptions], [1]);
+});
+
+test("the developer's own edit is shown at once and lights nothing, a unit or an assumption", () => {
+  const own = chaseRetargeted(
+    chaseOpened(body(null)),
+    body("Only an admin."),
+    { before: ["Members can invite."], after: ["Members can invite.", "Invites expire."] },
+    { reduced: true, lit: false },
+  );
+  assert.equal(chaseBehind(own), false);
+  assert.equal(drawn(own)[PROBLEM], "### Problem\n\nOnly an admin.");
+  assert.ok(chaseView(own, false).every((view) => !view.fresh));
+  assert.deepEqual([...own.freshAssumptions], []);
 });
 
 test("once the work catches up on a live call, the caret waits where the last edit ended", () => {
