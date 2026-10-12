@@ -9,6 +9,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentTitle,
   type CodingAgentUsage,
+  type TurnRecord,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
@@ -49,6 +50,7 @@ import {
   turnsBefore,
   turnsNamed,
 } from "../store/message-reads.js";
+import { turnRecordOf } from "../turn-record.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -108,11 +110,12 @@ export function cursorToWire(cursor: MessageCursor): string {
 /** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, and for a turn's journal when the turn began and closed, which is the wire's `CodingAgentMessage` once serialized. */
-type TranscriptMessage = StoredUIMessage & {
-  readonly startedAt?: number;
-  readonly finishedAt?: number;
-};
+/** One row of the transcript as the route answers it: its message as the store holds it, and for a turn's journal when the turn began and closed and what it ran on and spent, which is the wire's `CodingAgentMessage` once serialized. */
+type TranscriptMessage = StoredUIMessage &
+  TurnRecord & {
+    readonly startedAt?: number;
+    readonly finishedAt?: number;
+  };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
 export interface TranscriptPage {
@@ -184,31 +187,45 @@ const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly 
         ),
   );
 
+/** What a turn whose journal is on a page says of itself: when it began, and what it ran on and spent. */
+interface JournalTurn {
+  readonly startedAt: number;
+  readonly record: TurnRecord;
+}
+
 /**
- * When each turn whose journal is among the rows began, by the turn: its
- * start, or its queueing before eve started it, which is what the working
- * line counted from while it ran (`codingAgentRunStartedAt`).
+ * Each turn whose journal is among the rows, by the turn: when it began,
+ * its start or its queueing before eve started it, which is what the
+ * working line counted from while it ran (`codingAgentRunStartedAt`), and
+ * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */
-const turnStartsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
+const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
   const journals = records.filter((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
   const ids = new Set(journals.flatMap((record) => record.turnId ?? []));
   return Effect.map(
     turnsNamed(userId, [...ids]),
-    (turns) => new Map(turns.map((turn) => [turn.id, (turn.startedAt ?? turn.queuedAt).getTime()])),
+    (turns) =>
+      new Map<string, JournalTurn>(
+        turns.map((turn) => [
+          turn.id,
+          { startedAt: (turn.startedAt ?? turn.queuedAt).getTime(), record: turnRecordOf(turn) },
+        ]),
+      ),
   );
 };
 
-/** A row as the page carries it: its message, and for a turn's journal when the turn began and, once the journal closed, when. */
+/** A row as the page carries it: its message, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
 function transcriptMessageOf(
   record: StoredMessageRecord,
-  turnStarts: ReadonlyMap<string, number>,
+  journalTurns: ReadonlyMap<string, JournalTurn>,
 ): TranscriptMessage {
-  const startedAt = record.turnId === undefined ? undefined : turnStarts.get(record.turnId);
-  if (startedAt === undefined) return record.message;
+  const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
+  if (turn === undefined) return record.message;
   return {
     ...record.message,
-    startedAt,
+    startedAt: turn.startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
+    ...turn.record,
   };
 }
 
@@ -305,10 +322,10 @@ function pagePast(
     );
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
     const records = read.ok ? read.value : [];
-    const turnStarts = yield* turnStartsOf(target.userId, records);
+    const journalTurns = yield* journalTurnsOf(target.userId, records);
     return {
       page: {
-        messages: records.map((record) => transcriptMessageOf(record, turnStarts)),
+        messages: records.map((record) => transcriptMessageOf(record, journalTurns)),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),

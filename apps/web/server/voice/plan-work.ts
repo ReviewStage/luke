@@ -1,5 +1,5 @@
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
+import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -33,6 +33,7 @@ import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-que
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { SHOW_CODE_TOOL } from "../hosted/show-code.js";
 import type { StoredMessageRecord, StoredTurnRecord } from "../hosted/store/message-reads.js";
+import { turnRecordOf } from "../hosted/turn-record.js";
 
 /**
  * plan-work.ts -- one planning turn as the Work tab draws it, projected from the turn's row and its journal.
@@ -394,16 +395,17 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * read from the journals of its child conversation (`subagents`, by the
  * call's id) and drawn by the same walk, its calls running while the
  * subagent does, with when its newest task began and ended, its title
- * where one landed on that child (`titles`, by the call's id), and the
- * model its newest task ran on where its turn row named one (`models`, by
- * the call's id, `hosted/child-models.ts`).
+ * where one landed on that child (`titles`, by the call's id), and what
+ * its newest task ran on and spent as its turn row recorded them
+ * (`records`, by the call's id, `hosted/child-models.ts`). The turn carries
+ * what it ran on and spent too, as its own row recorded them.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
-  models: ReadonlyMap<string, string> = new Map(),
+  records: ReadonlyMap<string, TurnRecord> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
@@ -411,16 +413,13 @@ export function planWorkOf(
     if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
     const messages = journals.map((each) => each.message);
     const title = titles.get(part.id);
-    const model = models.get(part.id);
     return {
       ...part,
       session: {
         ...newest(partsOf(messages, part.state)),
         ...sessionSpanOf(journals),
         ...(title === undefined ? undefined : { title }),
-        ...(model === undefined || model.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
-          ? undefined
-          : { model }),
+        ...records.get(part.id),
       },
     };
   });
@@ -431,5 +430,6 @@ export function planWorkOf(
     ...(ended === null ? undefined : { endedAt: ended.getTime() }),
     state: turnState,
     ...newest(parts),
+    ...turnRecordOf(turn),
   };
 }

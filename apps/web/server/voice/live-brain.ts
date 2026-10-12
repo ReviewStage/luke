@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -43,7 +44,7 @@ import {
 import { childConversationId } from "../hosted/brain-host/ids.js";
 import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { subagentModelsByCall } from "../hosted/child-models.js";
+import { subagentRecordsByCall } from "../hosted/child-models.js";
 import { childTitlesByCall } from "../hosted/child-titles.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -481,10 +482,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   /**
    * The journals of each subagent the calls named started or sent work to,
    * by call, read from the child conversation each call's session is
-   * recorded in, with the title of each that has one and the model each ran
-   * on. A subagent whose journals could not be read is left out, so its call
-   * is drawn without its session rather than ending the ask, and titles or
-   * models that could not be read leave every session without them.
+   * recorded in, with the title of each that has one and what each ran on
+   * and spent. A subagent whose journals could not be read is left out, so
+   * its call is drawn without its session rather than ending the ask, and
+   * titles or records that could not be read leave every session without
+   * them.
    */
   const subagentJournalsOf = Effect.fnUntraced(function* (
     conversationId: string,
@@ -513,11 +515,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): ReadonlyMap<string, string> => new Map()),
     );
-    const models = yield* subagentModelsByCall(options.userId, journals).pipe(
+    const records = yield* subagentRecordsByCall(options.userId, journals).pipe(
       Effect.tapError(logStoreFailure),
-      Effect.orElseSucceed((): ReadonlyMap<string, string> => new Map()),
+      Effect.orElseSucceed((): ReadonlyMap<string, TurnRecord> => new Map()),
     );
-    return { journals, titles, models };
+    return { journals, titles, records };
   });
 
   /**
@@ -578,7 +580,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const {
       journals: subagents,
       titles,
-      models,
+      records,
     } = yield* subagentJournalsOf(turn.conversationId, told.workers);
     // The start of a task the last look's calls steered is looked for ahead of the journal too.
     const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
@@ -614,7 +616,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     told.seeking = callsSendingToEarlierTasks(message).some(
       (callId) => !found(told.workers, callId),
     );
-    const work = telling ? planWorkOf(turn, message, subagents, titles, models) : undefined;
+    const work = telling ? planWorkOf(turn, message, subagents, titles, records) : undefined;
     if (work !== undefined && !isDeepStrictEqual(work, told.work)) {
       told.work = work;
       for (const listener of [...workListeners]) listener(work);

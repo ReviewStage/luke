@@ -3,7 +3,12 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_DELEGATE_TOOL } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_DELEGATE_TOOL,
+  TURN_ENDING,
+  type TurnRecord,
+} from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
@@ -21,7 +26,7 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentTranscriptView } from "./agent-tab";
-import { momentText } from "./plan-time";
+import { spanText } from "./plan-time";
 import { PlanWork, SubagentTab } from "./plan-work";
 import { workerOf, workRowsOf } from "./work-model";
 import { WorkingLine, workedForText, workingClock, workingTime } from "./working-time";
@@ -62,13 +67,26 @@ const mounted = (element: ReactElement) =>
       timers: () =>
         [...container.querySelectorAll("[role='timer']")].map((timer) => timer.textContent),
       worked: () => container.querySelector("[data-worked] time"),
+      /** The card the finished line hangs once the pointer rests on it, or nothing where it hangs none. */
+      hoverWorked: () => {
+        const time = container.querySelector("[data-worked] time");
+        assert.ok(time, "no finished line to hover");
+        act(() => {
+          time.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+        });
+        return document.body.querySelector<HTMLElement>("[data-turn-card]");
+      },
       working: () => container.querySelector("[data-working]"),
       draw: (next: ReactElement) =>
         Effect.andThen(
           Effect.sync(() => draw(next)),
           drawn,
         ),
-      unmount: () => act(() => root.unmount()),
+      unmount: () => {
+        act(() => root.unmount());
+        // The card hangs at the body's end, past the container the test drew in.
+        for (const card of document.body.querySelectorAll("[role='tooltip']")) card.remove();
+      },
     };
   });
 
@@ -190,13 +208,54 @@ it.effect(
 const TURN_END = new Date(2026, 9, 12, 15, 42).getTime();
 
 /** One of the agent's turns: a line of its words, begun 1m 18s before it ended, still written where it has no end. */
-const agentTurn = (finished: boolean) => ({
+const agentTurn = (finished: boolean, record: TurnRecord = {}) => ({
   id: "turn-1",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [{ type: "text", text: "Added the tests." }],
   startedAt: TURN_END - 78 * SECOND,
   ...(finished ? { finishedAt: TURN_END } : undefined),
+  ...record,
 });
+
+const OPUS: CatalogModel = {
+  id: "anthropic/claude-opus-5.5",
+  name: "Claude Opus 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "medium", "high"],
+};
+
+const SOL: CatalogModel = {
+  id: "openai/gpt-6.1-sol",
+  name: "GPT-6.1 Sol",
+  provider: MODEL_PROVIDER.OPENAI,
+  efforts: ["low", "medium", "high"],
+};
+
+/** What a finished turn on Opus recorded: its model and effort, and the tokens its steps summed. */
+const OPUS_TURN: TurnRecord = {
+  model: OPUS.id,
+  effort: "high",
+  tokens: { inputTokens: 397_434, outputTokens: 660, cachedInputTokens: 396_430 },
+};
+
+/** A card's token rows as a reader takes them in: each label and its count. */
+const tokenRows = (card: HTMLElement | null) =>
+  [...(card?.querySelectorAll(".turn-card-token") ?? [])].map((row) => [
+    row.querySelector("dt")?.textContent,
+    row.querySelector("dd")?.textContent,
+  ]);
+
+/** An agent's transcript of one finished turn, its record as given. */
+const finishedAgent = (record: TurnRecord) =>
+  createElement(AgentTranscriptView, {
+    messages: [agentTurn(true, record)],
+    delegation: { models: [OPUS] },
+    reading: false,
+    failed: false,
+    working: false,
+    onRetry: () => undefined,
+    openGitHub: () => undefined,
+  });
 
 /** One of the agent's turns handing a worker a task, the call running or answered. */
 const delegatingTurn = (running: boolean) => ({
@@ -262,7 +321,7 @@ test("a finished turn's last line says how long it worked and the day and time i
 });
 
 it.effect(
-  "an agent's finished turn ends on how long it worked and when, selectable, the full moment on hover, and a turn still written ends on none",
+  "an agent's finished turn ends on how long it worked and when, selectable, its card on hover, and a turn still written ends on none",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(TURN_END + MINUTE);
@@ -290,9 +349,99 @@ it.effect(
       const worked = tab.worked();
       assert.match(worked?.textContent ?? "", /^Worked for 1m 18s · Today, /u);
       assert.equal(worked?.closest("[data-worked]")?.classList.contains("select-text"), true);
-      assert.equal(worked?.getAttribute("title"), momentText(TURN_END));
       assert.equal(worked?.getAttribute("datetime"), new Date(TURN_END).toISOString());
+      assert.equal(
+        tab.hoverWorked()?.querySelector(".turn-card-when")?.textContent,
+        spanText(TURN_END - 78 * SECOND, TURN_END),
+      );
       tab.unmount();
+    }),
+);
+
+it.effect(
+  "hovering an agent's finished turn says the model and effort it ran on with its harness's mark, when it began and ended in full, and the tokens it spent",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(TURN_END + MINUTE);
+      const tab = yield* mounted(finishedAgent(OPUS_TURN));
+      const card = tab.hoverWorked();
+      assert.equal(card?.querySelector(".turn-card-model")?.textContent, "Opus 5.5 High");
+      assert.equal(
+        card?.querySelector("[data-harness]")?.getAttribute("data-harness"),
+        MODEL_PROVIDER.ANTHROPIC,
+      );
+      assert.equal(
+        card?.querySelector(".turn-card-when")?.textContent,
+        "Oct 12, 2026, 3:40 PM → 3:42 PM",
+      );
+      assert.equal(card?.querySelector(".turn-card-ending"), null);
+      assert.deepEqual(tokenRows(card), [
+        ["Input", "1,004"],
+        ["Output", "660"],
+        ["Cache read", "396,430"],
+      ]);
+      tab.unmount();
+    }),
+);
+
+it.effect("a turn whose row counted no tokens hangs a card with no token section", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(TURN_END + MINUTE);
+    const { tokens: _counted, ...uncounted } = OPUS_TURN;
+    const tab = yield* mounted(finishedAgent(uncounted));
+    const card = tab.hoverWorked();
+    assert.equal(card?.querySelector(".turn-card-model")?.textContent, "Opus 5.5 High");
+    assert.equal(card?.querySelector(".turn-card-tokens"), null);
+    tab.unmount();
+  }),
+);
+
+it.effect("a stopped, failed, or abandoned turn's card says how it ended", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(TURN_END + MINUTE);
+    const endings: string[] = [];
+    for (const ending of Object.values(TURN_ENDING)) {
+      const tab = yield* mounted(finishedAgent({ ...OPUS_TURN, ending }));
+      endings.push(tab.hoverWorked()?.querySelector(".turn-card-ending")?.textContent ?? "");
+      tab.unmount();
+    }
+    assert.deepEqual(endings, ["Stopped", "Failed", "Abandoned"]);
+  }),
+);
+
+it.effect(
+  "hovering a finished turn on the Work tab says the model Luke ran on, wearing no harness's mark, and that it was stopped where it was",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(TURN_END + MINUTE);
+      const work = yield* mounted(
+        createElement(PlanWork, {
+          turns: [
+            {
+              turnId: "turn-1",
+              startedAt: TURN_END - 42 * SECOND,
+              endedAt: TURN_END,
+              state: PLAN_WORK_STATE.FAILED,
+              earlierOmitted: false,
+              parts: [{ type: "text", text: "Reading the repository." }],
+              model: "openai/gpt-6.1-sol",
+              ending: TURN_ENDING.STOPPED,
+            },
+          ],
+          callLive: false,
+          earlier: undefined,
+          onLoadEarlier: () => Promise.resolve(),
+          onOpenSubagent: () => undefined,
+          shown: true,
+          models: [SOL],
+        }),
+      );
+      const card = work.hoverWorked();
+      assert.equal(card?.querySelector(".turn-card-model")?.textContent, "GPT-6.1 Sol");
+      assert.equal(card?.querySelector("[data-harness]"), null);
+      assert.equal(card?.querySelector(".turn-card-ending")?.textContent, "Stopped");
+      assert.equal(card?.querySelector(".turn-card-tokens"), null);
+      work.unmount();
     }),
 );
 

@@ -738,7 +738,7 @@ function TabContent({
     return worker === undefined ? (
       <SpinnerRegion label="Loading subagent" />
     ) : (
-      <SubagentTab key={tab.subagent} worker={worker} shown={shown} />
+      <SubagentTab key={tab.subagent} worker={worker} shown={shown} models={agents.models} />
     );
   }
   switch (tab) {

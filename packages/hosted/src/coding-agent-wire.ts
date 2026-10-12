@@ -480,6 +480,52 @@ const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
   additionalProperties: true,
 });
 
+/** How a turn ended where it did not simply answer: stopped, failed, or given up on by the sweep after running past its bound. */
+export const TURN_ENDING = {
+  STOPPED: "stopped",
+  FAILED: "failed",
+  ABANDONED: "abandoned",
+} as const;
+
+export type TurnEnding = (typeof TURN_ENDING)[keyof typeof TURN_ENDING];
+
+/**
+ * One turn's own tokens, as its row summed them over its steps: the input
+ * the model read, the output it wrote, and how much of that input its
+ * prefix cache answered, which the input counts too.
+ */
+const turnTokensSchema = EffectSchema.Struct({
+  inputTokens: countedNumber,
+  outputTokens: countedNumber,
+  cachedInputTokens: countedNumber,
+});
+
+export type TurnTokens = typeof turnTokensSchema.Type;
+
+/** A catalog id or an effort as a turn's row recorded it. */
+const recordedChoice = EffectSchema.String.check(
+  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS),
+);
+
+/**
+ * What a finished turn ran on and spent, as its row recorded them, which a
+ * turn's footer card says: the model's catalog id, the effort it ran at,
+ * its tokens, and how it ended where it did not simply answer. Each is
+ * absent where the row recorded none and from a service older than it; the
+ * tokens and the ending, too, until the turn has ended.
+ */
+export const turnRecordFields = {
+  /** The catalog id of the model the turn ran on, such as `openai/gpt-6.1-sol`. */
+  model: EffectSchema.optionalKey(recordedChoice),
+  effort: EffectSchema.optionalKey(recordedChoice),
+  tokens: EffectSchema.optionalKey(turnTokensSchema),
+  ending: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(TURN_ENDING))),
+};
+
+const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
+
+export type TurnRecord = typeof turnRecordSchema.Type;
+
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
  * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
@@ -488,7 +534,8 @@ const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
  * than declared part by part, because the SDK's vocabulary is the contract
  * and the components that draw them read it directly. One of the agent's
  * turns carries beside them when the turn began and when it answered or
- * ended, so a tab says how long a finished turn worked.
+ * ended, so a tab says how long a finished turn worked, and once it has,
+ * what it ran on and spent (`turnRecordFields`).
  */
 export const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
@@ -499,6 +546,7 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */
   finishedAt: EffectSchema.optionalKey(countedNumber),
+  ...turnRecordFields,
 });
 
 export type CodingAgentMessage = typeof codingAgentMessageSchema.Type;

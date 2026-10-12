@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
-import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import { CODING_AGENT_BOUNDS, turnRecordFields } from "./coding-agent-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -216,8 +216,8 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's, when its newest task began and ended, its title, and the model
- * it ran on. Note that it stands one level deep, because the wire shows no
+ * model's, when its newest task began and ended, its title, and what that
+ * task ran on and spent. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
@@ -232,10 +232,8 @@ const planWorkSessionSchema = EffectSchema.Struct({
   title: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
   ),
-  /** The catalog id of the model its newest task ran on, such as `openai/gpt-6.1-sol`, which its row names as an agent's subagent row names its pair; absent before that task's turn named one, and from a service older than it. */
-  model: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
-  ),
+  /** What its newest task ran on, which its row names as an agent's subagent row names its pair, and once it ended what it spent and how it ended. */
+  ...turnRecordFields,
 });
 
 const planWorkPartSchema = EffectSchema.Union([
@@ -252,10 +250,11 @@ export type PlanWorkPart = typeof planWorkPartSchema.Type;
 
 /**
  * One planning turn as the Work tab draws it: the turn, when it started and
- * ended, how far it has got, and the newest of what the model wrote and called,
- * oldest first. Unlike `plan.activity`, this carries each call's output: the
- * text a command answered in the plan's repository sandbox, and pages read
- * from the public web, shown back to the developer on their own Mac.
+ * ended, how far it has got, the newest of what the model wrote and called,
+ * oldest first, and what it ran on and spent. Unlike `plan.activity`, this
+ * carries each call's output: the text a command answered in the plan's
+ * repository sandbox, and pages read from the public web, shown back to the
+ * developer on their own Mac.
  */
 export const planWorkTurnSchema = EffectSchema.Struct({
   turnId: EffectSchema.String,
@@ -267,6 +266,7 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,
   parts: EffectSchema.Array(planWorkPartSchema),
+  ...turnRecordFields,
 });
 
 export type PlanWorkTurn = typeof planWorkTurnSchema.Type;

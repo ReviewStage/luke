@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { TURN_ENDING } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -481,6 +482,87 @@ test("a turn says when it ended once it has, and no end while it runs", async ()
   assert.equal(done.endedAt, NOW);
 });
 
+/** A step of words whose model counted the tokens given, and the end given after it. */
+function countedStep(turnId: string, end: MessageStreamEvent): MessageStreamEvent[] {
+  return [
+    stamped({
+      type: "step.started",
+      data: { turnId, sequence: SEQUENCE, stepIndex: 0, modelId: "m" },
+    }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence: SEQUENCE, stepIndex: 0, finishReason: "stop", message: "Done." },
+    }),
+    stamped({
+      type: "step.completed",
+      data: {
+        turnId,
+        sequence: SEQUENCE,
+        stepIndex: 0,
+        finishReason: "stop",
+        usage: { inputTokens: 1_200, outputTokens: 80, cacheReadTokens: 1_000 },
+      },
+    }),
+    end,
+  ];
+}
+
+test("a finished turn's work says the model and effort it ran on and the tokens it spent, and how it ended where it did not simply answer", async () => {
+  const endedWith = async (end: MessageStreamEvent) => {
+    const target = await conversation();
+    const standing: RelayStanding = {
+      ...standingFor(target),
+      model: "gpt-6.1-sol",
+      reasoningEffort: "high",
+    };
+    await play([...opening(FIRST_EVE_TURN), ...countedStep(FIRST_EVE_TURN, end)], standing);
+    const { model, effort, tokens, ending } = await worked(target, standing);
+    return { model, effort, tokens, ending };
+  };
+  const tokens = { inputTokens: 1_200, outputTokens: 80, cachedInputTokens: 1_000 };
+
+  assert.deepEqual(
+    await endedWith(
+      stamped({ type: "turn.completed", data: { turnId: FIRST_EVE_TURN, sequence: SEQUENCE } }),
+    ),
+    { model: "openai/gpt-6.1-sol", effort: "high", tokens, ending: undefined },
+  );
+  assert.equal(
+    (
+      await endedWith(
+        stamped({ type: "turn.cancelled", data: { turnId: FIRST_EVE_TURN, sequence: SEQUENCE } }),
+      )
+    ).ending,
+    TURN_ENDING.STOPPED,
+  );
+  assert.equal(
+    (
+      await endedWith(
+        stamped({
+          type: "turn.failed",
+          data: {
+            turnId: FIRST_EVE_TURN,
+            sequence: SEQUENCE,
+            code: "model_error",
+            message: "upstream failed",
+          },
+        }),
+      )
+    ).ending,
+    TURN_ENDING.FAILED,
+  );
+});
+
+test("a turn still running says the model it runs on but no tokens and no ending yet", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(opening(FIRST_EVE_TURN), standing);
+  const running = await worked(target, standing);
+  assert.equal(running.model, "openai/scripted-model");
+  assert.equal(running.tokens, undefined);
+  assert.equal(running.ending, undefined);
+});
+
 test("a call the turn ended without answering says it may have run rather than that it failed, and the turn reads as failed", async () => {
   const target = await conversation();
   const standing = standingFor(target);
@@ -889,6 +971,43 @@ test("a plan's work read back names the model a worker's newest task ran on, as 
 
   assert.equal((await sessionOn("gpt-6.1-sol")).model, "openai/gpt-6.1-sol");
   assert.equal((await sessionOn(undefined)).model, undefined);
+});
+
+test("a plan's work read back says what a worker's finished task spent and how it ended", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, worker.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...countedStep(
+        FIRST_EVE_TURN,
+        stamped({ type: "turn.cancelled", data: { turnId: FIRST_EVE_TURN, sequence: SEQUENCE } }),
+      ),
+    ],
+    { ...standingFor(child), reasoningEffort: "low", turn: RELAY_TURN.CHILD },
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  const [drawn] = read.value.turns[0]?.parts ?? [];
+  assert.ok(drawn?.type === PLAN_WORK_PART.TOOL && drawn.session !== undefined);
+  const { effort, tokens, ending } = drawn.session;
+  assert.deepEqual(
+    { effort, tokens, ending },
+    {
+      effort: "low",
+      tokens: { inputTokens: 1_200, outputTokens: 80, cachedInputTokens: 1_000 },
+      ending: TURN_ENDING.STOPPED,
+    },
+  );
 });
 
 test("a plan's work read back carries a worker's title from its child conversation, on the call that started it and on a later call steering the same task; an untitled worker carries none", async () => {

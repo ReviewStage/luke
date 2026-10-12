@@ -201,10 +201,13 @@ const SUBAGENT_END_LINE = {
 export function SubagentTab({
   worker,
   shown,
+  models,
 }: {
   worker: WorkWorkerBlock;
   /** Whether the tab is on screen, which is when a running subagent's line counts how long it has worked. */
   shown: boolean;
+  /** The catalog as last read, which names the model its finished line's card says; none before the first read lands. */
+  models?: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   const { call, task, session } = worker;
   const job = workerJob(call);
@@ -229,7 +232,9 @@ export function SubagentTab({
           </Plan>
           <SubagentRows worker={worker} />
           {call.running ? <WorkingLine startedAt={shown ? session?.startedAt : undefined} /> : null}
-          {worked === undefined ? null : <WorkedFor {...worked} />}
+          {worked === undefined ? null : (
+            <WorkedFor {...worked} record={session?.record} models={models} />
+          )}
           {ended === undefined ? null : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
@@ -305,6 +310,7 @@ function WorkTurn({
   now: number;
   counting: boolean;
 }): React.JSX.Element {
+  const models = useContext(ModelsContext);
   return (
     <>
       <Checkpoint
@@ -315,7 +321,13 @@ function WorkTurn({
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
       <WorkTurnRows rows={turn.rows} />
       {turn.state === PLAN_WORK_STATE.RUNNING || turn.endedAt === undefined ? null : (
-        <WorkedFor startedAt={turn.startedAt} endedAt={turn.endedAt} />
+        <WorkedFor
+          startedAt={turn.startedAt}
+          endedAt={turn.endedAt}
+          record={turn.record}
+          models={models}
+          harnessed={false}
+        />
       )}
     </>
   );
