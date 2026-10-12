@@ -286,6 +286,16 @@ export interface GitHubAppService {
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
+  /**
+   * Whether the signed-in user reaches the installation, read on the user's
+   * own token as one repository of it (`GET
+   * /user/installations/{id}/repositories?per_page=1`): any answer GitHub
+   * gives at all is reach, and a not found or a forbidden is none.
+   */
+  readonly userReachesInstallation: (
+    userId: string,
+    installationId: number,
+  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | SqlClient.SqlClient>;
   /** The repositories the signed-in user reaches through the App, read on the user's own token: every installation they reach, each paged through. */
   readonly userRepositories: (
     userId: string,
@@ -932,6 +942,23 @@ function githubAppService(
         return Option.some(installationOf(record));
       }).pipe(Effect.scoped),
     userInstallations: (userId) => Effect.flatMap(userToken(userId), installationsOnToken),
+    userReachesInstallation: (userId, installationId) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const request = githubRead(
+          `/user/installations/${installationId}/repositories`,
+          token,
+        ).pipe(HttpClientRequest.setUrlParams({ per_page: "1" }));
+        const response = yield* sendAsUser(request);
+        if (
+          response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
+          response.status === GITHUB_HTTP_STATUS.FORBIDDEN
+        ) {
+          return false;
+        }
+        yield* readBody(response, InstallationRepositoriesSchema);
+        return true;
+      }).pipe(Effect.scoped),
     userRepositories: (userId) =>
       Effect.gen(function* () {
         const token = yield* userToken(userId);

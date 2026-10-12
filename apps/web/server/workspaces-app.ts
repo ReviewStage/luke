@@ -1,4 +1,13 @@
-import { type Cause, Effect, Layer, Option } from "effect";
+import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
+import {
+  WORKSPACE_MEMBERS_QUERY,
+  WORKSPACE_ROLE,
+  workspaceJoinRequestSchema,
+  workspaceLeaveRequestSchema,
+  workspaceMemberRemovalSchema,
+} from "@sidecar/hosted/workspace-wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Cause, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -6,7 +15,9 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type { GitHubApp } from "./github/github-app.js";
+import { unparsedWire } from "./core.js";
+import { GitHubApp } from "./github/github-app.js";
+import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import {
   listAvailableWorkspaces,
   type SyncedInstallations,
@@ -20,11 +31,23 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import type { StoreFailure } from "./hosted/store-failure.js";
+import {
+  addMember,
+  installationWorkspaceOf,
+  listMembers,
+  membershipOf,
+  removeMember,
+} from "./hosted/workspace-members.js";
 import type { WorkspaceSeams } from "./hosted/workspace-seams.js";
-import { ensurePersonalWorkspace, listWorkspaces } from "./hosted/workspace-store.js";
+import {
+  ensurePersonalWorkspace,
+  listWorkspaces,
+  type Workspace,
+} from "./hosted/workspace-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -43,11 +66,33 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * workspaces it already has are answered all the same. The bearer is
  * resolved before any row is touched, and both lists are the bearer's
  * account's alone.
+ *
+ * `POST /api/workspaces/join` makes the account a member of the workspace of
+ * an active installation, once its own GitHub token still reaches that
+ * installation; joining one it is in already answers it as it stands.
+ * `GET /api/workspaces/members` answers a workspace's members to a member
+ * of it, `POST /api/workspaces/members/remove` lets an owner or an admin
+ * remove a member who is not an owner, and `POST /api/workspaces/leave`
+ * lets anyone but an owner leave. A workspace the account is not in is not
+ * found, whatever it asked; a personal one, which nobody joins, manages, or
+ * leaves, is not permitted.
  */
 
-const WORKSPACES_PATH = "/api/workspaces";
+const WORKSPACES_PATH = {
+  LIST: "/api/workspaces",
+  JOIN: "/api/workspaces/join",
+  MEMBERS: "/api/workspaces/members",
+  MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  LEAVE: "/api/workspaces/leave",
+} as const;
 
-const HTTP_METHOD = { GET: "GET" } as const;
+const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
+
+/** A join, a removal, or a leaving names a few ids and nothing more. */
+const MAXIMUM_WORKSPACE_BODY_BYTES = 4 * 1024;
+
+/** The roles that may remove a member. */
+const MANAGING_ROLES: readonly Workspace["role"][] = [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN];
 
 /** No installation synced, so nothing to join. */
 const NONE: SyncedInstallations = [];
@@ -97,6 +142,38 @@ function installationsSyncedOrNone(
   );
 }
 
+/** The bearer's account, for a request under the one method the endpoint takes; the web request beside it. */
+const signedInAs = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: WorkspacesAppSeams,
+  method: string,
+): Effect.fn.Return<
+  { readonly userId: string; readonly request: Request },
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== method) return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return { userId: account.value, request };
+});
+
+/**
+ * The workspace as the account sees it, where it is a member of it and it is
+ * one whose members are managed: one it is not in is not found, and a
+ * personal one is not permitted.
+ */
+const managedWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+): Effect.fn.Return<Workspace, HostedRefusal, SqlClient.SqlClient> {
+  const standing = yield* hostedStoreOrUnavailable(membershipOf(userId, organizationId));
+  if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (standing.value.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  return standing.value;
+});
+
 const workspacesEndpoint = /* @__PURE__ */ Effect.fn("web/workspacesEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<
@@ -104,14 +181,7 @@ const workspacesEndpoint = /* @__PURE__ */ Effect.fn("web/workspacesEndpoint")(f
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
 > {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const userId = account.value;
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.GET);
   yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(userId, seams.workspaces));
   const synced = yield* installationsSyncedOrNone(userId, seams.workspaces);
   const workspaces = yield* hostedStoreOrUnavailable(listWorkspaces(userId));
@@ -119,12 +189,122 @@ const workspacesEndpoint = /* @__PURE__ */ Effect.fn("web/workspacesEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaces, available });
 });
 
-/** The group: the one workspaces path, and the hosted vocabulary's own refusal for any other. */
+/**
+ * POST: the account joins the workspace of an active installation. GitHub is
+ * asked only for an account not in it yet, and an installation its token no
+ * longer reaches is not found, as one with no workspace is.
+ */
+const joinEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceJoinEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+> {
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
+  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
+  const join = readEither(workspaceJoinRequestSchema)(body);
+  if (Result.isFailure(join)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { installationId } = join.success;
+  const workspace = yield* hostedStoreOrUnavailable(installationWorkspaceOf(installationId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const standing = yield* hostedStoreOrUnavailable(membershipOf(userId, workspace.value));
+  if (Option.isSome(standing)) {
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspace: standing.value });
+  }
+  const app = yield* GitHubApp;
+  const reaches = yield* githubUserReadOrRefusal(
+    app.userReachesInstallation(userId, installationId),
+  );
+  if (!reaches) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const joined = yield* pluginWriteOrUnavailable(
+    addMember(userId, workspace.value, seams.workspaces),
+  );
+  if (Option.isNone(joined)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspace: joined.value });
+});
+
+/** GET: a workspace's members, to a member of it. */
+const membersEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMembersEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  const { userId, request } = yield* signedInAs(seams, HTTP_METHOD.GET);
+  const named = new URL(request.url).searchParams.getAll(WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID);
+  const read = readEither(workspaceIdSchema)(unparsedWire(named[0]));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  yield* managedWorkspace(userId, read.success);
+  const members = yield* hostedStoreOrUnavailable(listMembers(read.success));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/** POST: an owner or an admin removes a member who is not an owner, answered with those who remain. */
+const removeEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMemberRemoveEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
+  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
+  const removal = readEither(workspaceMemberRemovalSchema)(body);
+  if (Result.isFailure(removal)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, userId: removed } = removal.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (!MANAGING_ROLES.includes(workspace.role)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  const target = yield* hostedStoreOrUnavailable(membershipOf(removed, workspaceId));
+  if (Option.isNone(target)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (target.value.role === WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  yield* hostedStoreOrUnavailable(removeMember(removed, workspaceId));
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/** POST: the account leaves a workspace it does not own. */
+const leaveEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceLeaveEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
+  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
+  const leaving = readEither(workspaceLeaveRequestSchema)(body);
+  if (Result.isFailure(leaving)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId } = leaving.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (workspace.role === WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  yield* hostedStoreOrUnavailable(removeMember(userId, workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
+});
+
+/** The group: the workspaces paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp> {
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH, hostedRefusing(workspacesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.LIST, hostedRefusing(workspacesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.JOIN, hostedRefusing(joinEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.MEMBERS, hostedRefusing(membersEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      WORKSPACES_PATH.MEMBERS_REMOVE,
+      hostedRefusing(removeEndpoint(seams)),
+    ),
+    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.LEAVE, hostedRefusing(leaveEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

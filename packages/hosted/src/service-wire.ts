@@ -72,6 +72,13 @@ export const HOSTED_API_ERROR = {
    * was written.
    */
   PLAN_ARCHIVED: "plan-archived",
+  /**
+   * The account's role in the workspace does not allow this, or the workspace
+   * is a personal one, which has no members to manage and cannot be left:
+   * a member removing someone, an owner removed or leaving. Nothing was
+   * written.
+   */
+  NOT_PERMITTED: "not-permitted",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

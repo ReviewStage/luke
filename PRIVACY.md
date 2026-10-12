@@ -260,7 +260,12 @@ the GitHub account it is installed on and holding you as its owner, and keeps
 beside it GitHub's ids for the installation and that account, its login,
 whether it is a user or an organization, and whether the installation is
 active, suspended, or removed. An installation another Luke account already
-has a workspace for is offered to you to join and never joined for you. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
+has a workspace for is offered to you to join and never joined for you;
+before you join one, the service asks GitHub, on your own GitHub
+authorization, whether you still reach that installation. Every member of a
+workspace other than a personal one sees every other member's name, email
+address, and role in it, and an owner or an administrator of it can remove
+a member. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result; and the turn's model, token counts, and the ids of OpenAI's
