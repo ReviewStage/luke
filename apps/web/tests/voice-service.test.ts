@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { VOICE_SECONDS_OUTCOME } from "@sidecar/database/models/quota";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
@@ -14,7 +15,6 @@ import { EXCESS_KEYS, isRecord, isWireString, unparsedWire, type WireRecord } fr
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
-import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
   greetingCue,
   LIVE_CLIENT_EVENT,

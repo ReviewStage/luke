@@ -1,6 +1,6 @@
+import type { VoiceSecondsOutcome } from "@sidecar/database/models/quota";
 import type { LiveSessionTrace } from "@sidecar/voice/live-session";
 import type { HostedApiError } from "../core.js";
-import type { VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
  * What the service writes down about itself: status codes, close codes,

@@ -16,6 +16,7 @@
     "./models/hosted-store": "./src/models/hosted-store.js",
     "./models/ids": "./src/models/ids.js",
     "./models/message-reads": "./src/models/message-reads.js",
+    "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
     "./models/voice-writer": "./src/models/voice-writer.js",

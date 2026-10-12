@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { spendHostedMeter, utcDayKey } from "@sidecar/database/models/quota";
 import { user } from "@sidecar/database/schemas/auth";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { spendHostedMeter, utcDayKey } from "../server/hosted/quota";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
