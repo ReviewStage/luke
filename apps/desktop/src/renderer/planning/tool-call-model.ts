@@ -253,7 +253,7 @@ function inboxToolView(tool: string, input: WireValue | undefined): ToolCallView
     const post = inboxPostView(input);
     return {
       kind: CALL_KIND.INBOX_POST,
-      subject: post?.title ?? "",
+      subject: post === undefined ? "" : cardTitle(post.title),
       input:
         post === undefined
           ? input === undefined

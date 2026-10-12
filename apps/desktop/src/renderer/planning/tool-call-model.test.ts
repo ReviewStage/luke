@@ -208,7 +208,7 @@ test("a post to the inbox is a row naming its item, its context and options as t
     tool: "post_to_inbox",
     input: {
       key: "invite-queue",
-      title: "Which queue backs the invitations?",
+      title: "Which queue backs the `invite` emails?",
       kind: "choice",
       details: "Both work.",
       options: [{ label: "Postgres", detail: "One database." }, { label: "Redis" }],
@@ -217,7 +217,11 @@ test("a post to the inbox is a row naming its item, its context and options as t
     output: { status: "accepted", inbox: [] },
   });
   assert.equal(view.kind, CALL_KIND.INBOX_POST);
-  assert.equal(view.subject, "Which queue backs the invitations?");
+  assert.equal(
+    view.subject,
+    "Which queue backs the invite emails?",
+    "the title as plain words, as its card draws it",
+  );
   assert.deepEqual(view.input, {
     kind: TOOL_BLOCK.TEXT,
     text: "Both work.\n- Postgres (recommended) -- One database.\n- Redis",
