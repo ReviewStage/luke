@@ -29,9 +29,9 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * and older versions are read a page at a time from the list's foot.
  *
  * The view is one place in the window's history however many versions are
- * chosen in it, so Back returns to the plan as it was left, side panel and
- * all, and a restore that lands goes back the same way, where the window's
- * toast offers its Undo. Every row and the version beside them name what
+ * chosen in it, so Back returns to wherever it was opened from, the plan as
+ * it was left, side panel and all; a restore that lands leaves for the plan
+ * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
  * the plan held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
@@ -148,14 +148,12 @@ function useVersionKeys(
   }, [rows]);
 }
 
-/** The version history's page beside the list: the version chosen, or the state standing in its place. */
-function VersionPage({
-  plans,
-  onExit,
-}: {
-  plans: PlansControl;
-  onExit: () => void;
-}): React.JSX.Element {
+/**
+ * The version history's page beside the list: the version chosen, or the
+ * state standing in its place. A restore that lands leaves for the plan it
+ * restored, which is not always the one Back returns to.
+ */
+function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { history } = plans;
   if (history.viewing !== undefined) {
     return (
@@ -163,7 +161,7 @@ function VersionPage({
         history={history}
         viewing={history.viewing}
         shown={plans.shown}
-        onRestored={onExit}
+        onRestored={history.onClose}
       />
     );
   }
@@ -262,7 +260,7 @@ export function DesktopVersionHistory({
         <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
-        <VersionPage plans={plans} onExit={onExit} />
+        <VersionPage plans={plans} />
       </section>
     </div>
   );

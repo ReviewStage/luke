@@ -14,9 +14,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * read again whenever the plan is edited while it stands, so a save Luke
  * makes on a call lands at the head of the list as it lands in the
  * document. The newest revision, the plan as it stands, is chosen until the
- * developer chooses another; choosing one reads its content and the content
- * before it, and the version history draws what that revision changed until
- * it is left or another plan opens, and opens again on the newest. Restoring the version is the service's write; the
+ * developer chooses another, and a save landing meanwhile moves the view on
+ * to the new newest; choosing one reads its content and the content before
+ * it, and the version history draws what that revision changed until it is
+ * left or another plan opens, and opens again on the newest. Restoring the version is the service's write; the
  * plan it answers arrives in the document through main's view like any
  * other save, and the history reads again on it. A restore is undone by
  * restoring the version that stood before it, which the caller is handed to
@@ -92,12 +93,29 @@ interface HeldList {
   readonly list: HistoryList;
 }
 
-/** A version chosen on one plan, its content as read, and how many times it was asked for, so choosing one whose read failed reads it again. */
+/**
+ * A version chosen on one plan: its revision, none while the newest is
+ * followed, so a save landing moves the view onto it; its content as read and
+ * the revision that read was for; and how many times it was asked for, so
+ * choosing one whose read failed reads it again.
+ */
 interface HeldVersion {
   readonly planId: string;
-  readonly seq: number;
+  readonly seq: number | undefined;
   readonly read: VersionRead;
+  readonly readOf: number | undefined;
   readonly asked: number;
+}
+
+/** The version history opened on a plan: following the newest, nothing read yet. */
+function followingNewest(planId: string): HeldVersion {
+  return {
+    planId,
+    seq: undefined,
+    read: { kind: HISTORY_READ.READING },
+    readOf: undefined,
+    asked: 1,
+  };
 }
 
 /**
@@ -171,10 +189,10 @@ export function usePlanHistory(input: {
   if (version !== undefined && chosen === undefined) setVersion(undefined);
   const held = list !== undefined && list.planId === planId ? list.list : undefined;
   const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
-  // Until one is chosen, the plan as it stands is.
+  // Until one is chosen, the plan as it stands is, whichever revision that is now.
   const newest = revisions[0]?.seq;
-  if (reading && planId !== undefined && chosen === undefined && newest !== undefined) {
-    setVersion({ planId, seq: newest, read: { kind: HISTORY_READ.READING }, asked: 1 });
+  if (reading && planId !== undefined && chosen === undefined) {
+    setVersion(followingNewest(planId));
   }
 
   useEffect(() => {
@@ -207,7 +225,7 @@ export function usePlanHistory(input: {
     );
   }, [reading, planId, editedAt, retries]);
 
-  const seq = chosen?.seq;
+  const seq = chosen === undefined ? undefined : (chosen.seq ?? newest);
   const asked = chosen?.asked;
   useEffect(() => {
     if (planId === undefined || seq === undefined || asked === undefined) return;
@@ -216,7 +234,7 @@ export function usePlanHistory(input: {
     const land = (landed: VersionRead) => {
       if (read !== versionReads.current) return;
       setVersion((held) =>
-        held?.planId === planId && held.seq === seq ? { ...held, read: landed } : held,
+        held?.planId === planId ? { ...held, read: landed, readOf: seq } : held,
       );
     };
     latest.current.readRevision(planId, seq).then(
@@ -225,22 +243,24 @@ export function usePlanHistory(input: {
     );
   }, [planId, seq, asked, editedAt, name]);
 
-  // Choosing the version drawn again leaves it as it is, unless its read failed.
+  // Choosing the version drawn again leaves it as it is, unless its read
+  // failed; choosing the newest follows the newest from then on.
   const onSelect = useCallback(
     (chosenSeq: number) => {
       if (planId === undefined) return;
       setVersion((held) => {
-        const same = held?.planId === planId && held.seq === chosenSeq;
+        const same = held?.planId === planId && (held.seq ?? newest) === chosenSeq;
         if (same && held.read.kind !== HISTORY_READ.FAILED) return held;
         return {
           planId,
-          seq: chosenSeq,
+          seq: chosenSeq === newest ? undefined : chosenSeq,
           read: { kind: HISTORY_READ.READING },
+          readOf: undefined,
           asked: (same ? held.asked : 0) + 1,
         };
       });
     },
-    [planId],
+    [planId, newest],
   );
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
 
@@ -287,7 +307,12 @@ export function usePlanHistory(input: {
     viewing:
       chosen === undefined || line === undefined
         ? undefined
-        : { line, current: newest === line.seq, read: chosen.read },
+        : {
+            line,
+            current: newest === line.seq,
+            // A read made for the revision followed before a save moved it on is not this one's.
+            read: chosen.readOf === seq ? chosen.read : { kind: HISTORY_READ.READING },
+          },
     onSelect,
     onRetry,
     onLoadEarlier,

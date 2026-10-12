@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type PlanSummary } from "@sidecar/hosted/plan-wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -15,6 +16,7 @@ import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { PLANS_PAGE } from "./planning/planning-model";
+import { HISTORY_READ } from "./planning/use-plan-history";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 
 const ignore = () => undefined;
@@ -41,6 +43,22 @@ const EXPORTS: PlanSummary = {
   repository: null,
 };
 const EVERY_PLAN = [INVITATIONS, BILLING, EXPORTS];
+
+/** An older version of whichever plan's version history stands, read and drawn, with something to restore. */
+const OLDER_VERSION = {
+  line: {
+    seq: 1,
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: false },
+    startedAt: 1,
+    changes: 1,
+  },
+  current: false,
+  read: {
+    kind: HISTORY_READ.READY,
+    document: { body: "# Plan", assumptions: [] },
+    previous: null,
+  },
+} as const;
 
 /** What the window shows for a place: a Settings page's title, the new-plan page, a plan's version history, or the open plan's name. */
 const NEW_PLAN_PAGE = "new plan";
@@ -100,6 +118,9 @@ function Window({
     onLeavePlan: () => setOpen(undefined),
     onNewPlan: () => setOpen(undefined),
     history: versionHistoryControl({
+      viewing: OLDER_VERSION,
+      // A restore the service carries, which the shell leaves the version history on.
+      onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
       open: historyFor !== undefined && historyFor === shown,
       onOpen: (planId) => {
         setOpen(planId);
@@ -199,6 +220,20 @@ function openVersionHistory(plan: PlanSummary): void {
       (item) => item.textContent === "Version history",
     ),
   );
+}
+
+/** Restores the version drawn, answering the question it asks, and lets the restore land. */
+async function restoreVersion(): Promise<void> {
+  click(
+    [...document.body.querySelectorAll<HTMLButtonElement>(".version-page button")].find(
+      (button) => button.textContent === "Restore this version",
+    ),
+  );
+  const restore = [
+    ...document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+  ].find((button) => button.textContent === "Restore");
+  assert.ok(restore, "Restore asks first");
+  await act(async () => restore.click());
 }
 
 /** Turns to a Settings page from its page list. */
@@ -481,6 +516,23 @@ test("a version history opened from another plan's row opens over that plan, and
 
   pressEscape();
   assert.equal(where(), INVITATIONS.name);
+});
+
+test("a restore lands on the plan it restored, as Back would from its own plan, and on that plan though another was open", async () => {
+  show();
+  openPlan(INVITATIONS);
+  openVersionHistory(INVITATIONS);
+  await restoreVersion();
+  assert.equal(where(), INVITATIONS.name);
+  command("[");
+  assert.equal(where(), NEW_PLAN_PAGE, "the restore stepped back rather than visiting again");
+
+  openPlan(INVITATIONS);
+  openVersionHistory(BILLING);
+  await restoreVersion();
+  assert.equal(where(), BILLING.name);
+  command("[");
+  assert.equal(where(), VERSION_HISTORY);
 });
 
 test("an archived plan's version history goes back to the archived plan it was opened on", () => {

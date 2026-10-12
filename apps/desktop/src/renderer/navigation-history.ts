@@ -63,10 +63,21 @@ function sameStep(one: Place | undefined, other: Place): boolean {
 /**
  * The trail with the window standing on `place`. A step already standing is
  * the same trail, but for a Settings page turned, which the standing step
- * takes in place.
+ * takes in place. A plan's version history left for that plan, standing
+ * just behind it, is a step back to it rather than a visit, whichever door
+ * left it: a restore lands on the plan as Back would.
  */
 function visited(trail: Trail, place: Place): Trail {
   const standing = trail.places[trail.at];
+  const behind = trail.places[trail.at - 1];
+  if (
+    standing?.kind === PLACE_KIND.VERSION_HISTORY &&
+    place.kind === PLACE_KIND.PLAN &&
+    place.planId === standing.planId &&
+    sameStep(behind, place)
+  ) {
+    return { places: trail.places, at: trail.at - 1 };
+  }
   if (sameStep(standing, place)) {
     if (standing?.kind !== PLACE_KIND.SETTINGS || place.kind !== PLACE_KIND.SETTINGS) return trail;
     if (standing.view === place.view) return trail;

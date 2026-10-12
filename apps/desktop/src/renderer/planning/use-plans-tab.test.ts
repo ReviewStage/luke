@@ -364,6 +364,50 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a save landing while the version history stands moves the view on to it from the newest, and leaves an older version chosen where it is",
+  () =>
+    Effect.gen(function* () {
+      const head = { seq: 2 };
+      const editedAt = (at: number): PlanningView => ({
+        ...EDITED,
+        document: {
+          status: PLANNING_READ.READY,
+          plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true } },
+        },
+      });
+      const tab = mount(
+        { shown: true, planning: editedAt(20) },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({
+              revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
+            }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+
+      head.seq = 3;
+      tab.stand({ planning: editedAt(30) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 3, "the newest followed");
+      assert.equal(tab.control().history.viewing?.current, true);
+
+      act(() => tab.control().history.onSelect(2));
+      yield* landed;
+      head.seq = 4;
+      tab.stand({ planning: editedAt(40) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "an older version stays chosen");
+      assert.equal(tab.control().history.viewing?.current, false);
+    }),
+);
+
 test("another plan opening leaves the version history, and so does a notification's click onto an agent's tab", () => {
   const tab = mount({ shown: true, planning: EDITED });
   act(() => tab.control().history.onOpen(PLAN.id));
