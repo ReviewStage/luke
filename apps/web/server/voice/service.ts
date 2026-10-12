@@ -582,6 +582,7 @@ export class VoiceService {
             event: LOG_EVENT.SESSION_TRACE,
             trace: trace.kind,
             ...(trace.waitedMs === undefined ? undefined : { waitedMs: trace.waitedMs }),
+            ...(trace.reason === undefined ? undefined : { reason: trace.reason }),
           });
         },
       });
