@@ -40,7 +40,10 @@ import { codingAgentStatusOf } from "./status.js";
  * still writes the line when the turn receives it. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
- * first step. Who reaches eve is the caller's: the route holds the
+ * first step. The caller is any member of the plan's workspace, whose plan
+ * read gates the send and whose standing with GitHub is asked, while the
+ * line lands in the agent's conversation under the member who started it.
+ * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
  * exactly this message (`coder-host/channel.ts`). An archived plan's agents
@@ -84,7 +87,7 @@ const unstartedRefusal = (agent: CodingAgent) =>
       : HOSTED_REFUSAL.AGENT_NOT_READY,
   );
 
-/** Hands the line to the account's agent, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
+/** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: EveSessions,
   writer: Effect.Effect<StoreWriter>,
@@ -96,9 +99,10 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   HostedRefusal,
   SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
 > {
-  const target = { userId, conversationId: agent.conversationId };
+  // The line is written in the agent's conversation, which is its starter's whichever member sends it.
+  const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(
-    sentLineStands(userId, agent.conversationId, sentLineId(line.clientKey)),
+    sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
   const held = yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));

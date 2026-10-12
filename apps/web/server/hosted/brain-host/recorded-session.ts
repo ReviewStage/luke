@@ -97,6 +97,16 @@ export function recordedRuntimeSession(
   );
 }
 
+/** The account a standing conversation belongs to, which is whom its messages and turns are addressed under; nothing for a cleared or missing one. */
+export function conversationOwnerOf(
+  conversationId: string,
+): Effect.Effect<Option.Option<string>, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(
+    findConversationOwner(conversationId),
+    Option.map((row) => row.userId),
+  );
+}
+
 /** Whether a conversation stands and belongs to the account. */
 export function conversationOwnedBy(
   userId: string,

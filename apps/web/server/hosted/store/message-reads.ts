@@ -509,9 +509,15 @@ const LatestTurnRowSchema = Schema.Struct({
   usage: Schema.NullOr(TurnUsageColumnSchema),
 });
 
+/** A read of conversations by id, under the account that owns them, or by id alone (null) where the caller passed a gate of its own. */
+const ConversationsReadSchema = Schema.Struct({
+  userId: Schema.NullOr(Schema.String),
+  conversationIds: Schema.Array(Schema.String),
+});
+
 /** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
 const findLatestTurns = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Request: ConversationsReadSchema,
   Result: LatestTurnRowSchema,
   execute: ({ userId, conversationIds }) =>
     db
@@ -530,7 +536,12 @@ const findLatestTurns = SqlSchema.findAll({
         usage: turns.usage,
       })
       .from(turns)
-      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
+      .where(
+        and(
+          userId === null ? undefined : eq(turns.userId, userId),
+          inArray(turns.conversationId, [...conversationIds]),
+        ),
+      )
       .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
 });
 
@@ -580,9 +591,8 @@ export function turnUsagesOf(
   return findTurnUsages({ userId, conversationId });
 }
 
-/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
-export function latestTurnsOf(
-  userId: string,
+function latestTurnsRead(
+  userId: string | null,
   conversationIds: readonly string[],
 ): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
   if (conversationIds.length === 0) return Effect.succeed(new Map());
@@ -590,6 +600,25 @@ export function latestTurnsOf(
     findLatestTurns({ userId, conversationIds }),
     (rows) => new Map(rows.map((row) => [row.conversationId, row])),
   );
+}
+
+/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
+export function latestTurnsOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
+  return latestTurnsRead(userId, conversationIds);
+}
+
+/**
+ * The newest turn of each conversation named, whoever owns it, keyed by
+ * conversation. Only for ids a gate already read, such as the conversations
+ * of the coding agents a member's workspace reaches, which other members started.
+ */
+export function latestTurnsOfReached(
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
+  return latestTurnsRead(null, conversationIds);
 }
 
 const AwaitingLinesRowSchema = Schema.Struct({
@@ -647,7 +676,7 @@ export function noReceiptOfLine() {
  * received under another row (`noReceiptOfLine`) is not counted.
  */
 const countAwaitingLines = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Request: ConversationsReadSchema,
   Result: AwaitingLinesRowSchema,
   execute: ({ userId, conversationIds }) =>
     db
@@ -659,7 +688,7 @@ const countAwaitingLines = SqlSchema.findAll({
       .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(
         and(
-          eq(messages.userId, userId),
+          userId === null ? undefined : eq(messages.userId, userId),
           inArray(messages.conversationId, [...conversationIds]),
           eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
@@ -700,9 +729,8 @@ export function sentLineStands(
   return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
 }
 
-/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
-export function awaitingLinesOf(
-  userId: string,
+function awaitingLinesRead(
+  userId: string | null,
   conversationIds: readonly string[],
 ): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
   if (conversationIds.length === 0) return Effect.succeed(new Set());
@@ -710,6 +738,21 @@ export function awaitingLinesOf(
     countAwaitingLines({ userId, conversationIds }),
     (rows) => new Set(rows.filter((row) => row.lines > 0).map((row) => row.conversationId)),
   );
+}
+
+/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
+export function awaitingLinesOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
+  return awaitingLinesRead(userId, conversationIds);
+}
+
+/** The conversations among those named, whoever owns them, in which a developer's line awaits its turn; only for ids a gate already read, as `latestTurnsOfReached`. */
+export function awaitingLinesOfReached(
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
+  return awaitingLinesRead(null, conversationIds);
 }
 
 /** A turn row is mutable, so its order is the latest instant any of its stamps was set. */

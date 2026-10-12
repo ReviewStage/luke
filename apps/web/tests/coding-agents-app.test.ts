@@ -118,7 +118,7 @@ import {
   type RepositoryScript,
 } from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -1775,6 +1775,55 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         yield* updatePlan(owner, plan.id, { archived: false });
         yield* sent("Rename it.");
         assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a member of the plan's workspace lists, reads, and messages an agent a teammate started, the line landing in the starter's conversation",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { other, plan, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const asOther = (text: string) =>
+          ask(messageAs(other, agent.id, { text, clientKey: randomUUID() }));
+        assert.deepEqual(
+          yield* asOther("Before I joined."),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        yield* joinWorkspace(plan.workspaceId, other);
+
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, other, { id: plan.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map((each) => [each.id, each.status]),
+          [[agent.id, CODING_AGENT_STATUS.COMPLETED]],
+        );
+        const read = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
+        );
+        assert.deepEqual(userTexts(read), [planMarkdown(SAVED)]);
+
+        const sent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* asOther("Rename the subject line too."),
+        );
+        assert.equal(sent.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[`Bearer ${other}`, sessionId]],
+        );
+        assert.deepEqual(yield* transcript(), {
+          lines: [planMarkdown(SAVED), "Rename the subject line too."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
       }),
   );
 

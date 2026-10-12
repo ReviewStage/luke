@@ -27,7 +27,8 @@ nothing on it writes what you said or what he spoke to disk. The reads of
 those words back are a plan's side panel tabs: while the plan is open, Luke
 on your Mac reads what was said on the plan's calls from our service for the
 Transcript tab, the spoken words alone and never his judgment's record, and,
-for each coding agent you started on the plan, that agent's transcript for
+for each coding agent started on the plan, by you or another member of its
+workspace, that agent's transcript for
 its own tab, its words, reasoning summaries, and tool calls with their
 output, read while the tab is showing and the agent runs; both are held in
 the window's memory to show them and go when you leave the plan or quit
@@ -59,7 +60,8 @@ fixture or evidence run keeps no conversation at all.
 your account, in a workspace: your personal workspace unless you start it in
 another workspace you are a member of, and the plan records which. Every
 member of that workspace can read, change, and delete the plan, its board,
-and its history, and read what was said on its calls, yours included. It
+and its history, read what was said on its calls, yours included, and read,
+message, rename, and stop the coding agents any member started on it. It
 stores the plan's name and its one document, a Markdown body and a list of
 assumptions, written by the planning call's notetaker as you talk and by you,
 when you edit a section of it in Luke. An edit you make is sent to our service
