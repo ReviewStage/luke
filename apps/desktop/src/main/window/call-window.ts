@@ -128,10 +128,23 @@ export class CallWindow implements CallWindowSurface {
     });
     window.on("moved", () => {
       const [left, top] = window.getPosition();
-      fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+      try {
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+      } catch {
+        // Note that a place that cannot be kept is let go of, because the
+        // card opening at its corner next time costs nothing, and a throw
+        // from this listener would take the process, and the call, with it.
+      }
     });
+    // A renderer that dies after it drew is stood back up at once while the
+    // card is wanted, since the presence tells this window nothing more
+    // until the call's standing moves. One that dies before it ever drew
+    // waits for the next show, so a renderer that cannot load never loops.
     window.webContents.on("render-process-gone", () => {
-      if (window === this.#window) this.close();
+      if (window !== this.#window) return;
+      const reopen = this.#wanted && this.#ready;
+      this.close();
+      if (reopen) this.show();
     });
     void window.loadFile(this.#options.rendererHtmlPath);
     return window;

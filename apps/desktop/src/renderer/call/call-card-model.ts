@@ -78,6 +78,22 @@ export function callCard(input: {
 }
 
 /**
+ * The plan whose call bar this window has on screen, or none: the Plans tab
+ * on a plan's document, unless its version history or a side panel filling
+ * the window covers the column the call bar stands in.
+ */
+export function callBarPlanId(input: {
+  plansTab: boolean;
+  documentPage: boolean;
+  historyOpen: boolean;
+  sidePanelFullScreen: boolean;
+  activePlanId: string | undefined;
+}): string | undefined {
+  const covered = input.historyOpen || input.sidePanelFullScreen;
+  return input.plansTab && input.documentPage && !covered ? input.activePlanId : undefined;
+}
+
+/**
  * Whether a Luke window draws the card: a call in progress, the window has
  * the keyboard, and the plan it shows is not the call's, where the call bar
  * already is. A window without the keyboard leaves the call to the floating

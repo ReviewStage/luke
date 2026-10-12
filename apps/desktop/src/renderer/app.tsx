@@ -15,7 +15,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
-import { callCard, callCardShown } from "./call/call-card-model";
+import { callBarPlanId, callCard, callCardShown } from "./call/call-card-model";
 import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
@@ -231,13 +231,17 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
-  // The call card, while this window has the keyboard and shows anything but
-  // the call's plan: another plan, the new-plan page, Settings.
+  // The call card, while this window has the keyboard and its call bar is not
+  // on screen: another plan, the new-plan page, Settings, or the plan itself
+  // under its version history or a side panel filling the window.
   const focused = useWindowFocused();
-  const planShown =
-    tab === PANEL_TAB.PLANS && plans.page === PLANS_PAGE.DOCUMENT
-      ? state?.planning.activePlanId
-      : undefined;
+  const planShown = callBarPlanId({
+    plansTab: tab === PANEL_TAB.PLANS,
+    documentPage: plans.page === PLANS_PAGE.DOCUMENT,
+    historyOpen: plans.history.open,
+    sidePanelFullScreen: plans.sidePanel.fullScreen,
+    activePlanId: state?.planning.activePlanId,
+  });
   const call: CallCardInput | undefined =
     !accountGated && callCardShown({ view: voiceView, focused, planShown })
       ? {
