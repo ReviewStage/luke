@@ -342,9 +342,11 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
     "the effort dimmed after the model",
   );
   assert.equal(done.querySelector("[data-subagent-pair] .provider-mark"), null, "no mark");
-  const answered = done.querySelector('[data-tool-state="output-available"]');
-  assert.equal(answered?.getAttribute("aria-label"), "Completed");
-  assert.equal(answered?.childElementCount, 0, "no check drawn");
+  assert.equal(
+    done.querySelector("[data-tool-state]")?.outerHTML,
+    undefined,
+    "no mark and no seat for one",
+  );
   assert.ok(done.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'), "Clawd");
   assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
@@ -700,14 +702,14 @@ test("a finished turn's fold names its subagents apart from its calls, a worker 
   );
 });
 
-test("each row says what the call did and where it stands, and the icon and mark are 16px", () => {
+test("each row says what the call did and where it stands, a finished call with no mark, and the icon and mark are 16px", () => {
   const markup = unfolded([TURN]).innerHTML;
   assert.match(
     markup,
     /Read <\/span><span[^>]*>\/workspace\/repository\/apps\/web\/server\/routes\/invite\.ts</u,
   );
   assert.match(markup, /Edited <\/span><span[^>]*>apps\/web\/server\/db\/schema\.ts</u);
-  assert.match(markup, /data-tool-state="output-available"[^>]*aria-label="Completed"><\/span>/u);
+  assert.doesNotMatch(markup, /data-tool-state="output-available"/u);
   assert.match(
     markup,
     /data-tool-state="input-available"[^>]*aria-label="Running"><span class="spinner-ring/u,
@@ -910,7 +912,11 @@ test("each kind of part is drawn by its AI Elements component: the plan a card, 
   // Each tool call is one Tool row with its input and output under it.
   const rows = [...log.querySelectorAll("details[data-call-id]")];
   assert.equal(rows.length, 4);
-  for (const row of rows) assert.ok(row.querySelector("summary [data-tool-state]"));
+  // Only a call still running or failed wears a mark; one that ended well draws none.
+  assert.deepEqual(
+    rows.map((row) => row.querySelector("summary [data-tool-state]")?.getAttribute("aria-label")),
+    [undefined, undefined, "Running", "Failed"],
+  );
   // The reasoning is one Reasoning fold under its line.
   const thoughts = [...log.querySelectorAll("details")].filter(
     (fold) => fold.querySelector("summary")?.textContent === "Thought",

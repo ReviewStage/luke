@@ -606,7 +606,7 @@ test("a worker's line in the Work tab is one button saying where the subagent st
   const work = page.querySelector('section[aria-label="Work"]');
   assert.ok(work);
   const lines = [...work.querySelectorAll<HTMLElement>("[data-subagent-row]")];
-  // Each line is the one button: its job, and the state mark every call's row wears.
+  // Each line is the one button: its job, and the state mark a call's row wears while it runs.
   assert.deepEqual(
     lines.map((line) => [
       line.tagName,
@@ -615,7 +615,7 @@ test("a worker's line in the Work tab is one button saying where the subagent st
     ]),
     [
       ["BUTTON", running, "Running"],
-      ["BUTTON", done, "Completed"],
+      ["BUTTON", done, undefined],
     ],
   );
   assert.equal(work.querySelector('[aria-label="Open in tab"]'), null);
