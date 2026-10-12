@@ -4,9 +4,11 @@ import {
   type CodingAgent,
   latestTurnsOfReached,
   listCodingAgents,
+  listPublishedCodingAgents,
   readCodingAgent,
 } from "@sidecar/database/models/coding-agent-store";
 import { listJournals } from "@sidecar/database/models/message-reads";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import {
   CODING_AGENT_BOUNDS,
@@ -14,6 +16,9 @@ import {
   type CodingAgentFailure,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
+  ROLLOUT_ROLE,
+  type RolloutRole,
+  rolloutRoleSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import { modelLabel } from "@sidecar/hosted/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
@@ -44,6 +49,7 @@ import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 import type { HostedRefusal } from "./http-effect.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
+import { ROLLOUT_BASE_REFUSAL, rolloutBaseBranchOf } from "./plan-agents.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
@@ -70,6 +76,15 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * the agent's brief, or the developer's task in its place, on the model and
  * effort the developer named or else the account's default, checked against
  * the catalog, whose choices the refusal lists so Luke can ask or try again.
+ * A start at a position of the plan's rollout is that pull request's builder,
+ * handed its brief and based on the branch the builder below it published,
+ * read off the rows by the rule the standing context's ready line reads
+ * (`plan-agents.ts`), so Luke never names a branch; a start of role keeper,
+ * at no position and with no task, is the rollout's one stack keeper. A
+ * position the rollout does not name, one a live builder holds, one whose
+ * base is not open yet, a second live keeper, a keeper of a plan with no
+ * rollout, and a role its position or task contradicts are each refused in words that say what to do instead.
+ * The list and the read say each agent's role, and a builder's position.
  * Every answer is data the model reads, never a credential: a call's input
  * is named and its output never, since a command's output is the
  * repository's own text and whatever the agent's shell printed.
@@ -118,6 +133,22 @@ export const START_CODING_AGENT_REFUSAL = {
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
   ARCHIVED: "Not started: this plan is archived; the developer unarchives it first.",
+  NOT_IN_ROLLOUT:
+    "Not started: the plan's rollout names no pull request at that position; the [rollout] " +
+    "lines name the positions there are.",
+  POSITION_TAKEN:
+    "Not started: a live builder already holds that position; message it with " +
+    "message_coding_agent, or start the position again once that builder has failed or stopped.",
+  BASE_NOT_OPEN:
+    "Not started: the pull request this one bases on is not open yet; start this position " +
+    "once the builder below has opened it and it shows under Ready to start.",
+  KEEPER_TAKEN:
+    "Not started: the rollout already has a live stack keeper; message it with " +
+    "message_coding_agent, or start the keeper again once it has failed or stopped.",
+  NO_ROLLOUT:
+    "Not started: the plan has no rollout yet, so there is no stack for a keeper to keep.",
+  ROLE_MISMATCH:
+    "Not started: a builder needs its position, and the keeper takes no position and no task.",
 } as const;
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
@@ -125,7 +156,17 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.PLAN_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
+  // The role is checked before the start, so invalid is a position past a rollout cut shorter since.
+  [HOSTED_API_ERROR.INVALID_REQUEST, START_CODING_AGENT_REFUSAL.NOT_IN_ROLLOUT],
+  [HOSTED_API_ERROR.POSITION_TAKEN, START_CODING_AGENT_REFUSAL.POSITION_TAKEN],
+  [HOSTED_API_ERROR.KEEPER_TAKEN, START_CODING_AGENT_REFUSAL.KEEPER_TAKEN],
 ]);
+
+/** The start refusal's sentence for each reason a position cannot start on its base. */
+const ROLLOUT_BASE_REFUSAL_WORDS = {
+  [ROLLOUT_BASE_REFUSAL.NOT_IN_ROLLOUT]: START_CODING_AGENT_REFUSAL.NOT_IN_ROLLOUT,
+  [ROLLOUT_BASE_REFUSAL.BASE_NOT_OPEN]: START_CODING_AGENT_REFUSAL.BASE_NOT_OPEN,
+} as const;
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
 const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -189,6 +230,20 @@ const START_CODING_AGENT_INPUT = Schema.Struct({
       "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
     ),
   ),
+  position: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+      "The pull request of the plan's rollout the agent builds, counted from one as the " +
+        "[rollout] lines number it; leave it out for an agent outside the rollout.",
+    ),
+  ),
+  role: Schema.optionalKey(
+    describeWire(
+      rolloutRoleSchema,
+      "What the agent does for the plan's rollout: builder, which a position already implies, " +
+        "or keeper, the one stack keeper, started with no position and no task.",
+    ),
+  ),
 });
 
 const readAgentRef = Schema.decodeUnknownResult(READ_CODING_AGENT_INPUT);
@@ -203,8 +258,8 @@ export const LIST_CODING_AGENTS_TOOL = {
     "developer sees it named), the model and effort it runs on with the model's name to say it " +
     "by, its status (starting, running, " +
     "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, one " +
-    "line of what it last did, and its position where it works one pull request of the " +
-    "plan's rollout. Call it when the developer asks about or addresses an agent, to " +
+    "line of what it last did, and its role in the plan's rollout where it has one: builder, " +
+    "with the position of the pull request it builds, or keeper. Call it when the developer asks about or addresses an agent, to " +
     "find which one they mean.",
   inputSchema: Schema.Struct({}),
 } as const;
@@ -233,7 +288,11 @@ export const START_CODING_AGENT_TOOL = {
   name: AGENT_TOOL.START_CODING_AGENT,
   description:
     "Start a new coding agent on this plan, exactly as the developer's Start button would: " +
-    "on the plan itself with no task, or on the task given in the plan's place. It runs on the " +
+    "on the plan itself with no task, or on the task given in the plan's place. With a " +
+    "position it is that pull request's builder in the rollout, handed the pull request's " +
+    "brief rather than the plan and based on the branch of the pull request below it, which " +
+    "must be open. With role keeper and no position or task it is the rollout's one stack " +
+    "keeper, handed the stacks to keep. It runs on the " +
     "model and effort named, or on the developer's default with neither. Answers `accepted` " +
     "with the agent's id, model, the model's name to say it by, effort, and status once its " +
     "session is open, or `rejected` " +
@@ -328,7 +387,9 @@ interface AgentReading {
   readonly repository: string;
   readonly branch: string | null;
   readonly activity: string | null;
-  /** The pull request of the plan's rollout it works, counted from one; absent for an agent started outside the rollout. */
+  /** What it does for the plan's rollout; absent for an agent started outside the rollout. */
+  readonly role?: RolloutRole;
+  /** The pull request of the plan's rollout it builds, counted from one; absent for any agent but a builder. */
   readonly position?: number;
 }
 
@@ -397,6 +458,7 @@ const readAgent = (
       repository: agent.repository,
       branch: agent.branch,
       activity: activity ?? null,
+      ...(agent.role === null ? undefined : { role: agent.role }),
       ...(agent.position === null ? undefined : { position: agent.position }),
     };
   });
@@ -549,6 +611,21 @@ export function runMessageCodingAgent(
   );
 }
 
+/** The call's plan's rollout; none where the plan cannot be found. */
+const rolloutOf = (call: CodingAgentCall) =>
+  Effect.map(readPlan(call.plan.userId, call.plan.planId), (stored) =>
+    Option.match(stored, { onNone: () => [], onSome: (plan) => plan.plan.rollout }),
+  );
+
+/** The branch the builder at the position bases on, read off the call's plan and its builders' rows. */
+const rolloutBaseOf = (call: CodingAgentCall, position: number) =>
+  Effect.gen(function* () {
+    const { userId, planId } = call.plan;
+    const rollout = yield* rolloutOf(call);
+    const agents = yield* listPublishedCodingAgents(userId, [planId]);
+    return rolloutBaseBranchOf(rollout, position, agents);
+  });
+
 /** One call of `start_coding_agent`: an agent started on the call's plan under the call's own key, or why nothing was started. */
 export function runStartCodingAgent(
   call: CodingAgentCall,
@@ -562,18 +639,36 @@ export function runStartCodingAgent(
   ) {
     return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { task, model, effort } = asked.success;
+  const { task, model, effort, position, role } = asked.success;
+  // A position makes a builder; the keeper stands at none and is handed its own brief, not a task.
+  if (
+    (role === ROLLOUT_ROLE.BUILDER && position === undefined) ||
+    (role === ROLLOUT_ROLE.KEEPER && (position !== undefined || task !== undefined))
+  ) {
+    return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.ROLE_MISMATCH));
+  }
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const eve = call.eve;
   if (eve === undefined) return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
   return orStoreRefusal(
     Effect.gen(function* () {
       const { userId, planId } = call.plan;
+      // A keeper of no rollout would keep nothing, which the start would answer only as invalid.
+      if (role === ROLLOUT_ROLE.KEEPER && (yield* rolloutOf(call)).length === 0) {
+        return rejected(START_CODING_AGENT_REFUSAL.NO_ROLLOUT);
+      }
+      const base = position === undefined ? undefined : yield* rolloutBaseOf(call, position);
+      if (base !== undefined && Result.isFailure(base)) {
+        return rejected(ROLLOUT_BASE_REFUSAL_WORDS[base.failure]);
+      }
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         planId,
         idempotencyKey: call.clientKey,
         choice,
         task,
+        position,
+        baseBranch: base?.success,
+        role,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;
