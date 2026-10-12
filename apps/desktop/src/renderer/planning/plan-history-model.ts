@@ -452,3 +452,60 @@ export function versionDiff(
     assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);
   return { units, assumptions, changed };
 }
+
+/** One section a revision changed, as its drill-in lists it: the unit of the version it is, its heading, and how it changed. */
+export interface ChangedSection {
+  /** Where the section stands among the version's units, which is how the page draws it alone. */
+  readonly unit: number;
+  readonly heading: string;
+  readonly change: Exclude<VersionChange, typeof VERSION_CHANGE.SAME>;
+}
+
+/** A unit that is a title line alone, the `# name` a body of the template's fields opens with, which no writer wrote. */
+const BARE_TITLE_LINE = /^#[^\S\n]+[^\n]*$/u;
+
+/**
+ * The sections a revision changed, in reading order: each unit of its diff
+ * that is not the same as before, so the list names what the page marks,
+ * and for a plan of the template's fields, its assumptions as one section
+ * after them where they changed, drawn by the unit just past the last. A
+ * revision with nothing before it, the plan's first, wrote every section
+ * it holds but a title line alone, which is the plan's name rather than
+ * anything written. Note that a revision is one writer's saves joined, and
+ * the store keeps only the text they left, so a section is the finest step
+ * a revision can be read in.
+ */
+export function changedSections(diff: VersionDiff, first: boolean): readonly ChangedSection[] {
+  const units = diff.units.flatMap((unit, at): ChangedSection[] => {
+    if (first && BARE_TITLE_LINE.test(unit.words.trim())) return [];
+    const change = first ? VERSION_CHANGE.ADDED : unit.change;
+    if (change === VERSION_CHANGE.SAME) return [];
+    return [{ unit: at, heading: unit.key, change }];
+  });
+  const assumptions = first
+    ? diff.assumptions.length > 0
+    : diff.assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);
+  if (!assumptions) return units;
+  return [
+    ...units,
+    {
+      unit: diff.units.length,
+      heading: PLAN_HEADING.ASSUMPTIONS,
+      change: first ? VERSION_CHANGE.ADDED : VERSION_CHANGE.CHANGED,
+    },
+  ];
+}
+
+/** Whether a revision's row opens the sections it changed: one whose saves made more than one change, never a restore or the plan before history. */
+export function opensSections(line: PlanRevisionLine): boolean {
+  return (
+    line.changes > 1 &&
+    line.restoredFrom === undefined &&
+    line.lastEdit.actor !== PLAN_ACTOR.EARLIER
+  );
+}
+
+/** What a section is called in a revision's list: its heading, or Opening for the words before the document's first heading. */
+export function sectionName(heading: string): string {
+  return heading === "" ? "Opening" : heading;
+}
