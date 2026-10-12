@@ -129,6 +129,9 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
+/** Archives the plan the mounted window draws, as another window or Mac would. */
+let archive: (() => void) | undefined;
+
 /** The plan as the window draws it, its document as the service holds it now, archived where asked. */
 function planOf(document: PlanDocument, archived: boolean): Plan {
   return {
@@ -151,6 +154,8 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, 
   function Window() {
     const sidebar = useSidebarCollapse(false);
     const [open, setOpen] = useState(true);
+    const [archivedNow, setArchivedNow] = useState(archived);
+    archive = () => setArchivedNow(true);
     const history = usePlanHistory({
       source: service.source,
       planId: PLAN_ID,
@@ -165,7 +170,7 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, 
     const plans = plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
-      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current, archived) },
+      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current, archivedNow) },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
     });
     return createElement(DesktopVersionHistory, {
@@ -454,6 +459,23 @@ it.effect("an archived plan's versions are read, and none of them offers a resto
     assert.equal(chosen(page), "Luke");
     assert.equal(restoreButton(page), undefined);
   }),
+);
+
+it.effect(
+  "a restore's question still standing when the plan is archived elsewhere is taken down",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const page = yield* mount(service, yield* registryOnTestClock);
+      yield* press(page, "Luke1d4 changes");
+      yield* press(page, "Restore this version");
+      assert.ok(document.querySelector('[role="alertdialog"]'), "the question stands");
+
+      yield* Effect.promise(() => act(async () => archive?.()));
+
+      assert.equal(document.querySelector('[role="alertdialog"]'), null);
+      assert.equal(service.current, LATEST);
+    }),
 );
 
 it.effect("Back leaves the version history for the plan", () =>
