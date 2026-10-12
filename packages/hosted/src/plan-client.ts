@@ -76,7 +76,12 @@ import {
   planTreePath,
   planWorkPath,
 } from "./service-paths.js";
-import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
+import {
+  HOSTED_API_ERROR,
+  type HostedApiError,
+  hostedErrorSchema,
+  readServiceAnswer,
+} from "./service-wire.js";
 import { type PlanTranscript, planTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
@@ -125,7 +130,7 @@ function refusedAs<Failure extends PlanCallFailure>(
   payload: UnparsedWireValue,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
 ): PlanCallResult<never, Failure | typeof PLAN_CALL_FAILURE.UNANSWERED> {
-  const refusal = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
+  const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
@@ -173,7 +178,7 @@ export class HostedPlanClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const opened = Result.getOrUndefined(readEither(planAnswerSchema)(payload));
+        const opened = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
         return opened === undefined ? UNANSWERED : succeeded(opened.plan);
       }
       return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND });
@@ -212,7 +217,7 @@ export class HostedPlanClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const edited = Result.getOrUndefined(readEither(planEditAnswerSchema)(payload));
+        const edited = Result.getOrUndefined(readServiceAnswer(planEditAnswerSchema)(payload));
         return edited === undefined ? UNANSWERED : succeeded(edited);
       }
       return refusedAs(payload, {
@@ -242,7 +247,9 @@ export class HostedPlanClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const listed = Result.getOrUndefined(readEither(githubRepositoriesAnswerSchema)(payload));
+        const listed = Result.getOrUndefined(
+          readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
+        );
         return listed === undefined ? UNANSWERED : succeeded(listed);
       }
       return refusedAs(payload, {
@@ -274,7 +281,7 @@ export class HostedPlanClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const changed = Result.getOrUndefined(readEither(planAnswerSchema)(payload));
+        const changed = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
         return changed === undefined ? UNANSWERED : succeeded(changed.plan);
       }
       return refusedAs(payload, REPOSITORY_REFUSALS);
@@ -519,7 +526,7 @@ export class HostedPlanClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const started = Result.getOrUndefined(readEither(planAnswerSchema)(payload));
+        const started = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
         return started === undefined ? UNANSWERED : succeeded(started.plan);
       }
       return refusedAs(payload, REPOSITORY_REFUSALS);

@@ -1,5 +1,4 @@
 import {
-  EXCESS_KEYS,
   HTTP_METHOD,
   type UnparsedWireValue,
   unparsedWire,
@@ -75,7 +74,12 @@ import {
   planAgentsPath,
   planInboxPath,
 } from "./service-paths.js";
-import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
+import {
+  HOSTED_API_ERROR,
+  type HostedApiError,
+  hostedErrorSchema,
+  readServiceAnswer,
+} from "./service-wire.js";
 
 /**
  * coding-agent-client.ts -- the window's side of a plan's coding agents, as the host asks the service for them.
@@ -153,7 +157,7 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
-  const refusal = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
+  const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   return failure === undefined ? UNANSWERED : { failure };
 }
@@ -173,7 +177,7 @@ function readAnswer<Answer, Encoded>(
   return Effect.map(jsonOf(answer.response), (body): Answer | Failed => {
     const payload = unparsedWire(body);
     if (!answer.response.ok) return refusedAs(payload, named);
-    const read = Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(payload));
+    const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
     return read === undefined ? UNANSWERED : read;
   });
 }

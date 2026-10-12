@@ -1,4 +1,5 @@
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { EXCESS_KEYS } from "@sidecar/wire";
+import { readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 
 /**
@@ -8,8 +9,9 @@ import { Schema as EffectSchema, SchemaTransformation } from "effect";
  * wire module beside this one.
  *
  * Every declaration below is composed directly as an Effect `Schema` and
- * exported under its own name: a caller reads one through `readEither` and
- * shows it through `emitJsonSchema`, both from `@sidecar/wire/effect`.
+ * exported under its own name: a caller reads a request through `readEither`,
+ * an answer through `readServiceAnswer` below, and shows either through
+ * `emitJsonSchema` from `@sidecar/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -105,10 +107,22 @@ export const writtenText = EffectSchema.String.check(
 export const countedNumber = EffectSchema.Finite.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
 /**
+ * Reads an answer of the service, or a frame it sent, dropping any key a
+ * newer service added rather than refusing the whole answer. Every desktop
+ * read of what the service answered goes through this, because a build that
+ * refused an unknown key — v0.11.0 reading a plan — stops working the day
+ * the service adds one. A request frame the desktop builds, an IPC act, and
+ * anything the service parses are read with `readEither` as declared,
+ * refusing a key they do not name.
+ */
+export const readServiceAnswer = <S extends EffectSchema.ConstraintDecoder<unknown>>(schema: S) =>
+  readEither(schema, { excess: EXCESS_KEYS.DROP });
+
+/**
  * An answer's records are plain structs: whether a key a newer service added
  * is dropped or refused is no longer the declaration's to state, so a reader
- * of one of these asks for it — `readEither(schema, { excess: EXCESS_KEYS.DROP })`
- * — and the option it passes reaches every struct nested inside.
+ * of one of these asks for it through {@link readServiceAnswer}, and the
+ * option it passes reaches every struct nested inside.
  */
 export const hostedQuotaSchema = EffectSchema.Struct({
   used: countedNumber,

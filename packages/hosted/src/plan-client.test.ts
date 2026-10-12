@@ -682,3 +682,51 @@ it.effect("a pin that names no repository never travels", () =>
     assert.deepEqual(api.requests(), []);
   }),
 );
+
+it.effect(
+  "an opened, started, changed, or edited plan reads whatever keys a newer service added, at the answer, the plan, and the document",
+  () =>
+    Effect.gen(function* () {
+      const newer = {
+        plan: { ...PLAN, document: { ...PLAN.document, outline: [] }, reviewers: [] },
+        servedBy: "a newer service",
+      };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}`]: { answer: () => newer },
+        "POST /api/plans": { answer: () => newer },
+        [`PATCH /api/plans/${PLAN_ID}`]: { answer: () => newer },
+        [`POST /api/plans/${PLAN_ID}/edit`]: { answer: () => newer },
+      });
+      const read = { ok: true, answer: PLAN };
+      const edit = { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." };
+
+      assert.deepEqual(yield* Effect.provide(client().open(PLAN_ID), api.layer), read);
+      assert.deepEqual(
+        yield* Effect.provide(client().create({ name: "Teammate invitations" }), api.layer),
+        read,
+      );
+      assert.deepEqual(
+        yield* Effect.provide(client().setRepository(PLAN_ID, null), api.layer),
+        read,
+      );
+      assert.deepEqual(yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer), {
+        ok: true,
+        answer: { plan: PLAN },
+      });
+    }),
+);
+
+it.effect("a refusal carrying more than its reason still reads as the refusal it names", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`GET /api/plans/${PLAN_ID}`]: {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND, requestId: "req_1" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const opened = yield* Effect.provide(client().open(PLAN_ID), api.layer);
+
+    assert.deepEqual(opened, { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND });
+  }),
+);

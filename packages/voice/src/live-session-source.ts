@@ -17,6 +17,7 @@ import {
   planCodeFrameFromWire,
   planDraftFrameFromWire,
   planWorkFrameFromWire,
+  readServiceAnswer,
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionCreateFrame,
@@ -38,7 +39,6 @@ import {
   type LiveVoice,
 } from "@sidecar/live";
 import {
-  EXCESS_KEYS,
   HTTP_STATUS,
   positiveInteger,
   text,
@@ -46,7 +46,6 @@ import {
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
 import {
   Clock,
   Data,
@@ -543,14 +542,13 @@ class ServiceLiveSessionSource {
     // quota it exhausted, and whatever a newer service adds — and v4 settles excess keys at the
     // read rather than on the declaration, so this read drops them instead of refusing the frame
     // and calling a refusal it can plainly name malformed.
-    const error = Result.getOrUndefined(
-      readEither(hostedErrorSchema, { excess: EXCESS_KEYS.DROP })(payload),
-    );
+    const error = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
     if (error) {
       if (error === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
         this.#quota =
-          Result.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(payload.quota))) ??
-          this.#quota;
+          Result.getOrUndefined(
+            readServiceAnswer(hostedQuotaSchema)(unparsedWire(payload.quota)),
+          ) ?? this.#quota;
       }
       this.#outcome.record(
         HOSTED_ERROR_OUTCOME.get(error) ?? LIVE_SESSION_OUTCOME.HTTP_ERROR,

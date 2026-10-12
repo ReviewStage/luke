@@ -307,6 +307,24 @@ it.live(
     }),
 );
 
+it.live(
+  "a quota refusal whose allowance carries a key a newer service added still reports the allowance",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering({
+          error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+          quota: { ...QUOTA, window: "day" },
+        }),
+      ]);
+      const source = hosted(script);
+
+      yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+
+      assert.deepEqual(source.diagnostics().quota, QUOTA);
+    }),
+);
+
 it.live("the hosted source treats a frame that is neither answer nor error as malformed", () =>
   Effect.gen(function* () {
     const answers = [
