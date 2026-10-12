@@ -366,13 +366,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         );
       }
       // macOS is asked now, while the developer is here to answer, rather
-      // than as the first agent ends behind the window.
-      if (
-        runMode.observesProviders &&
-        (settings?.stored.agentNotifications ?? APP_SETTING_SCHEMA.agentNotifications.default)
-      ) {
-        askForNotifications();
-      }
+      // than as the first agent ends behind the window. Note that it is
+      // asked whatever the setting says, because asking posts nothing and
+      // macOS asks only once, and a switch turned on later would otherwise
+      // leave its first notification to ask, and be refused.
+      if (runMode.observesProviders) askForNotifications();
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
