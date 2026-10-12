@@ -1,4 +1,12 @@
 import assert from "node:assert/strict";
+import {
+  CHECK_SUMMARY,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@sidecar/hosted/coding-agent-wire";
+import { ROLLOUT_BASE, type RolloutItem } from "@sidecar/hosted/plan-wire";
+import { REPORT_KIND, type Report, reportText } from "@sidecar/hosted/rollout-wire";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
@@ -19,12 +27,26 @@ import { user } from "../../server/db/auth-schema";
 import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { conversations } from "../../server/db/storage-schema";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
+import {
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_TURN,
+  type BrainHostTurn,
+} from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
+import {
+  createCodingAgent,
+  recordCodingAgentPublished,
+  updateCodingAgentBranch,
+} from "../../server/hosted/coding-agent-store";
+import {
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  START_CODING_AGENT_TOOL,
+} from "../../server/hosted/coding-agent-tools";
 import {
   createPlan,
   openPlanConversation,
@@ -33,6 +55,7 @@ import {
 } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
+import { cutRollout } from "../../tests/support/plan-rollouts";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import {
   SCRIPTED_CUT,
@@ -40,6 +63,7 @@ import {
   SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
+  SCRIPTED_RETARGET,
 } from "../scripted-model";
 
 /**
@@ -54,7 +78,12 @@ import {
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
- * they meet eve.
+ * they meet eve. A rollout worker's report opens a report turn on its
+ * plan's conversation, and the scripted model, which runs the rollout from
+ * the [rollout] lines its standing context carries, starts what the report
+ * made ready, answers a question, or tells the dependents of a merge to
+ * retarget; the eval holds the calls it made, which reach a plan with no
+ * repository and no coding-agent service and so change nothing.
  */
 
 const SHA256_HEX_LENGTH = 64;
@@ -78,6 +107,16 @@ const PLAN_WORDS = {
     "2, the invite route, on 1: green on the table with its route tests. " +
     "3, the invite email, on 1: it needs the table and not the route.",
 } as const;
+
+/** A rollout of three pull requests: the schema on main, and a route and a screen both on the schema. */
+const ROLLOUT: readonly RolloutItem[] = [
+  { title: "Schema", scope: "The invitation table.", base: ROLLOUT_BASE.MAIN, acceptance: null },
+  { title: "Route", scope: "POST /api/invitations.", base: 1, acceptance: null },
+  { title: "Screen", scope: "The invite dialog.", base: 1, acceptance: null },
+];
+
+/** The options the route's worker offers when it asks, the first of which the scripted model takes. */
+const ROUTE_OPTIONS = ["Reuse memberships", "A new invitations table"] as const;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
 const ACCEPTED_SESSION = Schema.Struct({ sessionId: Schema.String });
@@ -136,6 +175,51 @@ async function planDocument(run: Run, planId: string) {
   return stored.value.plan.document;
 }
 
+/** A worker's pull request as GitHub last answered it, in the state named. */
+function pullRequestIn(number: number, state: PullRequestState): CodingAgentPullRequest {
+  return {
+    number,
+    title: "Schema",
+    url: `https://github.com/acme/relay/pull/${number}`,
+    state,
+    checks: CHECK_SUMMARY.PENDING,
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+  };
+}
+
+/** A worker started at a position of the plan's rollout, with no turn yet, so it holds its position. */
+async function startWorker(run: Run, planId: string, position: number): Promise<string> {
+  const started = await run(
+    createCodingAgent(LOCAL_DEV_PRINCIPAL, {
+      planId,
+      idempotencyKey: `${planId}-worker-${position}`,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/relay",
+      planSnapshot: null,
+      task: `Pull request ${position}`,
+      position,
+    }),
+  );
+  assert.ok(Option.isSome(started));
+  return started.value.agent.id;
+}
+
+/** A plan holding the three-PR rollout, with the schema's worker's pull request #415 in the state named. */
+async function rolloutPlan(run: Run, schema: PullRequestState) {
+  const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+  await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
+  await run(cutRollout(plan.id, ROLLOUT));
+  const schemaWorker = await startWorker(run, plan.id, 1);
+  await run(updateCodingAgentBranch(LOCAL_DEV_PRINCIPAL, schemaWorker, "luke/invites/1-schema"));
+  await run(
+    recordCodingAgentPublished(LOCAL_DEV_PRINCIPAL, schemaWorker, pullRequestIn(415, schema)),
+  );
+  return plan;
+}
+
 export default defineEval({
   description:
     "A typed ask in a plan's conversation runs through eve, the relay, and the writer into the store.",
@@ -150,13 +234,17 @@ export default defineEval({
       await ensureLocalDevUser(run);
 
       /** A typed ask opening a new session over the conversation, answered once the session is its record. */
-      const openSession = async (conversationId: string, message: string) => {
+      const openSession = async (
+        conversationId: string,
+        message: string,
+        turn: BrainHostTurn = BRAIN_HOST_TURN.TYPED,
+      ) => {
         const opened = await t.target.fetch("/eve/v1/session", {
           method: "POST",
           headers: {
             "content-type": "application/json",
             [BRAIN_HOST_HEADER.CONVERSATION]: conversationId,
-            [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+            [BRAIN_HOST_HEADER.TURN]: turn,
           },
           body: JSON.stringify({ message }),
         });
@@ -298,6 +386,79 @@ export default defineEval({
             isTextUIPart(part) &&
             part.text === `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`,
         ),
+      );
+
+      /** A worker's report as a report turn on its plan's conversation, answered with the tool calls the model made in it. */
+      const reportTurn = async (planId: string, report: Report) => {
+        const conversationId = await planConversation(run, planId);
+        const opened = await openSession(
+          conversationId,
+          reportText(report),
+          BRAIN_HOST_TURN.REPORT,
+        );
+        const session = await t.target.attachSession(opened.sessionId);
+        session.succeeded();
+        const turn = await readTurnById(run, hostTurnId(opened.sessionId, "turn_0"));
+        assert.ok(turn);
+        assert.equal(turn.origin, TURN_ORIGIN.REPORT);
+        assert.equal(turn.status, TURN_STATUS.SETTLED);
+        const rows = await readMessagesByTurn(run, conversationId, turn.id);
+        return rows
+          .flatMap((row) => row.parts)
+          .filter((part) => isToolUIPart(part))
+          .map((part) => ({ type: part.type, input: part.input }));
+      };
+
+      // The schema's pull request opens, so the route and the screen, both on
+      // it, are ready to start: the model starts those two and nothing else.
+      const openedPlan = await rolloutPlan(run, PULL_REQUEST_STATE.OPEN);
+      assert.deepEqual(
+        await reportTurn(openedPlan.id, {
+          kind: REPORT_KIND.PR_OPENED,
+          position: 1,
+          pullRequest: 415,
+          text: "The invitation table is up for review.",
+        }),
+        [2, 3].map((position) => ({
+          type: `tool-${START_CODING_AGENT_TOOL.name}`,
+          input: { position },
+        })),
+      );
+
+      // The route's worker asks, offering two answers, and the model answers
+      // that worker with one of them.
+      const askedPlan = await rolloutPlan(run, PULL_REQUEST_STATE.OPEN);
+      const route = await startWorker(run, askedPlan.id, 2);
+      const asked = await reportTurn(askedPlan.id, {
+        kind: REPORT_KIND.QUESTION,
+        position: 2,
+        text: "Where do pending invitations live?",
+        options: [...ROUTE_OPTIONS],
+      });
+      assert.deepEqual(asked.at(-1), {
+        type: `tool-${MESSAGE_CODING_AGENT_TOOL.name}`,
+        input: { agentId: route, text: `Go with ${ROUTE_OPTIONS[0]}.` },
+      });
+
+      // The schema merges, so the route and the screen, both on it, are told
+      // to retarget to main, and nothing is started.
+      const mergedPlan = await rolloutPlan(run, PULL_REQUEST_STATE.MERGED);
+      const dependents = [
+        await startWorker(run, mergedPlan.id, 2),
+        await startWorker(run, mergedPlan.id, 3),
+      ];
+      const merged = await reportTurn(mergedPlan.id, {
+        kind: REPORT_KIND.MERGED,
+        position: 1,
+        pullRequest: 415,
+        text: "Squashed onto main.",
+      });
+      assert.deepEqual(
+        merged.filter((call) => call.type !== `tool-${LIST_CODING_AGENTS_TOOL.name}`),
+        dependents.map((agentId) => ({
+          type: `tool-${MESSAGE_CODING_AGENT_TOOL.name}`,
+          input: { agentId, text: SCRIPTED_RETARGET },
+        })),
       );
     } finally {
       await runtime.dispose();

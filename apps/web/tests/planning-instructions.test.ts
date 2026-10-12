@@ -7,6 +7,7 @@ import {
   ROLLOUT_NOTE_FIELD,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { REPORT_KIND, reportLine } from "@sidecar/hosted/rollout-wire";
 import { test } from "vitest";
 import {
   DEVELOPER_FIELDS_MARKER,
@@ -14,6 +15,7 @@ import {
   SCRIBE_INSTRUCTIONS,
   WORKER_INSTRUCTIONS,
 } from "../server/hosted/brain-host/planning";
+import { START_CODING_AGENT_REFUSAL } from "../server/hosted/coding-agent-tools";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 
 /**
@@ -85,5 +87,48 @@ test("the planning model proposes the rollout once interfaces, hard parts, and t
     "never restate it as prose",
   ]) {
     assert.ok(PLANNING_INSTRUCTIONS.includes(words), `the planning prompt says ${words}`);
+  }
+});
+
+/** The section of the planning prompt that runs a plan's rollout. */
+function rolloutSection(): string {
+  const start = PLANNING_INSTRUCTIONS.indexOf("### Running the rollout");
+  assert.ok(start >= 0, "the planning prompt runs the rollout");
+  return PLANNING_INSTRUCTIONS.slice(start, PLANNING_INSTRUCTIONS.indexOf("\n### ", start + 1));
+}
+
+test("the planning model is told what to do on every report a turn can open with, by the line the turn receives", () => {
+  const section = rolloutSection();
+  for (const kind of Object.values(REPORT_KIND)) {
+    const line = reportLine({ kind, position: 2, text: "" });
+    assert.ok(section.includes(`- \`${line}`), `the rollout section names ${kind}`);
+  }
+});
+
+test("the planning model is told every refusal a start at a position may answer, in the words the tool answers it with", () => {
+  const section = rolloutSection();
+  for (const refusal of [
+    START_CODING_AGENT_REFUSAL.NOT_IN_ROLLOUT,
+    START_CODING_AGENT_REFUSAL.POSITION_TAKEN,
+    START_CODING_AGENT_REFUSAL.BASE_NOT_OPEN,
+  ]) {
+    assert.ok(section.includes(`- "${refusal}": `), refusal);
+  }
+});
+
+test("the planning model starts what is ready on ship it, retargets dependents on a merge, merges only when the developer says, and builds nothing itself", () => {
+  const section = rolloutSection();
+  for (const rule of [
+    "ship it",
+    "start every position under Ready to start",
+    "`gh pr edit <number> --base main`",
+    "never merged unprompted",
+    "`gh pr merge <number> --squash`",
+    "Start the position again once",
+    "queue_question",
+    "act on, not to narrate",
+    "Never implement anything in this conversation",
+  ]) {
+    assert.ok(section.includes(rule), rule);
   }
 });

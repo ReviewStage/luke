@@ -13,6 +13,7 @@ import {
   ROLLOUT_PURPOSE,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD, type Plan } from "@sidecar/hosted/plan-wire";
+import { REPORT_KIND, type Report, reportLine } from "@sidecar/hosted/rollout-wire";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -33,6 +34,7 @@ import {
   runMessageCodingAgent,
   runReadCodingAgent,
   runStartCodingAgent,
+  START_CODING_AGENT_REFUSAL,
   START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
@@ -90,6 +92,92 @@ const PLAN_SECTIONS = [
   sectionLine(PLAN_HEADING.ROLLOUT, ROLLOUT_PURPOSE, ROLLOUT_BAR),
 ].join("\n");
 
+/** The worker and the pull request each example report line names. */
+const EXAMPLE_REPORT = { position: 2, pullRequest: 415 } as const;
+
+/**
+ * What Luke does on each kind of report, by the line the report turn opens
+ * with. A kind whose report names its pull request is shown with one; the
+ * ends a turn reports may have none.
+ */
+const REPORT_ACTION = {
+  [REPORT_KIND.PR_OPENED]: {
+    pullRequest: true,
+    action:
+      "its pull request is open, so a position based on it may now be under Ready to start. Start each position that is, and nothing else.",
+  },
+  [REPORT_KIND.CI_GREEN]: {
+    pullRequest: true,
+    action:
+      "its checks pass. If it is now under Ready to merge, queue a question offering the developer to merge it; never merge it unasked.",
+  },
+  [REPORT_KIND.REBASED]: {
+    pullRequest: true,
+    action: "it is on its new base. Nothing is yours to do unless the [rollout] lines changed.",
+  },
+  [REPORT_KIND.MERGED]: {
+    pullRequest: true,
+    action:
+      "it is on main. Tell each worker whose position bases on it, with message_coding_agent, to retarget its pull request to main with `gh pr edit <number> --base main`, rebase it onto the merge commit on main, push, and report `rebased`. Then start what became ready.",
+  },
+  [REPORT_KIND.QUESTION]: {
+    pullRequest: false,
+    action:
+      "the worker asks and waits. Answer it with message_coding_agent from the plan and the other pull requests' state. Where the answer is the developer's (it changes what the plan decided, a product choice, or an interface they settled), put it to them with queue_question, which Luke asks on this call or the next, and tell the worker it is with the developer.",
+  },
+  [REPORT_KIND.BLOCKED]: {
+    pullRequest: false,
+    action:
+      "the worker cannot go on. Unblock it the same way as a question: from the plan where you can, else through the developer.",
+  },
+  [REPORT_KIND.FINISHED]: {
+    pullRequest: false,
+    action:
+      "its turn ended. Nothing is yours to do when its pull request is open; when it ended with none, read it with read_coding_agent and put what stopped it to the developer.",
+  },
+  [REPORT_KIND.FAILED]: {
+    pullRequest: false,
+    action:
+      "its turn failed. Start the position again once with start_coding_agent; when list_coding_agents shows a worker at that position already failed before, start nothing and tell the developer instead.",
+  },
+  [REPORT_KIND.STOPPED]: {
+    pullRequest: false,
+    action: "the developer stopped it. Start nothing at that position until they ask.",
+  },
+} as const satisfies Record<Report["kind"], { pullRequest: boolean; action: string }>;
+
+/** Each report as the turn opens with it and what Luke does on it, for the planning model. */
+const REPORT_ACTIONS = Object.values(REPORT_KIND)
+  .map((kind) => {
+    const { pullRequest, action } = REPORT_ACTION[kind];
+    const report = { kind, position: EXAMPLE_REPORT.position, text: "" };
+    const line = reportLine(
+      pullRequest ? { ...report, pullRequest: EXAMPLE_REPORT.pullRequest } : report,
+    );
+    return `- \`${line}\`: ${action}`;
+  })
+  .join("\n");
+
+/** What Luke does on each refusal a start at a position may answer, by the refusal's own words. */
+const START_REFUSAL_ACTIONS = [
+  {
+    refusal: START_CODING_AGENT_REFUSAL.NOT_IN_ROLLOUT,
+    action:
+      "the rollout changed under you; read the [rollout] lines again and start only a position they name.",
+  },
+  {
+    refusal: START_CODING_AGENT_REFUSAL.POSITION_TAKEN,
+    action:
+      "a worker already holds it, so start no second one; message that worker if it needs telling.",
+  },
+  {
+    refusal: START_CODING_AGENT_REFUSAL.BASE_NOT_OPEN,
+    action: "wait; the position starts once the worker below reports its pull request opened.",
+  },
+]
+  .map(({ refusal, action }) => `- "${refusal}": ${action}`)
+  .join("\n");
+
 /**
  * The instructions a plan conversation's session runs under. "How to plan"
  * is adapted from Matt Pocock's grilling skill,
@@ -126,6 +214,13 @@ const PLAN_SECTIONS = [
  * the interfaces, hard parts, and testing hold, because what is cut by layer
  * before the interfaces are known has to be cut again, and it reaches the
  * plan only as the notetaker's rollout notes, never as this model's prose.
+ * Note that
+ * "Running the rollout" is the `orchestrate` skill's rules in Luke's voice,
+ * because Luke runs a plan's rollout as that skill's orchestrator does: it
+ * starts a worker per pull request, answers it, and tells it when to rebase
+ * and merge, and never builds anything itself. Each report line and each
+ * start refusal is shown in the words the turn receives, so the model reads
+ * the line it has and the action beside it rather than inferring one.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -237,6 +332,22 @@ On an instruction, send it when it is clear which agent is meant and what to say
 On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_coding_agent with no task to build the plan, or with the task in the developer's words where they named one instead, and the model and effort where they named them, else neither. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read and message.
 
 Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
+
+### Running the rollout
+
+The plan's rollout is the pull requests the work lands as, in order, each on main or on an earlier one. While it names more than one, the [rollout] lines in your standing context show each position's base, its worker, and its pull request, then the positions Ready to start and Ready to merge. The service works those out from the plan and the workers' rows, so read readiness off them and never work it out yourself. You run the rollout as a lead runs a stack of pull requests: one worker per pull request, started at its position, answered when it asks, told when to rebase and when to merge. Never implement anything in this conversation: the code is the workers'.
+
+When the developer says to ship it ("ship it", "roll it out", "start the rollout"), start every position under Ready to start with start_coding_agent, its position given and no task, on the model and effort they named, else neither, and say in one sentence which positions you started. With no [rollout] lines the plan is one pull request: start one agent on the plan as above.
+
+A worker reports to you as a turn of its own, opened by its report's first line, and the developer may be on no call. A report turn is yours to act on, not to narrate: act through the tools, then return in a sentence or two what you did, or that nothing was yours to do. Find a worker's id with list_coding_agents, which names each worker's position. On each report:
+
+${REPORT_ACTIONS}
+
+A pull request under Ready to merge is offered to the developer, never merged unprompted. When they say to merge it ("merge 1", "merge the schema one"), tell its worker with message_coding_agent to merge it with \`gh pr merge <number> --squash\` and report \`merged\`.
+
+A start at a position may be refused. On each refusal:
+
+${START_REFUSAL_ACTIONS}
 
 ### Available tools
 

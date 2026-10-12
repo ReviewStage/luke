@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_BRIEF, CODING_AGENT_REPORT_TOOL } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_REPLY, inboxAnswerMessage } from "@sidecar/hosted/inbox-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -356,6 +356,26 @@ test("a worker handed one pull request is told to read the whole plan, and one h
   assert.ok(worker.includes("Read it before you take a note with `edit_plan`"));
   assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false).includes("read_plan"));
   assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("read_plan"));
+});
+
+test("a rollout's worker is told to report each milestone of its pull request to Luke, when to ask him, and to keep small calls its own; an agent handed the plan or a task is told of no report", () => {
+  const worker = coderInstructions(STACKED_WORKER, CODING_AGENT_BRIEF.PULL_REQUEST, false);
+  for (const kept of [
+    `\`${CODING_AGENT_REPORT_TOOL}\``,
+    "the moment your pull request is open",
+    "when its checks are green",
+    "after you rebase it",
+    "after you merge it",
+    "when the brief and the code disagree",
+    "when the acceptance cannot be met",
+    "an interface another pull request of the rollout depends on",
+    "record them with `edit_plan`",
+  ]) {
+    assert.ok(worker.includes(kept), kept);
+  }
+  for (const brief of [CODING_AGENT_BRIEF.PLAN, CODING_AGENT_BRIEF.TASK]) {
+    assert.ok(!coderInstructions(RELAY_AGENT, brief, false).includes("Reporting to Luke"), brief);
+  }
 });
 
 test("the session is told to watch its pull request's checks for the bounded rounds where its token reads them, and that CI was not watched where it does not", () => {
