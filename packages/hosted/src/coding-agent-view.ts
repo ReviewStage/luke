@@ -12,6 +12,10 @@ import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.
 import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
+  planTemplateAnswerSchema,
+  planTemplateWriteRequestSchema,
+} from "./plan-document-template.js";
+import {
   PROVIDER_KEY_PROVIDER,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
@@ -39,6 +43,10 @@ import {
  * A clip dictated into an agent's message box travels here too, since the
  * box is an agent's: the clip and its words to listen for, and the text
  * back, or why there is none.
+ *
+ * The account's plan template travels here too, since it is the account's
+ * own on the service as the default and the keys are, and Settings asks for
+ * all three the same way: the template read, and one kept or reset.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -105,6 +113,16 @@ export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
+
+/** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
+export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);
+
+export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
+
+/** Writing the template, as the window asks it: the text to keep verbatim, or null for the default. */
+export const planTemplateWriteParamsSchema = planTemplateWriteRequestSchema;
+
+export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
 
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;

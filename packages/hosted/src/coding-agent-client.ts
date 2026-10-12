@@ -28,6 +28,8 @@ import {
   type CodingAgentPullRequestAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type PlanTemplateAnswerView,
+  type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -58,6 +60,10 @@ import {
   modelChoiceSchema,
   modelsAnswerSchema,
 } from "./models-wire.js";
+import {
+  planTemplateAnswerSchema,
+  planTemplateWriteRequestSchema,
+} from "./plan-document-template.js";
 import {
   PROVIDER_KEY_QUERY,
   providerKeySaveRequestSchema,
@@ -91,7 +97,9 @@ import {
  * read and the inbox read are the two calls the service holds open, for as
  * long as it waits on the agent's next message or the inbox's next change,
  * so they travel under a deadline of their own that outlasts that hold;
- * every other call keeps the account call's usual one.
+ * every other call keeps the account call's usual one. The account's plan
+ * template is read and written here too, as Settings asks for it beside
+ * the default and the keys.
  */
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
@@ -245,6 +253,34 @@ export class HostedCodingAgentClient {
         Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, DEFAULT_REFUSALS), (read) =>
           "failure" in read ? read : { choice: read.codingAgent },
         ),
+    );
+  }
+
+  /** The account's plan template: its own, or the default while it keeps none. */
+  readPlanTemplate(): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }),
+      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * The template kept verbatim, or the default again for null, answering it
+   * as then kept; a template past the bound is refused here without
+   * traveling at all.
+   */
+  writePlanTemplate(
+    params: PlanTemplateWriteParams,
+  ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planTemplateWriteRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
     );
   }
 

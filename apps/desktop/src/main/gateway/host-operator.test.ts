@@ -317,3 +317,32 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a plan template travels to the host as the method's template, a reset as null, and the host's answer reads with a key a newer host added dropped",
+  () =>
+    Effect.gen(function* () {
+      const requests: RecordedCall[] = [];
+      const client: GatewayClient = {
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            return { ok: true, result: carried({ template: "## Why\n", custom: true, at: 1 }) };
+          }),
+        on: () => () => undefined,
+      };
+      const operator = operatorOver(client);
+
+      const kept = yield* operator.planTemplateWrite({ template: "## Why\n" });
+      yield* operator.planTemplateWrite({ template: null });
+
+      assert.deepEqual(kept, { template: "## Why\n", custom: true });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: "## Why\n" }],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: null }],
+        ],
+      );
+    }),
+);

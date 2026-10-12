@@ -78,6 +78,7 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
+  [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
   [SETTINGS_VIEW.API_KEYS]: "API keys",
 } satisfies Record<SettingsView, string>;
@@ -155,6 +156,18 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
+    // The account's plan template, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.PLAN_TEMPLATE,
+          label: "Plan template",
+          page: SETTINGS_VIEW.PLAN_TEMPLATE,
+          haystack: [
+            "Plan template",
+            "new plan starter document markdown sections headings default",
+          ],
+        }
+      : undefined,
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {

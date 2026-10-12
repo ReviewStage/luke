@@ -23,7 +23,9 @@ import {
   codingAgentStopParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
+  type PlanTemplateAnswerView,
   type ProviderKeysAnswerView,
+  planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
@@ -37,7 +39,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, and the plan's inbox, one item of it answered.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, and the plan's inbox, one item of it answered.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -69,6 +71,8 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "readPlanTemplate"
+  | "writePlanTemplate"
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
@@ -142,6 +146,20 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.saveProviderKey(save));
         return carried<ProviderKeysAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_READ]: () =>
+      Effect.map(asked(client.readPlanTemplate()), (answer) =>
+        carried<PlanTemplateAnswerView>(answer),
+      ),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE]: (params) =>
+      Effect.gen(function* () {
+        const write = yield* read(
+          planTemplateWriteParamsSchema,
+          params,
+          "a template write names a template within the bound, or null for the default",
+        );
+        const answer = yield* asked(client.writePlanTemplate(write));
+        return carried<PlanTemplateAnswerView>(answer);
       }),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {

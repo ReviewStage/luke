@@ -46,9 +46,12 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
+  type PlanTemplateAnswerView,
+  type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
+  planTemplateAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -238,6 +241,10 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key removed; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** The account's plan template and whether it wrote it; or why there is none. */
+  planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
+  /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
+  planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
     params: DictationTranscribeParams,
@@ -683,6 +690,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    planTemplateRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ),
+        codingAgentAnswer(planTemplateAnswerViewSchema),
+      ),
+    planTemplateWrite: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: params.template }),
+        codingAgentAnswer(planTemplateAnswerViewSchema),
       ),
     dictationTranscribe: (params) =>
       Effect.map(

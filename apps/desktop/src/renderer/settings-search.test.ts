@@ -86,6 +86,17 @@ test("a row a page is not drawing is not offered", () => {
     searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "api key"),
   );
   assert.deepEqual(labels(signedOutKeys), [], "no key row without an account to hold it");
+
+  // The plan template is the account's on the service, so it is found on its page while one is signed in.
+  const template = found(searchSettings(hosted, "template"));
+  assert.deepEqual(
+    template.map((entry) => [entry.label, entry.page]),
+    [["Plan template", SETTINGS_VIEW.PLAN_TEMPLATE]],
+  );
+  const signedOutTemplate = found(
+    searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "template"),
+  );
+  assert.deepEqual(labels(signedOutTemplate), [], "no template without an account to hold it");
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {
