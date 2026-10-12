@@ -57,7 +57,9 @@ fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it under
 your account, in a workspace: your personal workspace unless you start it in
-another workspace you are a member of, and the plan records which. It
+another workspace you are a member of, and the plan records which. Every
+member of that workspace can read, change, and delete the plan, its board,
+and its history, and read what was said on its calls, yours included. It
 stores the plan's name and its one document, a Markdown body and a list of
 assumptions, written by the planning call's notetaker as you talk and by you,
 when you edit a section of it in Luke. An edit you make is sent to our service

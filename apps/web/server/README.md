@@ -125,7 +125,14 @@ cascading with the organization (migration 0090, which moves every plan
 standing into its starter's personal workspace before it sets the column
 not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
-statement joins into its own where clause.
+statement joins into its own where clause. A plan is read and written by
+every member of its workspace, whichever of them started it:
+`planReachableBy` and `reachablePlan` gate every plan statement in
+`plan-store.ts`, `board-store.ts`, `transcript-store.ts`, and
+`plan-revisions.ts`, and the voice door's `heldPlan`, on the caller's
+membership of the plan's workspace rather than on the plan's starter. Past
+that gate a shared plan's transcript and a new call's earlier calls are
+every member's calls about it.
 
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
@@ -888,8 +895,10 @@ plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`server/hosted/plan-store.ts` names the account beside the plan, so another
-account's plan answers exactly as none does.
+`server/hosted/plan-store.ts` names the account beside the plan and gates on
+its membership of the plan's workspace, so a teammate's plan reads and
+writes as the account's own, and a plan of a workspace the account is not in
+answers exactly as none does.
 
 `server/repository-pins-app.ts` answers `/api/repository-pins`, the
 repositories the account pinned in the sidebar, whose groups of plans stand
@@ -948,8 +957,9 @@ locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
-A plan id another account owns reads as an empty history and restores as
-`not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
+Every member of the plan's workspace reads the history any of them wrote;
+a plan of a workspace the account is not in reads as an empty history and
+restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
 A plan's repository is `plan.repository` (migration 0063), the full name

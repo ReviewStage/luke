@@ -1461,7 +1461,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan or account",
+    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -1490,9 +1490,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           [ASSISTANT, "After how many days?", 9_000],
         ]);
         yield* callAbout({ userId: owner, planId, startedAt: 3_000_000 }, []);
-        yield* callAbout({ userId: other, planId, startedAt: 3_000_000 }, [
-          [USER, "Another account's words.", 0],
-        ]);
         const otherPlan = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
@@ -1528,6 +1525,82 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
+  );
+
+  it.effect("a teammate's call about a shared plan reads in every member's transcript", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const started = readAnswer(
+        planAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+      ).plan;
+      yield* joinWorkspace(started.workspaceId, other);
+      const read = (userId: string) =>
+        Effect.map(
+          ask(request(TRANSCRIPT, userId, { id: started.id })),
+          (answered) =>
+            readAnswer(planTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
+        );
+      const { USER } = VOICE_SEGMENT_ROLE;
+
+      const ownersCall = yield* callAbout(
+        { userId: owner, planId: started.id, startedAt: 1_000_000 },
+        [[USER, "Invites should expire.", 0]],
+      );
+      const teammatesCall = yield* callAbout(
+        { userId: other, planId: started.id, startedAt: 2_000_000 },
+        [[USER, "After seven days.", 0]],
+      );
+
+      const expected = {
+        calls: [
+          {
+            id: ownersCall,
+            startedAt: 1_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.")],
+          },
+          {
+            id: teammatesCall,
+            startedAt: 2_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "After seven days.")],
+          },
+        ],
+        earlierOmitted: false,
+      };
+      assert.deepEqual(yield* read(owner), expected);
+      assert.deepEqual(yield* read(other), expected);
+    }),
+  );
+
+  it.effect("the board one member saves is read by the rest of the workspace", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const started = readAnswer(
+        planAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+      ).plan;
+      yield* joinWorkspace(started.workspaceId, other);
+
+      const saved = yield* ask(
+        request(BOARD, other, {
+          method: "PUT",
+          id: started.id,
+          body: { elements: [NOTE], appliedDrawing: 0 },
+        }),
+      );
+
+      assert.equal(saved.status, HOSTED_HTTP_STATUS.OK);
+      assert.deepEqual(
+        readAnswer(
+          boardAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(BOARD, owner, { id: started.id })),
+        ).board.elements,
+        [NOTE],
+      );
+    }),
   );
 
   it.effect(
