@@ -13,7 +13,11 @@ import {
   type PullRequestReadFailure,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { type CodingAgent, readCodingAgent } from "../coding-agent-store.js";
+import {
+  type CodingAgent,
+  readCodingAgent,
+  recordCodingAgentPublished,
+} from "../coding-agent-store.js";
 import type { StoreFailure } from "../store-failure.js";
 import { CODER } from "./bounds.js";
 
@@ -32,7 +36,10 @@ import { CODER } from "./bounds.js";
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
- * pull request's head's checks. The answer is kept per
+ * pull request's head's checks. Every answer read is written on the
+ * agent's row as well, the pull request or none, which is what the plan
+ * list reads, so the sidebar says what the last read found without asking
+ * GitHub itself. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
@@ -79,11 +86,9 @@ function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
 /**
  * What the agent published as GitHub holds it now: the newest pull request
  * from the branch its row holds, else the branch alone where GitHub holds
- * it, else nothing. The routes read it through the cache below; the voice
- * brain's read of one agent (`hosted/coding-agent-tools.ts`) reads it
- * afresh, once per ask.
+ * it, else nothing.
  */
-export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
+const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
@@ -103,6 +108,21 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   return pushed
     ? { repository: agent.repository, branch: agent.branch, pullRequest: null }
     : nothing(agent);
+});
+
+/**
+ * What the agent published as GitHub holds it now, written on its row as
+ * read. The routes read it through the cache below; the voice brain's read
+ * of one agent (`hosted/coding-agent-tools.ts`) reads it afresh, once per
+ * ask.
+ */
+export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
+  userId: string,
+  agent: CodingAgent,
+): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+  const answer = yield* publishedOnGitHub(userId, agent);
+  yield* recordCodingAgentPublished(userId, agent.id, answer.pullRequest);
+  return answer;
 });
 
 /** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */

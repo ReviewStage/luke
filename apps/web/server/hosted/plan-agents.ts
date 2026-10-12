@@ -1,0 +1,123 @@
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  PLAN_AGENTS_BOUNDS,
+  type PlanAgentLine,
+  type PlanAgentsSummary,
+  type PlanPullRequestLine,
+  type PlanSummary,
+} from "@sidecar/hosted/plan-wire";
+import { Clock, Effect } from "effect";
+import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
+import {
+  awaitingLinesOf,
+  type CodingAgentLatestTurn,
+  type CodingAgentStoreEffect,
+  latestTurnsOf,
+  listPublishedCodingAgents,
+  type PublishedCodingAgent,
+} from "./coding-agent-store.js";
+
+/**
+ * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
+ *
+ * Three statements answer the whole list however many plans it holds: the
+ * agents of every plan named with the pull request each last published,
+ * their newest turns, and which of them hold a line awaiting its turn. An
+ * agent's status is read exactly as its tab's is (`coder-host/status.ts`),
+ * and a pull request is the one its row keeps as GitHub last answered, so
+ * nothing here asks GitHub. A plan with no agent carries nothing, so the
+ * list stays as small as it was for every plan nobody has started an agent
+ * on.
+ */
+
+/** The statuses under which an agent is at work. */
+const WORKING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
+  CODING_AGENT_STATUS.STARTING,
+  CODING_AGENT_STATUS.RUNNING,
+]);
+
+/** One agent read for the list: its line, and when it was started, which orders the lines. */
+interface ReadAgent {
+  readonly line: PlanAgentLine;
+  readonly createdAt: number;
+  readonly published: PublishedCodingAgent["published"];
+}
+
+/** One agent as its row names it, its status read at `now`: since its run began while it works, since its newest turn ended once it has. */
+function agentLine(
+  held: PublishedCodingAgent,
+  turn: CodingAgentLatestTurn | undefined,
+  lineAwaits: boolean,
+  now: number,
+): ReadAgent {
+  const { agent } = held;
+  const status = codingAgentStatusOf(turn, { createdAt: agent.createdAt, now, lineAwaits });
+  const at = WORKING_STATUSES.has(status)
+    ? codingAgentRunStartedAt(turn, { createdAt: agent.createdAt, lineAwaits })
+    : turn?.settledAt?.getTime();
+  return {
+    line: {
+      id: agent.id,
+      title: agent.title,
+      model: agent.model,
+      effort: agent.effort,
+      status,
+      ...(at === undefined ? undefined : { at }),
+    },
+    createdAt: agent.createdAt.getTime(),
+    published: held.published,
+  };
+}
+
+/**
+ * One plan's agents in brief: those at work named first, then the rest,
+ * newest started first within each; the pull requests newest agent's
+ * first, each number once, since two agents on one branch share theirs.
+ */
+function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
+  const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
+  const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
+  const resting = newest.filter((agent) => !WORKING_STATUSES.has(agent.line.status));
+  const pullRequests = new Map<number, PlanPullRequestLine>();
+  for (const { published } of newest) {
+    if (published === null || pullRequests.has(published.number)) continue;
+    const { number, title, state, checks, additions, deletions } = published;
+    pullRequests.set(number, { number, title, state, checks, additions, deletions });
+  }
+  return {
+    total: agents.length,
+    working: working.length,
+    agents: [...working, ...resting]
+      .slice(0, PLAN_AGENTS_BOUNDS.MAX_AGENTS)
+      .map((agent) => agent.line),
+    pullRequestTotal: pullRequests.size,
+    pullRequests: [...pullRequests.values()].slice(0, PLAN_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+  };
+}
+
+/** The account's listed plans, each carrying its agents in brief where it has any; the plans' order and every other field as listed. */
+export function withPlanAgents(
+  userId: string,
+  plans: readonly PlanSummary[],
+): CodingAgentStoreEffect<readonly PlanSummary[]> {
+  return Effect.gen(function* () {
+    const held = yield* listPublishedCodingAgents(
+      userId,
+      plans.map((plan) => plan.id),
+    );
+    const conversationIds = held.map(({ agent }) => agent.conversationId);
+    const turns = yield* latestTurnsOf(userId, conversationIds);
+    const awaiting = yield* awaitingLinesOf(userId, conversationIds);
+    const now = yield* Clock.currentTimeMillis;
+    const byPlan = new Map<string, ReadAgent[]>();
+    for (const agent of held) {
+      const { conversationId, planId } = agent.agent;
+      const line = agentLine(agent, turns.get(conversationId), awaiting.has(conversationId), now);
+      byPlan.set(planId, [...(byPlan.get(planId) ?? []), line]);
+    }
+    return plans.map((plan) => {
+      const agents = byPlan.get(plan.id);
+      return agents === undefined ? plan : { ...plan, agents: summaryOf(agents) };
+    });
+  });
+}

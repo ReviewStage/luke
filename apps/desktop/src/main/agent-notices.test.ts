@@ -6,9 +6,12 @@ import {
   type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Duration, Effect, Layer } from "effect";
@@ -73,6 +76,7 @@ function fixture() {
   let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
   let signedInAs: string | undefined = ACCOUNT;
   let notifying = true;
+  let listReads = 0;
   const notices = createAgentNotices({
     listAgents: (planId) =>
       Effect.sync(() => {
@@ -102,6 +106,9 @@ function fixture() {
       return () => {
         accountChanged = undefined;
       };
+    },
+    onPlanAgentsMoved: () => {
+      listReads += 1;
     },
     watchInterval: WATCH,
     report: () => undefined,
@@ -135,8 +142,65 @@ function fixture() {
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
+    /** How many times the plan list was asked for again. */
+    listReads: () => listReads,
   };
 }
+
+/** A pull request one of the agents opened, as a read of what it published answers it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 41,
+  title: "Teammate invitations",
+  url: "https://github.com/acme/relay/pull/41",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PENDING,
+  additions: 12,
+  deletions: 3,
+  changedFiles: 2,
+};
+
+it.effect(
+  "the plan list is asked for again as an agent starts and as its turn ends, and not for an answer that says nothing new",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      assert.equal(f.listReads(), 0);
+
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })]);
+      assert.equal(f.listReads(), 1);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.RUNNING);
+      assert.equal(f.listReads(), 1);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.equal(f.listReads(), 2);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.equal(f.listReads(), 2);
+    }),
+);
+
+it.effect(
+  "the plan list is asked for again where a read of what an agent published finds a pull request, or one that moved, and not for the same one read again",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      notices.observePublished(AGENT_ID, null);
+      assert.equal(f.listReads(), 0);
+
+      notices.observePublished(AGENT_ID, PULL_REQUEST);
+      notices.observePublished(AGENT_ID, PULL_REQUEST);
+      assert.equal(f.listReads(), 1);
+      notices.observePublished(AGENT_ID, { ...PULL_REQUEST, checks: CHECK_SUMMARY.FAILING });
+      assert.equal(f.listReads(), 2);
+      notices.observePublished(AGENT_ID, {
+        ...PULL_REQUEST,
+        checks: CHECK_SUMMARY.FAILING,
+        state: PULL_REQUEST_STATE.MERGED,
+      });
+      assert.equal(f.listReads(), 3);
+    }),
+);
 
 it.effect(
   "an agent that ends while the window is behind is announced once, as the plan's name over the model's, and dots its tab",

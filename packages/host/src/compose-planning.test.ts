@@ -18,12 +18,14 @@ import {
   LOOK_AT_BOARD_TOOL_NAME,
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
   PLAN_FILE_REFUSAL,
   type Plan,
+  type PlanAgentsSummary,
   type PlanFileAnswer,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
@@ -90,6 +92,8 @@ function summary({
 /** The service as a table of plans the test edits between beats. */
 interface FakeService extends PlanningClient {
   plans: Plan[];
+  /** What the list says of each plan's coding agents, by plan id; a plan with none says nothing. */
+  agents: Record<string, PlanAgentsSummary>;
   listFails: boolean;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
@@ -136,6 +140,7 @@ const EDITED_AT = 7_000;
 function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
     plans,
+    agents: {},
     listFails: false,
     deleteFails: false,
     listGate: Effect.void,
@@ -226,7 +231,13 @@ function fakeService(plans: Plan[]): FakeService {
         service.reads.push("list");
         const answer = service.listFails
           ? { ok: false as const, failure: PLAN_CALL_FAILURE.UNANSWERED }
-          : { ok: true as const, answer: service.plans.map(summary) };
+          : {
+              ok: true as const,
+              answer: service.plans.map((each) => {
+                const agents = service.agents[each.id];
+                return agents === undefined ? summary(each) : { ...summary(each), agents };
+              }),
+            };
         yield* service.listGate;
         return answer;
       }),
@@ -902,6 +913,38 @@ it.effect(
       });
       assert.deepEqual(last()?.plans[0], summary(billing));
       assert.equal(service.reads.length, reads);
+    }),
+);
+
+it.effect(
+  "a pin keeps what the list said of the plan's coding agents, which only the list answers",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const agents: PlanAgentsSummary = {
+        total: 1,
+        working: 1,
+        agents: [
+          {
+            id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+            title: null,
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            status: CODING_AGENT_STATUS.RUNNING,
+            at: 5_000,
+          },
+        ],
+        pullRequestTotal: 0,
+        pullRequests: [],
+      };
+      service.agents[INVITES] = agents;
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      yield* call(GATEWAY_METHOD.PLANNING_PIN, { planId: INVITES, pinned: true });
+
+      assert.deepEqual(last()?.plans, [{ ...summary(invites), pinnedAt: MARKED_AT, agents }]);
     }),
 );
 

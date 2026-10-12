@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -16,9 +21,11 @@ import {
   type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
+  listPublishedCodingAgents,
   type NewCodingAgent,
   readCodingAgent,
   readCodingAgentContext,
+  recordCodingAgentPublished,
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
@@ -99,7 +106,45 @@ const conversationKind = (conversationId: string) =>
     (rows) => rows[0],
   );
 
+/** A pull request as GitHub answered a read of it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 41,
+  title: "Teammate invitations",
+  url: "https://github.com/reviewstage/luke/pull/41",
+  state: PULL_REQUEST_STATE.DRAFT,
+  checks: CHECK_SUMMARY.PENDING,
+  additions: 120,
+  deletions: 4,
+  changedFiles: 3,
+};
+
 it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
+  it.effect(
+    "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openPlan;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        const theirs = started(yield* createCodingAgent(other.userId, start(other.planId)));
+
+        yield* recordCodingAgentPublished(userId, agent.id, PULL_REQUEST);
+        // Another account's write names no agent of theirs, and another account's read names none of this one's.
+        yield* recordCodingAgentPublished(userId, theirs.id, PULL_REQUEST);
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId, other.planId]), [
+          { agent, published: PULL_REQUEST },
+        ]);
+        assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.planId]), [
+          { agent: theirs, published: null },
+        ]);
+
+        yield* recordCodingAgentPublished(userId, agent.id, null);
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), [
+          { agent, published: null },
+        ]);
+      }),
+  );
+
   it.effect("a Start is one agent on a conversation of its own, holding what it was handed", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

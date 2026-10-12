@@ -710,6 +710,14 @@ and their conversations stamped deleted beside the plan's own (`deletePlan`),
 the id moved into
 the query by the rewrite `server/function-rewrites.ts` makes of every
 segment-captured id.
+Each row of the list carries `agents` where the plan has a coding agent
+(`server/hosted/plan-agents.ts`): how many it has and how many are starting
+or running, the three it names (those at work first, then the newest), each
+with its title, model, effort, status, and since when, and the pull requests
+they opened, each number once and at most three, as GitHub last answered a
+read of them. Three statements answer the whole list: the agents of every
+plan listed with `coding_agent.published` (migration 0078), their newest
+turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
@@ -1995,7 +2003,9 @@ developer's own App token (`github/pull-requests.ts`): the newest pull
 request from the branch, else whether the branch was pushed at all, with
 the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
-warning rather than failing the answer. The answer is kept
+warning rather than failing the answer. Every answer read is written on the
+agent's row (`coding_agent.published`, the pull request or null), which is
+what the plan list's `agents` reads. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
 ended, so the first read after a turn ends is fresh rather than the running

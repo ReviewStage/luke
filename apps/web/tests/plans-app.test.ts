@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
@@ -23,7 +29,7 @@ import {
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
@@ -33,6 +39,7 @@ import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
 import { planBoard } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
+import { turns } from "../server/db/storage-schema";
 import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
 import {
   VOICE_DELEGATION_MODE,
@@ -44,9 +51,15 @@ import {
   DRAW_ON_BOARD_STATUS,
   runDrawOnBoard,
 } from "../server/hosted/board-tool";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  recordCodingAgentPublished,
+} from "../server/hosted/coding-agent-store";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { PLAN_REVISION } from "../server/hosted/plan-revisions";
+import { createPlan } from "../server/hosted/plan-store";
 import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
@@ -296,7 +309,108 @@ const DRAW_API = {
   elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
 };
 
+/** An agent started on the account's plan now, on the test's clock, failing the test where the Start made none. */
+const startAgent = (userId: string, planId: string) =>
+  Effect.map(
+    createCodingAgent(userId, {
+      planId,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "Acme/Relay",
+      planSnapshot: "# Teammate invitations\n",
+      task: null,
+    }),
+    (started) => Option.getOrElse(started, () => assert.fail("the start made no agent")).agent,
+  );
+
+/** One turn of the agent's, queued and started at `startedAt` and, where given, ended at `settledAt`. */
+const agentTurn = (
+  userId: string,
+  agent: CodingAgent,
+  turn: { readonly startedAt: number; readonly settledAt?: number },
+) =>
+  db.insert(turns).values({
+    userId,
+    conversationId: agent.conversationId,
+    origin: TURN_ORIGIN.TYPED,
+    status: turn.settledAt === undefined ? TURN_STATUS.RUNNING : TURN_STATUS.SETTLED,
+    queuedAt: new Date(turn.startedAt),
+    startedAt: new Date(turn.startedAt),
+    settledAt: turn.settledAt === undefined ? null : new Date(turn.settledAt),
+  });
+
+/** A pull request as GitHub answered a read of it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 128,
+  title: "Invite teammates by email",
+  url: "https://github.com/Acme/Relay/pull/128",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.FAILING,
+  additions: 214,
+  deletions: 9,
+  changedFiles: 6,
+};
+
 it.layer(testSqlClient)("the plan routes", (it) => {
+  it.effect(
+    "a listed plan says what its coding agents are doing and what they published, and a plan with none says nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const quiet = yield* createPlan(owner, { name: LEDGER.name });
+        const busy = yield* createPlan(owner, { name: RELAY.name });
+        const failed = yield* startAgent(owner, busy.id);
+        yield* TestClock.adjust("1 minute");
+        const first = yield* startAgent(owner, busy.id);
+        yield* agentTurn(owner, first, { startedAt: 61_000, settledAt: 90_000 });
+        yield* recordCodingAgentPublished(owner, first.id, PULL_REQUEST);
+        yield* TestClock.adjust("1 minute");
+        // A second agent on the same branch answers the same pull request, which is counted once.
+        const second = yield* startAgent(owner, busy.id);
+        yield* agentTurn(owner, second, { startedAt: 121_000, settledAt: 150_000 });
+        yield* recordCodingAgentPublished(owner, second.id, PULL_REQUEST);
+        yield* TestClock.adjust("1 minute");
+        const working = yield* startAgent(owner, busy.id);
+        yield* agentTurn(owner, working, { startedAt: 185_000 });
+        // Past the first agent's grace with no turn: it reads as failed.
+        yield* TestClock.adjust("5 minutes");
+
+        const { plans } = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+
+        const listed = new Map(plans.map((plan) => [plan.id, plan]));
+        assert.equal(listed.get(quiet.id)?.agents, undefined);
+        const agents = listed.get(busy.id)?.agents;
+        assert.ok(agents);
+        assert.equal(agents.total, 4);
+        assert.equal(agents.working, 1);
+        assert.deepEqual(
+          agents.agents.map((agent) => [agent.id, agent.status, agent.at]),
+          [
+            [working.id, CODING_AGENT_STATUS.RUNNING, 185_000],
+            [second.id, CODING_AGENT_STATUS.COMPLETED, 150_000],
+            [first.id, CODING_AGENT_STATUS.COMPLETED, 90_000],
+          ],
+        );
+        assert.ok(!agents.agents.some((agent) => agent.id === failed.id));
+        assert.equal(agents.pullRequestTotal, 1);
+        assert.deepEqual(agents.pullRequests, [
+          {
+            number: 128,
+            title: "Invite teammates by email",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.FAILING,
+            additions: 214,
+            deletions: 9,
+          },
+        ]);
+      }),
+  );
+
   it.effect("a started plan lists, and opens with what its notes saved", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();

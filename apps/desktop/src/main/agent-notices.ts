@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -55,6 +56,13 @@ import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
  * takes it, reads what the agent published once, and posts; an end whose
  * read found nothing, or could not be made, says finished as before. The
  * agent's unseen dot is set as the end is seen, ahead of the read.
+ *
+ * The sidebar's plan rows say which plans have an agent at work and which
+ * a pull request, from the plan list, which is read on no clock. So the
+ * ledger asks for the list again whenever it sees an agent start or end,
+ * and whenever a read of what an agent published, the panel's or the
+ * notice's own, finds a pull request other than the one it last saw for
+ * that agent, since that read is what the service keeps for the list.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
@@ -129,6 +137,8 @@ export interface AgentNoticesDependencies {
   signedInAs: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
+  /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
+  onPlanAgentsMoved: () => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -144,6 +154,8 @@ export interface AgentNotices {
   observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
   observeModels(models: readonly CatalogModel[]): void;
+  /** What one agent published, as a read of it answered: the pull request, or none. */
+  observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
   /** A plan the host no longer holds: its agents are forgotten. */
   observePlanGone(planId: string): void;
   /** The panel said which agent's tab it shows, or none. */
@@ -174,6 +186,22 @@ interface TurnEnd {
 
 function stillWriting(status: CodingAgentStatus): boolean {
   return WRITING_STATUSES.has(status);
+}
+
+/** Whether two reads of what an agent published say the same of it in a plan's row: the same pull request, standing the same, of the same size. */
+function samePublished(
+  a: CodingAgentPullRequest | null,
+  b: CodingAgentPullRequest | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.number === b.number &&
+    a.title === b.title &&
+    a.state === b.state &&
+    a.checks === b.checks &&
+    a.additions === b.additions &&
+    a.deletions === b.deletions
+  );
 }
 
 /**
@@ -215,6 +243,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const { listAgents, readPullRequest, planName, open, onUnseenChanged, report } = dependencies;
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
+    /** What each agent was last read to have published, by agent. */
+    const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
     const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
@@ -241,16 +271,23 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Queue.offerUnsafe(ends, { agentId, agent, focused });
     }
 
+    /** A read of what the agent published answered: the list is read again where it found other than the last read did, or a pull request where none was read before. */
+    function observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void {
+      const was = published.get(agentId) ?? null;
+      published.set(agentId, pullRequest);
+      if (!samePublished(was, pullRequest)) dependencies.onPlanAgentsMoved();
+    }
+
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
     const pullRequestOf = (end: TurnEnd): Effect.Effect<number | undefined> =>
       end.agent.status !== CODING_AGENT_STATUS.COMPLETED
         ? Effect.succeed(undefined)
         : readPullRequest(end.agentId).pipe(
-            Effect.map((answer) =>
-              "pullRequest" in answer && answer.pullRequest !== null
-                ? answer.pullRequest.number
-                : undefined,
-            ),
+            Effect.map((answer) => {
+              if (!("pullRequest" in answer)) return undefined;
+              observePublished(end.agentId, answer.pullRequest);
+              return answer.pullRequest?.number;
+            }),
             Effect.catchDefect((defect) =>
               Effect.sync(() => {
                 report(
@@ -298,10 +335,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      // An agent first seen ended ended before Luke watched it.
+      // An agent first seen ended ended before Luke watched it; one first seen at work may have just started.
       if (was === undefined) {
         if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
+        if (stillWriting(next.status)) dependencies.onPlanAgentsMoved();
         return;
       }
       // The reads overlap, so a list can land after a newer read moved the
@@ -314,7 +352,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         // message awaiting the next turn, which its own answer says.
         if (!stillWriting(was.status)) return;
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
-        if (!stillWriting(next.status)) ended(agentId, next);
+        if (stillWriting(next.status)) return;
+        ended(agentId, next);
+        dependencies.onPlanAgentsMoved();
         return;
       }
       // A new turn: the one before it is left behind, and its own end is the next notice.
@@ -322,6 +362,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId !== null) pastTurns.add(was.turnId);
       ledger.set(agentId, { ...next, pastTurns });
       if (!stillWriting(next.status)) ended(agentId, next);
+      dependencies.onPlanAgentsMoved();
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan deleted or an account left has no tab to clear one. */
@@ -330,6 +371,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       for (const [agentId, agent] of ledger) {
         if (keep(agent)) continue;
         ledger.delete(agentId);
+        published.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
       if (dotted) publishUnseen();
@@ -384,6 +426,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeModels: (next) => {
         models = next;
       },
+      observePublished,
       observePlanGone: (planId) => forget((agent) => agent.planId !== planId),
       shown: (agentId) => {
         shownAgent = agentId;

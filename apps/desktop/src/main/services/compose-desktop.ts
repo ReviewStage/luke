@@ -218,6 +218,10 @@ export function composeDesktop(
         signedInAs: () => accountKey(state.snapshot().account),
         onAccountChanged: (listener) =>
           operator.host.onAccountChanged((account) => listener(accountKey(account))),
+        // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
+        onPlanAgentsMoved: () => {
+          void run(operator.host.planningRefresh());
+        },
         report: config.report,
       }).pipe(
         Effect.provideService(

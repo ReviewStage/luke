@@ -540,6 +540,13 @@
       "when": 1791085000000,
       "tag": "0077_coding_agent_context_window",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791110000000,
+      "tag": "0078_coding_agent_published",
+      "breakpoints": true
     }
   ]
 }

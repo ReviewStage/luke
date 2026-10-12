@@ -1,6 +1,8 @@
 import {
   CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
   type ContextWindow,
+  codingAgentPullRequestSchema,
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -61,7 +63,10 @@ import {
  * developer gave, and renamed, which replaces whatever stands. The newest
  * model step of the agent's own conversation and eve's last compaction of
  * it are written by the coder host as eve tells them, and read back with
- * the transcript, which is what the tab's context ring draws. Every
+ * the transcript, which is what the tab's context ring draws. The pull
+ * request from the agent's branch is written as GitHub answered each read
+ * of it (`coder-host/published.ts`), and read back beside the agents of
+ * every plan the list names, so the list asks GitHub nothing. Every
  * function is an effect over the ambient `SqlClient` and names no database
  * of its own.
  */
@@ -348,6 +353,33 @@ const findAgentsOfPlan = SqlSchema.findAll({
       .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
 });
 
+const updateAgentPublished = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, agentId, published }) =>
+    db
+      .update(codingAgent)
+      .set({ published })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+});
+
+const findAgentsOfPlans = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, planIds }) =>
+    db
+      .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.planId, [...planIds])))
+      .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+});
+
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -462,6 +494,32 @@ export function listCodingAgents(
   planId: string,
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfPlan({ userId, planId });
+}
+
+/** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
+export interface PublishedCodingAgent {
+  readonly agent: CodingAgent;
+  readonly published: CodingAgentPullRequest | null;
+}
+
+/** Every agent started on the account's plans named, each with what it published, in the order they were started; a plan another account owns names none. */
+export function listPublishedCodingAgents(
+  userId: string,
+  planIds: readonly string[],
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  if (planIds.length === 0) return Effect.succeed([]);
+  return Effect.map(findAgentsOfPlans({ userId, planIds }), (rows) =>
+    rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
+}
+
+/** The pull request from the account's agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent the account does not own. */
+export function recordCodingAgentPublished(
+  userId: string,
+  agentId: string,
+  published: CodingAgentPullRequest | null,
+): CodingAgentStoreEffect<void> {
+  return updateAgentPublished({ userId, agentId, published });
 }
 
 /** The account's agent under this id, or nothing for an agent the account does not own. */

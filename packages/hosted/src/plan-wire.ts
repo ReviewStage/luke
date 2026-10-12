@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -22,6 +23,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the list leaves out unless asked for it (`PLAN_LIST_QUERY`), so a build
  * that knows nothing of archiving never sees an archived plan. Both are the
  * account's, so they follow it to every Mac it signs in on.
+ * A row of the list also says, in brief, what the plan's coding agents are
+ * doing and what they published (`planAgentsSummarySchema`), so the sidebar
+ * can mark a plan at work or with a pull request without a read per row.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -266,8 +270,75 @@ const planSummaryFields = {
   archivedAt: EffectSchema.optionalKey(countedNumber),
 };
 
-/** One row of the plan list: everything but the document. */
-export const planSummarySchema = EffectSchema.Struct(planSummaryFields);
+/** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
+export const PLAN_AGENTS_BOUNDS = {
+  /** The most agents a row names: those at work first, then the newest started. */
+  MAX_AGENTS: 3,
+  /** The most pull requests a row names: the newest agent's first. */
+  MAX_PULL_REQUESTS: 3,
+} as const;
+
+/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, and since when. */
+export const planAgentLineSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  /** The agent's title; null where it has none, when it is named by its model. */
+  title: EffectSchema.NullOr(EffectSchema.String),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: EffectSchema.String,
+  effort: EffectSchema.String,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /**
+   * Epoch milliseconds: when its run began while it works, and when its
+   * newest turn ended once it has; absent where neither is known.
+   */
+  at: EffectSchema.optionalKey(countedNumber),
+});
+
+export type PlanAgentLine = typeof planAgentLineSchema.Type;
+
+/** A pull request one of a plan's agents opened, as GitHub last answered the service: where it stands and its size. */
+export const planPullRequestLineSchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  additions: countedNumber,
+  deletions: countedNumber,
+});
+
+export type PlanPullRequestLine = typeof planPullRequestLineSchema.Type;
+
+/**
+ * What a plan's coding agents are doing and what they published, in brief:
+ * how many agents it has and how many of them are at work, the few the row
+ * names, and the pull requests they opened, each counted once by its
+ * number. A pull request is as the service last read it from GitHub, so
+ * it may trail GitHub by as long as nothing has asked.
+ */
+export const planAgentsSummarySchema = EffectSchema.Struct({
+  total: countedNumber,
+  /** The agents starting or running now. */
+  working: countedNumber,
+  agents: EffectSchema.Array(planAgentLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_AGENTS),
+  ),
+  pullRequestTotal: countedNumber,
+  pullRequests: EffectSchema.Array(planPullRequestLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+  ),
+});
+
+export type PlanAgentsSummary = typeof planAgentsSummarySchema.Type;
+
+/**
+ * One row of the plan list: everything but the document, and what its
+ * coding agents are doing, which only the list answers, and only for a plan
+ * with an agent.
+ */
+export const planSummarySchema = EffectSchema.Struct({
+  ...planSummaryFields,
+  agents: EffectSchema.optionalKey(planAgentsSummarySchema),
+});
 
 export type PlanSummary = typeof planSummarySchema.Type;
 
