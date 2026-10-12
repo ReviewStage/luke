@@ -1717,6 +1717,37 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a member steers the running turn of an agent a teammate started: the words reach the starter's session and stand under the starter, so a repeat under the key sends nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, target, sessionId, ask, transcript } =
+          yield* startedAgent(eve, { running: true });
+        yield* joinWorkspace(plan.workspaceId, other);
+        const clientKey = randomUUID();
+        const steer = () =>
+          ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
+          [[`Bearer ${other}`, sessionId, target.conversationId]],
+        );
+        assert.equal(
+          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
+          true,
+        );
+        assert.deepEqual(yield* transcript(), {
+          lines: [planMarkdown(SAVED), "Use seven days, not five."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
     "a page carries what the agent has cost over its own turns and its workers', each step priced at the model it ran on, and what its newest turn cost",
     () =>
       Effect.gen(function* () {
