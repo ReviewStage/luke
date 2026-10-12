@@ -1,4 +1,5 @@
 import {
+  CODE_PATH_MAX_CHARS,
   PLAN_FILE_REFUSAL,
   PLAN_TREE_BOUNDS,
   PLAN_TREE_ENTRY,
@@ -38,6 +39,8 @@ import { isSecretFile } from "./shown-file.js";
  * folder, held to the same rule, so an entry inside a folder named as a
  * secret file is left out though the folder itself is named, and cut at a
  * bound of its own, larger than one folder's, saying so where it was cut.
+ * An entry whose path is longer than the wire carries is left out too, the
+ * listing saying it was cut, since it is then not the whole repository.
  */
 
 /** Whether a folder is, or stands inside, one whose name is a secret file's. */
@@ -97,9 +100,10 @@ const readFolder = /* @__PURE__ */ Effect.fn("web/planTreeFolder")(function* (
     } satisfies PlanTreeAnswer;
   }
   const bound = recursive ? PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES : PLAN_TREE_BOUNDS.MAX_ENTRIES;
-  const listed = recursive
+  const shown = recursive
     ? folder.entries.filter((entry) => !insideSecret(entry.name))
     : folder.entries;
+  const listed = shown.filter((entry) => entry.name.length <= CODE_PATH_MAX_CHARS);
   const entries = listed.slice(0, bound).map((entry) => ({
     name: entry.name,
     kind: entry.type === GIT_ENTRY.TREE ? PLAN_TREE_ENTRY.FOLDER : PLAN_TREE_ENTRY.FILE,
@@ -110,7 +114,7 @@ const readFolder = /* @__PURE__ */ Effect.fn("web/planTreeFolder")(function* (
       repository,
       branch: confirmed.defaultBranch,
       entries,
-      truncated: folder.truncated || listed.length > bound,
+      truncated: folder.truncated || listed.length < shown.length || listed.length > bound,
     },
   } satisfies PlanTreeAnswer;
 });

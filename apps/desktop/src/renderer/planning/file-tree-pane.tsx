@@ -35,12 +35,17 @@ import type { ListFolder } from "./folder-listings";
  * pane is left out of the screen recording (`ph-no-capture`).
  */
 
-/** What the search covers: not yet asked, the whole repository being read or read, or only the folders listed so far, the whole having been cut short. */
+/**
+ * What the search covers: not yet asked, the whole repository being read or
+ * read, or only the folders listed so far, the whole having been cut short,
+ * or its read not having landed for the search standing.
+ */
 const SEARCH_SCOPE = {
   UNREAD: "unread",
   READING: "reading",
   WHOLE: "whole",
   OPENED: "opened",
+  MISSED: "missed",
 } as const;
 
 type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
@@ -205,20 +210,25 @@ export function FileTreePane({
 
   // Note that the whole repository is read the first time a search is
   // typed rather than as the tree opens, because most trees are browsed and
-  // never searched; a read that did not land is asked again by the next
-  // search, and one cut short leaves the search on the folders listed.
+  // never searched. A read that did not land leaves the search on the
+  // folders listed until the field is emptied, so the next search asks
+  // again and this one asks no more; one cut short leaves it there for good.
   useEffect(() => {
-    if (query.trim() === "" || scope !== SEARCH_SCOPE.UNREAD) return;
+    if (query.trim() === "") {
+      if (scope === SEARCH_SCOPE.MISSED) setScope(SEARCH_SCOPE.UNREAD);
+      return;
+    }
+    if (scope !== SEARCH_SCOPE.UNREAD) return;
     setScope(SEARCH_SCOPE.READING);
     readWhole().then(
       (answer) => {
-        if (!("folder" in answer)) return setScope(SEARCH_SCOPE.UNREAD);
+        if (!("folder" in answer)) return setScope(SEARCH_SCOPE.MISSED);
         if (answer.folder.truncated) return setScope(SEARCH_SCOPE.OPENED);
         everything.current = entriesOf(answer.folder.entries);
         handle.current?.within(everything.current);
         setScope(SEARCH_SCOPE.WHOLE);
       },
-      () => setScope(SEARCH_SCOPE.UNREAD),
+      () => setScope(SEARCH_SCOPE.MISSED),
     );
   }, [query, scope, readWhole]);
 

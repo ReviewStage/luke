@@ -327,6 +327,17 @@ const RECURSIVE_TREES = new Map<string, () => Response>([
     "main:huge",
     () => Response.json({ tree: [gitEntry("a.ts", "blob", "100644")], truncated: true }),
   ],
+  [
+    "main:deep",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry("a.ts", "blob", "100644"),
+          gitEntry(`${"nested/".repeat(150)}b.ts`, "blob", "100644"),
+        ],
+        truncated: false,
+      }),
+  ],
 ]);
 
 const TREES_PATH = /^\/repos\/Acme\/Relay\/git\/trees\/(.+)$/u;
@@ -1713,7 +1724,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "asked recursively, a folder is listed whole in one read, each entry by its path, nothing inside a folder named as a secret file though the folder is named; one GitHub cut short says so; and a recursive query other than 1 is invalid",
+    "asked recursively, a folder is listed whole in one read, each entry by its path, nothing inside a folder named as a secret file though the folder is named; one GitHub cut short, or holding a path longer than the wire carries, says so; and a recursive query other than 1 is invalid",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
@@ -1757,6 +1768,18 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         assert.ok("folder" in huge);
         assert.equal(huge.folder.truncated, true);
+        const deep = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ path: "deep", recursive: "1" }),
+        );
+        assert.ok("folder" in deep);
+        assert.deepEqual(deep.folder.entries, [{ name: "a.ts", kind: AS_FILE }]);
+        assert.equal(
+          deep.folder.truncated,
+          true,
+          "a path longer than the wire carries is left out, and said",
+        );
         assert.deepEqual(
           yield* whole({ recursive: "yes" }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),

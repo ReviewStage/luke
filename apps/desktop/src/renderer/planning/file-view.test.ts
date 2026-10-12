@@ -345,3 +345,34 @@ test("the first search reads the whole repository once and hands the tree its ev
     [],
   );
 });
+
+test("a whole read that did not land leaves the search on the folders opened without asking again until the field is emptied and a new search begins", async () => {
+  let asked = 0;
+  const view = mounted([], () => {
+    asked += 1;
+    return Promise.resolve({ refusal: PLAN_FILE_REFUSAL.UNAVAILABLE });
+  });
+  await view.draw(FILE);
+  await view.press(view.container.querySelector(".file-tree-toggle"));
+  const field = view.container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
+  assert.ok(field, "the tree has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const type = async (words: string) => {
+    act(() => {
+      setValue?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await view.draw(FILE);
+  };
+
+  await type("plans");
+  await type("plans-app");
+  assert.equal(asked, 1, "the search standing asks once");
+  await type("");
+  await type("routes");
+  assert.equal(asked, 2, "a new search asks again");
+  assert.deepEqual(
+    tree.narrowed.filter((narrowing) => narrowing.startsWith("within")),
+    [],
+  );
+});
