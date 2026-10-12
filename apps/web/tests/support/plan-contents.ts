@@ -24,6 +24,7 @@ const TEXT_FIELDS = [
   PLAN_FIELD.CONTEXT,
   PLAN_FIELD.GOAL,
   PLAN_FIELD.APPROACH,
+  PLAN_FIELD.INTERFACES,
   PLAN_FIELD.ALTERNATIVES,
   PLAN_FIELD.HARD_PARTS,
   PLAN_FIELD.NOT_DOING,
@@ -62,6 +63,7 @@ export const TEMPLATE_HEADINGS = [
   "## Context",
   "## Goal",
   "## Approach",
+  "## Interfaces",
   "## Hard parts",
   "## Not doing",
   "## Testing",
@@ -69,7 +71,7 @@ export const TEMPLATE_HEADINGS = [
 ] as const;
 
 /** How many core answers the template holds; each reads "Unanswered" while null. */
-export const TEMPLATE_UNANSWERED_FIELDS = 6;
+export const TEMPLATE_UNANSWERED_FIELDS = 7;
 
 /** The section headings a body carries, in order, leaving out its title. */
 export function templateHeadingsOf(body: string): readonly string[] {
@@ -100,7 +102,7 @@ export const INVITATIONS_DRAFT: PlanContent = {
 };
 
 /**
- * A small feature, settled: every core field answered, the inapplicable one
+ * A small feature, settled: every core field answered, the inapplicable ones
  * saying why in a sentence rather than inventing a hard part to fill it, and
  * no optional field.
  */
@@ -112,7 +114,8 @@ export const SMALL_FEATURE: PlanContent = {
     goal: 'The empty list reads "No plans yet. Start one with New plan."',
     approach:
       "- `src/renderer/planning/planning-parts.tsx`: the new line, following the other " +
-      "empty-state lines there.\n- No type, schema, or signature changes.",
+      "empty-state lines there.",
+    interfaces: "None: a copy change touches no type, schema, or signature.",
     hardParts: "Not applicable: a copy change has no edge case beyond the line itself.",
     notDoing: "Any other copy in the panel.",
     testing:
@@ -151,10 +154,11 @@ export const BULK_IMPORT: PlanContent = {
     context: "Workspace admins moving from another tool enter contacts one at a time.",
     goal: "An admin imports a CSV of contacts in one step.",
     approach:
-      `${BULK_IMPORT_AGREED.DECISION}\n\n${BULK_IMPORT_AGREED.CONTRACT}\n\n` +
+      `${BULK_IMPORT_AGREED.DECISION}\n\n` +
       "- `src/contacts/import.ts`: new, the validation pass and the import.\n" +
       "- `src/contacts/store.ts`: `insertMany` runs in one transaction.\n" +
       "- Follow `src/contacts/export.ts` for reading a file in rows.",
+    interfaces: `\`src/contacts/import.ts\`:\n\n${BULK_IMPORT_AGREED.CONTRACT}`,
     alternatives: BULK_IMPORT_AGREED.ALTERNATIVE,
     hardParts:
       `- ${BULK_IMPORT_AGREED.RULE} A CSV whose row 12 has no email address adds no contact ` +

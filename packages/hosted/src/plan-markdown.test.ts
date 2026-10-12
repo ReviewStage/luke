@@ -76,6 +76,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
     "## Context",
     "## Goal",
     "## Approach",
+    "## Interfaces",
     "## Hard parts",
     "## Not doing",
     "## Testing",

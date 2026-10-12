@@ -546,18 +546,29 @@ responsible for turning them into a concrete plan. So the template is the
 design doc two engineering teammates would write after talking a task
 through in a meeting, and each section is a question a good teammate asks.
 The sections are what the planning model asks about, in the order a meeting
-runs, so getting them right is what shapes Luke's questions.
+runs, so getting them right is what shapes Luke's questions. The same
+document is the whole spec a coding agent builds from, so Luke talks like a
+teammate and holds the document to a spec's bar.
+
+Each section is defined once, in `plan-template.ts`: its heading
+(`PLAN_FIELD_HEADING`), what it holds and the form it is written in
+(`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
+from (`PLAN_FIELD_BAR`). The planning model is handed all three; the
+notetaker is handed the purpose alone, since it records what was said
+rather than judging it. `apps/web/tests/planning-instructions.test.ts`
+holds both prompts to those words.
 
 | Section | Field | The question Luke asks |
 | --- | --- | --- |
 | Context | `context` | What is going on today, and why now? The problem, who it affects, and what prompted the work. |
 | Goal | `goal` | What is true once we are done, as outcomes someone could observe? |
-| Approach | `approach` | How would we build it? The main pieces and how they fit, the data and interfaces that change (as code, never function bodies), and existing code to follow, by path. |
+| Approach | `approach` | How would we build it? The main pieces and how they fit, where each lives by path, the code each follows, and each design decision with its reason. |
+| Interfaces | `interfaces` | What boundaries change? Every type, schema, table, route, event, tool, or signature added or changed, as code under its file, never function bodies; "None" with the reason. |
 | Alternatives | `alternatives` | What else could we do, and why not that? |
-| Hard parts | `hardParts` | What is tricky? Edge cases and how each behaves, failure and retry, permission, privacy, and performance limits, and risks. |
+| Hard parts | `hardParts` | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
 | Not doing | `notDoing` | What are we leaving out on purpose, and why? |
 | Plan of attack | `planOfAttack` | How does the work split, and in what order does it land? Migration and rollout where they apply. |
-| Testing | `testing` | How do we know it works? The cases worth checking and the end-to-end check. |
+| Testing | `testing` | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
 | Open questions | `openQuestions` | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
 | Assumptions | `assumptions` | The existing `{ text }` list: what Luke proposed and the developer had no preference on. |
 
@@ -582,9 +593,10 @@ runs, so getting them right is what shapes Luke's questions.
   empty until the first save, and the store formats an empty body from the
   row's fields when it reads it. Migration 0074 carried every plan written
   under the earlier template (Goal, Scope, Rules, Implementation, Decisions,
-  Verification, Left to the agent, Data and migration) onto this one, each
-  old field's words under a bold label in the section that now holds them,
-  and its revisions with it.
+  Verification, Left to the agent, Data and migration) onto this one, and
+  its revisions with it: contracts became Interfaces whole, and every other
+  old field's words sit under a bold label in the section that now holds
+  them.
 - **Saving and resuming** go through the same save, so a plan written in the
   template resumes with its answers and its assumptions intact.
 - **Structure is the tool's; agreement is the model's.** The schema
@@ -604,9 +616,12 @@ and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/
 That template cut alternatives, risks, and steps because no agent-facing
 source asked for them, and those are exactly what two teammates argue about.
 It also made Luke work through fields rather than think with the developer.
-The agent still gets what it needs: Approach carries the interfaces and the
-code to follow, Hard parts carries the behavior a smart agent could guess
-wrong, and Testing carries the check. None of this is validated against a
+The agent still gets a spec: Interfaces carries the exact shapes, Hard parts
+says what the change does in every case a capable agent could guess wrong,
+and Testing carries a When/then case with an exact result for every goal and
+hard part, which is where the old examples' precision went. Luke proposes
+the interfaces and the cases himself for the developer to confirm, so the
+call never turns into dictating code or test cases. None of this is validated against a
 comparative evaluation.
 
 ### Microphone row and the panel's voice

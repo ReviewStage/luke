@@ -32,8 +32,11 @@ import { PLAN_BOUNDS, type PlanAssumption } from "./plan-wire.js";
  * they will build it and what they weighed against it, the hard parts, what
  * they leave out, how the work lands, and how they will know it works. Each
  * section is a question a good teammate asks, so the sections are what the
- * planning model asks about. A coding agent builds from the same document
- * and explores the code itself, so the plan carries pointers into the code
+ * planning model asks about. The same document is the whole spec a coding
+ * agent builds from, so the sections an agent needs exactly (the
+ * interfaces, how each hard case behaves, and the test cases) each carry a
+ * bar a plan must meet before it is done (`PLAN_FIELD_BAR`). The agent
+ * explores the code itself, so the plan carries pointers into the code
  * rather than a description of it.
  *
  * The formatter owns every heading and its order. Field text is Markdown the
@@ -57,6 +60,7 @@ export const PLAN_HEADING = {
   CONTEXT: "Context",
   GOAL: "Goal",
   APPROACH: "Approach",
+  INTERFACES: "Interfaces",
   ALTERNATIVES: "Alternatives",
   HARD_PARTS: "Hard parts",
   NOT_DOING: "Not doing",
@@ -86,6 +90,7 @@ export const planFieldsSchema = EffectSchema.Struct({
   context: ANSWER,
   goal: ANSWER,
   approach: ANSWER,
+  interfaces: ANSWER,
   alternatives: ANSWER,
   hardParts: ANSWER,
   notDoing: ANSWER,
@@ -114,6 +119,7 @@ export const EMPTY_PLAN_FIELDS: PlanFields = {
   context: null,
   goal: null,
   approach: null,
+  interfaces: null,
   alternatives: null,
   hardParts: null,
   notDoing: null,
@@ -245,6 +251,7 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
     coreSection(PLAN_HEADING.CONTEXT, fields.context),
     coreSection(PLAN_HEADING.GOAL, fields.goal),
     coreSection(PLAN_HEADING.APPROACH, fields.approach),
+    coreSection(PLAN_HEADING.INTERFACES, fields.interfaces),
     ...optionalSection(PLAN_HEADING.ALTERNATIVES, fields.alternatives),
     coreSection(PLAN_HEADING.HARD_PARTS, fields.hardParts),
     coreSection(PLAN_HEADING.NOT_DOING, fields.notDoing),
@@ -264,6 +271,7 @@ export const PLAN_FIELD = {
   CONTEXT: "context",
   GOAL: "goal",
   APPROACH: "approach",
+  INTERFACES: "interfaces",
   ALTERNATIVES: "alternatives",
   HARD_PARTS: "hardParts",
   NOT_DOING: "notDoing",
@@ -280,6 +288,7 @@ export const PLAN_FIELD_HEADING = {
   context: PLAN_HEADING.CONTEXT,
   goal: PLAN_HEADING.GOAL,
   approach: PLAN_HEADING.APPROACH,
+  interfaces: PLAN_HEADING.INTERFACES,
   alternatives: PLAN_HEADING.ALTERNATIVES,
   hardParts: PLAN_HEADING.HARD_PARTS,
   notDoing: PLAN_HEADING.NOT_DOING,
@@ -290,36 +299,77 @@ export const PLAN_FIELD_HEADING = {
 } as const satisfies Record<PlanField, string>;
 
 /**
- * What each field holds: the question a teammate would ask, and what answers
- * it. Note that this is the one statement of a section's meaning, because the
- * planning model asks from it and the notetaker writes to it, and two copies
- * would drift into Luke asking for one thing and the notes filing another.
+ * What each field holds and the form it is written in. Note that this is the
+ * one statement of a section's meaning, because the planning model asks from
+ * it and the notetaker writes to it, and two copies would drift into Luke
+ * asking for one thing and the notes filing another.
  */
 export const PLAN_FIELD_PURPOSE = {
   context:
-    "What is going on today and why it matters now: the problem, who it affects, and what " +
-    "prompted the work.",
-  goal: "What is true once the work is done, as outcomes someone could observe.",
+    "Why this work exists: what happens today, who it affects and how often, and what " +
+    "prompted it now. Current behavior is stated as the code or the developer says it is, " +
+    "never guessed.",
+  goal:
+    "What is true once the work ships, one outcome per bullet, each something a user or a " +
+    "test could observe. No implementation detail.",
   approach:
-    "How it will be built: the main pieces and how they fit together, the data and " +
-    "interfaces that change (types, schema, and signatures as code in fenced blocks, never " +
-    "function bodies), and existing code to follow, by repository-relative path.",
-  alternatives: "Other approaches that were weighed, and why each was not chosen.",
+    "The design in plain words: the main pieces and how they fit together, where each lives " +
+    "by repository-relative path, the existing code or pattern each follows, and each " +
+    "design decision with its reason.",
+  interfaces:
+    "Every type, schema, table, route, event, tool, or function signature the change adds " +
+    "or changes, written as code in fenced blocks under the path of the file it lives in. " +
+    'Shapes and signatures only, never function bodies. "None" with the reason when ' +
+    "nothing at a module boundary changes.",
+  alternatives:
+    "Each other approach that was weighed: what it was, and the concrete reason it lost.",
   hardParts:
-    "What is tricky: edge cases and how each behaves, failure, cancellation, and retry, " +
-    "permission, privacy, and performance limits, and the risks and how each is handled.",
-  notDoing: "What is left out on purpose, and why.",
+    "Each tricky case as one bullet: the situation, then exactly what the change does in it. " +
+    "Edge cases, failure, cancellation, retry, concurrency, permissions, privacy, and " +
+    "performance where they apply, and each risk with how it is handled.",
+  notDoing:
+    "What is out of scope, one bullet each with why, including anything a capable agent " +
+    "might otherwise build unasked.",
   planOfAttack:
-    "How the work splits and the order it lands in, with data migration and rollout where " +
-    "they apply.",
+    "The steps the work lands in, in order, each one testable on its own, and why the order " +
+    "matters. Data migration, backfill, and rollout where they apply.",
   testing:
-    "How we know it works: the cases worth checking, each with its expected result, and the " +
-    "end-to-end check that proves the change.",
+    'The cases that prove the change, one bullet each written as "When <situation>, then ' +
+    '<exact observable result>", then the end-to-end check a person or a script runs to ' +
+    "prove it works, with its command where there is one.",
   openQuestions:
-    "Unresolved questions, contradictions, or facts no source could settle, one per note.",
+    "Each unresolved question, contradiction, or fact no source could settle, worded as a " +
+    "question, one per note.",
   assumptions:
     "What the plan assumes without the developer having said it, Luke's suggestions not yet " +
     "agreed among them, one per note.",
+} as const satisfies Record<PlanField, string>;
+
+/**
+ * When each section is good enough for a coding agent to build from without
+ * coming back with a question. The planning model holds the plan to these
+ * before it calls the plan complete; the notetaker is never told them,
+ * because it records what was said rather than judging it.
+ */
+export const PLAN_FIELD_BAR = {
+  context: "Someone new to the code could explain why the work matters.",
+  goal: "Every outcome can be checked true or false.",
+  approach:
+    "Every piece names the path it lives in and the code it follows, and no step says only " +
+    '"update" or "handle".',
+  interfaces:
+    "Every new or changed boundary is written as code under its file, or the section says " +
+    '"None" and why.',
+  alternatives:
+    "Optional. Every alternative the developer raised or Luke suggested has the reason it lost.",
+  hardParts: "Every case says exactly what the change does, not only that it is hard.",
+  notDoing: "Anything a capable agent might add unasked is listed.",
+  planOfAttack: "Optional. Needed when the order of the steps matters or stored data moves.",
+  testing:
+    "Every goal and every hard part has at least one When/then case with an exact result, " +
+    "and there is an end-to-end check.",
+  openQuestions: "Nothing left in it would change what gets built.",
+  assumptions: "Every choice Luke made for the developer is listed.",
 } as const satisfies Record<PlanField, string>;
 
 /** The kinds of note the notetaker takes. */

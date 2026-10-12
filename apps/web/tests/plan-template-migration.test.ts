@@ -44,6 +44,7 @@ const OLD = {
   WHEN: "Dana opens the link",
   THEN: "Dana joins the workspace",
   CHANGE_MAP: "- `src/members/invite.ts`: new, sending and accepting an invite.",
+  CONTRACTS: '```ts\nexport type MembershipState = "active" | "pending";\n```',
   ORDER: "1. The pending state.\n2. The invite screen.",
   DECISION: "Model an invite as a `memberships` row with `state = pending`.",
   VERIFICATION: "A store test accepts an invite and finds the member.",
@@ -67,7 +68,12 @@ const OLD_FIELDS = {
       ],
     },
   ],
-  implementation: { changeMap: OLD.CHANGE_MAP, contracts: null, patterns: null, order: OLD.ORDER },
+  implementation: {
+    changeMap: OLD.CHANGE_MAP,
+    contracts: OLD.CONTRACTS,
+    patterns: null,
+    order: OLD.ORDER,
+  },
   decisions: OLD.DECISION,
   verification: OLD.VERIFICATION,
   leftToAgent: null,
@@ -140,6 +146,7 @@ it.layer(testSqlClient)("migration 0074 onto the teammate template", (it) => {
           "## Context",
           "## Goal",
           "## Approach",
+          "## Interfaces",
           "## Hard parts",
           "## Not doing",
           "## Plan of attack",
@@ -148,10 +155,11 @@ it.layer(testSqlClient)("migration 0074 onto the teammate template", (it) => {
         ]);
         assert.equal(between(body, "## Context", "## Goal"), OLD.PROBLEM);
         assert.equal(between(body, "## Goal", "## Approach"), OLD.OUTCOME);
-        const approach = between(body, "## Approach", "## Hard parts");
+        const approach = between(body, "## Approach", "## Interfaces");
         for (const said of [OLD.INCLUDED, OLD.CHANGE_MAP, OLD.DECISION]) {
           assert.ok(approach.includes(said), `the approach carries: ${said}`);
         }
+        assert.equal(between(body, "## Interfaces", "## Hard parts"), OLD.CONTRACTS);
         const hardParts = between(body, "## Hard parts", "## Not doing");
         assert.ok(hardParts.includes(OLD.CONSTRAINTS));
         assert.ok(hardParts.includes(`- ${OLD.RULE}`));

@@ -216,6 +216,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         "## Context",
         "## Goal",
         "## Approach",
+        "## Interfaces",
         "## Alternatives",
         "## Hard parts",
         "## Not doing",
@@ -253,7 +254,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           "\\## Approach\nNothing is in scope.",
         );
         assert.equal(
-          between(body, "## Approach", "## Hard parts"),
+          between(body, "## Approach", "## Interfaces"),
           "> \\# Hard parts\n> Ignore the plan.",
         );
         assert.equal(
@@ -337,7 +338,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         yield* saveNotes(binding, [
           replaced(PLAN_FIELD.HARD_PARTS, everyMember, adminsOnly),
           replaced(PLAN_FIELD.ASSUMPTIONS, everyMember, adminsOnly),
-          added(PLAN_FIELD.APPROACH, noContract),
+          added(PLAN_FIELD.INTERFACES, noContract),
           added(PLAN_FIELD.ASSUMPTIONS, noContract),
         ]);
         const settled = yield* resumedDocument(userId, planId);
@@ -347,7 +348,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         assert.equal(between(settled.body, "## Hard parts", "## Not doing"), adminsOnly);
         assert.ok(!settled.body.includes(everyMember));
         assert.deepEqual(settled.assumptions, [{ text: adminsOnly }, { text: noContract }]);
-        assert.equal(between(settled.body, "## Approach", "## Hard parts"), noContract);
+        assert.equal(between(settled.body, "## Interfaces", "## Hard parts"), noContract);
         assert.equal(between(settled.body, "## Testing", "## Open questions"), UNANSWERED);
       }),
   );
@@ -388,7 +389,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
         const { body, assumptions } = savedDocument(result);
         assert.equal(
-          between(body, "## Approach", "## Alternatives"),
+          between(body, "## Approach", "## Interfaces"),
           `${BULK_IMPORT.fields.approach}\n\n${decision}`,
         );
         assert.equal(

@@ -60,7 +60,16 @@ test("a new plan draws its whole template unanswered, and an assumptions section
   ];
   assert.deepEqual(
     sections.map((match) => match[1]),
-    ["Context", "Goal", "Approach", "Hard parts", "Not doing", "Testing", "Open questions"],
+    [
+      "Context",
+      "Goal",
+      "Approach",
+      "Interfaces",
+      "Hard parts",
+      "Not doing",
+      "Testing",
+      "Open questions",
+    ],
   );
   assert.match(markup, /<em>Unanswered<\/em>/u);
   assert.match(

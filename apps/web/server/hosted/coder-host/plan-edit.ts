@@ -40,8 +40,8 @@ export const EDIT_PLAN_TOOL = {
     "under a field, correct a phrase copied exactly from the saved text, or strike the line " +
     "holding one. Use it to record a question the plan does not answer under openQuestions " +
     "together with the assumption you go on under, to correct a fact you verified in the " +
-    "code, to record a hard part you met under hardParts, or to record a decision you made " +
-    "under approach. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
+    "code, to record a hard part you met under hardParts, to record an interface you had to " +
+    "change under interfaces, or to record a decision you made under approach. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
     "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,

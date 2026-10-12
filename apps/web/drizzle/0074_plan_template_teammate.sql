@@ -29,11 +29,11 @@ CREATE FUNCTION "plan_0074_fields"("f" jsonb) RETURNS jsonb LANGUAGE sql IMMUTAB
 		'approach', NULLIF(concat_ws(E'\n\n',
 			plan_0074_labelled('Included', "f" #>> '{scope,included}'),
 			plan_0074_labelled('Change map', "f" #>> '{implementation,changeMap}'),
-			plan_0074_labelled('Contracts', "f" #>> '{implementation,contracts}'),
 			plan_0074_labelled('Patterns to follow', "f" #>> '{implementation,patterns}'),
 			plan_0074_labelled('Decisions', "f"->>'decisions'),
 			plan_0074_labelled('Left to the agent', "f"->>'leftToAgent')
 		), ''),
+		'interfaces', "f" #>> '{implementation,contracts}',
 		'alternatives', NULL,
 		'hardParts', NULLIF(concat_ws(E'\n\n',
 			plan_0074_labelled('Constraints', "f" #>> '{scope,constraints}'),
