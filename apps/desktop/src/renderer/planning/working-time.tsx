@@ -153,11 +153,18 @@ export function WorkedFor({
   );
 }
 
-/** The shimmering line a transcript ends on while its agent works, counting how long where the run's start is known. */
-export function WorkingLine({ startedAt }: { startedAt: number | undefined }): ReactNode {
+/** The shimmering line a transcript ends on while its agent works, saying what it is doing and counting how long where the run's start is known. */
+export function WorkingLine({
+  startedAt,
+  words = WORKING_LINE,
+}: {
+  startedAt: number | undefined;
+  /** What the agent is doing, as far as its transcript shows it: "Working…" unless said otherwise. */
+  words?: string;
+}): ReactNode {
   return (
     <p className="m-0 text-[12.5px] select-text" data-working="" aria-live="polite">
-      <Shimmer>{WORKING_LINE}</Shimmer>
+      <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>
   );

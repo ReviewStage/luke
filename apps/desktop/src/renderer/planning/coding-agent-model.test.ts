@@ -17,6 +17,7 @@ import {
   AGENT_PART,
   agentLines,
   agentParts,
+  agentWorkingPhase,
   applyMessagesPage,
   checkoutCommand,
   choiceLabel,
@@ -44,6 +45,7 @@ import {
   startFailureNote,
   unreadSentLines,
   unsearchedModels,
+  WORKING_PHASE,
 } from "./coding-agent-model";
 
 function message(id: string, text: string): CodingAgentMessage {
@@ -540,4 +542,44 @@ test("a turn failed on the account's own API key ends saying so and where to rep
     endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
     "Failed: your API key was refused or can't be read; check Settings › API keys",
   );
+});
+
+test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
+  const plan: CodingAgentMessage = {
+    id: "m-plan",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: AGENT_PART.TEXT, text: "# Invitations" }],
+  };
+  const opened: CodingAgentMessage = {
+    id: "m-turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: AGENT_PART.STEP_START }],
+    startedAt: 1_000,
+  };
+  const calling: CodingAgentMessage = {
+    ...opened,
+    parts: [
+      { type: AGENT_PART.STEP_START },
+      { type: "tool-bash", toolCallId: "call_1", state: TOOL_STATE.INPUT_AVAILABLE },
+    ],
+  };
+  const closed: CodingAgentMessage = { ...calling, finishedAt: 9_000 };
+  const line: CodingAgentMessage = {
+    id: "m-line",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: AGENT_PART.TEXT, text: "Also expire them after a week." }],
+  };
+  // Before the session runs a turn, whatever stands, and before the turn writes its journal.
+  assert.equal(agentWorkingPhase([plan], true), WORKING_PHASE.STARTING);
+  assert.equal(agentWorkingPhase([plan, opened], true), WORKING_PHASE.STARTING);
+  assert.equal(agentWorkingPhase([plan], false), WORKING_PHASE.STARTING);
+  // The turn open with nothing past its step boundary is the model at its first step.
+  assert.equal(agentWorkingPhase([plan, opened], false), WORKING_PHASE.THINKING);
+  assert.equal(agentWorkingPhase([plan, calling], false), WORKING_PHASE.WORKING);
+  // A line after a closed turn awaits a turn of its own; one sent into an open turn steers it.
+  assert.equal(agentWorkingPhase([plan, closed, line], false), WORKING_PHASE.STARTING);
+  // A turn closing ahead of its row's settling ends as it worked, not as a start.
+  assert.equal(agentWorkingPhase([plan, closed], false), WORKING_PHASE.WORKING);
+  assert.equal(agentWorkingPhase([plan, calling, line], false), WORKING_PHASE.WORKING);
+  assert.equal(agentWorkingPhase([plan, opened, line], false), WORKING_PHASE.THINKING);
 });
