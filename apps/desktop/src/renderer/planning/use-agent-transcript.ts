@@ -28,7 +28,9 @@ import {
  * answer's cursor is where the next read starts, each page joins the
  * messages held by id, and each page's status is the agent's as the page
  * was read, with why where its turn failed, which the tab's end line says,
- * and what its model's context holds, which the box's ring draws.
+ * what its model's context holds, which the box's ring draws, and when its
+ * run and each worker it waits on began, which the working line and a
+ * subagent's row count from.
  * The loop runs while the tab is on screen and the agent may
  * still write, and ends on its own when a page says the agent ended; an
  * agent that has ended is read once through, page by page, and then left
@@ -54,6 +56,10 @@ export interface AgentTranscriptControl {
   turnUsage: CodingAgentUsage | undefined;
   /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
   context: CodingAgentContext | undefined;
+  /** When the run under way began, as the last page said; nothing where it did not, which is where a worker's tab counts from. */
+  runStartedAt: number | undefined;
+  /** When each worker the agent's newest turn still waits on began, by the call that started it, as the last page said; none on a worker's. */
+  delegations: ReadonlyMap<string, number>;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -69,6 +75,8 @@ interface Held {
   usage: CodingAgentUsage | undefined;
   turnUsage: CodingAgentUsage | undefined;
   context: CodingAgentContext | undefined;
+  runStartedAt: number | undefined;
+  delegations: ReadonlyMap<string, number>;
   failed: boolean;
 }
 
@@ -81,6 +89,8 @@ function fresh(agentId: string): Held {
     usage: undefined,
     turnUsage: undefined,
     context: undefined,
+    runStartedAt: undefined,
+    delegations: new Map(),
     failed: false,
   };
 }
@@ -146,6 +156,10 @@ export function useAgentTranscript(input: {
           usage: answer.usage,
           turnUsage: answer.turnUsage,
           context: answer.context,
+          runStartedAt: answer.runStartedAt,
+          delegations: new Map(
+            (answer.delegations ?? []).map((started) => [started.callId, started.startedAt]),
+          ),
         }));
         latest.current.onStatus(agentId, answer);
         latest.current.onTitle(agentId, answer.title);
@@ -175,6 +189,8 @@ export function useAgentTranscript(input: {
     usage: held.usage,
     turnUsage: held.turnUsage,
     context: held.context,
+    runStartedAt: held.runStartedAt,
+    delegations: held.delegations,
     reading: active && held.messages.length === 0,
     failed: held.failed,
     onRetry,

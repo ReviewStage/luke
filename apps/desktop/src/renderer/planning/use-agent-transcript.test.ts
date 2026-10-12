@@ -246,3 +246,18 @@ test("a read that did not answer ends the loop and says so, and Try again reads 
   assert.equal(tab.reads.length, 3);
   assert.equal(tab.reads.at(-1)?.after, "1:1");
 });
+
+test("each page's run start and the workers its turn waits on are what the tab counts from, and a page naming none counts none", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, shown: true });
+  await tab.answer({
+    ...page([message("m1", "Delegating.")], "1:0", CODING_AGENT_STATUS.RUNNING),
+    runStartedAt: 4_000,
+    delegations: [{ callId: "call-worker", startedAt: 9_000 }],
+  });
+  assert.equal(tab.control().runStartedAt, 4_000);
+  assert.deepEqual([...tab.control().delegations], [["call-worker", 9_000]]);
+
+  await tab.answer(page([message("m1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED));
+  assert.equal(tab.control().runStartedAt, undefined);
+  assert.deepEqual([...tab.control().delegations], []);
+});

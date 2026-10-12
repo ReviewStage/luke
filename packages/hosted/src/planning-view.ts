@@ -206,13 +206,17 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's. Note that it stands one level deep, because the wire shows no
+ * model's, and when its newest task began and ended. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,
   parts: EffectSchema.Array(planWorkSessionPartSchema),
+  /** Epoch milliseconds the subagent began its newest task, which a running one counts from; absent from a service older than it. */
+  startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
+  /** Epoch milliseconds it answered or ended that task; absent while it runs, and from a service older than it. */
+  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
 });
 
 const planWorkPartSchema = EffectSchema.Union([
@@ -228,8 +232,8 @@ const planWorkPartSchema = EffectSchema.Union([
 export type PlanWorkPart = typeof planWorkPartSchema.Type;
 
 /**
- * One planning turn as the Work tab draws it: the turn, when it started,
- * how far it has got, and the newest of what the model wrote and called,
+ * One planning turn as the Work tab draws it: the turn, when it started and
+ * ended, how far it has got, and the newest of what the model wrote and called,
  * oldest first. Unlike `plan.activity`, this carries each call's output: the
  * text a command answered in the plan's repository sandbox, and pages read
  * from the public web, shown back to the developer on their own Mac.
@@ -238,6 +242,8 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   turnId: EffectSchema.String,
   /** Epoch milliseconds the turn started. */
   startedAt: EffectSchema.Finite,
+  /** Epoch milliseconds the turn ended; absent while it runs, and from a service older than it. */
+  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
   state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,

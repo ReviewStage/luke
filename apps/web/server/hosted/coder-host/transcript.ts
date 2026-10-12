@@ -1,8 +1,10 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_STATUS,
   type CodingAgentContext,
+  type CodingAgentDelegationStart,
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentUsage,
@@ -11,18 +13,32 @@ import type { ToolSet } from "ai";
 import { Clock, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { StoredUIMessage } from "../../core.js";
+import {
+  isSettledToolPartState,
+  isStoredToolPart,
+  MESSAGE_ROLE,
+  type StoredUIMessage,
+  storedToolName,
+} from "../../core.js";
+import { childConversationId } from "../brain-host/ids.js";
 import {
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentDelegation,
+  delegationStartsOf,
   latestTurnsOf,
   readCodingAgentContext,
   readDelegation,
   turnUsagesOf,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
-import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
+import {
+  type ConversationTarget,
+  listMessagesPast,
+  type MessageCursor,
+  type StoredMessageRecord,
+} from "../store/index.js";
+import { type LatestTurn, readMessageByClientId, turnsNamed } from "../store/message-reads.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -54,7 +70,12 @@ import { usageOfTurn, usageOfTurns } from "./usage.js";
  * else, and what the agent has cost, its workers' turns included, and its
  * newest turn, each read once with the page that is answered rather than
  * on every look inside the hold, and on the agent's own transcript what
- * its model's context holds as its newest step left it (`context.ts`).
+ * its model's context holds as its newest step left it (`context.ts`) and
+ * when each worker its newest turn still waits on began. A turn's journal
+ * carries when the turn began, by the rule the working line counts from,
+ * and when the journal closed: the close is written with the journal's
+ * last parts, so the page that carries them carries it too, where the
+ * turn row's own settling may land a look later.
  * Note that a step's end is written a moment before the next step starts
  * and lands its parts in the journal, so the page that wakes on a step
  * carries the step before it. The wire spells the cursor as the two
@@ -77,9 +98,15 @@ export function cursorToWire(cursor: MessageCursor): string {
 /** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
 
-/** A page of the transcript as the route answers it: each row's message as the store holds it, which is the wire's `CodingAgentMessage` once serialized, the agent's status as it stood, and why where its newest turn failed. */
+/** One row of the transcript as the route answers it: its message as the store holds it, and for a turn's journal when the turn began and closed, which is the wire's `CodingAgentMessage` once serialized. */
+type TranscriptMessage = StoredUIMessage & {
+  readonly startedAt?: number;
+  readonly finishedAt?: number;
+};
+
+/** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
 export interface TranscriptPage {
-  readonly messages: readonly StoredUIMessage[];
+  readonly messages: readonly TranscriptMessage[];
   readonly cursor: MessageCursor;
   readonly status: CodingAgentStatus;
   /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
@@ -91,6 +118,8 @@ export interface TranscriptPage {
   readonly turnUsage?: CodingAgentUsage;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
   readonly context?: CodingAgentContext;
+  /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
+  readonly delegations?: readonly CodingAgentDelegationStart[];
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -99,8 +128,8 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
   SqlClient.SqlClient | R
 >;
 
-/** The newest turn as a page reads it: what it ran under and cost; nothing before the first. */
-type NewestTurn = Parameters<typeof usageOfTurn>[0];
+/** The newest turn as a page reads it: which it is, and what it ran under and cost; nothing before the first. */
+type NewestTurn = LatestTurn | undefined;
 
 /** The agent whose own transcript a page is, as its context is read: its row. */
 type OwnAgent = Pick<CodingAgent, "id">;
@@ -141,6 +170,72 @@ const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly 
   );
 
 /**
+ * When each turn whose journal is among the rows began, by the turn: its
+ * start, or its queueing before eve started it, which is what the working
+ * line counted from while it ran (`codingAgentRunStartedAt`).
+ */
+const turnStartsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
+  const journals = records.filter((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+  const ids = new Set(journals.flatMap((record) => record.turnId ?? []));
+  return Effect.map(
+    turnsNamed(userId, [...ids]),
+    (turns) => new Map(turns.map((turn) => [turn.id, (turn.startedAt ?? turn.queuedAt).getTime()])),
+  );
+};
+
+/** A row as the page carries it: its message, and for a turn's journal when the turn began and, once the journal closed, when. */
+function transcriptMessageOf(
+  record: StoredMessageRecord,
+  turnStarts: ReadonlyMap<string, number>,
+): TranscriptMessage {
+  const startedAt = record.turnId === undefined ? undefined : turnStarts.get(record.turnId);
+  if (startedAt === undefined) return record.message;
+  return {
+    ...record.message,
+    startedAt,
+    ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
+  };
+}
+
+/**
+ * The delegations the agent's newest turn still waits on, each with when
+ * its worker began: the delegation calls its journal holds unanswered, by
+ * the child conversation each recorded. Note that a worker runs only inside
+ * the turn that called it, so no older journal is read, and a call whose
+ * record has not landed yet is left out until a later page finds it.
+ */
+const delegationsUnderWay = (
+  target: ConversationTarget,
+  tools: ToolSet,
+  turn: NewestTurn,
+): TranscriptEffect<readonly CodingAgentDelegationStart[]> =>
+  Effect.gen(function* () {
+    if (turn === undefined) return [];
+    const read = yield* readMessageByClientId(target.userId, target.conversationId, tools, turn.id);
+    const parts = read.ok ? (read.value[0]?.message.parts ?? []) : [];
+    const calls = parts
+      .filter(isStoredToolPart)
+      .filter(
+        (part) =>
+          storedToolName(part) === CODING_AGENT_DELEGATE_TOOL &&
+          !isSettledToolPartState(part.state),
+      )
+      .map((part) => part.toolCallId);
+    const children = calls.map((callId) => ({
+      callId,
+      child: childConversationId(target.conversationId, callId),
+    }));
+    const started = yield* delegationStartsOf(
+      target,
+      children.map((each) => each.child),
+    );
+    return children.flatMap(({ callId, child }) => {
+      const at = started.get(child);
+      return at === undefined ? [] : [{ callId, startedAt: at.getTime() }];
+    });
+  });
+
+/**
  * The page with what the agent has cost: every settled turn of its
  * conversation and its workers', and its newest turn, priced at the catalog
  * as the instance holds it now; a catalog it cannot read prices nothing,
@@ -149,6 +244,7 @@ const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly 
  */
 const withUsage = (
   target: ConversationTarget,
+  tools: ToolSet,
   page: TranscriptPage,
   turn: NewestTurn,
   own: OwnAgent | undefined,
@@ -160,11 +256,16 @@ const withUsage = (
     const usage = usageOfTurns(rows, offered);
     const turnUsage = usageOfTurn(turn, offered);
     const context = own === undefined ? undefined : yield* contextOf(target, own, offered);
+    const delegations =
+      own !== undefined && WAITING_STATUSES.has(page.status)
+        ? yield* delegationsUnderWay(target, tools, turn)
+        : [];
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
       ...(turnUsage === undefined ? undefined : { turnUsage }),
       ...(context === undefined ? undefined : { context }),
+      ...(delegations.length === 0 ? undefined : { delegations }),
     };
   });
 
@@ -184,9 +285,11 @@ function pagePast(
       CODING_AGENT_BOUNDS.MESSAGES_PAGE,
     );
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
+    const records = read.ok ? read.value : [];
+    const turnStarts = yield* turnStartsOf(target.userId, records);
     return {
       page: {
-        messages: read.ok ? read.value.map((record) => record.message) : [],
+        messages: records.map((record) => transcriptMessageOf(record, turnStarts)),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
@@ -265,6 +368,6 @@ export function transcriptPast(
         ? Effect.succeed(read.value)
         : pagePast(target, tools, after, agent.createdAt);
     }),
-    Effect.flatMap(({ page, turn }) => withUsage(target, page, turn, own)),
+    Effect.flatMap(({ page, turn }) => withUsage(target, tools, page, turn, own)),
   );
 }

@@ -55,6 +55,7 @@ import {
   callsSendingToEarlierTasks,
   planWorkOf,
   SUBAGENT_JOURNALS,
+  type SubagentJournal,
   workerSessionCallsOf,
 } from "./plan-work.js";
 
@@ -476,7 +477,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     conversationId: string,
     sessions: ReadonlyMap<string, string>,
   ) {
-    const journals = new Map<string, readonly StoredUIMessage[]>();
+    const journals = new Map<string, readonly SubagentJournal[]>();
     for (const [callId, sessionCallId] of sessions) {
       const read = yield* listJournals(
         options.userId,
@@ -487,11 +488,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         Effect.tapError(logStoreFailure),
         Effect.orElseSucceed(() => undefined),
       );
-      if (read?.ok)
-        journals.set(
-          callId,
-          read.value.map((row) => row.message),
-        );
+      if (read?.ok) journals.set(callId, read.value);
     }
     return journals;
   });

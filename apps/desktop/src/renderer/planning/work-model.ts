@@ -72,16 +72,20 @@ export type WorkBlock =
 
 export type WorkWorkerBlock = Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
 
-/** A subagent's session as the tab draws it when opened: its rows, and whether older ones were left out. */
+/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, and when its newest task began and ended where the service said. */
 interface WorkSessionRow {
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
+  startedAt?: number;
+  endedAt?: number;
 }
 
 /** One turn as the tab draws it. */
 export interface WorkTurnRow {
   key: string;
   startedAt: number;
+  /** When the turn ended, where the service said; none while it runs or was left running. */
+  endedAt?: number;
   /** Running only while the turn moves; a turn its call left running is drawn as stopped, since nothing more of it will be told. */
   state: PlanWorkState;
   earlierOmitted: boolean;
@@ -250,6 +254,12 @@ function rowsOf(
             session: {
               earlierOmitted: part.session.earlierOmitted,
               rows: rowsOf(part.session.parts, part.id, call.running, false, false),
+              ...(part.session.startedAt === undefined
+                ? undefined
+                : { startedAt: part.session.startedAt }),
+              ...(part.session.endedAt === undefined
+                ? undefined
+                : { endedAt: part.session.endedAt }),
             },
           }),
     };
@@ -272,6 +282,7 @@ export function workRowsOf(
     return {
       key: turn.turnId,
       startedAt: turn.startedAt,
+      ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
       rows: rowsOf(turn.parts, turn.turnId, moving, turn.state === PLAN_WORK_STATE.DONE, true),

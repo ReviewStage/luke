@@ -49,6 +49,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "./turn-rows";
+import { WorkingTime } from "./working-time";
 
 /**
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on the Transcript tab, the Work tab, and a coding agent's tab alike.
@@ -189,6 +190,8 @@ export type TranscriptSubagentProps = {
   /** What it runs on; none where the row knows no pair. */
   pair: SubagentPair | undefined;
   state: ToolState;
+  /** When the subagent began, which a running row counts from beside its spinner; none where unknown or not counted, when the spinner stands alone. */
+  startedAt?: number | undefined;
   /** Why the call failed, drawn under the row, since a call refused before its worker began leaves no tab to read it in. */
   errorText: string | undefined;
   /** Opens the subagent's tab, or chooses it where it is open; none where the row stands in a tab that opens no tab. */
@@ -228,17 +231,19 @@ function SubagentGlyph({
  * harness its model runs in (the worker's robot, lit while it runs, where
  * the model is unknown), the job, fading where the line cuts it, the model
  * and effort it runs on as every pair is drawn (`model-label.tsx`), and the
- * mark a call's row wears for where it stands. The whole line is the one
- * button that opens the subagent's tab, which is where its steps and its
- * answer are read, so it folds nothing open in place. Where it opens no tab
- * it is the same line, pressed by nothing. A call that failed says why in
- * red under the line, open from the start.
+ * mark a call's row wears for where it stands, with how long it has worked
+ * beside the spinner while it runs (`working-time.tsx`). The whole line is
+ * the one button that opens the subagent's tab, which is where its steps
+ * and its answer are read, so it folds nothing open in place. Where it
+ * opens no tab it is the same line, pressed by nothing. A call that failed
+ * says why in red under the line, open from the start.
  */
 export function TranscriptSubagent({
   callId,
   job,
   pair,
   state,
+  startedAt,
   errorText,
   onOpen,
 }: TranscriptSubagentProps): ReactNode {
@@ -255,6 +260,9 @@ export function TranscriptSubagent({
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
+      {running && startedAt !== undefined ? (
+        <WorkingTime startedAt={startedAt} className="shrink-0" />
+      ) : null}
       <ToolStateMark state={state} />
     </>
   );

@@ -75,7 +75,7 @@ test("a worker's line and its task card name the task by its first line as plain
 
   const worker = workerOf(workRowsOf(TURNS, false), "call-worker");
   assert.ok(worker);
-  const tab = mounted(createElement(SubagentTab, { worker }));
+  const tab = mounted(createElement(SubagentTab, { worker, shown: true }));
   const card = tab.querySelector<HTMLDetailsElement>("[data-task-card]");
   assert.ok(card);
   assert.equal(

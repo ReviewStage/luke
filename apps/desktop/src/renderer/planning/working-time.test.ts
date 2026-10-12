@@ -3,7 +3,14 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { it } from "@effect/vitest";
-import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/hosted/planning-view";
+import { CODING_AGENT_DELEGATE_TOOL } from "@sidecar/hosted/coding-agent-wire";
+import {
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
+  type PlanWorkState,
+  type PlanWorkTurn,
+} from "@sidecar/hosted/planning-view";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { Duration, Effect, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -14,8 +21,10 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentTranscriptView } from "./agent-tab";
-import { PlanWork } from "./plan-work";
-import { WorkingLine, workingClock, workingTime } from "./working-time";
+import { momentText } from "./plan-time";
+import { PlanWork, SubagentTab } from "./plan-work";
+import { workerOf, workRowsOf } from "./work-model";
+import { WorkingLine, workedForText, workingClock, workingTime } from "./working-time";
 
 /** React's act warns outside an environment that says it is a test. */
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -50,6 +59,9 @@ const mounted = (element: ReactElement) =>
     return {
       text: () => container.textContent,
       timer: () => container.querySelector("[role='timer']")?.textContent ?? null,
+      timers: () =>
+        [...container.querySelectorAll("[role='timer']")].map((timer) => timer.textContent),
+      worked: () => container.querySelector("[data-worked] time"),
       draw: (next: ReactElement) =>
         Effect.andThen(
           Effect.sync(() => draw(next)),
@@ -167,5 +179,172 @@ it.effect(
       yield* tab.draw(work(PLAN_WORK_STATE.DONE, true));
       assert.equal(tab.timer(), null);
       tab.unmount();
+    }),
+);
+
+/** 3:42 PM on the developer's own clock, whatever zone the test runs in. */
+const TURN_END = new Date(2026, 9, 12, 15, 42).getTime();
+
+/** One of the agent's turns: a line of its words, begun 1m 18s before it ended, still written where it has no end. */
+const agentTurn = (finished: boolean) => ({
+  id: "turn-1",
+  role: MESSAGE_ROLE.ASSISTANT,
+  parts: [{ type: "text", text: "Added the tests." }],
+  startedAt: TURN_END - 78 * SECOND,
+  ...(finished ? { finishedAt: TURN_END } : undefined),
+});
+
+/** One of the agent's turns handing a worker a task, the call running or answered. */
+const delegatingTurn = (running: boolean) => ({
+  id: "turn-1",
+  role: MESSAGE_ROLE.ASSISTANT,
+  parts: [
+    {
+      type: `tool-${CODING_AGENT_DELEGATE_TOOL}`,
+      toolCallId: "call-worker",
+      state: running ? "input-available" : "output-available",
+      input: { task: "Count the routes." },
+      ...(running ? undefined : { output: { model: "m", effort: "low", result: "Twelve." } }),
+    },
+  ],
+});
+
+/** The Work tab holding one turn whose worker began 42 seconds before the clock's zero, its call and session running or answered at the zero. */
+const workerTurns = (running: boolean): readonly PlanWorkTurn[] => [
+  {
+    turnId: "turn-1",
+    startedAt: -MINUTE,
+    ...(running ? undefined : { endedAt: 0 }),
+    state: running ? PLAN_WORK_STATE.RUNNING : PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    parts: [
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "call-worker",
+        tool: PLAN_WORK_TOOL.WORKER,
+        name: "worker",
+        state: running ? PLAN_WORK_STATE.RUNNING : PLAN_WORK_STATE.DONE,
+        subject: "Count the routes.",
+        input: JSON.stringify({ message: "Count the routes." }),
+        session: {
+          earlierOmitted: false,
+          parts: [{ type: PLAN_WORK_PART.TEXT, text: "Twelve routes." }],
+          startedAt: -42 * SECOND,
+          ...(running ? undefined : { endedAt: 0 }),
+        },
+      },
+    ],
+  },
+];
+
+test("a finished turn's last line says how long it worked and the time of day it ended", () => {
+  assert.equal(
+    workedForText(TURN_END - 78 * SECOND, TURN_END, "en-US"),
+    "Worked for 1m 18s · 3:42 PM",
+  );
+  assert.equal(workedForText(TURN_END - 3 * HOUR, TURN_END, "en-US"), "Worked for 3h 0m · 3:42 PM");
+});
+
+it.effect(
+  "an agent's finished turn ends on how long it worked and when, the full moment on hover, and a turn still written ends on none",
+  () =>
+    Effect.gen(function* () {
+      const tab = yield* mounted(
+        createElement(AgentTranscriptView, {
+          messages: [agentTurn(false)],
+          reading: false,
+          failed: false,
+          working: true,
+          onRetry: () => undefined,
+          openGitHub: () => undefined,
+        }),
+      );
+      assert.equal(tab.worked(), null);
+      yield* tab.draw(
+        createElement(AgentTranscriptView, {
+          messages: [agentTurn(true)],
+          reading: false,
+          failed: false,
+          working: false,
+          onRetry: () => undefined,
+          openGitHub: () => undefined,
+        }),
+      );
+      const worked = tab.worked();
+      assert.match(worked?.textContent ?? "", /^Worked for 1m 18s · /u);
+      assert.equal(worked?.getAttribute("title"), momentText(TURN_END));
+      assert.equal(worked?.getAttribute("datetime"), new Date(TURN_END).toISOString());
+      tab.unmount();
+    }),
+);
+
+it.effect(
+  "a running worker's row counts from when the agent's page said it began, beside its spinner, and stops counting once its call answers",
+  () =>
+    Effect.gen(function* () {
+      const view = (running: boolean) =>
+        createElement(AgentTranscriptView, {
+          messages: [delegatingTurn(running)],
+          delegation: { models: [], starts: new Map([["call-worker", -42 * SECOND]]) },
+          reading: false,
+          failed: false,
+          working: true,
+          onRetry: () => undefined,
+          openGitHub: () => undefined,
+        });
+      const tab = yield* mounted(view(true));
+      assert.equal(tab.timer(), "42s");
+      yield* advance(Duration.seconds(1));
+      assert.equal(tab.timer(), "43s");
+      yield* tab.draw(view(false));
+      assert.equal(tab.timer(), null);
+      tab.unmount();
+    }),
+);
+
+it.effect(
+  "the Work tab's running worker counts from its task's start while the tab is on screen, and a finished turn ends on how long it worked",
+  () =>
+    Effect.gen(function* () {
+      const tab = (running: boolean, shown: boolean) =>
+        createElement(PlanWork, {
+          turns: workerTurns(running),
+          callLive: true,
+          earlier: undefined,
+          onLoadEarlier: () => Promise.resolve(),
+          onOpenSubagent: () => undefined,
+          shown,
+        });
+      const work = yield* mounted(tab(true, true));
+      // The turn's own count beside its state, then the worker's beside its spinner.
+      assert.deepEqual(work.timers(), ["1m 0s", "42s"]);
+      assert.equal(work.worked(), null);
+      yield* advance(Duration.seconds(1));
+      assert.deepEqual(work.timers(), ["1m 1s", "43s"]);
+      yield* work.draw(tab(true, false));
+      assert.deepEqual(work.timers(), []);
+      yield* work.draw(tab(false, true));
+      assert.deepEqual(work.timers(), []);
+      assert.match(work.worked()?.textContent ?? "", /^Worked for 1m 0s · /u);
+      work.unmount();
+    }),
+);
+
+it.effect(
+  "a subagent's tab counts from its task's start while it runs, and once it answered ends on how long it worked",
+  () =>
+    Effect.gen(function* () {
+      const tab = (running: boolean) => {
+        const worker = workerOf(workRowsOf(workerTurns(running), true), "call-worker");
+        assert.ok(worker);
+        return createElement(SubagentTab, { worker, shown: true });
+      };
+      const session = yield* mounted(tab(true));
+      assert.equal(session.timer(), "42s");
+      assert.equal(session.worked(), null);
+      yield* session.draw(tab(false));
+      assert.equal(session.timer(), null);
+      assert.match(session.worked()?.textContent ?? "", /^Worked for 42s · /u);
+      session.unmount();
     }),
 );

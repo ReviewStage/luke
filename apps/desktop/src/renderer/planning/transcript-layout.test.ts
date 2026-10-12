@@ -217,7 +217,7 @@ function subagentTab(): ReactElement {
   );
   const worker = workerOf(rows, "call-worker");
   assert.ok(worker);
-  return createElement(SubagentTab, { worker });
+  return createElement(SubagentTab, { worker, shown: true });
 }
 
 test("the card at the top of an agent's tab and a subagent's stands off the tab row by the section gap, and clips its header's hover fill to its own rounded corners", async () => {

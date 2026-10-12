@@ -37,7 +37,7 @@ import {
   workerJob,
   workRowsOf,
 } from "./work-model";
-import { WorkingLine, WorkingTime } from "./working-time";
+import { WorkedFor, WorkingLine, WorkingTime } from "./working-time";
 
 /**
  * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
@@ -104,15 +104,21 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
  */
 const OpenSubagentContext = createContext<(callId: string) => void>(() => undefined);
 
-/** A subagent's call as the one button every subagent's row is, which opens its tab. */
-function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
+/** Whether a running subagent's row counts how long it has worked: while the Work tab is on screen, as its running turn counts. */
+const CountingContext = createContext(false);
+
+/** A subagent's call as the one button every subagent's row is, which opens its tab, counting while it runs from when its task began. */
+function WorkerLine({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
   const open = useContext(OpenSubagentContext);
+  const counting = useContext(CountingContext);
+  const { call, session } = worker;
   return (
     <TranscriptSubagent
       callId={call.id}
       job={workerJob(call)}
       pair={undefined}
       state={toolStateOf(call)}
+      startedAt={counting ? session?.startedAt : undefined}
       errorText={undefined}
       onOpen={() => open(call.id)}
     />
@@ -151,16 +157,29 @@ const SUBAGENT_END_LINE = {
  * tab draws its transcript: the task it was handed as a card at the top,
  * its job on the card's line and the whole message once opened, scrolling
  * with the rest; its blocks as the Work tab draws them; and at
- * the end a shimmering line while it runs, or a quiet one where it was
- * stopped. The tab's own label names the task, so no head repeats it. The
+ * the end a shimmering line while it runs, counting from when its task
+ * began, or once it has finished a quiet line saying how long it worked
+ * and when it ended, and one saying so where it was stopped. The tab's own
+ * label names the task, so no head repeats it. The
  * worker is read from the plan's work on every frame, so the tab follows
  * the session while the subagent runs, and the log keeps to its newest
  * line as every transcript does.
  */
-export function SubagentTab({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
-  const { call, task } = worker;
+export function SubagentTab({
+  worker,
+  shown,
+}: {
+  worker: WorkWorkerBlock;
+  /** Whether the tab is on screen, which is when a running subagent's line counts how long it has worked. */
+  shown: boolean;
+}): React.JSX.Element {
+  const { call, task, session } = worker;
   const job = workerJob(call);
   const ended = call.running ? undefined : SUBAGENT_END_LINE[call.state];
+  const worked =
+    call.running || session?.startedAt === undefined || session.endedAt === undefined
+      ? undefined
+      : { startedAt: session.startedAt, endedAt: session.endedAt };
   return (
     <div className="plan-work ph-no-capture">
       <Conversation>
@@ -176,8 +195,8 @@ export function SubagentTab({ worker }: { worker: WorkWorkerBlock }): React.JSX.
             </PlanContent>
           </Plan>
           <SubagentRows worker={worker} />
-          {/* No start of a subagent's own reaches the window, so its line counts nothing. */}
-          {call.running ? <WorkingLine startedAt={undefined} /> : null}
+          {call.running ? <WorkingLine startedAt={shown ? session?.startedAt : undefined} /> : null}
+          {worked === undefined ? null : <WorkedFor {...worked} />}
           {ended === undefined ? null : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
@@ -200,7 +219,7 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
     case WORK_BLOCK.CALL:
       return <WorkCall call={block.call} />;
     case WORK_BLOCK.WORKER:
-      return <WorkerLine call={block.call} />;
+      return <WorkerLine worker={block} />;
   }
 }
 
@@ -243,7 +262,7 @@ function TurnState({
   );
 }
 
-/** One turn: the checkpoint saying when it began and how far it got, then its blocks. */
+/** One turn: the checkpoint saying when it began and how far it got, then its blocks, and once it ended how long it worked. */
 function WorkTurn({
   turn,
   now,
@@ -262,6 +281,9 @@ function WorkTurn({
       </Checkpoint>
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
       <WorkTurnRows rows={turn.rows} />
+      {turn.state === PLAN_WORK_STATE.RUNNING || turn.endedAt === undefined ? null : (
+        <WorkedFor startedAt={turn.startedAt} endedAt={turn.endedAt} />
+      )}
     </>
   );
 }
@@ -346,23 +368,27 @@ export function PlanWork({
   return (
     <section className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
-        {rows.length === 0 && earlier === undefined ? (
-          <ConversationEmptyState>
-            <p className="m-0">{WORK_EMPTY_LINE}</p>
-          </ConversationEmptyState>
-        ) : (
-          <Conversation>
-            {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-            <ConversationContent className="pt-0">
-              {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
-              {earlier === undefined ? null : <EarlierWork key={earlier} onLoad={onLoadEarlier} />}
-              {rows.map((turn) => (
-                <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
-              ))}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-        )}
+        <CountingContext.Provider value={shown}>
+          {rows.length === 0 && earlier === undefined ? (
+            <ConversationEmptyState>
+              <p className="m-0">{WORK_EMPTY_LINE}</p>
+            </ConversationEmptyState>
+          ) : (
+            <Conversation>
+              {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
+              <ConversationContent className="pt-0">
+                {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
+                {earlier === undefined ? null : (
+                  <EarlierWork key={earlier} onLoad={onLoadEarlier} />
+                )}
+                {rows.map((turn) => (
+                  <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
+                ))}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          )}
+        </CountingContext.Provider>
       </OpenSubagentContext.Provider>
     </section>
   );

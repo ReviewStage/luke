@@ -176,6 +176,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       agent: { ...AGENT, ...held.choice, status: held.status },
       models: MODELS,
       startedAt: undefined,
+      delegationStarts: undefined,
       readModels: ignore,
       transcript: {
         messages: held.messages,
@@ -183,6 +184,8 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         usage: held.usage,
         turnUsage: undefined,
         context: held.context,
+        runStartedAt: undefined,
+        delegations: new Map(),
         reading: false,
         failed: false,
         onRetry: ignore,
