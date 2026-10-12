@@ -956,6 +956,30 @@ test("a working line shimmers at the end only while the agent may still write, s
   assert.match(ended, /<\/div><\/div><\/div>$/u);
 });
 
+test("the working line says the agent is starting before its turn opens and thinking before the turn draws a row", () => {
+  const line = (markup: string) =>
+    /data-working=""[^>]*><span[^>]*>([^<]*)<\/span>/u.exec(markup)?.[1];
+  const starting = renderToStaticMarkup(
+    createElement(AgentTranscriptView, {
+      messages: [PLAN],
+      reading: false,
+      failed: false,
+      working: true,
+      sessionStarting: true,
+      onRetry: ignore,
+      openGitHub: ignore,
+    }),
+  );
+  assert.equal(line(starting), "Starting…");
+  const opened: CodingAgentMessage = {
+    id: "m-turn",
+    role: "assistant",
+    parts: [{ type: "step-start" }],
+  };
+  assert.equal(line(drawn([PLAN, opened], true)), "Thinking…");
+  assert.equal(line(drawn([PLAN, TURN], true)), "Working…");
+});
+
 test("a message the developer sent after the plan is the developer's bubble, and only the first is the plan card", () => {
   const markup = drawn([PLAN, TURN, FOLLOW_UP]);
   const cards = markup.match(/data-plan-card=""/gu) ?? [];

@@ -43,8 +43,9 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * or was stopped, whether its transcript is still followed, how
  * a page of its messages joins the ones held, how a stored message's parts
  * are read for drawing, which of its rows wait above the composer rather
- * than in the transcript, when a line the developer sent has been read
- * back, what a Start or a message that did not land says, and what its
+ * than in the transcript, what its working line says it is doing, when a
+ * line the developer sent has been read back, what a Start or a message
+ * that did not land says, and what its
  * pull request chip, its branch chip, and the pull request's row say and
  * open, and how what an agent or a turn cost is told.
  * Nothing here asks anything.
@@ -818,6 +819,13 @@ const AGENT_READING: RowReading<AgentPart> = {
     (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
 };
 
+/** The parts of a message a row is drawn from: every part but a step boundary and a kind this build does not draw. */
+function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
+  return agentParts(message).filter(
+    (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
+  );
+}
+
 /**
  * One of the agent's turns as the rows every transcript draws, folded as
  * the Work tab folds Luke's (`turn-rows.ts`). A step boundary and a part
@@ -835,9 +843,7 @@ export function agentRows(
   grouped = true,
   newestTodos: string | undefined = undefined,
 ): readonly TurnRow<AgentPart>[] {
-  const parts = agentParts(message).filter(
-    (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
-  );
+  const parts = drawnParts(message);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
@@ -848,6 +854,49 @@ export function agentRows(
     done: grouped && !moving,
     grouped,
   });
+}
+
+/** What an agent is doing while it may still write, as its transcript's working line says it. */
+export const WORKING_PHASE = {
+  /** Its session has not opened the turn that will answer the newest line. */
+  STARTING: "starting",
+  /** The turn is open and its model has drawn nothing yet. */
+  THINKING: "thinking",
+  /** The turn has drawn something: a call, a thought, or words. */
+  WORKING: "working",
+} as const;
+
+export type WorkingPhase = (typeof WORKING_PHASE)[keyof typeof WORKING_PHASE];
+
+/** What the working line says in each phase. */
+export const WORKING_PHASE_WORDS = {
+  [WORKING_PHASE.STARTING]: "Starting…",
+  [WORKING_PHASE.THINKING]: "Thinking…",
+  [WORKING_PHASE.WORKING]: "Working…",
+} as const satisfies Record<WorkingPhase, string>;
+
+/**
+ * What a working agent is doing, as far as its transcript shows it, which
+ * is what its working line says in place of a bare "Working…" between a
+ * send and the turn's first row, as Codex and Cursor word a cloud agent's
+ * start. It is starting while its session has not run a turn, or while
+ * its newest turn's journal is closed or absent, so the line the developer
+ * sent awaits a turn of its own; thinking while that journal is open and
+ * holds nothing drawn past its step boundaries, which is the model at its
+ * first step, since a step's reasoning lands only as the step ends and its
+ * words a finished sentence at a time; and working once anything is drawn.
+ * Note that a line sent while a turn runs steers that turn, so the open
+ * journal before it is what the agent is doing, not the line.
+ */
+export function agentWorkingPhase(
+  lines: readonly CodingAgentMessage[],
+  sessionStarting: boolean,
+): WorkingPhase {
+  const journal = lines.findLast((line) => line.role === MESSAGE_ROLE.ASSISTANT);
+  if (sessionStarting || journal === undefined || journal.finishedAt !== undefined) {
+    return WORKING_PHASE.STARTING;
+  }
+  return drawnParts(journal).length === 0 ? WORKING_PHASE.THINKING : WORKING_PHASE.WORKING;
 }
 
 /** Where a worker stands, read from its delegation's part: running until the call answers, then completed, or failed where the call ended in an error. */

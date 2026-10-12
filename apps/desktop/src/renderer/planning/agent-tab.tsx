@@ -42,6 +42,7 @@ import {
   agentRows,
   agentStillWriting,
   agentTabLabel,
+  agentWorkingPhase,
   dockedTodos,
   endLine,
   messageWords,
@@ -50,6 +51,7 @@ import {
   providerOf,
   settledPlanEdits,
   showsPublishedRow,
+  WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
 } from "./coding-agent-model";
@@ -100,7 +102,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
- * the agent may still write, a shimmering "Working…" stands at the end,
+ * the agent may still write, a shimmering line stands at the end saying
+ * what it is doing, "Starting…" until its turn opens, "Thinking…" until
+ * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
  * counting how long the run has gone where the service said when it began
  * (`working-time.tsx`), as a running worker's row counts beside its
  * spinner, gone the moment it ends, so a finished turn ends on its own
@@ -453,6 +457,7 @@ export function AgentTranscriptView({
   reading,
   failed,
   working,
+  sessionStarting = false,
   startedAt,
   ended,
   onRetry,
@@ -471,6 +476,8 @@ export function AgentTranscriptView({
   failed: boolean;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
   working: boolean;
+  /** Whether the agent's session has not run its first turn yet, which its working line says. */
+  sessionStarting?: boolean;
   /** When the run under way began, which the working line counts from; none where unknown, when the line only shimmers. */
   startedAt?: number | undefined;
   /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
@@ -513,7 +520,12 @@ export function AgentTranscriptView({
               todos={todos}
             />
           ))}
-          {working ? <WorkingLine startedAt={startedAt} /> : null}
+          {working ? (
+            <WorkingLine
+              startedAt={startedAt}
+              words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting)]}
+            />
+          ) : null}
           {ended !== undefined ? (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
@@ -612,6 +624,7 @@ export function AgentTabView({
         reading={transcript.reading}
         failed={transcript.failed}
         working={working}
+        sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
@@ -792,6 +805,7 @@ export function AgentSubagentTab({
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(status)}
+        sessionStarting={status === CODING_AGENT_STATUS.STARTING}
         startedAt={shown ? transcript.runStartedAt : undefined}
         ended={endLine(status, transcript.failure)}
         onRetry={transcript.onRetry}
