@@ -1,8 +1,12 @@
 /* The whiteboard fills the page between the header and the microphone row;
    Excalidraw draws to the size of the box it is given, so the canvas's box
-   is the page's own. */
+   is the page's own. Note that the board isolates its own stacking, because
+   Excalidraw raises its toolbar, hints, and menus by z-index: unisolated they
+   rose through the side panel's tab strip and over the "+" menu dropped from
+   it, while isolated they still layer among themselves as Excalidraw says. */
 .plan-board {
   position: relative;
+  isolation: isolate;
   display: flex;
   min-height: 0;
   flex: 1;
