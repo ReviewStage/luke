@@ -8,16 +8,12 @@ import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PlanBody } from "../planning/plan-body";
-import * as FieldEditorModule from "../planning/plan-field-editor";
 import { rendererRegistry } from "../renderer-runtime";
-import { ContentEditableFieldEditor } from "./ce-field";
-import { LexicalFieldEditor } from "./lexical-field";
-import { TipTapFieldEditor } from "./tiptap-field";
 
 /**
- * SPIKE, not production code. `?editor=pm|tiptap|lexical|ce` picks the
- * in-place editor (built from a `main` checkout, where the context does not
- * exist, the page is today's text boxes); `?long=1` grows the plan to sixty
+ * SPIKE, not production code. Built from this branch the page edits in
+ * place on TipTap; built from a `main` checkout it is today's text boxes.
+ * `?long=1` grows the plan to sixty
  * rules and long fields for the latency runs. `window.spike` lets the
  * headless driver play Luke: `lukeWrites(field, text)` is a notetaker save
  * landing on a text field, `lukeDraft(field, text)` a live draft frame.
@@ -119,15 +115,6 @@ function planOf(content: PlanContent, at: number, actor: Plan["lastEdit"]): Plan
 }
 
 const params = new URLSearchParams(window.location.search);
-const EDITORS = {
-  tiptap: TipTapFieldEditor,
-  lexical: LexicalFieldEditor,
-  ce: ContentEditableFieldEditor,
-} as const;
-const chosen = EDITORS[params.get("editor") as keyof typeof EDITORS];
-const context = (FieldEditorModule as { SeamlessEditorContext?: React.Context<unknown> })
-  .SeamlessEditorContext;
-
 /** The stored content the fake service holds, which the driver reads. */
 let stored: PlanContent = {
   fields: params.get("long") === "1" ? longFields() : FIELDS,
@@ -165,14 +152,9 @@ function Demo(): React.JSX.Element {
         })),
     },
   });
-  const body = <PlanBody plan={plan} live={false} onEdit={edit} />;
   return (
     <section className="desktop-document spike-demo" aria-label={NAME}>
-      {context === undefined || chosen === undefined ? (
-        body
-      ) : (
-        <context.Provider value={chosen}>{body}</context.Provider>
-      )}
+      <PlanBody plan={plan} live={false} onEdit={edit} />
     </section>
   );
 }

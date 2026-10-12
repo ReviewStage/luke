@@ -6,11 +6,10 @@ import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { PencilIcon, PlusIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { rendererRuntime } from "../renderer-runtime";
-import { type FieldValue, PM_FIELD_KIND } from "../spike/field-value";
-import { PmFieldEditor } from "../spike/pm-field";
+import { FIELD_KIND, type FieldValue, FieldEditor as InPlaceEditor } from "../spike/field-editor";
 import {
   CONFLICT_NOTE,
   EDIT_DRAFT,
@@ -81,10 +80,6 @@ export interface ClickPoint {
   readonly x: number;
   readonly y: number;
 }
-
-/** SPIKE: the in-place editor a field opens in, the minimal ProseMirror one unless the demo swaps it. */
-export type SeamlessEditor = typeof PmFieldEditor;
-export const SeamlessEditorContext = createContext<SeamlessEditor>(PmFieldEditor);
 
 /** The document's one field editor, where it stands, and its doors. */
 export interface FieldEditing {
@@ -263,14 +258,14 @@ function EditorNote({
 }
 
 /** SPIKE: the field's words as the in-place editor opens on them, read from the draft the model opened. */
-function seamlessValue(editor: FieldEditor): FieldValue {
+function inPlaceValue(editor: FieldEditor): FieldValue {
   const { draft, target } = editor;
-  if (draft.kind === EDIT_DRAFT.RULE) return { kind: PM_FIELD_KIND.RULE, rule: draft.rule };
-  if (target.field === PLAN_FIELD.OPEN_QUESTIONS || target.field === PLAN_FIELD.ASSUMPTIONS) {
-    const items = draft.text.split("\n").filter((line) => line !== "");
-    return { kind: PM_FIELD_KIND.ITEMS, items };
-  }
-  return { kind: PM_FIELD_KIND.TEXT, markdown: draft.text === "" ? null : draft.text };
+  if (draft.kind === EDIT_DRAFT.RULE) return { kind: FIELD_KIND.RULE, rule: draft.rule };
+  if (target.field === PLAN_FIELD.OPEN_QUESTIONS)
+    return { kind: FIELD_KIND.QUESTIONS, text: draft.text };
+  if (target.field === PLAN_FIELD.ASSUMPTIONS)
+    return { kind: FIELD_KIND.ASSUMPTIONS, text: draft.text };
+  return { kind: FIELD_KIND.TEXT, text: draft.text };
 }
 
 /** SPIKE: how long the typing pauses before the document hears the field's words. */
@@ -295,9 +290,8 @@ function useCoalescedDrafts(editing: FieldEditing): {
     const next = pending.current;
     pending.current = undefined;
     if (next === undefined) return;
-    if (next.kind === PM_FIELD_KIND.RULE) door.current.typeRule(next.rule);
-    else if (next.kind === PM_FIELD_KIND.ITEMS) door.current.typeText(next.items.join("\n"));
-    else door.current.typeText(next.markdown ?? "");
+    if (next.kind === FIELD_KIND.RULE) door.current.typeRule(next.rule);
+    else door.current.typeText(next.text);
   };
   useEffect(() => flush, []);
   return {
@@ -333,46 +327,41 @@ export function PlanFieldEditor({
   ruleCount: number;
   editing: FieldEditing;
 }): React.JSX.Element {
-  const Editor = useContext(SeamlessEditorContext);
   const label = targetLabel(editor.target, ruleCount);
-  const value = useRef(seamlessValue(editor)).current;
+  const value = useRef(inPlaceValue(editor)).current;
   const { onDraft, onFinish } = useCoalescedDrafts(editing);
-  const fields =
-    value.kind === PM_FIELD_KIND.RULE ? (
-      <div className="plan-unit plan-rule">
-        <span className="plan-rule-number">
-          {"rule" in editor.target ? `${editor.target.rule + 1}.` : ""}
-        </span>
-        <Editor
-          value={value}
-          at={editing.at}
-          label={label}
-          className="markdown plan-rule-body"
-          onDraft={onDraft}
-          onFinish={onFinish}
-        />
-      </div>
-    ) : (
-      <Editor
-        value={value}
-        at={editing.at}
-        label={label}
-        className={
-          value.kind === PM_FIELD_KIND.ITEMS ? "markdown spike-items" : "markdown plan-unit"
-        }
-        onDraft={onDraft}
-        onFinish={onFinish}
-      />
-    );
+  const rule = value.kind === FIELD_KIND.RULE;
+  const words = (
+    <InPlaceEditor
+      value={value}
+      at={editing.at}
+      label={label}
+      className={rule ? "markdown plan-rule-body" : "markdown plan-unit"}
+      onDraft={onDraft}
+      onFinish={onFinish}
+    />
+  );
   return (
     <section
       className="plan-field-editor spike-seamless ph-no-capture"
       aria-label={`Editing ${label}`}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onFinish();
+      }}
     >
-      {heading === undefined || value.kind === PM_FIELD_KIND.RULE ? null : (
+      {heading === undefined || rule ? null : (
         <MarkdownMessage words={heading} className="plan-unit" />
       )}
-      {fields}
+      {rule ? (
+        <div className="plan-unit plan-rule">
+          <span className="plan-rule-number">
+            {"rule" in editor.target ? `${editor.target.rule + 1}.` : ""}
+          </span>
+          {words}
+        </div>
+      ) : (
+        words
+      )}
       <EditorNote editor={editor} editing={editing} />
     </section>
   );

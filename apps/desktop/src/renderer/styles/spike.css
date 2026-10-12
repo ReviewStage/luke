@@ -13,16 +13,13 @@
   caret-color: var(--accent);
 }
 
-.spike-editor:empty::before,
-.spike-editor > p:only-child:empty::before {
+/* TipTap's placeholder on an empty field, as its documentation draws it. */
+.spike-editor p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
   color: var(--text-tertiary);
-  content: "Unanswered";
-}
-
-/* A list field is one list, drawn as the assumptions are. */
-.spike-items ul {
-  margin: 0;
-  padding-left: 1.5em;
+  content: attr(data-placeholder);
+  pointer-events: none;
 }
 
 /* A rule's clauses, as the read view draws each example's lines. */
@@ -42,24 +39,10 @@
   display: none;
 }
 
-.spike-raw {
-  opacity: 0.7;
-}
-
-/* Lexical's inline formats, by its theme's classes. */
-.spike-bold {
-  font-weight: 700;
-}
-
-.spike-italic {
-  font-style: italic;
-}
-
-.spike-strike {
-  text-decoration: line-through;
-}
-
 /* A link in the editor is the read view's link, not the browser's blue. */
-.spike-editor a.markdown-link {
+.spike-editor a {
   color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--markdown-edge);
+  text-underline-offset: 0.15em;
 }

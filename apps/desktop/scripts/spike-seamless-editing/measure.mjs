@@ -1,4 +1,4 @@
-// measure.mjs -- SPIKE: the renderer bundle's gzipped size with each in-place editor prototype added, and the demo page's build.
+// measure.mjs -- SPIKE: the renderer bundle's gzipped size with the in-place editor added, and the demo page's build.
 
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,7 +13,7 @@ import { build } from "esbuild";
  *   node scripts/spike-seamless-editing/measure.mjs          # the bundle table
  *   node scripts/spike-seamless-editing/measure.mjs demo out/  # the demo page into out/
  *
- * Each variant is the renderer's own entry plus one prototype held live on a
+ * The variant is the renderer's own entry plus the editor held live on a
  * global, built with `scripts/build.mjs`'s renderer options and gzipped at
  * level 9, as the budget check measures it.
  */
@@ -39,11 +39,7 @@ const RENDERER_OPTIONS = {
 
 const VARIANTS = {
   main: "",
-  "+ minimal ProseMirror (pm-field)": `import { PmFieldEditor } from "./spike/pm-field"; globalThis.__spike = PmFieldEditor;`,
-  "+ TipTap (StarterKit, our mdast bridge)": `import { TipTapFieldEditor } from "./spike/tiptap-field"; globalThis.__spike = TipTapFieldEditor;`,
-  "+ TipTap + @tiptap/markdown (marked)": `import { TipTapFieldEditor } from "./spike/tiptap-field"; import { Markdown } from "@tiptap/markdown"; globalThis.__spike = [TipTapFieldEditor, Markdown];`,
-  "+ Lexical (rich text, list, link, markdown)": `import { LexicalFieldEditor } from "./spike/lexical-field"; globalThis.__spike = LexicalFieldEditor;`,
-  "+ contenteditable (ce-field)": `import { ContentEditableFieldEditor } from "./spike/ce-field"; globalThis.__spike = ContentEditableFieldEditor;`,
+  "+ TipTap field editor (spike/field-editor)": `import { FieldEditor } from "./spike/field-editor"; globalThis.__spike = FieldEditor;`,
 };
 
 async function gzipped(extra) {
@@ -61,17 +57,15 @@ async function gzipped(extra) {
   return { raw: bytes.length, gz: gzipSync(bytes, { level: 9 }).length };
 }
 
-/** Each editor as a bundle of its own, loaded on first use as `whiteboard.js` is: no React, nothing shared with the renderer. */
+/** The editor as a bundle of its own, loaded on first use as `whiteboard.js` and `file-tree.js` are; it carries its own React. */
 const LAZY = {
-  "minimal ProseMirror (pm-mount, vanilla)": `import { mountFieldEditor } from "./spike/pm-mount"; globalThis.__spike = mountFieldEditor;`,
-  "TipTap core + StarterKit (vanilla, our bridge)": `import { Editor } from "@tiptap/core"; import StarterKit from "@tiptap/starter-kit"; import { fieldJson, valueOf } from "./spike/field-value"; globalThis.__spike = [Editor, StarterKit, fieldJson, valueOf];`,
-  "Lexical core + rich text, list, link, markdown (vanilla)": `import { createEditor } from "lexical"; import { registerRichText } from "@lexical/rich-text"; import { registerList } from "@lexical/list"; import { LinkNode } from "@lexical/link"; import { registerHistory } from "@lexical/history"; import { $convertFromMarkdownString, registerMarkdownShortcuts, TRANSFORMERS } from "@lexical/markdown"; globalThis.__spike = [createEditor, registerRichText, registerList, LinkNode, registerHistory, $convertFromMarkdownString, registerMarkdownShortcuts, TRANSFORMERS];`,
+  "TipTap field editor as field-editor.js": `import { createRoot } from "react-dom/client"; import { FieldEditor } from "./spike/field-editor"; globalThis.__spike = [createRoot, FieldEditor];`,
 };
 
 async function lazyGzipped(entry) {
   const result = await build({
     ...RENDERER_OPTIONS,
-    stdin: { contents: entry, resolveDir: renderer, sourcefile: "lazy-entry.ts", loader: "ts" },
+    stdin: { contents: entry, resolveDir: renderer, sourcefile: "lazy-entry.tsx", loader: "tsx" },
     outfile: "editor.js",
   });
   const bytes = result.outputFiles[0].contents;
