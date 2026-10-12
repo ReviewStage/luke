@@ -1467,6 +1467,49 @@ it.effect(
 );
 
 it.effect(
+  "a device input one message short of the bound still opens on the plan, and on the earlier calls only where a second message fits",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await openSession(context, plan.id);
+      await sendText(
+        first.attach.socket,
+        JSON.stringify(heard("Invites should expire.", 1000, 2000)),
+      );
+      await hangUpConnection(first.desktop, first.attach, first.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the first call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const deviceLines = (count: number) => Array.from({ length: count }, () => SEED[0] ?? {});
+
+      const full = await openSession(context, plan.id, deviceLines(LIVE_INPUT_BOUNDS.MESSAGES - 1));
+      const fullSeeded = seededTexts(context, 1);
+      assert.equal(fullSeeded.length, LIVE_INPUT_BOUNDS.MESSAGES);
+      assert.equal(fullSeeded[0]?.role, SEED_ROLE.DEVELOPER);
+      assert.ok(String(fullSeeded[0]?.text).includes(PLAN.name));
+      assert.equal(fullSeeded[1]?.role, SEED_ROLE.USER, "no room is left for the earlier calls");
+      await hangUpConnection(full.desktop, full.attach, full.upstream);
+
+      const roomy = await openSession(
+        context,
+        plan.id,
+        deviceLines(LIVE_INPUT_BOUNDS.MESSAGES - 2),
+      );
+      const [seed, transcript] = seededTexts(context, 2);
+      assert.ok(String(seed?.text).includes(PLAN.name));
+      assert.ok(String(transcript?.text).endsWith("Developer: Invites should expire."));
+      await hangUpConnection(roomy.desktop, roomy.attach, roomy.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
+        () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
   "earlier calls past the startup bound keep their newest lines and the plan's seed, and the whole stays under the bound",
   () =>
     Effect.promise(async () => {

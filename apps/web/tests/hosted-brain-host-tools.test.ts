@@ -596,6 +596,8 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
   const second = startedAgentOf(tasked);
   assert.deepEqual([second.model, second.effort], [SOL, "low"]);
+  // Named as the catalog names it, as the screen does once the catalog is read.
+  assert.equal(second.modelName, "GPT-6.1 Sol");
   assert.equal(JSON.parse(eve.sent[1]?.body ?? "").message, TASK);
   // The agents it started are the ones the other tools then read.
   const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});

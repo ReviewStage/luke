@@ -243,11 +243,14 @@ function startupInput(
   plan: Plan,
   earlier: readonly EarlierCallLine[],
 ): readonly InitialItem[] {
-  // The plan's seed and the transcript are one message each.
-  if (input.length + 2 > LIVE_INPUT_BOUNDS.MESSAGES) return input;
+  if (input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
   const room = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input);
   const planFloor = Math.min(room, PLAN_SEED_FLOOR_TOKENS, startupTokens(planSeedText(plan, true)));
-  const said = newestWithin(earlier, room - planFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
+  // The plan's seed and the transcript are one message each, and the plan's is kept first.
+  const said =
+    input.length + 2 > LIVE_INPUT_BOUNDS.MESSAGES
+      ? []
+      : newestWithin(earlier, room - planFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
   const history =
     said.length === 0 ? [] : [developerSeedItem(`${EARLIER_CALLS_NOTE}\n\n${said.join("\n")}`)];
   const seed = startupPrefix(planSeedText(plan, said.length > 0), room - seedItemTokens(history));

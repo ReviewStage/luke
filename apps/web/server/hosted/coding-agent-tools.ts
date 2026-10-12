@@ -358,6 +358,15 @@ const standingsOf = (userId: string, agents: readonly CodingAgent[]) =>
     };
   });
 
+/**
+ * The models offered as the catalog last read them, or none where it cannot
+ * be read: a model is then named from its id, as the screen names it before
+ * the catalog arrives.
+ */
+const offeredModels = Effect.flatMap(ModelCatalog, (catalog) =>
+  Effect.orElseSucceed(catalog.read, (): readonly OfferedModel[] => []),
+);
+
 const readAgent = (
   userId: string,
   agent: CodingAgent,
@@ -365,6 +374,7 @@ const readAgent = (
     readonly status: CodingAgentStatus;
     readonly failureReason: CodingAgentFailure | undefined;
   },
+  offered: readonly OfferedModel[],
 ): Effect.Effect<AgentReading, StoreFailure, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const [newest] = yield* journalsOf(userId, agent, 1);
@@ -376,7 +386,7 @@ const readAgent = (
       id: agent.id,
       title: agent.title ?? agent.model,
       model: agent.model,
-      modelName: modelLabel(agent.model),
+      modelName: modelLabel(agent.model, offered),
       effort: agent.effort,
       status: standing.status,
       ...(standing.failureReason === undefined
@@ -432,11 +442,11 @@ function choiceRefusal(choice: ModelChoice | undefined, offered: readonly Offere
 }
 
 /** The agent as a start answers it: its id, what it runs on, and where it stands now. */
-const startedReading = (userId: string, agent: CodingAgent) =>
+const startedReading = (userId: string, agent: CodingAgent, offered: readonly OfferedModel[]) =>
   Effect.map(standingsOf(userId, [agent]), (standing) => ({
     id: agent.id,
     model: agent.model,
-    modelName: modelLabel(agent.model),
+    modelName: modelLabel(agent.model, offered),
     effort: agent.effort,
     status: standing(agent).status,
   }));
@@ -457,14 +467,15 @@ function readingsRecord(readings: readonly AgentReading[]): WireRecord[] {
 /** One call of `list_coding_agents`: every agent of the plan, in the order started. */
 export function runListCodingAgents(
   call: CodingAgentCall,
-): Effect.Effect<WireRecord, never, SqlClient.SqlClient> {
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   return orStoreRefusal(
     Effect.gen(function* () {
       const { userId, planId } = call.plan;
       const agents = yield* listCodingAgents(userId, planId);
       const standing = yield* standingsOf(userId, agents);
+      const offered = yield* offeredModels;
       const readings = yield* Effect.forEach(agents, (agent) =>
-        readAgent(userId, agent, standing(agent)),
+        readAgent(userId, agent, standing(agent), offered),
       );
       return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readingsRecord(readings) };
     }),
@@ -487,7 +498,7 @@ export function runReadCodingAgent(
       const agent = found.value;
       const { userId } = call.plan;
       const standing = yield* standingsOf(userId, [agent]);
-      const reading = yield* readAgent(userId, agent, standing(agent));
+      const reading = yield* readAgent(userId, agent, standing(agent), yield* offeredModels);
       const published = yield* publishedOf(userId, agent);
       const journals = yield* journalsOf(userId, agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
@@ -564,15 +575,13 @@ export function runStartCodingAgent(
       if (Result.isFailure(started)) {
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
-          const catalog = yield* ModelCatalog;
-          const offered = yield* Effect.orElseSucceed(catalog.read, () => []);
-          return rejected(choiceRefusal(choice, offered));
+          return rejected(choiceRefusal(choice, yield* offeredModels));
         }
         return rejected(startRefusalWords(refusal));
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        agent: yield* startedReading(userId, started.success.agent),
+        agent: yield* startedReading(userId, started.success.agent, yield* offeredModels),
       };
     }),
   );
