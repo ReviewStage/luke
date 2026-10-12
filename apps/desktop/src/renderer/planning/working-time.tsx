@@ -38,6 +38,9 @@ const HOUR_MINUTES = 60;
 /** What a transcript's last line says while its agent works. */
 const WORKING_LINE = "Working…";
 
+/** What a finished turn's last line says before how long it worked. */
+const WORKED_WORDS = "Worked for ";
+
 /** What separates how long a finished turn worked from when it ended. */
 const WORKED_SEPARATOR = " · ";
 
@@ -58,7 +61,7 @@ export function workedForText(
   locale?: string,
 ): string {
   const ended = callHeading(endedAt, now, locale);
-  return `Worked for ${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
+  return `${WORKED_WORDS}${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 
 /** The time now, and again each second: what a count is read against. */
@@ -98,9 +101,11 @@ export function WorkingTime({
 
 /**
  * The quiet line a finished turn ends on: how long it worked and when it
- * ended, hanging the turn's card while the pointer rests on it
+ * ended, hanging the turn's card while the pointer rests anywhere on it
  * (`turn-card.tsx`): what it ran on, when it began and ended in full, how
- * it ended, and its tokens, as far as its row recorded them.
+ * it ended, and its tokens, as far as its row recorded them. Note that the
+ * line is only as wide as its words, so the card answers the words and not
+ * the empty column beside them.
  */
 export function WorkedFor({
   startedAt,
@@ -121,22 +126,30 @@ export function WorkedFor({
   const now = useMinute();
   const text = workedForText(startedAt, endedAt, now);
   return (
-    <p className="m-0 text-[11.5px] text-muted-foreground tabular-nums select-text" data-worked="">
-      <Tooltip
-        label={text}
-        card={
-          <TurnCard
-            startedAt={startedAt}
-            endedAt={endedAt}
-            record={record}
-            models={models}
-            harnessed={harnessed}
-          />
-        }
+    <Tooltip
+      label={text}
+      card={
+        <TurnCard
+          startedAt={startedAt}
+          endedAt={endedAt}
+          record={record}
+          models={models}
+          harnessed={harnessed}
+        />
+      }
+    >
+      <p
+        className="m-0 w-fit text-[11.5px] text-muted-foreground tabular-nums select-text"
+        data-worked=""
       >
-        <time dateTime={new Date(endedAt).toISOString()}>{text}</time>
-      </Tooltip>
-    </p>
+        <span data-worked-length="">
+          {WORKED_WORDS}
+          {workingTime(endedAt - startedAt)}
+        </span>
+        {WORKED_SEPARATOR}
+        <time dateTime={new Date(endedAt).toISOString()}>{callHeading(endedAt, now)}</time>
+      </p>
+    </Tooltip>
   );
 }
 

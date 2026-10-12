@@ -66,13 +66,13 @@ const mounted = (element: ReactElement) =>
       timer: () => container.querySelector("[role='timer']")?.textContent ?? null,
       timers: () =>
         [...container.querySelectorAll("[role='timer']")].map((timer) => timer.textContent),
-      worked: () => container.querySelector("[data-worked] time"),
-      /** The card the finished line hangs once the pointer rests on it, or nothing where it hangs none. */
-      hoverWorked: () => {
-        const time = container.querySelector("[data-worked] time");
-        assert.ok(time, "no finished line to hover");
+      worked: () => container.querySelector("[data-worked]"),
+      /** The card the finished line hangs once the pointer rests on the part of it named (its whole line unless said), or nothing where it hangs none. */
+      hoverWorked: (part = "[data-worked]") => {
+        const target = container.querySelector(part);
+        assert.ok(target, `no ${part} to hover`);
         act(() => {
-          time.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+          target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
         });
         return document.body.querySelector<HTMLElement>("[data-turn-card]");
       },
@@ -349,7 +349,10 @@ it.effect(
       const worked = tab.worked();
       assert.match(worked?.textContent ?? "", /^Worked for 1m 18s · Today, /u);
       assert.equal(worked?.closest("[data-worked]")?.classList.contains("select-text"), true);
-      assert.equal(worked?.getAttribute("datetime"), new Date(TURN_END).toISOString());
+      assert.equal(
+        worked?.querySelector("time")?.getAttribute("datetime"),
+        new Date(TURN_END).toISOString(),
+      );
       assert.equal(
         tab.hoverWorked()?.querySelector(".turn-card-when")?.textContent,
         spanText(TURN_END - 78 * SECOND, TURN_END),
@@ -382,6 +385,21 @@ it.effect(
       ]);
       tab.unmount();
     }),
+);
+
+it.effect("the whole finished line hangs the card: its length and its timestamp alike", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(TURN_END + MINUTE);
+    const opened: (string | undefined)[] = [];
+    for (const part of ["[data-worked-length]", "[data-worked] time"]) {
+      const tab = yield* mounted(finishedAgent(OPUS_TURN));
+      opened.push(
+        tab.hoverWorked(part)?.querySelector(".turn-card-model")?.textContent ?? undefined,
+      );
+      tab.unmount();
+    }
+    assert.deepEqual(opened, ["Opus 5.5 High", "Opus 5.5 High"]);
+  }),
 );
 
 it.effect("a turn whose row counted no tokens hangs a card with no token section", () =>

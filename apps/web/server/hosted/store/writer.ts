@@ -697,7 +697,7 @@ const insertMessageRow = SqlSchema.findOneOption({
  * revision and stamps the row with where it moved to, in the one statement,
  * so the change signal's head moves with the write and a messages read
  * asked from an earlier revision answers exactly the rows written since.
- * The four writes below are the only ones that change a row after it is
+ * The writes below that take the bump are the only ones that change a row after it is
  * numbered; a move gives a row a fresh sequence, which the sequence counter
  * already announces.
  *
@@ -779,6 +779,24 @@ const completeMessage = SqlSchema.void({
         finishedAt: row.finishedAt,
         revision: landedRevision(bumped),
       })
+      .where(eq(messages.id, row.id));
+  },
+});
+
+/**
+ * A turn's closed journal read again once its turn has settled: nothing on
+ * the row changes but its revision, so a reader past the journal's own
+ * cursor finds it again beside what the settled turn row now says of it,
+ * its tokens and how it ended (`turn-record.ts`).
+ */
+const reviseJournal = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({ revision: landedRevision(bumped) })
       .where(eq(messages.id, row.id));
   },
 });
@@ -1235,8 +1253,13 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
   // A journal still open here belongs to a turn that answered nothing, so
   // the words its steps formed while it ran leave it, and what it keeps is
-  // what it did.
+  // what it did. One the answer already closed is revised in place, because
+  // a reader may have taken it before the row settled, and what the row now
+  // says of it travels with it.
   const open = yield* messageByClientId(context, event.turnId);
+  if (Option.isSome(open) && open.value.finishedAt !== null) {
+    yield* reviseJournal({ id: open.value.id, conversationId: context.target.conversationId });
+  }
   if (Option.isSome(open) && open.value.finishedAt === null) {
     const parts = open.value.parts.flatMap((part) => {
       if (part.type === UI_PART_TYPE.TEXT) return [];

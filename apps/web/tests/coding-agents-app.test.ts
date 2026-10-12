@@ -2308,6 +2308,73 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a journal read after its turn answered but before the turn settled is read again past that cursor once it has, with what the turn spent",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask, target, writer } = yield* startedAgent(fakeEve(), undefined);
+        const pageAfter = (after?: string) =>
+          Effect.map(
+            ask(
+              request(AGENT_MESSAGES, owner, {
+                id: agent.id,
+                ...(after === undefined ? undefined : { after }),
+              }),
+            ),
+            (answered) =>
+              readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const journalIn = (page: { messages: readonly CodingAgentMessage[] }) =>
+          page.messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+        const turnId = randomUUID();
+        const event = { conversationId: sessionKey(target.conversationId), turnId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+          model: "anthropic/claude-opus-5-5",
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: yield* Clock.currentTimeMillis,
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          sequence: 2,
+          message: {
+            id: turnId,
+            role: MESSAGE_ROLE.ASSISTANT,
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            parts: [{ type: UI_PART_TYPE.TEXT, text: "Done.", state: UI_PART_STATE.DONE }],
+          },
+        });
+        const answered = yield* pageAfter();
+        assert.equal(journalIn(answered)?.tokens, undefined);
+
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          sequence: 3,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          usage: counted(1_500, 150),
+          responseIds: [],
+          at: yield* Clock.currentTimeMillis,
+        });
+        const settled = journalIn(yield* pageAfter(answered.cursor));
+        assert.equal(settled?.id, journalIn(answered)?.id);
+        assert.deepEqual(settled?.tokens, {
+          inputTokens: 1_500,
+          outputTokens: 150,
+          cachedInputTokens: 0,
+        });
+      }),
+  );
+
+  it.effect(
     "the agent's page names each delegation its turn still waits on with when its worker began, from the record's own start, and names none once the call answers",
     () =>
       Effect.gen(function* () {

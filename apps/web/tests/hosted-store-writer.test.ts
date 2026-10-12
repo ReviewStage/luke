@@ -401,16 +401,25 @@ test("each write to the journal in place moves the conversation's journal revisi
   );
 
   // The turn's answer completes the journal: the third write, and the row finishes under it.
-  await feed(target, [
-    stream.answered(stream.turnId, REPLY_PARTS),
-    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
-  ]);
+  await feed(target, [stream.answered(stream.turnId, REPLY_PARTS)]);
   assert.equal(await journalRevision(target), 3);
   assert.deepEqual(
     (await storedMessages(target)).map((row) => [row.seq, row.revision, row.finishedAt !== null]),
     [
       [1, null, true],
       [2, 3, true],
+    ],
+  );
+
+  // The turn's settling revises the closed journal in place, so a reader that took it at the
+  // third write finds it again beside what the settled turn spent: the fourth.
+  await feed(target, [stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)]);
+  assert.equal(await journalRevision(target), 4);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => [row.seq, row.revision, row.finishedAt !== null]),
+    [
+      [1, null, true],
+      [2, 4, true],
     ],
   );
 });
