@@ -548,10 +548,11 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           (page) => page.context,
         );
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const relay = (event: MessageStreamEvent) =>
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-          host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash });
+          host.relay(event, admitted, session as never, state, { hash: prompt.hash });
         const data = { turnId: "turn_0", sequence: 0 };
         yield* relay(stamped({ type: "turn.started", data }));
         yield* relay(stamped({ type: "message.received", data: { ...data, message: PLAN_TEXT } }));
