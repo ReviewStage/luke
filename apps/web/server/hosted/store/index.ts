@@ -1,3 +1,4 @@
+import { purgeClearedConversations } from "@sidecar/database/models/soft-delete";
 import type { ToolSet } from "ai";
 import type { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -8,7 +9,6 @@ import {
   type StoredTurnRecord,
   turnsNamed,
 } from "./message-reads.js";
-import { purgeClearedConversations } from "./soft-delete.js";
 
 /** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
 type HostedStoreFailure = SqlError | Schema.SchemaError;
