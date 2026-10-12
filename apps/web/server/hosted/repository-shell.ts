@@ -6,6 +6,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import { GitHubApp } from "../github/github-app.js";
+import { COMMAND_DESCRIPTION } from "./command-description.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
@@ -67,7 +68,7 @@ function notRunWording<const Reasons extends Readonly<Record<string, string>>>(
 
 /** Why a call ran nothing, in words the model can act on. */
 export const REPOSITORY_SHELL_REFUSAL = {
-  UNREADABLE: `${NOT_RUN}the arguments must be exactly \`command\`, one shell command.`,
+  UNREADABLE: `${NOT_RUN}the arguments must be \`command\`, one shell command, and its optional \`description\`.`,
   ...notRunWording(REPOSITORY_REFUSAL),
 } as const;
 
@@ -258,6 +259,7 @@ const RUN_IN_REPOSITORY_INPUT = Schema.Struct({
     'One bash command, run from the root of the repository checkout, such as "ls", ' +
       '"grep -rn invite src", or "cat package.json".',
   ),
+  description: COMMAND_DESCRIPTION,
 });
 
 const readInput = readEither(RUN_IN_REPOSITORY_INPUT);

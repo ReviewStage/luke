@@ -111,6 +111,7 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
       data-call-id={call.id}
       kind={call.kind}
       subject={call.subject}
+      description={call.description}
       state={toolStateOf(call)}
       input={call.input}
       output={

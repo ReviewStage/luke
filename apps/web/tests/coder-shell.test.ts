@@ -6,10 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream } from "node:stream/web";
+import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { bashStartingIn } from "../server/hosted/coder-host/shell";
+import { bashStartingIn, SHELL_INPUT } from "../server/hosted/coder-host/shell";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a
@@ -21,7 +22,9 @@ import { bashStartingIn } from "../server/hosted/coder-host/shell";
  * search path holds nothing, so only the shell's builtins run, and that
  * with no `bash` on it eve's launcher evaluates the command in place
  * rather than backgrounding it under `/tmp/.eve`, which keeps the test
- * inside its own directory.
+ * inside its own directory. A command's description is for the developer's
+ * transcript, so it reaches the shell as nothing, and what the model is
+ * offered is recorded the way the wire's schemas are.
  */
 
 /** What eve's `bash` answers a command that finished. */
@@ -69,8 +72,13 @@ function unreached(name: string): () => never {
   return () => assert.fail(`${name} is not reached by the shell`);
 }
 
-/** The shell started in the checkout given, called as eve calls a tool, over a sandbox rooted at the root given. */
-async function run(root: string, checkout: string, command: string): Promise<Completed> {
+/** The shell started in the checkout given, called as eve calls a tool with the command and what it is for where given, over a sandbox rooted at the root given. */
+async function run(
+  root: string,
+  checkout: string,
+  command: string,
+  description?: string,
+): Promise<Completed> {
   const shell = bashStartingIn(checkout);
   const context: EveToolContext = {
     session: {
@@ -87,7 +95,8 @@ async function run(root: string, checkout: string, command: string): Promise<Com
     // SAFETY: the shell reaches the sandbox only to spawn the command, which is what the double answers.
     getSandbox: (async () => shellSandbox(root)) as unknown as EveToolContext["getSandbox"],
   };
-  const answer = await shell.execute({ command }, context);
+  const input = description === undefined ? { command } : { command, description };
+  const answer = await shell.execute(input, context);
   assert.ok(!(Symbol.asyncIterator in answer) && answer.status === "completed");
   return answer;
 }
@@ -119,4 +128,21 @@ test("a checkout that is not there fails the call and runs nothing at the sandbo
   const answer = await run(root, join(root, "missing"), "echo ran; pwd");
   assert.notEqual(answer.exitCode, 0);
   assert.equal(answer.stdout, "");
+});
+
+test("a command given with its description runs as the command alone", async () => {
+  const { root, checkout } = sandboxRoot();
+  const answer = await run(root, checkout, "echo ran", "Say the command ran");
+  assert.deepEqual(
+    { exitCode: answer.exitCode, stdout: answer.stdout, stderr: answer.stderr },
+    { exitCode: 0, stdout: "ran\n", stderr: "" },
+  );
+});
+
+test("the model is offered a command and the plain words it is for, and nothing else", async () => {
+  await settleJsonSchemaGolden(
+    jsonSchemaGoldenRoot(import.meta.url),
+    "coder-bash-tool-input",
+    jsonSchemaOf(SHELL_INPUT),
+  );
 });

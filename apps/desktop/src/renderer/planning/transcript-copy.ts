@@ -30,7 +30,8 @@ import { WORK_BLOCK, type WorkBlock, type WorkWorkerBlock, workerJob } from "./w
  * tab that is not shown copies as one that is. The concise copy is what a
  * reader skims: the brief the agent was handed, each message the developer
  * sent, and each of the agent's turns as one line per call it made, in its
- * kind's verb (`- Ran \`pnpm test\``), and the turn's last words; reasoning
+ * kind's verb (`- Ran \`pnpm test\``) or the words a command was described
+ * in (`- Run the unit tests: \`pnpm test\``), and the turn's last words; reasoning
  * and every call's input and answer are left out. The full copy is all the
  * tab opens onto, in order: words, reasoning, and every call with its input
  * and its answer, an answer past `OUTPUT_LIMIT` cut there with a note
@@ -114,6 +115,8 @@ type CopiedBlock =
       readonly kind: typeof COPIED_BLOCK.CALL;
       readonly call: CallKind;
       readonly subject: string;
+      /** For a command, the plain words the model said it is for, which the line leads with in place of the verb. */
+      readonly description: string | undefined;
       readonly input: ToolBlock | undefined;
       /** Nothing while the call has not answered. */
       readonly output: ToolBlock | undefined;
@@ -162,11 +165,14 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
     const output = view.result === undefined ? undefined : textBlock(view.result);
     const subject = cardTitle(view.task);
     const input = textBlock(view.task);
-    return [{ kind: COPIED_BLOCK.CALL, call: CALL_KIND.WORKER, subject, input, output, error }];
+    const call = CALL_KIND.WORKER;
+    return [
+      { kind: COPIED_BLOCK.CALL, call, subject, description: undefined, input, output, error },
+    ];
   }
   const view = toolCallView(part);
-  const { input, output, subject } = view;
-  return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, input, output, error }];
+  const { input, output, subject, description } = view;
+  return [{ kind: COPIED_BLOCK.CALL, call: view.kind, subject, description, input, output, error }];
 }
 
 /** One block of the Work tab's worker session as a copy reads it. */
@@ -183,6 +189,7 @@ function workBlock(block: WorkBlock): CopiedBlock {
         kind: COPIED_BLOCK.CALL,
         call: call.kind,
         subject: block.kind === WORK_BLOCK.WORKER ? workerJob(call) : (call.subject ?? ""),
+        description: call.description,
         input: block.kind === WORK_BLOCK.WORKER ? textBlock(block.task) : call.input,
         output: call.output === undefined ? undefined : textBlock(call.output),
         error: undefined,
@@ -272,21 +279,31 @@ function oneLine(text: string): string {
   return line.length <= SUBJECT_LIMIT ? line : `${line.slice(0, SUBJECT_LIMIT).trimEnd()}…`;
 }
 
-/** How a call's line is put together: its subject on one line, what stands between the verb and it, and whether it is code. */
+/**
+ * How a call's line is put together: what it leads with, its kind's verb
+ * or a command's own description, its subject on one line, what stands
+ * between the two, and whether the subject is code.
+ */
 function callParts(call: CopiedCall) {
   const worker = call.call === CALL_KIND.WORKER;
   return {
+    verb: call.description ?? CALL_WORDS[call.call].verb,
     subject: oneLine(call.subject),
-    joiner: worker ? ": " : " ",
+    joiner: worker || call.description !== undefined ? ": " : " ",
     code: !worker && CALL_WORDS[call.call].code,
   };
 }
 
-/** What a call did, its kind's verb then its subject, as code where the subject is; a worker's task follows a colon, since its subject is words. */
-function callSaid(call: CopiedCall, verb: string) {
-  const { subject, joiner, code } = callParts(call);
-  if (subject === "") return verb.replace(/:$/u, "");
-  return `${verb}${joiner}${code ? inlineCode(subject) : subject}`;
+/**
+ * What a call did, its kind's verb, set as `styled` sets it, then its
+ * subject, as code where the subject is; a worker's task follows a colon,
+ * since its subject is words, and so does a described command, since its
+ * description is.
+ */
+function callSaid(call: CopiedCall, styled: (verb: string) => string) {
+  const { verb, subject, joiner, code } = callParts(call);
+  if (subject === "") return styled(verb).replace(/:$/u, "");
+  return `${styled(verb)}${joiner}${code ? inlineCode(subject) : subject}`;
 }
 
 /** A turn as the concise copy reads it: the developer's words; or the agent's calls one line each, a run of them one list, and its last words where they stand. */
@@ -301,7 +318,7 @@ function conciseTurn(turn: CopiedTurn): string[] {
   turn.blocks.forEach((block, index) => {
     if (block.kind === COPIED_BLOCK.CALL) {
       const failed = block.error === undefined ? "" : " (failed)";
-      calls.push(`- ${callSaid(block, CALL_WORDS[block.call].verb)}${failed}`);
+      calls.push(`- ${callSaid(block, (verb) => verb)}${failed}`);
       return;
     }
     if (block.kind !== COPIED_BLOCK.WORDS) return;
@@ -335,9 +352,12 @@ export function latestActivity(transcript: CopiedTranscript): LatestActivity | u
   if (block.kind === COPIED_BLOCK.WORDS) {
     return { kind: LATEST_ACTIVITY.WORDS, text: plainWords(block.text) };
   }
+  // A described command says its description alone, as its row does.
+  if (block.description !== undefined) {
+    return { kind: LATEST_ACTIVITY.CALL, verb: block.description, subject: "", code: false };
+  }
   // The verb and its joiner as the concise copy's line puts them, the subject drawn apart.
-  const { subject, joiner, code } = callParts(block);
-  const { verb } = CALL_WORDS[block.call];
+  const { verb, subject, joiner, code } = callParts(block);
   const lead = subject === "" ? verb.replace(/:$/u, "") : `${verb}${joiner.trimEnd()}`;
   return { kind: LATEST_ACTIVITY.CALL, verb: lead, subject, code };
 }
@@ -354,7 +374,7 @@ function reasoningSaid(text: string): string {
 
 /** A call as the full copy reads it: what it did in bold, its input, and its answer or its error. */
 function callBlockSaid(call: CopiedCall): string {
-  const head = callSaid(call, `**${CALL_WORDS[call.call].verb}**`);
+  const head = callSaid(call, (verb) => `**${verb}**`);
   const { input, output, error } = call;
   return [
     head,

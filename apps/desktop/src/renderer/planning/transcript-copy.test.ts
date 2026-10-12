@@ -242,6 +242,43 @@ test("a write of the agent's to-dos copies as how far the list has got, and in f
   );
 });
 
+test("a command the model described copies as its description then the command, in full with the command fenced under it, and its latest step says the description alone, as its row does", () => {
+  const described = agentTranscript({
+    title: "Invite flow",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    messages: [
+      ...MESSAGES.slice(0, 1),
+      {
+        id: "m2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-bash",
+            toolCallId: "call_d",
+            state: "output-available",
+            input: { command: "pnpm test", description: "Run the unit tests" },
+            output: { exitCode: 0, stdout: "12 passed\n", stderr: "", truncated: false },
+          },
+        ],
+      },
+    ],
+  });
+  assert.match(
+    transcriptMarkdown(described, TRANSCRIPT_COPY.CONCISE),
+    /\n- Run the unit tests: `pnpm test`\n$/u,
+  );
+  assert.match(
+    transcriptMarkdown(described, TRANSCRIPT_COPY.FULL),
+    /\*\*Run the unit tests\*\*: `pnpm test`\n\n```sh\npnpm test\n```\n\nOutput:\n\n```\n12 passed\n```\n$/u,
+  );
+  assert.deepEqual(latestActivity(described), {
+    kind: LATEST_ACTIVITY.CALL,
+    verb: "Run the unit tests",
+    subject: "",
+    code: false,
+  });
+});
+
 test("the full copy cuts a huge answer and says so, and fences an answer holding a fence with a longer one", () => {
   const huge = "x".repeat(5_000);
   const copied = transcriptMarkdown(

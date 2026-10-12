@@ -10,7 +10,7 @@ import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
-import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
+import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -18,7 +18,8 @@ import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
  * Pure decisions over the tool part the SDK stored: the row's kind and
  * subject are read from the call's input alone, so a row drawn while the
  * call runs does not change shape when its answer lands, and the kind's
- * verb is `turn-rows.ts`'s, the same the Work tab says; the body's two
+ * verb is `turn-rows.ts`'s, the same the Work tab says, but for a command
+ * the model said the purpose of, whose line says that instead; the body's two
  * blocks are read from the input and the output in the tool's own terms
  * (a command, a patch, a file's words) where the tool is one eve gives the
  * agent, and as their JSON where it is not. A delegation's row is read the
@@ -51,6 +52,8 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
+  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; absent where it said none. */
+  readonly description?: string;
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
   readonly output: ToolBlock | undefined;
@@ -298,9 +301,11 @@ function knownToolView(
   switch (tool) {
     case AGENT_TOOL.BASH: {
       const command = stringAt(input, "command") ?? "";
+      const description = commandDescription(stringAt(input, "description"));
       return {
         kind: CALL_KIND.COMMAND,
         subject: command,
+        ...(description === undefined ? undefined : { description }),
         input: { kind: TOOL_BLOCK.COMMAND, text: command },
         output: output === undefined ? undefined : commandOutput(output),
       };
