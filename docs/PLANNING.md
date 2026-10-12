@@ -245,14 +245,18 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
   on the section, from the writer the plan keeps for each field (`fieldEdits`
-  on the wire, `plan.field_writers` on the service); a section no save has
-  changed since the service began keeping writers says nothing. A press on a
+  on the wire, `plan.field_writers` on the service), or, for a plan that is
+  one document, for each section by its heading (`sectionEdits`,
+  `plan.section_writers`); a section no save has changed since the service
+  began keeping writers says nothing, and neither does a renamed heading. A press on a
   section's line, or Return on it from the keyboard, opens the version
   history on the revision that save made, and opens no editor.
 - The sections someone other than the developer changed since they last
   looked at the plan on this Mac wear a still tint of Luke's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
-  Dismiss") until Dismiss or leaving the plan (`planning/use-plan-looks.ts`).
+  Dismiss") until Dismiss or leaving the plan (`planning/use-plan-looks.ts`),
+  each section known by its field, or by its heading in a plan that is one
+  document.
   A look is the plan held open three seconds: from then on every save while
   it stays open counts as seen, so the notetaker typing in on a call never
   lights anything. What is kept is the newest save's instant, on the
@@ -273,15 +277,24 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every core section shows from the moment the plan starts, an unanswered
   one as "Unanswered".
-- It is selectable, so a selection can be copied, and each field opens in an
-  editor in place ("Editing" below): a text section, the open questions, and
-  the assumptions.
+- A plan that is one document, which the service answers with no `fields`,
+  is drawn as the plan's name, in the look of the body's `# Name` line
+  (`planning/plan-title.tsx`), over its text and nothing else: the text has
+  no title line, its assumptions are a section of it, and nothing stands in
+  for a section it leaves empty. It is read-only until its editor lands. The
+  text is cut into sections as the service cuts it (`planSections` in
+  `packages/hosted/src/plan-document.ts`): what stands before the first
+  heading, then each `#` or `##` heading with what stands under it, a
+  heading inside a code fence being code.
+- It is selectable, so a selection can be copied, and each field of a plan
+  of the fixed template opens in an editor in place ("Editing" below): a
+  text section, the open questions, and the assumptions.
 - When a save lands, the document redraws in place and keeps its scroll
   position, the caret typing in what the notetaker changed; the developer's
   own edit lands at once.
-- Each assumption is a plain bulleted row with its text, and nothing in it
-  responds to a click. With no assumptions, the section stands and reads
-  "None recorded".
+- Each assumption of a plan of the fixed template is a plain bulleted row
+  with its text, and nothing in it responds to a click. With no assumptions,
+  the section stands and reads "None recorded".
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
 
@@ -667,9 +680,14 @@ current one included, is drawn against the one just before it, which is what
 the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
 words written in on a green wash and struck out on a red one, word by word
-with jsdiff (`planning/plan-history-model.ts`); the assumptions are
-compared as a list. The first version has nothing before it and is drawn
-with nothing marked. The view is one step of the window's back and forward
+with jsdiff (`planning/plan-history-model.ts`), sections paired by their
+headings; the assumptions are compared as a list. A plan that is one
+document has every version drawn under its name with no list after it, and
+a version from before it was one document is drawn as the document would
+hold it: its title line is the title, its assumptions the `## Assumptions`
+section, and a field's "Unanswered" a section left empty, so the version
+that made it one document shows only what its save changed. The first
+version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
 whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
 it was left, its side panel untouched.
 
@@ -700,8 +718,9 @@ so each differs from the one before only where the newest note lands. The
 host draws each draft in place of the open plan's document, and the Plans
 tab's caret types that difference in where it stands: a point typed at the
 end of its field, a correction selected and retyped, a struck line selected
-and erased. A unit of the document is known by its heading, so an optional
-section joining or leaving moves no other words. A
+and erased. A unit of the document is a section as the service cuts one
+("Document" above), known by its heading, so a section joining or leaving
+moves no other words. A
 run that breaks off sends the saved document back, so no half-written draft
 is left standing.
 

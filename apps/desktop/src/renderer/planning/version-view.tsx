@@ -10,6 +10,7 @@ import { Skeleton, SkeletonRegion } from "../skeleton";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
 import { momentText } from "./plan-time";
+import { PlanTitle } from "./plan-title";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
@@ -25,8 +26,11 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its colour alone
- * (`plan-history-model.ts`). The first version has nothing before it, so it
- * is drawn with nothing marked, and a version still being read stands as
+ * (`plan-history-model.ts`). A version of a plan that is one document is
+ * drawn under the plan's name, as the plan's own tab draws it, with no
+ * assumptions' section after it, since its assumptions are a section of
+ * its text. The first version has nothing before it, so it is drawn with
+ * nothing marked, and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
  * in the window's dialog with the accent rather than red, since a restore is
  * itself a version the history keeps and can be undone by restoring the
@@ -69,11 +73,43 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** The version's body and its assumptions, each unit and assumption drawn as it stands against what it is compared with. */
-function VersionBody({ diff }: { diff: VersionDiff }): React.JSX.Element {
+/** The assumptions of a version of a plan of the template's fields, each drawn as it stands against what it is compared with. */
+function VersionAssumptions({ diff }: { diff: VersionDiff }): React.JSX.Element {
+  return (
+    <section className="plan-assumptions" aria-label="Assumptions">
+      <h2 className="plan-assumptions-heading">Assumptions</h2>
+      {diff.assumptions.length === 0 ? (
+        <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
+      ) : (
+        <ul>
+          {diff.assumptions.map((assumption, at) => (
+            // oxlint-disable-next-line react/no-array-index-key -- an assumption has no id of its own.
+            <li key={at} className={`plan-assumption${CHANGE_CLASS[assumption.change]}`}>
+              {assumption.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The version's body, each unit drawn as it stands against what it is
+ * compared with: under `title` for a plan that is one document, and
+ * followed by its assumptions for a plan of the template's fields.
+ */
+function VersionBody({
+  diff,
+  title,
+}: {
+  diff: VersionDiff;
+  title: string | undefined;
+}): React.JSX.Element {
   return (
     <>
       <div className="plan-body">
+        {title === undefined ? null : <PlanTitle name={title} />}
         {diff.units.map((unit, at) => (
           <MarkdownMessage
             // A unit's heading may stand twice, struck and written again, so its place keys it.
@@ -85,21 +121,7 @@ function VersionBody({ diff }: { diff: VersionDiff }): React.JSX.Element {
           />
         ))}
       </div>
-      <section className="plan-assumptions" aria-label="Assumptions">
-        <h2 className="plan-assumptions-heading">Assumptions</h2>
-        {diff.assumptions.length === 0 ? (
-          <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
-        ) : (
-          <ul>
-            {diff.assumptions.map((assumption, at) => (
-              // oxlint-disable-next-line react/no-array-index-key -- an assumption has no id of its own.
-              <li key={at} className={`plan-assumption${CHANGE_CLASS[assumption.change]}`}>
-                {assumption.text}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {title === undefined ? <VersionAssumptions diff={diff} /> : null}
     </>
   );
 }
@@ -122,7 +144,13 @@ export function VersionSkeleton(): React.JSX.Element {
 }
 
 /** The version's content against the one before it, or the state standing in its place. */
-function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Element {
+function VersionContent({
+  viewing,
+  title,
+}: {
+  viewing: ViewedVersion;
+  title: string | undefined;
+}): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
   if (read.kind === HISTORY_READ.FAILED) {
@@ -132,13 +160,13 @@ function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Elem
       </p>
     );
   }
-  const diff = versionDiff(read.previous, read.document);
+  const diff = versionDiff(read.previous, read.document, title);
   // Note that the first version is compared with nothing, so it is never said to have changed nothing.
   const unchanged = read.previous !== null && !diff.changed;
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
-      <VersionBody diff={diff} />
+      <VersionBody diff={diff} title={title} />
     </>
   );
 }
@@ -157,6 +185,7 @@ export function VersionView({
   shown,
   onRestored,
   restorable = true,
+  title,
 }: {
   history: PlanHistoryControl;
   viewing: ViewedVersion;
@@ -164,6 +193,8 @@ export function VersionView({
   onRestored: () => void;
   /** Whether the version may be restored: not while the plan is archived. */
   restorable?: boolean;
+  /** The name of a plan that is one document, which every version is drawn under (`documentTitleOf`). */
+  title?: string | undefined;
 }): React.JSX.Element {
   // An archive landing while the question stands takes the question down with the button.
   const restore = useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
@@ -197,7 +228,7 @@ export function VersionView({
       </header>
       <div className="desktop-document">
         <div className="plan-document-scroll">
-          <VersionContent viewing={viewing} />
+          <VersionContent viewing={viewing} title={title} />
         </div>
       </div>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at)} />

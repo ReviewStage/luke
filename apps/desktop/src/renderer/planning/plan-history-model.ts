@@ -1,3 +1,5 @@
+import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
+import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   type PlanDocument,
@@ -7,7 +9,6 @@ import {
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
-import { planUnits } from "./plan-reveal";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
@@ -16,14 +17,18 @@ import { planUnits } from "./plan-reveal";
  * for the notetaker, You for the developer, a coding agent by its title, and
  * Earlier for the plan as it stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
- * brought back. A version is drawn whole, unit by unit as the document cuts
- * its body (`plan-reveal.ts`), each unit beside the same unit of the plan it
- * is compared with: a unit only one of them holds is drawn added or struck
- * whole, and a unit both hold that differs is drawn with its words written
- * in and struck out where they changed, word by word (`plan-diff.ts`). The
- * assumptions are compared as a list. A section's "Edited by" names the
- * save that last changed it, which is found as the revision it moved on.
- * Everything here is pure.
+ * brought back. A version is drawn whole, a unit to each section of its
+ * body (`planSections`, as the open plan cuts it in `plan-reveal.ts`), each
+ * unit beside the unit under the same heading in the plan it is compared
+ * with: a unit only one of them holds is drawn added or struck whole, and a
+ * unit both hold that differs is drawn with its words written in and struck
+ * out where they changed, word by word (`plan-diff.ts`). A plan of the
+ * template's fields has its assumptions compared as a list. A plan that is
+ * one document holds its assumptions in its text, and its versions are
+ * drawn under its name; a version from before it was one document is drawn
+ * as the document would hold it, so the two compare by what each draws. A
+ * section's "Edited by" names the save that last changed it, which is found
+ * as the revision it moved on. Everything here is pure.
  */
 
 /** How a unit or an assumption of a version stands against the plan it is compared with. */
@@ -114,11 +119,8 @@ export function revisionOfSave(
   return (revisions[before - 1] ?? revisions[before])?.seq;
 }
 
-/** A unit's key: its first line, which is its heading, or the plan's title for the first. */
-function unitKey(words: string): string {
-  const end = words.indexOf("\n");
-  return end === -1 ? words : words.slice(0, end);
-}
+/** A run of whitespace, line breaks among it, which a title line and a list item spell as one space. */
+const WHITESPACE_RUN = /\s+/gu;
 
 /** A space between two words that changed, which a reader takes as part of the change around it. */
 const LONE_SPACE = /^[^\S\n]+$/u;
@@ -190,27 +192,36 @@ function readerRuns(changes: readonly WordChange[]): readonly WordChange[] {
   return runs;
 }
 
-/** One unit both plans hold: the same, or its words merged, struck words before the words that replace them, each stretch marked. */
-function pairedUnit(base: string, shown: string): VersionUnit {
-  const key = unitKey(shown);
-  if (base === shown) return { key, words: shown, change: VERSION_CHANGE.SAME, marks: [] };
+/**
+ * One unit both plans hold: the same, or its words merged, struck words
+ * before the words that replace them, each stretch marked. Note that a unit
+ * left with nothing marked is the same, because its only difference was a
+ * field's placeholder giving way to nothing, as a section of the template's
+ * fields does when the plan becomes one document.
+ */
+function pairedUnit(base: string, shown: PlanSection): VersionUnit {
+  const key = shown.heading;
+  if (base === shown.text) {
+    return { key, words: shown.text, change: VERSION_CHANGE.SAME, marks: [] };
+  }
   let words = "";
   const marks: MarkdownMark[] = [];
-  for (const change of readerRuns(wordChanges(base, shown))) {
+  for (const change of readerRuns(wordChanges(base, shown.text))) {
     const from = words.length;
     words += change.words;
     if (change.added) marks.push({ from, to: words.length, kind: MARKDOWN_MARK.INSERTED });
     if (change.removed) marks.push({ from, to: words.length, kind: MARKDOWN_MARK.DELETED });
   }
-  return { key, words, change: VERSION_CHANGE.CHANGED, marks };
+  const change = marks.length === 0 ? VERSION_CHANGE.SAME : VERSION_CHANGE.CHANGED;
+  return { key, words, change, marks };
 }
 
 /** A unit only one plan holds, drawn whole as added or struck. */
 function loneUnit(
-  words: string,
+  section: PlanSection,
   change: typeof VERSION_CHANGE.ADDED | typeof VERSION_CHANGE.REMOVED,
 ) {
-  return { key: unitKey(words), words, change, marks: [] } satisfies VersionUnit;
+  return { key: section.heading, words: section.text, change, marks: [] } satisfies VersionUnit;
 }
 
 /**
@@ -219,19 +230,20 @@ function loneUnit(
  * its place are paired one for one, so a section that took another's place
  * reads as one unit changed rather than one gone and one new.
  */
-function unitsAgainst(base: readonly string[], shown: readonly string[]): VersionUnit[] {
-  const runs = diffArrays(base.map(unitKey), shown.map(unitKey));
+function unitsAgainst(base: readonly PlanSection[], shown: readonly PlanSection[]): VersionUnit[] {
+  const headingOf = (section: PlanSection) => section.heading;
+  const runs = diffArrays(base.map(headingOf), shown.map(headingOf));
   const units: VersionUnit[] = [];
   let atBase = 0;
   let atShown = 0;
-  let struck: string[] = [];
-  const settle = (written: readonly string[]) => {
+  let struck: PlanSection[] = [];
+  const settle = (written: readonly PlanSection[]) => {
     const paired = Math.min(struck.length, written.length);
-    for (let at = 0; at < paired; at += 1) {
-      units.push(pairedUnit(struck[at] ?? "", written[at] ?? ""));
-    }
-    for (const words of struck.slice(paired)) units.push(loneUnit(words, VERSION_CHANGE.REMOVED));
-    for (const words of written.slice(paired)) units.push(loneUnit(words, VERSION_CHANGE.ADDED));
+    written.slice(0, paired).forEach((section, at) => {
+      units.push(pairedUnit(struck[at]?.text ?? "", section));
+    });
+    for (const gone of struck.slice(paired)) units.push(loneUnit(gone, VERSION_CHANGE.REMOVED));
+    for (const added of written.slice(paired)) units.push(loneUnit(added, VERSION_CHANGE.ADDED));
     struck = [];
   };
   for (const run of runs) {
@@ -248,8 +260,8 @@ function unitsAgainst(base: readonly string[], shown: readonly string[]): Versio
       continue;
     }
     settle([]);
-    taken.forEach((words, at) => {
-      units.push(pairedUnit(base[atBase + at] ?? "", words));
+    taken.forEach((section, at) => {
+      units.push(pairedUnit(base[atBase + at]?.text ?? "", section));
     });
     atBase += count;
   }
@@ -274,17 +286,49 @@ function assumptionsAgainst(base: PlanDocument, shown: PlanDocument): VersionAss
   );
 }
 
+/** An assumptions list as the section a document holds it in: its heading over one item a line, or its heading alone while it is empty. */
+function assumptionsSection(document: PlanDocument): PlanSection {
+  const heading = PLAN_HEADING.ASSUMPTIONS;
+  const items = document.assumptions.map(({ text }) => `- ${text.replace(WHITESPACE_RUN, " ")}`);
+  const blocks = [`## ${heading}`, ...(items.length === 0 ? [] : [items.join("\n")])];
+  return { heading, text: blocks.join("\n\n") };
+}
+
+/**
+ * The sections a version draws under a plan that is one document, titled
+ * `title`. Note that a version from before the plan was one document opens
+ * with its `# title` line and keeps its assumptions in a list beside its
+ * body, because the service formats it under the plan's name as it stands
+ * now. That line is the title drawn over every version, and that list is the
+ * section the document holds its assumptions in, so it draws what the
+ * document would.
+ */
+function documentSections(document: PlanDocument, title: string): readonly PlanSection[] {
+  const sections = planSections(document.body);
+  const titled = sections[0]?.text === `# ${title.replace(WHITESPACE_RUN, " ").trim()}`;
+  if (!titled && document.assumptions.length === 0) return sections;
+  return [...(titled ? sections.slice(1) : sections), assumptionsSection(document)];
+}
+
 /**
  * A version of the plan drawn against another, or drawn as it is against
  * nothing, as the first version is: every unit and assumption of either,
- * each marked by how it stands.
+ * each marked by how it stands. With `title`, the name of a plan that is
+ * one document, each version is drawn as that document draws it, its
+ * assumptions among its sections, and there is no list to compare.
  */
-export function versionDiff(base: PlanDocument | null, shown: PlanDocument): VersionDiff {
+export function versionDiff(
+  base: PlanDocument | null,
+  shown: PlanDocument,
+  title?: string,
+): VersionDiff {
+  const sectionsOf = (document: PlanDocument) =>
+    title === undefined ? planSections(document.body) : documentSections(document, title);
   const units =
     base === null
-      ? planUnits(shown.body).map((words) => pairedUnit(words, words))
-      : unitsAgainst(planUnits(base.body), planUnits(shown.body));
-  const assumptions = assumptionsAgainst(base ?? shown, shown);
+      ? sectionsOf(shown).map((section) => pairedUnit(section.text, section))
+      : unitsAgainst(sectionsOf(base), sectionsOf(shown));
+  const assumptions = title === undefined ? assumptionsAgainst(base ?? shown, shown) : [];
   const changed =
     units.some((unit) => unit.change !== VERSION_CHANGE.SAME) ||
     assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);

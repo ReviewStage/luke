@@ -4,6 +4,7 @@ import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
+import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { agoText, editedLine, PlanBody } from "./plan-body";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 
@@ -20,6 +21,7 @@ const PLAN: Plan = {
       { text: "An invite expires after 7 days." },
     ],
   },
+  fields: { ...EMPTY_PLAN_FIELDS, goal: "Invite a teammate by email." },
 };
 
 function bodyMarkup(plan: Plan): string {
@@ -139,4 +141,43 @@ test("how long ago a save was reads in the shortest words", () => {
   assert.equal(agoText(now - 3 * 60_000, now), "3m ago");
   assert.equal(agoText(now - 2 * 60 * 60_000, now), "2h ago");
   assert.equal(agoText(now - 5 * 24 * 60 * 60_000, now), "5d ago");
+});
+
+test("a plan that is one document draws its name as the title over its text, and no section after it", () => {
+  const markup = bodyMarkup(DOCUMENT_PLAN);
+
+  assert.match(
+    markup,
+    /^<div class="plan-document-scroll"><div class="plan-body"><div class="markdown plan-title"><p class="markdown-heading" data-level="1">Teammate invitations<\/p><\/div><div class="markdown plan-unit"><p class="markdown-heading" data-level="1">Context<\/p>/u,
+  );
+  const headings = [
+    ...markup.matchAll(/<p class="markdown-heading" data-level="(\d)">([^<]*)<\/p>/gu),
+  ];
+  assert.deepEqual(
+    headings.map((match) => [match[1], match[2]]),
+    [
+      ["1", "Teammate invitations"],
+      ["1", "Context"],
+      ["2", "Goal"],
+      ["2", "Approach"],
+      ["2", "Assumptions"],
+    ],
+  );
+  assert.match(markup, /## Not a section/u, "a heading inside a fence is drawn as code");
+  assert.match(markup, /<li>Links are single use\.<\/li>/u);
+  assert.doesNotMatch(markup, /plan-assumptions|plan-assumption"|None recorded/u);
+});
+
+test("a plan that is one document offers no editor, no section to add, and no placeholder, even with an edit door", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PlanBody, {
+      plan: { ...DOCUMENT_PLAN, document: { body: "", assumptions: [] } },
+      live: false,
+      onEdit: () => Promise.resolve({ saved: true } as const),
+    }),
+  );
+
+  assert.doesNotMatch(markup, /<button|<textarea|plan-unit-edit|plan-add-sections/u);
+  assert.doesNotMatch(markup, /Unanswered|None recorded/u);
+  assert.match(markup, /data-level="1">Teammate invitations</u);
 });

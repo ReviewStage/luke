@@ -82,7 +82,7 @@ const PLAN: Plan = {
   createdAt: 1,
   updatedAt: 2,
   repository: null,
-  document: { body: "# Teammate invitations", assumptions: [] },
+  document: { body: "", assumptions: [] },
 };
 
 const CODE: PlanCode = {

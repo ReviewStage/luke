@@ -9,6 +9,7 @@ import {
   type Plan,
   type PlanFieldEdit,
   type PlanFields,
+  type PlanSectionEdit,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
@@ -18,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach } from "vitest";
 import { captionStripProps } from "#testing/captions";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl, versionHistoryControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -80,8 +82,8 @@ function savedSince(edits: readonly PlanFieldEdit[]): Plan {
 const STORAGE_KEY = "luke.planLooks";
 
 /** The developer's last look at the plan on this Mac, as an earlier visit kept it. */
-function lookedAt(at: number): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ [PLAN.id]: at }));
+function lookedAt(at: number, planId = PLAN.id): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ [planId]: at }));
 }
 
 const roots: Root[] = [];
@@ -356,6 +358,94 @@ it.effect("a plan left before the look keeps its changes lit for the next visit"
     const again = open(plan, yield* registryOnTestClock);
     assert.deepEqual(changed(again.container), ["Context"]);
   }),
+);
+
+/** A save that last changed a section of the plan that is one document, by its heading. */
+function sectionEdit(
+  section: string,
+  actor: PlanSectionEdit["actor"],
+  at: number,
+): PlanSectionEdit {
+  const { field: _field, ...saved } = edit(PLAN_FIELD.CONTEXT, actor, at);
+  return { section, ...saved };
+}
+
+/** The plan that is one document with these saves on its sections, the newest of them its last edit. */
+function documentSavedSince(edits: readonly PlanSectionEdit[]): Plan {
+  const newest = edits.reduce((held, next) => (next.at > held.at ? next : held));
+  const { section: _section, ...lastEdit } = newest;
+  return { ...DOCUMENT_PLAN, sectionEdits: edits, lastEdit, updatedAt: newest.at };
+}
+
+it.effect(
+  "each section of a plan that is one document says who last changed it, known by its heading",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.adjust(Duration.days(2));
+      const now = yield* Clock.currentTimeMillis;
+      const ago = (span: Duration.Input) => now - Duration.toMillis(span);
+      const { container } = open(
+        documentSavedSince([
+          sectionEdit("Goal", PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
+          sectionEdit("Assumptions", PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(1))),
+          sectionEdit("Renamed since", PLAN_ACTOR.AGENT, ago(Duration.minutes(3))),
+        ]),
+        yield* registryOnTestClock,
+      );
+      yield* landed;
+
+      assert.deepEqual(bylines(container), [
+        ["Goal", "Edited by Luke during your call · 2h ago"],
+        ["Assumptions", "Edited by you · 1m ago"],
+      ]);
+    }),
+);
+
+it.effect(
+  "the sections of a plan that is one document someone else changed after the last look are tinted by heading and counted",
+  () =>
+    Effect.gen(function* () {
+      lookedAt(LOOKED_AT, DOCUMENT_PLAN.id);
+      const { container } = open(
+        documentSavedSince([
+          sectionEdit("Approach", PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
+          sectionEdit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
+          sectionEdit("Goal", PLAN_ACTOR.DEVELOPER, LOOKED_AT + 2),
+          sectionEdit("Assumptions", PLAN_ACTOR.AGENT, LOOKED_AT + 3),
+        ]),
+        yield* registryOnTestClock,
+      );
+
+      assert.deepEqual(changed(container), ["Context", "Assumptions"]);
+      assert.equal(changedNote(container), "Changed since you last looked · 2 sections");
+    }),
+);
+
+it.effect(
+  'a section\'s "Edited by" in a plan that is one document opens the version history on the save it names',
+  () =>
+    Effect.gen(function* () {
+      const at = LOOKED_AT + 1;
+      const shown: (number | undefined)[] = [];
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const plan = documentSavedSince([sectionEdit("Goal", PLAN_ACTOR.NOTETAKER, at)]);
+      const onShowHistory = (save: number | undefined) => shown.push(save);
+      const body = createElement(PlanBody, { plan, live: false, onShowHistory });
+      const registry = yield* registryOnTestClock;
+      act(() => root.render(onRegistry(registry, body)));
+      const line = container.querySelector<HTMLButtonElement>("button.plan-unit-byline");
+      assert.ok(line, "the section's line is a button");
+
+      assert.match(
+        line.getAttribute("aria-label") ?? "",
+        /^Goal: Edited by Luke during your call · .+\. Show version history$/u,
+      );
+      act(() => line.click());
+      assert.deepEqual(shown, [at]);
+    }),
 );
 
 it.effect(

@@ -4,8 +4,6 @@ import {
   PLAN_FIELD,
   type Plan,
   type PlanAssumption,
-  type PlanField,
-  type PlanFieldEdit,
   type PlanFields,
   type PlanLastEdit,
 } from "@sidecar/hosted/plan-wire";
@@ -32,8 +30,9 @@ import {
   type UnitView,
 } from "./plan-reveal";
 import { useMinute } from "./plan-time";
+import { documentTitleOf, PlanTitle } from "./plan-title";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
-import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
+import { NO_LOOKS, type PlanLooks, sectionSavesOf } from "./use-plan-looks";
 
 /**
  * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -55,6 +54,11 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * the revision that save made. The sections changed since the developer
  * last looked at the plan on this Mac wear a still tint, counted under that
  * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
+ * A plan kept as the template's fields draws its body, title line and all,
+ * then its assumptions as a section of their own. A plan that is one
+ * document draws its name as the title over its text (`plan-title.tsx`),
+ * and nothing after it: its assumptions are a section of the text, and each
+ * section is known by its heading.
  */
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
@@ -171,33 +175,37 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
 }
 
 /**
- * What each unit says of its field: the save that last changed each, which
+ * What each unit says of its section: the save that last changed each, which
  * changed since the last look, the minute it counts from, and the way into
- * the version history where the window offers one.
+ * the version history where the window offers one. A section is known by its
+ * field in a plan of the template's fields, and by its heading in a plan
+ * that is one document.
  */
-interface FieldMarks {
-  readonly edits: ReadonlyMap<PlanField, PlanFieldEdit>;
-  readonly changed: ReadonlySet<PlanField>;
+interface SectionMarks {
+  readonly edits: ReadonlyMap<string, PlanLastEdit>;
+  readonly changed: ReadonlySet<string>;
   readonly now: number;
   readonly onShowHistory: ShowHistory | undefined;
 }
 
 /**
- * The section's quiet line: who last changed it, and when, shown while the
- * pointer or the keyboard is on it; none where no save has. Where the window
- * offers the version history, it opens it on the revision that save made.
+ * The section's quiet line: who last changed the section known by `key`, and
+ * when, shown while the pointer or the keyboard is on it; none where no save
+ * has. Where the window offers the version history, it opens it on the
+ * revision that save made. `heading` names the section to a screen reader.
  */
-function bylineOf(marks: FieldMarks, field: PlanField): React.JSX.Element | null {
-  const edit = marks.edits.get(field);
+function bylineOf(marks: SectionMarks, key: string, heading: string): React.JSX.Element | null {
+  const edit = marks.edits.get(key);
   if (edit === undefined) return null;
   const line = editedLine(edit, marks.now);
   const { onShowHistory } = marks;
   if (onShowHistory === undefined) return <span className="plan-unit-byline">{line}</span>;
+  const named = heading === "" ? line : `${heading}: ${line}`;
   return (
     <button
       type="button"
       className="plan-unit-byline"
-      aria-label={`${PLAN_FIELD_HEADING[field]}: ${line}. Show version history`}
+      aria-label={`${named}. Show version history`}
       onClick={(event) => {
         // Note that the press stops here, because a click into the section opens its editor.
         event.stopPropagation();
@@ -324,12 +332,36 @@ const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot b
 /** The text fields the body draws only once they hold something, which the document offers to add while they do not. */
 const OPTIONAL_FIELDS = [PLAN_FIELD.ALTERNATIVES, PLAN_FIELD.PLAN_OF_ATTACK] as const;
 
+/** A unit drawn with its section's byline, where a save has changed the section. */
+function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null): React.JSX.Element {
+  if (byline === null) return drawn;
+  return (
+    <div className="plan-unit-attributed">
+      {drawn}
+      {byline}
+    </div>
+  );
+}
+
 /**
- * One unit of the body: drawn as the chase has it, tinted where its field
- * changed since the last look, the editor where it is the one the editor
- * opened from, nothing where it is the field an editor holds elsewhere, and
- * the way into its editor where it can be edited. Every section carries its
- * field's byline.
+ * One section of a plan that is one document, drawn as the chase has it,
+ * tinted where it changed since the last look, and carrying the byline of
+ * the save that last changed it, each by its heading.
+ */
+function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }): React.JSX.Element {
+  const changed = marks.changed.has(view.heading);
+  const drawn = (
+    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+  );
+  return attributed(drawn, bylineOf(marks, view.heading, view.heading));
+}
+
+/**
+ * One unit of a body of the template's fields: drawn as the chase has it,
+ * tinted where its field changed since the last look, the editor where it
+ * is the one the editor opened from, nothing where it is the field an
+ * editor holds elsewhere, and the way into its editor where it can be
+ * edited. Every section carries its field's byline.
  */
 function BodyUnit({
   view,
@@ -340,7 +372,7 @@ function BodyUnit({
   view: UnitView;
   editable: boolean;
   editing: FieldEditing;
-  marks: FieldMarks;
+  marks: SectionMarks;
 }): React.JSX.Element | null {
   const target = editTargetOfUnit(view.words);
   const changed = target !== undefined && marks.changed.has(target.field);
@@ -348,17 +380,8 @@ function BodyUnit({
     <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
   );
   if (target === undefined) return drawn;
-  const byline = bylineOf(marks, target.field);
-  if (!editable) {
-    return byline === null ? (
-      drawn
-    ) : (
-      <div className="plan-unit-attributed">
-        {drawn}
-        {byline}
-      </div>
-    );
-  }
+  const byline = bylineOf(marks, target.field, PLAN_FIELD_HEADING[target.field]);
+  if (!editable) return attributed(drawn, byline);
   const { editor, host } = editing;
   if (editor !== undefined && host === view.id) {
     const heading = view.words.split("\n", 1)[0] ?? "";
@@ -419,7 +442,7 @@ function PlanAssumptions({
   fresh: ReadonlySet<number>;
   editable: boolean;
   editing: FieldEditing;
-  marks: FieldMarks;
+  marks: SectionMarks;
 }): React.JSX.Element {
   const list =
     assumptions.length === 0 ? (
@@ -452,20 +475,22 @@ function PlanAssumptions({
       aria-label="Assumptions"
     >
       <h2 className="plan-assumptions-heading">Assumptions</h2>
-      {bylineOf(marks, PLAN_FIELD.ASSUMPTIONS)}
+      {bylineOf(marks, PLAN_FIELD.ASSUMPTIONS, PLAN_FIELD_HEADING[PLAN_FIELD.ASSUMPTIONS])}
       {body}
     </section>
   );
 }
 
 /**
- * The plan's body and its assumptions, the assumptions' section standing even
- * while the list is empty. `live` is the plan's call in progress, which keeps
+ * The plan's document: a body of the template's fields and its assumptions,
+ * the assumptions' section standing even while the list is empty, or the
+ * text of a plan that is one document under its name, the title, with no
+ * section after it. `live` is the plan's call in progress, which keeps
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
  * plan's version history from the "Edited by" line, on the plan as it
  * stands, and from a section's, on the revision of the save it names. With
- * `onEdit`, and fields from a service that sends them, each field opens in
- * an editor in place.
+ * `onEdit`, each field of a plan of the template's fields opens in an
+ * editor in place; a plan that is one document is drawn read-only.
  * `looks` are the sections changed since the developer last looked, which
  * the plan's region keeps (`use-plan-looks.ts`); without them none are.
  */
@@ -491,8 +516,8 @@ export function PlanBody({
   const editable = content !== undefined;
   const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
   const now = useMinute();
-  const marks: FieldMarks = {
-    edits: new Map(plan.fieldEdits?.map((edit) => [edit.field, edit])),
+  const marks: SectionMarks = {
+    edits: new Map(sectionSavesOf(plan).map(({ section, ...edit }) => [section, edit])),
     changed: looks.changed,
     now,
     onShowHistory,
@@ -534,14 +559,26 @@ export function PlanBody({
 
   const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
+  const title = documentTitleOf(plan);
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <ChangedLine looks={looks} />
       <div className="plan-body">
-        {views.map((view) => (
-          <BodyUnit key={view.id} view={view} editable={editable} editing={editing} marks={marks} />
-        ))}
+        {title === undefined ? null : <PlanTitle name={title} />}
+        {views.map((view) =>
+          title === undefined ? (
+            <BodyUnit
+              key={view.id}
+              view={view}
+              editable={editable}
+              editing={editing}
+              marks={marks}
+            />
+          ) : (
+            <DocumentUnit key={view.id} view={view} marks={marks} />
+          ),
+        )}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
           <PlanFieldEditor
             heading={`## ${PLAN_FIELD_HEADING[editing.editor.target.field]}`}
@@ -551,13 +588,15 @@ export function PlanBody({
         ) : null}
         {content === undefined ? null : <AddSections fields={content.fields} editing={editing} />}
       </div>
-      <PlanAssumptions
-        assumptions={assumptions}
-        fresh={freshAssumptions}
-        editable={editable}
-        editing={editing}
-        marks={marks}
-      />
+      {title === undefined ? (
+        <PlanAssumptions
+          assumptions={assumptions}
+          fresh={freshAssumptions}
+          editable={editable}
+          editing={editing}
+          marks={marks}
+        />
+      ) : null}
     </div>
   );
 }

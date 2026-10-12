@@ -2,10 +2,12 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanDocument,
+  type PlanFields,
   type PlanRevisionLine,
 } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
@@ -47,14 +49,18 @@ const LATEST = documentOf(
   ["## Goal\n\nAny member can invite.", "## Decisions\n\nInvites expire."],
   ["Invites create memberships."],
 );
-const VERSIONS = [
+const VERSIONS: readonly PlanDocument[] = [
   FIRST,
   documentOf(["## Goal\n\nAny member can invite."], ["Invites reuse memberships."]),
   LATEST,
-] as const;
+];
 
-/** The plan's service, holding its history and its document, which a restore puts a version back into. */
-function fakeService(now = NOW) {
+/**
+ * The plan's service, holding its history and its document, which a restore
+ * puts a version back into: `versions` oldest first, of a plan kept as the
+ * template's fields, or of one that is one document where `oneDocument`.
+ */
+function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS, oneDocument = false) {
   const lines: PlanRevisionLine[] = [
     {
       seq: 3,
@@ -86,7 +92,8 @@ function fakeService(now = NOW) {
   /** The answers held back while `holding`, in order. */
   const held: (() => void)[] = [];
   const service = {
-    current: LATEST,
+    current: versions.at(-1) ?? LATEST,
+    fields: oneDocument ? undefined : EMPTY_PLAN_FIELDS,
     refusing: false,
     /** Whether main refuses every read, as an act it could not carry. */
     unreachable: false,
@@ -103,15 +110,15 @@ function fakeService(now = NOW) {
     readRevision: (_planId, seq) =>
       answer(() => {
         if (service.unreachable) return unreachable();
-        const document = VERSIONS[seq - 1];
+        const document = versions[seq - 1];
         return Promise.resolve(
           document === undefined
             ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
-            : { revision: { seq, document, previous: VERSIONS[seq - 2] ?? null } },
+            : { revision: { seq, document, previous: versions[seq - 2] ?? null } },
         );
       }),
     restore: (_planId, seq) => {
-      const document = VERSIONS[seq - 1];
+      const document = versions[seq - 1];
       if (service.refusing || document === undefined) return Promise.resolve(false);
       service.current = document;
       return Promise.resolve(true);
@@ -133,7 +140,7 @@ afterEach(() => {
 let archive: (() => void) | undefined;
 
 /** The plan as the window draws it, its document as the service holds it now, archived where asked. */
-function planOf(document: PlanDocument, archived: boolean): Plan {
+function planOf(document: PlanDocument, fields: PlanFields | undefined, archived: boolean): Plan {
   return {
     id: PLAN_ID,
     name: "Teammate invitations",
@@ -141,6 +148,7 @@ function planOf(document: PlanDocument, archived: boolean): Plan {
     updatedAt: 0,
     repository: null,
     document,
+    ...(fields === undefined ? undefined : { fields }),
     ...(archived ? { archivedAt: 0 } : undefined),
   };
 }
@@ -177,7 +185,10 @@ function mount(
     const plans = plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
-      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current, archivedNow) },
+      region: {
+        kind: DOCUMENT_REGION.READY,
+        plan: planOf(service.current, service.fields, archivedNow),
+      },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
     });
     return createElement(DesktopVersionHistory, {
@@ -372,6 +383,45 @@ it.effect(
         "Decisions\nInvites expire.",
         "Invites create memberships.",
       ]);
+    }),
+);
+
+/** A plan's versions as one document: its text alone, its assumptions a section of it. */
+function textOf(sections: readonly string[]): PlanDocument {
+  return { body: `${sections.join("\n\n")}\n`, assumptions: [] };
+}
+
+it.effect(
+  "a plan that is one document draws each version under its name, by section, with no list after it, and its first version against the fields before it by what each draws",
+  () =>
+    Effect.gen(function* () {
+      const versions = [
+        FIRST,
+        textOf([
+          "## Goal\n\nAny member can invite.",
+          "## Assumptions\n\n- Invites reuse memberships.",
+        ]),
+        textOf([
+          "## Goal\n\nAny member can invite.",
+          "# Decisions\n\nInvites expire.",
+          "## Assumptions\n\n- Invites create memberships.",
+        ]),
+      ];
+      const page = yield* mount(fakeService(NOW, versions, true), yield* registryOnTestClock);
+      const title = () => page.querySelector(".version-page .plan-body > .plan-title")?.textContent;
+
+      assert.equal(title(), "Teammate invitations");
+      assert.equal(page.querySelector(".version-page .plan-assumptions"), null);
+      assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
+      assert.deepEqual(marked(page, "del"), ["reuse"]);
+      assert.deepEqual(marked(page, "ins"), ["create"]);
+
+      yield* press(page, "Invite emails5h1 change");
+      assert.equal(title(), "Teammate invitations");
+      assert.equal(page.querySelector(".version-page .plan-assumptions"), null);
+      assert.deepEqual(marked(page, "del"), ["Only admins"]);
+      assert.deepEqual(marked(page, "ins"), ["Any member"]);
+      assert.deepEqual(marked(page, ".version-added, .version-removed"), []);
     }),
 );
 

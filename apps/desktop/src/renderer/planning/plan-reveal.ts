@@ -1,3 +1,4 @@
+import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
 import { diffArrays } from "diff";
 import type { MarkdownEdit } from "../markdown-message";
 import { diffHunks, type Hunk, isPlaceholder } from "./plan-diff";
@@ -11,11 +12,14 @@ import { diffHunks, type Hunk, isPlaceholder } from "./plan-diff";
  * struck. Every document is final or still growing at its end, so nothing
  * here guesses at what the stream means; it plays the difference.
  *
- * The body is cut into units at every section heading, which the formatter
- * alone writes. A unit is known from one document to the next by its
- * heading, never by position, so an optional section joining the document
- * moves no other unit's words. A
- * unit the document no longer holds is erased where it stands before it
+ * The body is cut into units a section at a time, as the service cuts a
+ * plan's text (`planSections` in `@sidecar/hosted/plan-document`): the words
+ * before the first heading, then each `#` or `##` heading with what stands
+ * under it, a heading inside a code fence being code. A body of the
+ * template's fields cuts the same way, its title line a unit of its own. A
+ * unit is known from one document to the next by its heading, never by
+ * position, so a section joining the document moves no other unit's words.
+ * A unit the document no longer holds is erased where it stands before it
  * goes. One caret works through the differences an act at a time: it
  * travels to the next change, sweeps a selection over words to erase,
  * backspaces a few letters, and types, pausing where a hand would. Each act
@@ -44,12 +48,6 @@ export const CHASE_PACE = {
   /** The work left, in time at the pace above, past which the whole pace speeds up to keep up with the notetaker. */
   CATCH_UP_LAG_MS: 2_500,
 } as const;
-
-/** A line the formatter opens a section with. */
-const UNIT_HEADING = /^## /u;
-
-/** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
-const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
 
 /** The most acts one frame may play, so a frame given a long time cannot spin. */
 const MAX_ACTS_PER_FRAME = 64;
@@ -122,6 +120,8 @@ export interface ChaseState {
 export interface UnitView {
   /** The unit's identity while it stands, for a view to key it by. */
   readonly id: number;
+  /** The heading the unit is known by, empty for the words before the first. */
+  readonly heading: string;
   readonly words: string;
   /** Absent while the unit is drawn whole with no caret in it. */
   readonly edit: MarkdownEdit | undefined;
@@ -136,23 +136,10 @@ export interface ChaseAim {
   readonly reduced: boolean;
 }
 
-/** Whether a fence line closes the fence standing: the same character, at least as long. */
-function closesFence(marker: string, fence: string): boolean {
-  return marker[0] === fence[0] && marker.length >= fence.length;
-}
-
-/** A unit's heading as it is known: its first line where that is a section's heading, nothing for the header block. */
-function headingOf(words: string): string {
-  const end = words.indexOf("\n");
-  const line = end === -1 ? words : words.slice(0, end);
-  return UNIT_HEADING.test(line) ? line : "";
-}
-
 /** Each unit's key, a heading borne twice told apart by which of them it is. */
-function keysOf(units: readonly string[]): readonly UnitKey[] {
+function keysOf(sections: readonly PlanSection[]): readonly UnitKey[] {
   const seen = new Map<string, number>();
-  return units.map((words) => {
-    const heading = headingOf(words);
+  return sections.map(({ heading }) => {
     const occurrence = seen.get(heading) ?? 0;
     seen.set(heading, occurrence + 1);
     return { heading, occurrence };
@@ -421,38 +408,15 @@ function pairedUnits(previous: readonly ChaseUnit[], keys: readonly UnitKey[]): 
   return { order, from };
 }
 
-/**
- * The body cut before every section heading outside a fence: the header
- * block, then each section with its answer.
- */
-export function planUnits(body: string): readonly string[] {
-  const units: string[] = [];
-  let current: string[] = [];
-  let fence: string | undefined;
-  for (const line of body.split("\n")) {
-    const marker = FENCE_LINE.exec(line)?.[1];
-    if (fence === undefined && marker !== undefined) fence = marker;
-    else if (fence !== undefined && marker !== undefined && closesFence(marker, fence)) {
-      fence = undefined;
-    } else if (fence === undefined && UNIT_HEADING.test(line) && current.length > 0) {
-      units.push(current.join("\n").trimEnd());
-      current = [];
-    }
-    current.push(line);
-  }
-  if (current.length > 0) units.push(current.join("\n").trimEnd());
-  return units;
-}
-
 /** A plan as it opens: every unit shown whole, since what stood before is the document, not news. */
 export function chaseOpened(body: string): ChaseState {
-  const targets = planUnits(body);
-  const keys = keysOf(targets);
-  const units = targets.map((words, index) => ({
+  const sections = planSections(body);
+  const keys = keysOf(sections);
+  const units = sections.map(({ text }, index) => ({
     id: index,
     key: keys[index] ?? { heading: "", occurrence: index },
-    target: words,
-    shown: words,
+    target: text,
+    shown: text,
     fresh: false,
   }));
   return {
@@ -483,8 +447,8 @@ export function chaseRetargeted(
   aim: ChaseAim,
 ): ChaseState {
   const held = folded(state);
-  const targets = planUnits(body);
-  const keys = keysOf(targets);
+  const sections = planSections(body);
+  const keys = keysOf(sections);
   const { order, from } = pairedUnits(held.units, keys);
   let nextId = held.nextId;
   const movedTo = new Map<number, number>();
@@ -498,7 +462,7 @@ export function chaseRetargeted(
       units.push({ ...leaving, target: "" });
       continue;
     }
-    const target = targets[place.next] ?? "";
+    const target = sections[place.next]?.text ?? "";
     const key = keys[place.next] ?? { heading: "", occurrence: 0 };
     const before = from.get(place.next);
     const previous = before === undefined ? undefined : held.units[before];
@@ -583,7 +547,13 @@ export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
 /** One act drawn partway in the unit it works on. */
 function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
   const done = Math.floor(progress);
-  const working = { id: unit.id, writing: true, resting: false, fresh: false };
+  const working = {
+    id: unit.id,
+    heading: unit.key.heading,
+    writing: true,
+    resting: false,
+    fresh: false,
+  };
   switch (act.kind) {
     case ACT.TYPE: {
       const words = spliced(unit.shown, act.at, act.at, act.words);
@@ -618,6 +588,7 @@ export function chaseView(state: ChaseState, live: boolean): readonly UnitView[]
     if (drawsAct && act.unit === index) return actView(unit, act, state.progress);
     const still = {
       id: unit.id,
+      heading: unit.key.heading,
       words: unit.shown,
       edit: undefined,
       writing: false,
