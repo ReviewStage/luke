@@ -9,6 +9,7 @@ import {
   deletePlan,
   listPlans,
   readPlan,
+  savePlanText,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -31,7 +32,7 @@ import {
 import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
-import { openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
+import { joinWorkspace, openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The named plans and their one document, through the store's public
@@ -360,6 +361,44 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
           listed.map((summary) => summary.id),
           [ledger.id, relay.id],
         );
+      }),
+  );
+
+  it.effect(
+    "a member lists, opens, renames, saves notes and text on, and deletes a teammate's plan",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const started = yield* startPlan(starter, RELAY_PLAN);
+        yield* joinWorkspace(started.workspaceId, teammate);
+
+        assert.deepEqual(
+          (yield* listPlans(teammate)).map((plan) => plan.id),
+          [started.id],
+        );
+        assert.deepEqual(yield* resumedDocument(teammate, started.id), started.document);
+        const renamed = yield* updatePlan(teammate, started.id, { name: "Shared invitations" });
+        assert.deepEqual(
+          Option.map(renamed, (plan) => plan.name),
+          Option.some("Shared invitations"),
+        );
+        const saved = savedDocument(
+          yield* saveNotes(bound(teammate, started.id), INVITATIONS_NOTES),
+        );
+        assert.deepEqual(yield* resumedDocument(starter, started.id), saved);
+        const edited = `${saved.body}\n## Rollout\n\nBehind a flag first.\n`;
+        assert.equal(Option.isNone(yield* savePlanText(stranger, started.id, edited)), true);
+        assert.equal(Option.isSome(yield* savePlanText(teammate, started.id, edited)), true);
+        assert.equal((yield* resumedDocument(starter, started.id)).body, edited);
+
+        assert.deepEqual(yield* listPlans(stranger), []);
+        assert.equal(Option.isNone(yield* readPlan(stranger, started.id)), true);
+        assert.equal(yield* deletePlan(stranger, started.id), false);
+
+        assert.equal(yield* deletePlan(teammate, started.id), true);
+        assert.equal(Option.isNone(yield* readPlan(starter, started.id)), true);
       }),
   );
 

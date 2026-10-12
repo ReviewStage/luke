@@ -11,13 +11,14 @@ import { PAGE_BOUNDS } from "@sidecar/hosted/page-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Exit, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * A plan's pages, through the store's write and reads: a write is a page's
  * next version and every version stands as written, the plan lists each page
- * by its newest, and a plan another account owns, or a page the plan does
- * not hold, reads and writes as none. Synthetic accounts, plans, and pages
+ * by its newest, a member of the plan's workspace reads and writes its pages
+ * whoever started it, and a plan of a workspace the account is not in, or a
+ * page the plan does not hold, reads and writes as none. Synthetic accounts, plans, and pages
  * throughout.
  */
 
@@ -34,7 +35,7 @@ const openAccount = Effect.gen(function* () {
 const openPlan = Effect.gen(function* () {
   const userId = yield* openAccount;
   const plan = yield* startPlan(userId, { name: "Teammate invitations" });
-  return { userId, planId: plan.id };
+  return { userId, planId: plan.id, workspaceId: plan.workspaceId };
 });
 
 /** A write the test expects to land, as the page it left. */
@@ -91,6 +92,25 @@ it.layer(getTestDB())("a plan's pages", (it) => {
       assert.ok(Option.isNone(yield* writePage(other, planId, { pageId: chart.id, ...MOCKUP })));
       assert.deepEqual(yield* listPages(userId, planId), [chart]);
     }),
+  );
+
+  it.effect(
+    "a member of the plan's workspace reads and writes the pages a teammate wrote, and an account outside it neither",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId, workspaceId } = yield* openPlan;
+        const teammate = yield* openAccount;
+        const stranger = yield* openAccount;
+        yield* joinWorkspace(workspaceId, teammate);
+        const first = yield* written(userId, planId, CHART);
+
+        const again = yield* written(teammate, planId, { pageId: first.id, ...CHART_AGAIN });
+        assert.equal(again.version, 2);
+        assert.deepEqual(yield* listPages(userId, planId), [again]);
+        assert.deepEqual(yield* listPages(stranger, planId), []);
+        assert.ok(Option.isNone(yield* readPageVersion(stranger, planId, first.id, 1)));
+        assert.ok(Option.isNone(yield* writePage(stranger, planId, MOCKUP)));
+      }),
   );
 
   it.effect(

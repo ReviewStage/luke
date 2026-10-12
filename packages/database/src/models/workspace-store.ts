@@ -6,6 +6,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
+import { plan } from "../schemas/plan.js";
 import type { WorkspaceSeams } from "./workspace-seams.js";
 
 /**
@@ -22,7 +23,10 @@ import type { WorkspaceSeams } from "./workspace-seams.js";
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
  * Whether an account is in a workspace is one condition, its `member` row,
- * which a statement elsewhere joins into its own where clause.
+ * which a statement elsewhere joins into its own where clause: a plan is
+ * read and written by every member of the workspace it names, so a store
+ * gates a plan through `planReachableBy` and `reachablePlan` rather than by
+ * the account that started it.
  * Every function is an effect over the ambient `SqlClient`.
  */
 
@@ -197,6 +201,16 @@ function createPersonalOrganization(
         ),
       ),
     );
+}
+
+/** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
+export function planReachableBy(userId: string): SQL {
+  return memberOfWorkspace(userId, plan.organizationId);
+}
+
+/** The plan under this id, where the account is a member of its workspace; any other id reads as no plan. */
+export function reachablePlan(userId: string, planId: string): SQL | undefined {
+  return and(eq(plan.id, planId), planReachableBy(userId));
 }
 
 /** The account's personal workspace, by id; nothing before it was ever ensured. */

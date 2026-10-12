@@ -17,7 +17,7 @@ import {
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The live session row as the record now writes it: five effects over the
@@ -173,12 +173,23 @@ it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) 
       }),
   );
 
+  it.effect("a member of the plan's workspace holds a teammate's plan for a call", () =>
+    Effect.gen(function* () {
+      const starter = yield* openUser;
+      const teammate = yield* openUser;
+      const plan = yield* startPlan(starter, PLAN);
+      yield* joinWorkspace(plan.workspaceId, teammate);
+
+      assert.equal((yield* record.heldPlan({ userId: teammate, planId: plan.id }))?.id, plan.id);
+    }),
+  );
+
   it.effect(
-    "a plan's earlier calls read back oldest first, one speaker's adjacent words on one call run together, and never another plan's or another account's",
+    "a plan's earlier calls read back oldest first, one speaker's adjacent words on one call run together, every member's and never another plan's",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
-        const other = yield* openUser;
+        const teammate = yield* openUser;
         const planId = randomUUID();
         const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
         // Registered newest first, so the order read back is the calls' and not the rows'.
@@ -193,12 +204,15 @@ it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) 
         yield* callWith({ userId: owner, planId: randomUUID(), startedAt: NOW }, [
           [USER, "Another plan's words."],
         ]);
-        yield* callWith({ userId: other, planId, startedAt: NOW }, [[USER, "Another account's."]]);
+        const teammates = yield* callWith({ userId: teammate, planId, startedAt: NOW }, [
+          [USER, "A teammate's."],
+        ]);
 
         assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId }), [
           { voiceSessionId: first, role: USER, text: "Invites should expire." },
           { voiceSessionId: first, role: ASSISTANT, text: "After how many days?" },
           { voiceSessionId: second, role: USER, text: "Seven days." },
+          { voiceSessionId: teammates, role: USER, text: "A teammate's." },
         ]);
         assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId: randomUUID() }), []);
       }),
