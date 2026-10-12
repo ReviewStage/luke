@@ -9,7 +9,7 @@ import { type RefObject, useEffect } from "react";
  * top, then says it is done, so the ask is answered once and the log is the
  * reader's again. Note that scrolling the log away from its newest line is
  * what stops it following new lines (`../ai-elements/conversation.tsx`), as
- * a reader scrolling up does. An ask whose call or turn is not drawn is
+ * a reader scrolling up does, so the log is told of the scroll at once. An ask whose call or turn is not drawn is
  * answered all the same, leaving the log where it stood.
  */
 
@@ -28,6 +28,10 @@ export function useRevealInLog(
     const log = mark?.closest<HTMLElement>('[role="log"]');
     if (mark !== undefined && mark !== null && log !== undefined && log !== null) {
       log.scrollTop += mark.getBoundingClientRect().top - log.getBoundingClientRect().top;
+      // The log learns it left its newest line from its scroll event, which
+      // the browser sends a frame later, after the render the answer below
+      // asks for would have put it back at its bottom; so it is told now.
+      log.dispatchEvent(new Event("scroll"));
     }
     onRevealed();
   }, [root, ready, onRevealed]);

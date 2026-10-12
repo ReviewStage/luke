@@ -381,10 +381,13 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   );
 }
 
-/** Whether a key press belongs to something that takes keys of its own: a field, or a dialog over the window. */
+/** Whether a key press belongs to something that takes keys of its own: a field, a dialog over the window, or a menu open over a row. */
 function keysTaken(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || target.closest("input, textarea, select, dialog") !== null;
+  return (
+    target.isContentEditable ||
+    target.closest('input, textarea, select, dialog, [role="menu"]') !== null
+  );
 }
 
 /** What a list does with the arrow keys: up and down step through it, and right and left go into a row and back out, where the list offers them. */

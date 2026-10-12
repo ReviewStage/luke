@@ -561,8 +561,12 @@ export function usePlansTab(input: {
   // The version history is the plan's, so another plan, or none, leaves it.
   if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
   const historyOpen = historyFor !== undefined && historyFor.planId === boundFor;
-  // A reveal is the open plan's, so another plan leaves it unasked.
+  // A reveal is the open plan's, so another plan opening drops it, and
+  // coming back asks nothing of the visit after.
+  if (reveal !== undefined && reveal.planId !== boundFor) setReveal(undefined);
   const revealing = reveal !== undefined && reveal.planId === boundFor ? reveal.source : undefined;
+  // An answer clears the ask it answers, never one made since.
+  const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   const select = useCallback(
     (planId: string) => {
       const ask = { planId, over: openPlanId };
@@ -1028,7 +1032,7 @@ export function usePlansTab(input: {
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
       reveal:
         revealing?.kind === REVISION_SOURCE.CALL
-          ? { call: revealing.callId, onRevealed: () => setReveal(undefined) }
+          ? { call: revealing.callId, onRevealed: revealed }
           : undefined,
     },
     // A fixture's open plan is drawn mid-call, as its status and transcript are.
@@ -1039,7 +1043,7 @@ export function usePlansTab(input: {
       onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
       reveal:
         revealing?.kind === REVISION_SOURCE.WORK
-          ? { at: revealing.at, onRevealed: () => setReveal(undefined) }
+          ? { at: revealing.at, onRevealed: revealed }
           : undefined,
     },
     agents,

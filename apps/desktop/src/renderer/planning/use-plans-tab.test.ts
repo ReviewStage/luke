@@ -545,6 +545,21 @@ test("a version's Open leaves the history for where it was written: the panel's 
   assert.equal(tab.control().transcript.reveal, undefined);
 });
 
+test("a version's Open not yet answered when another plan opens is dropped, so coming back asks nothing of the visit after", () => {
+  const tab = mount({ shown: true, planning: EDITED });
+  act(() =>
+    tab.control().onShowSource(PLAN.id, {
+      kind: REVISION_SOURCE.CALL,
+      callId: "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    }),
+  );
+  assert.ok(tab.control().transcript.reveal);
+
+  tab.stand({ planning: { ...EDITED, activePlanId: OTHER_PLAN_ID } });
+  tab.stand({ planning: EDITED });
+  assert.equal(tab.control().transcript.reveal, undefined);
+});
+
 test("a version's Open onto an agent's tab leaves the history for the agent's tab, the side panel as it was", async () => {
   const tab = mount(
     { shown: true, planning: EDITED },

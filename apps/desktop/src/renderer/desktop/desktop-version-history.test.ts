@@ -589,6 +589,18 @@ it.effect(
     }),
 );
 
+it.effect("the arrows inside a version's menu are the menu's, and open nothing behind it", () =>
+  Effect.gen(function* () {
+    const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+
+    yield* rightClick(page, "Luke2h2 changes");
+    const item = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
+    assert.ok(item);
+    yield* arrow("ArrowRight", item);
+    assert.equal(sectionsOpen(page), false);
+  }),
+);
+
 /** The versions of a plan that is one document whose newest revision changed one section and added another. */
 const SECTIONED = [
   FIRST,

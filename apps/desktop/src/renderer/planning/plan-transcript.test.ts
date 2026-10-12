@@ -526,3 +526,59 @@ test("asked for a call by a version's Open, the tab brings that call to the top 
   assert.equal(container.querySelector<HTMLElement>('[role="log"]')?.scrollTop, 400);
   assert.equal(revealed.mock.calls.length, 1);
 });
+
+test("a call brought into view stays there through the redraw its answer asks and a line arriving after", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-reveal")) return new DOMRect(0, -1_480, 0, 0);
+    if (this.getAttribute("role") === "log") return new DOMRect(0, 120, 300, 400);
+    return new DOMRect();
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "log" ? 2_000 : 0;
+  });
+  const call = (key: string, startedAt: number, lines: readonly string[]) => ({
+    key,
+    startedAt,
+    live: false,
+    lukeEnded: false,
+    messages: lines.map((text, at) => ({
+      id: String(at),
+      role: TRANSCRIPT_SPEAKER.USER,
+      parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+    })),
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  let reveal: { call: string; onRevealed: () => void } | undefined = {
+    call: "call-1",
+    onRevealed: () => {
+      reveal = undefined;
+    },
+  };
+  const draw = (lines: readonly string[]) =>
+    act(() =>
+      root.render(
+        createElement(PlanTranscript, {
+          region: {
+            kind: TRANSCRIPT_REGION.READY,
+            earlierOmitted: false,
+            calls: [call("call-1", 1_000, ["The first call."]), call("call-2", 9_000, lines)],
+          },
+          onRetry: () => undefined,
+          reveal,
+        }),
+      ),
+    );
+
+  draw(["The second call."]);
+  const log = container.querySelector<HTMLElement>('[role="log"]');
+  assert.equal(log?.scrollTop, 400);
+  draw(["The second call.", "A line after."]);
+  assert.equal(log?.scrollTop, 400, "the log does not jump back to its newest line");
+});

@@ -409,6 +409,37 @@ function turnAt(rows: readonly WorkTurnRow[], at: number): string | undefined {
   return (rows.findLast((row) => row.startedAt <= at) ?? rows[0])?.key;
 }
 
+/**
+ * Reads older pages of the work while the moment a version's Open asked for
+ * is older than every turn drawn and an older page stands, answering whether
+ * it is still reading. A page that did not land leaves the page before it
+ * where it was, so a read settling with the same page before it is one that
+ * failed, and the seeking stops there rather than asking again forever.
+ */
+function useEarlierUntil(
+  at: number | undefined,
+  rows: readonly WorkTurnRow[],
+  earlier: string | undefined,
+  onLoadEarlier: () => Promise<void>,
+): boolean {
+  const [failedAt, setFailedAt] = useState<string | undefined>(undefined);
+  const oldest = rows[0]?.startedAt;
+  const seeking =
+    at !== undefined &&
+    earlier !== undefined &&
+    earlier !== failedAt &&
+    oldest !== undefined &&
+    oldest > at;
+  const latest = useRef(onLoadEarlier);
+  latest.current = onLoadEarlier;
+  useEffect(() => {
+    if (!seeking || earlier === undefined) return;
+    const settled = () => setFailedAt(earlier);
+    latest.current().then(settled, settled);
+  }, [seeking, earlier]);
+  return seeking;
+}
+
 export function PlanWork({
   turns,
   callLive,
@@ -440,8 +471,9 @@ export function PlanWork({
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
   const root = useRef<HTMLElement>(null);
+  const seeking = useEarlierUntil(reveal?.at, rows, earlier, onLoadEarlier);
   const revealed = reveal === undefined ? undefined : turnAt(rows, reveal.at);
-  useRevealInLog(root, turns !== undefined, reveal?.onRevealed);
+  useRevealInLog(root, turns !== undefined && !seeking, reveal?.onRevealed);
   return (
     <section ref={root} className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
