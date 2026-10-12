@@ -105,7 +105,7 @@ test('a section\'s "Edited by" opens the version history on the save it names, f
   const plan: Plan = {
     ...PLAN,
     lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true },
-    fieldEdits: [{ field: PLAN_FIELD.PROBLEM, actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true }],
+    fieldEdits: [{ field: PLAN_FIELD.CONTEXT, actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true }],
   };
   const onShowHistory = (save: number | undefined) => shown.push(save);
   const onEdit = () => Promise.resolve({ saved: true } as const);
@@ -115,7 +115,7 @@ test('a section\'s "Edited by" opens the version history on the save it names, f
 
   assert.match(
     line.getAttribute("aria-label") ?? "",
-    /^Problem: Edited by Luke during your call · .+\. Show version history$/u,
+    /^Context: Edited by Luke during your call · .+\. Show version history$/u,
   );
   line.focus();
   assert.equal(document.activeElement, line, "reached from the keyboard");
