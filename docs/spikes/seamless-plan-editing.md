@@ -88,21 +88,21 @@ Today (left): a click opens a box of raw Markdown with the caret at the
 start. The spike (right): the same words, still formatted, with the caret
 where the click landed.
 
-![Today vs the spike](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-PR_NUMBER/today-vs-seamless.png)
+![Today vs the spike](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/today-vs-seamless.png)
 
 Click, type `**often** `, Esc. The shortcut turns into bold as it is typed,
 and the save lands as Markdown:
 
-![Typing in place](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-PR_NUMBER/seamless-edit.gif)
+![Typing in place](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/seamless-edit.gif)
 
 | A rule: Enter walks the clauses and adds an example | The open questions: Enter makes the next one |
 | --- | --- |
-| ![Rule](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-PR_NUMBER/rule-editing.png) | ![List](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-PR_NUMBER/list-editing.png) |
+| ![Rule](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/rule-editing.png) | ![List](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/list-editing.png) |
 
 Luke rewrites the section mid-edit, and the shipped conflict choice stands
 under the editor:
 
-![Conflict](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-PR_NUMBER/conflict.png)
+![Conflict](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/conflict.png)
 
 ## Measurements
 
