@@ -1,11 +1,14 @@
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
+import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import { type EveSessions, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import type { PlanStoreEffect } from "../plan-store.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
@@ -35,6 +38,14 @@ export interface CoderHostSeams {
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
+  /**
+   * eve as the deployment reaches it for the account on the planning brain's
+   * routes, where a worker's report opens a turn on the plan's conversation;
+   * nothing while the environment names no secret or no origin for eve.
+   */
+  readonly planEve: (
+    userId: string,
+  ) => Effect.Effect<EveSessions | undefined, never, HttpClient.HttpClient>;
   /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
   readonly keys: (userId: string) => PlanStoreEffect<ProviderKeys>;
   /** The model an agent's title is generated on; nothing leaves every agent untitled. */
@@ -67,6 +78,13 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           run(conversationOwnedBy(userId, conversationId)),
       },
       deploymentSecret: () => environment.cronSecret,
+      planEve: (userId) =>
+        Effect.map(eveSessionsComposer, (compose) => {
+          const secret = environment.cronSecret;
+          const origin = deploymentEveOrigin();
+          if (secret === undefined || origin === undefined) return undefined;
+          return compose({ origin, caller: { secret, account: userId } });
+        }),
       userInfo: (input) =>
         Effect.tryPromise(async () => {
           // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.

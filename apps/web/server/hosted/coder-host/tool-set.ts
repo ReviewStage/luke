@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_REPORT_TOOL,
   CODING_AGENT_TODOS_TOOL,
 } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
@@ -18,8 +19,9 @@ import { connectionToolEntries } from "../connection-tools.js";
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the provider-run web reads, the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`) and its read of the plan whole (`plan-read.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`). The worker's own rows name
+ * its plan (`plan-edit.ts`) and its read of the plan whole (`plan-read.ts`), its to-do list (`todos.ts`), the
+ * developer's inbox it posts to (`inbox.ts`), and a rollout worker's
+ * reports to Luke (`report.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -45,6 +47,7 @@ export const CODER_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  REPORT: CODING_AGENT_REPORT_TOOL,
 } as const;
 
 /**

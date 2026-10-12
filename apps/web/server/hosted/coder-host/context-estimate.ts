@@ -8,6 +8,7 @@ import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.j
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { READ_PLAN_TOOL } from "./plan-read.js";
+import { REPORT_TOOL } from "./report.js";
 import { bashStartingIn } from "./shell.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -86,6 +87,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.READ_INBOX]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
+  },
+  [CODER_TOOL.REPORT]: {
+    description: REPORT_TOOL.description,
+    inputSchema: emitJsonSchema(REPORT_TOOL.inputSchema),
   },
 } as const satisfies Record<
   Exclude<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ProviderRunTool>,

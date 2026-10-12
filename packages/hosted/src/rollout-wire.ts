@@ -40,6 +40,20 @@ export const REPORT_KIND = {
 
 type ReportKind = (typeof REPORT_KIND)[keyof typeof REPORT_KIND];
 
+/**
+ * The kinds a worker reports itself, through its report tool: its
+ * milestones and its asks. How its turn ended is the host's to report, so
+ * a worker cannot claim to have finished.
+ */
+export const WORKER_REPORT_KIND = {
+  PR_OPENED: REPORT_KIND.PR_OPENED,
+  CI_GREEN: REPORT_KIND.CI_GREEN,
+  REBASED: REPORT_KIND.REBASED,
+  MERGED: REPORT_KIND.MERGED,
+  BLOCKED: REPORT_KIND.BLOCKED,
+  QUESTION: REPORT_KIND.QUESTION,
+} as const;
+
 /** The tag a GitHub report's first line names its reporter by. */
 const GITHUB_REPORTER = "github";
 
@@ -98,6 +112,19 @@ export const reportSchema = EffectSchema.Union([
 ]);
 
 export type Report = typeof reportSchema.Type;
+
+/**
+ * What a worker hands its report tool: a report with no reporter, since the
+ * host names the worker by the position its row holds, and one of the
+ * worker's own kinds. The model is shown this schema and eve holds the call
+ * to it, so its bounds are the report's own.
+ */
+export const workerReportInputSchema = EffectSchema.Struct({
+  ...REPORT_FIELDS,
+  kind: EffectSchema.Literals(Object.values(WORKER_REPORT_KIND)),
+});
+
+export type WorkerReportInput = typeof workerReportInputSchema.Type;
 
 /** A report's fixed first line: who reported, what happened, and on which pull request, `[worker 3] opened #415`. */
 export function reportLine(report: Report): string {

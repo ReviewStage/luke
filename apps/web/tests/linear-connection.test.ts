@@ -123,6 +123,7 @@ const codingHost = Effect.gen(function* () {
       ownsConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
+    planEve: () => Effect.succeed(undefined),
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     titleModel: () => undefined,
     scriptedModel: () => false,

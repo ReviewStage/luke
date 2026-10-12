@@ -3,7 +3,12 @@ import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { UnparsedWireValue } from "../server/core.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
-import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
+import {
+  type CoderHost,
+  coderHost,
+  type InboxCall,
+  type ReportCall,
+} from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
@@ -12,6 +17,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import { type ReportToolResult, reportRejected } from "../server/hosted/coder-host/report.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
   type LinearAdmission,
@@ -146,4 +152,19 @@ export function linearConnectionFor(
   admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
 ) {
   return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
+}
+
+/** One `report` call handed to Luke under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function reportToLuke(
+  auth: SessionAuth,
+  sessionId: string,
+  call: ReportCall,
+): Promise<ReportToolResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return reportRejected(admitted.failure);
+      return yield* host.report(admitted.success, call);
+    }),
+  );
 }
