@@ -10,6 +10,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import { builtStylesheet, cssRules } from "#testing/css-rules";
 import type { ActHandle } from "../act";
+import { SIDEBAR_WIDTH } from "../desktop/sidebar-collapse";
 import {
   CALL_CARD_SURFACE,
   CallCard,
@@ -157,4 +158,21 @@ test("in the floating window the whole card drags the window and every button an
     rules.find((rule) => rule.selectors.includes(selector))?.declarations.get("-webkit-app-region");
   assert.equal(regionOf('.call-card[data-surface="window"]'), "drag");
   assert.equal(regionOf('.call-card[data-surface="window"] button'), "no-drag");
+});
+
+test("folded, the card floats at the default sidebar's width, whatever width the sidebar was dragged to; docked, it takes the sidebar's own", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const declared = (selector: string, property: string) =>
+    rules
+      .filter((rule) => rule.selectors.includes(selector))
+      .map((rule) => rule.declarations.get(property))
+      .find((value) => value !== undefined);
+  assert.equal(
+    declared('.call-card[data-surface="floating"]', "width"),
+    "calc(var(--sidebar-width-default) - 2 * var(--row-inset))",
+  );
+  // The default token is the sidebar's own default, and the dragged width stands on it.
+  assert.equal(declared(":root", "--sidebar-width-default"), `${SIDEBAR_WIDTH.DEFAULT}px`);
+  assert.equal(declared(":root", "--sidebar-width"), "var(--sidebar-width-default)");
+  assert.equal(declared('.call-card[data-surface="sidebar"]', "width"), undefined);
 });
