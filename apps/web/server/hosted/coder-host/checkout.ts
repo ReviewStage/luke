@@ -1,11 +1,13 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
+import { ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-wire";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp, noreplyAddress } from "../../github/github-app.js";
 import {
   type CheckoutIdentity,
+  type CheckoutRepository,
   cloneRepository,
   REPOSITORY_REFUSAL,
   type RepositorySandbox,
@@ -13,7 +15,7 @@ import {
   setCheckoutIdentity,
 } from "../repository-shell.js";
 import { planWorkspace } from "../workspace-repository.js";
-import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { CODER, CODER_REFUSAL, type CoderRefusal, rolloutBranchPrefix } from "./bounds.js";
 
 /**
  * checkout.ts -- a coding agent's checkout of its repository, and the credential its sandbox pushes through.
@@ -139,12 +141,31 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
 );
 
 /**
- * The agent's repository checked out whole, at its current default branch,
- * into the sandbox, with the App's commit identity set in it; answers the
- * token minted for it, for the caller to set at the firewall for the
+ * What the clone fetches beside its own branch: every branch of the plan's
+ * rollout for its keeper, which restacks them; the default branch for a
+ * builder's clone of its base, which the stack lands on; nothing else.
+ */
+function alsoFetched(
+  agent: CodingAgent,
+  branch: string,
+  defaultBranch: string,
+): Pick<CheckoutRepository, "alsoFetch"> {
+  if (agent.role === ROLLOUT_ROLE.KEEPER)
+    return { alsoFetch: `${rolloutBranchPrefix(agent.planId)}*` };
+  return branch === defaultBranch ? {} : { alsoFetch: defaultBranch };
+}
+
+/**
+ * The agent's repository checked out whole into the sandbox, at the base
+ * branch its row names or at the current default branch where it names
+ * none, with the App's commit identity set in it; answers
+ * the token minted for it, for the caller to set at the firewall for the
  * commands that follow. The checkout is recorded under the name the agent's
- * row holds. Note that the identity is read ahead of the clone, so a bot
- * GitHub cannot name costs no clone.
+ * row holds. Note that a clone is of one branch, so what else the agent
+ * reads is fetched beside it: a builder's base has the default branch beside
+ * it, and the keeper, which has no base, checks out the default branch with
+ * every branch of the rollout beside it; and that the identity is
+ * read ahead of the clone, so a bot GitHub cannot name costs no clone.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
@@ -154,11 +175,13 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
   ): Effect.fn.Return<Redacted.Redacted, CheckoutRefused, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);
     const identity = yield* commitIdentity(minted.token);
+    const branch = agent.baseBranch ?? minted.defaultBranch;
     yield* cloneRepository(
       sandbox,
       {
         fullName: minted.fullName,
-        defaultBranch: minted.defaultBranch,
+        branch,
+        ...alsoFetched(agent, branch, minted.defaultBranch),
         recordedAs: agent.repository,
       },
       minted.token,

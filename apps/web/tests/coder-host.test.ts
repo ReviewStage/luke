@@ -11,7 +11,7 @@ import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-st
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { FAST_ACCESS } from "@sidecar/hosted/provider-key-wire";
@@ -355,6 +355,30 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
         assert.deepEqual(accepted, Result.succeed({ model: fast.id, effort: "high" }));
+      }),
+  );
+
+  it.effect(
+    "a rollout's worker is told its base as the branch it is checked out at and opens onto, and a plain agent the default branch",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const base = "luke/invitations/1-schema";
+
+        const stacked = yield* composedPrompt(host, admitted, {
+          ...agent,
+          position: 2,
+          baseBranch: base,
+          role: ROLLOUT_ROLE.BUILDER,
+        });
+        const plain = yield* composedPrompt(host, admitted, agent);
+
+        assert.ok(stacked.text.includes(`at the branch \`${base}\``));
+        assert.ok(stacked.text.includes(`\`gh pr create --base ${base}\``));
+        assert.ok(plain.text.includes("at its current default branch"));
+        assert.ok(!plain.text.includes(base));
+        assert.notEqual(stacked.hash, plain.hash);
       }),
   );
 

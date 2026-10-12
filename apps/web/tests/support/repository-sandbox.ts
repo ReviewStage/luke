@@ -40,8 +40,8 @@ export interface SandboxDouble extends RepositorySandbox {
   readonly policiesDuringClone: SandboxNetworkPolicy[];
   /** The repository checked out now, as the sandbox's record names it; nothing before a clone. */
   checkedOut: string | undefined;
-  /** The clone's arguments, as the last clone was handed them. */
-  readonly clones: { repository: string; branch: string; url: string }[];
+  /** Each clone's arguments, in order, with the branch fetched beside it where one was handed in. */
+  readonly clones: { repository: string; branch: string; url: string; alsoFetch?: string }[];
   /** Every commit identity set in the checkout, in order. */
   readonly identities: { name: string; email: string }[];
   /** How the next clones end; a clone with nothing scripted succeeds. */
@@ -136,10 +136,12 @@ export function sandboxDouble(
       const url = env?.[VARIABLE.URL];
       if (url !== undefined) {
         double.policiesDuringClone.push(policy);
+        const alsoFetch = env?.[VARIABLE.ALSO_FETCH];
         double.clones.push({
           repository: env?.[VARIABLE.REPOSITORY] ?? "",
           branch: env?.[VARIABLE.BRANCH] ?? "",
           url,
+          ...(alsoFetch === undefined ? undefined : { alsoFetch }),
         });
         const scripted = double.cloneAnswers.shift();
         if (scripted !== undefined && scripted.exitCode !== EXIT.OK) {

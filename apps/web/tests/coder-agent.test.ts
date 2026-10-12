@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_BRIEF, ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -16,6 +16,26 @@ import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
+
+/** A plain agent's row as its instructions read it: the repository, no rollout position, no base. */
+const RELAY_AGENT = {
+  repository: "Acme/Relay",
+  planId: "5f3c2a1e-0000-4000-8000-000000000001",
+  position: null,
+  baseBranch: null,
+  role: null,
+} as const;
+
+/** A rollout's third pull request, based on the second's branch. */
+const STACKED_WORKER = {
+  ...RELAY_AGENT,
+  position: 3,
+  baseBranch: "luke/5f3c2a1e/2-route",
+  role: ROLLOUT_ROLE.BUILDER,
+} as const;
+
+/** The rollout's keeper: no position and no base. */
+const KEEPER = { ...RELAY_AGENT, role: ROLLOUT_ROLE.KEEPER } as const;
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
@@ -126,7 +146,7 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
-      coderInstructions("Acme/Relay", brief, false).includes(
+      coderInstructions(RELAY_AGENT, brief, false).includes(
         "Never ask for a credential or a secret in a form",
       ),
       brief,
@@ -135,4 +155,24 @@ test("the session and the post tool are told never to ask for a credential or a 
   assert.ok(
     INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
+});
+test("a rollout's builder is told it is checked out at its base, to cut its branch under the plan's prefix with its position and open onto the base, and never to push the base or the default branch; a plain agent is told the default branch, and the keeper the rollout's branches beside it", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const stacked = coderInstructions(STACKED_WORKER, brief, false);
+    for (const kept of [
+      "at the branch `luke/5f3c2a1e/2-route`",
+      "`luke/5f3c2a1e/3-<slug>`, cut from `luke/5f3c2a1e/2-route`",
+      "`gh pr create --base luke/5f3c2a1e/2-route`",
+      "Never commit to or push `luke/5f3c2a1e/2-route` or the default branch",
+    ]) {
+      assert.ok(stacked.includes(kept), `${brief}: ${kept}`);
+    }
+    assert.ok(!stacked.includes("at its current default branch"), brief);
+    const plain = coderInstructions(RELAY_AGENT, brief, false);
+    assert.ok(plain.includes("at its current default branch"), brief);
+    assert.ok(plain.includes("cut from the default branch"), brief);
+    assert.ok(!plain.includes("--base"), brief);
+    const keeper = coderInstructions(KEEPER, brief, false);
+    assert.ok(keeper.includes("every branch of this plan's rollout, `luke/5f3c2a1e/*`"), brief);
+  }
 });

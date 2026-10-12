@@ -5,7 +5,16 @@
  * the coding agent's: the code extension's tooling (`gh`, signed commits,
  * TypeScript diagnostics) and the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs. Node is the
- * image's own; pnpm and Python are added where absent. Every command runs
+ * image's own; pnpm and Python are added where absent. GitHub's stacked
+ * pull request extension (`gh stack`) is placed where `gh` finds its
+ * extensions, at a pinned release whose digest is checked, for a rollout's
+ * keeper, which links and restacks its chains with it. Note that it is
+ * downloaded rather than installed with `gh extension install`, because
+ * `gh` refuses every command but a few without a token and no token stands
+ * while the snapshot is prepared; and that at run time `gh stack` is a child
+ * of the code extension's wrapped `gh`, so its calls to GitHub carry the
+ * wrapper's placeholder token and the firewall's real one replaces it, as
+ * for `gh` itself. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the
  * snapshot `prepare` made, so the larger image costs a planning session
@@ -34,6 +43,30 @@ import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/ver
 import { CODER } from "../coder-host/bounds.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
+/** The release of `gh stack` the snapshot carries, moved deliberately, with the SHA-256 of each binary as it was downloaded when pinned, since the release publishes none. */
+const GH_STACK = {
+  RELEASE: "v0.1.0",
+  SHA256: {
+    amd64: "358552dd7dce0a46ce153fe196270cec482b84f080947890aad4061a8d44bc0b",
+    arm64: "a79649e121845b7404109de21d65601c09c8c6d021d93738a3428d23986a8841",
+  },
+} as const;
+
+/** `gh stack` downloaded for the sandbox's architecture into `gh`'s extension directory, checked against its digest, and run once. */
+const GH_STACK_INSTALL = [
+  'case "$(uname -m)" in',
+  `  x86_64) arch=amd64; digest=${GH_STACK.SHA256.amd64} ;;`,
+  `  aarch64|arm64) arch=arm64; digest=${GH_STACK.SHA256.arm64} ;;`,
+  '  *) echo "gh stack has no build for $(uname -m)" >&2; exit 1 ;;',
+  "esac",
+  'extension="${XDG_DATA_HOME:-$HOME/.local/share}/gh/extensions/gh-stack"',
+  'mkdir -p "$extension"',
+  `curl -fsSL -o "$extension/gh-stack" "https://github.com/github/gh-stack/releases/download/${GH_STACK.RELEASE}/linux-$arch"`,
+  'echo "$digest  $extension/gh-stack" | sha256sum -c -',
+  'chmod 755 "$extension/gh-stack"',
+  '"$extension/gh-stack" --help >/dev/null',
+];
+
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
 const PREPARE_SCRIPT = [
   "set -e",
@@ -44,6 +77,7 @@ const PREPARE_SCRIPT = [
   '  if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y python3; else sudo -n apt-get update && sudo -n apt-get install -y python3; fi',
   "fi",
   "pnpm --version && python3 --version",
+  ...GH_STACK_INSTALL,
 ].join("\n");
 
 /**
