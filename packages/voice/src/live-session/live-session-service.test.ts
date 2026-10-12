@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import { TURN_REST_REASON } from "@sidecar/hosted";
 import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import { type PlanShownCode, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
@@ -39,6 +40,7 @@ import {
 } from "./live-brain.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
+  BACKEND_LOOP_BOUNDS,
   COMPLETED_QUIET_NOTE,
   END_CALL_BOUNDS,
   LIVE_SESSION_TRACE,
@@ -2902,4 +2904,307 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       assert.ok(f.reports.includes("A reply's commentary went unanswered and is not sent again"));
     }),
+);
+
+/** A fixture whose backend takes every continue as a run of its own, `cont-1` first. */
+function continuingFixture() {
+  return Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.continuing = () => `cont-${f.brain.continues.length}`;
+    return f;
+  });
+}
+
+/** What the voice was handed to say, with the delegation each was handed under. */
+function commentaryOf(sideband: FakeSideband) {
+  return appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+    "content" in event ? [event.content, event.delegation_id] : [],
+  );
+}
+
+it.effect(
+  "once the call has been quiet for the beat after the developer spoke and nothing is under way, the backend is set working with the lines it has not heard, and its reply is said session-wide",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire after a week.", 0, 1500);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS - 1);
+      assert.equal(f.brain.continues.length, 0);
+      yield* advanceClock(1);
+      assert.deepEqual(
+        f.brain.continues.map((work) => [work.sessionId, work.heard, work.questionsHeld]),
+        [["sess-1", "Developer: Invites should expire after a week.", 0]],
+      );
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "cont-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "cont-1",
+        sentence: "The invites table has no expiry column yet.",
+      });
+      yield* settle();
+      assert.deepEqual(commentaryOf(sideband), [
+        ["The invites table has no expiry column yet.", null],
+      ]);
+    }),
+);
+
+it.effect(
+  "the backend is not set working while an asked run is under way, and is once that run has ended and the call has been quiet, with nothing the ask already handed it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("How do invites work?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+      assert.equal(f.brain.continues.length, 0);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.equal(f.brain.continues.length, 0);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.deepEqual(
+        f.brain.continues.map((work) => work.heard),
+        [""],
+      );
+    }),
+);
+
+it.effect("the backend is not set working before the developer's first words", () =>
+  Effect.gen(function* () {
+    const f = yield* continuingFixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.output("Hi, what are we planning today?", 0, 1500);
+    yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+    assert.equal(f.brain.continues.length, 0);
+  }),
+);
+
+it.effect(
+  "a backend that rested, or refused to start, is not set working again until the developer speaks",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.RESTED,
+        runId: "cont-1",
+        reason: TURN_REST_REASON.WAITING_ON_DEVELOPER,
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+      assert.equal(f.brain.continues.length, 1);
+
+      f.brain.continuing = undefined;
+      sideband.input("A week.", 5000, 5600);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.brain.continues.length, 2);
+      sideband.output("Got it.", 6000, 6500);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+      assert.equal(f.brain.continues.length, 2);
+
+      f.brain.continuing = () => `cont-${f.brain.continues.length}`;
+      sideband.input("And admins can revoke them.", 7000, 7800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.brain.continues.length, 3);
+      assert.deepEqual(
+        f.traces.filter((trace) => trace.kind.startsWith("loop-")),
+        [
+          { kind: LIVE_SESSION_TRACE.LOOP_STARTED },
+          {
+            kind: LIVE_SESSION_TRACE.LOOP_RESTED,
+            reason: TURN_REST_REASON.WAITING_ON_DEVELOPER,
+          },
+          { kind: LIVE_SESSION_TRACE.LOOP_REFUSED },
+          { kind: LIVE_SESSION_TRACE.LOOP_STARTED },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "runs follow one another while the developer is around, and none starts once the developer has been silent past the absent bound",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000 + BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.brain.continues.length, 2);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.DEVELOPER_ABSENT_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-2",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000 + BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+      assert.equal(f.brain.continues.length, 2);
+    }),
+);
+
+it.effect(
+  "a continued run under way neither keeps an abandoned call from closing on idle nor ends the call itself",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.brain.continues.length, 1);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "cont-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "cont-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "cont-1",
+        sentence: "Expiry fits the invites table.",
+      });
+      yield* settle();
+      assert.equal(f.endings.count, 0);
+      sideband.acknowledge(0, 1000, 1200);
+      f.service.reportActivity(true);
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
+    }),
+);
+
+it.effect(
+  "the developer's next delegation silences a continued run's reply, and the questions it queues are still handed on",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      sideband.input("Actually, what about revoking?", 5000, 6000);
+      sideband.delegation("item_1", 6100);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "cont-1",
+        question: "Should an expired invite be resendable?",
+        recommendation: "Yes, as a fresh invite.",
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "cont-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "cont-1",
+        sentence: "Expiry fits the invites table.",
+      });
+      yield* settle();
+      const said = commentaryOf(sideband).map(([content]) => content);
+      assert.equal(said.length, 1);
+      assert.ok(String(said[0]).includes("Should an expired invite be resendable?"));
+    }),
+);
+
+it.effect(
+  "the stop key cancels a continued run and rests the backend until the developer speaks",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.service.stopSpeaking(), true);
+      yield* settle();
+      assert.deepEqual(f.brain.cancels, ["cont-1"]);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-1",
+        end: LIVE_BRAIN_RUN_END.CANCELLED,
+      });
+      yield* advanceClock(1000 + BACKEND_LOOP_BOUNDS.QUIET_MS * 3);
+      assert.equal(f.brain.continues.length, 1);
+      sideband.input("Go on.", 20_000, 20_500);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.equal(f.brain.continues.length, 2);
+    }),
+);
+
+it.effect(
+  "the questions queued since the developer last spoke are handed to the next continued run, and the developer's words clear them",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* continuingFixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Let's add invite expiry.", 0, 800);
+      yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+      for (const question of ["How long should invites last?", "Who can revoke one?"]) {
+        f.brain.fire({
+          kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+          runId: "cont-1",
+          question,
+          recommendation: "Your call.",
+        });
+      }
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* settle();
+      sideband.acknowledge(0, 0, 0);
+      yield* settle();
+      sideband.acknowledge(1, 0, 0);
+      yield* advanceClock(1000 + BACKEND_LOOP_BOUNDS.QUIET_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "cont-2",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      sideband.input("A week.", 20_000, 20_500);
+      yield* advanceClock(1000 + BACKEND_LOOP_BOUNDS.QUIET_MS);
+      assert.deepEqual(
+        f.brain.continues.map((work) => work.questionsHeld),
+        [0, 2, 0],
+      );
+    }),
+);
+
+it.effect("lines a continued run heard are still the next delegation's rows to attach", () =>
+  Effect.gen(function* () {
+    const f = yield* continuingFixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Let's add invite expiry.", 0, 800);
+    yield* advanceClock(BACKEND_LOOP_BOUNDS.QUIET_MS);
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      runId: "cont-1",
+      end: LIVE_BRAIN_RUN_END.COMPLETED,
+    });
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    const row = f.record.rows[0]?.rowId;
+    assert.ok(row);
+    assert.deepEqual(attaches(f.record), [
+      { delegationId: "item_1", voiceSessionId: "sess-1", rowIds: [row] },
+    ]);
+  }),
 );

@@ -1,4 +1,5 @@
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import type { TurnRestReason } from "@sidecar/hosted";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
@@ -215,6 +216,21 @@ const UNHEARD_ASK_LINE =
   "Luke handed this over with no new words from the developer since the last ask; answer from the conversation so far.";
 
 /**
+ * How the service keeps the backend working between the developer's words.
+ * Once the call has been quiet for `QUIET_MS` after the last line either
+ * speaker said, or after a run ended, and nothing is under way, the backend
+ * is set working again with what it has not heard. It stops once the planning
+ * model rests, and starts again when the developer next speaks. Note that
+ * nothing caps how many runs follow one another, because the model resting is
+ * the bound; `DEVELOPER_ABSENT_MS` is what lets a call the developer has
+ * walked away from fall quiet and close on idle.
+ */
+export const BACKEND_LOOP_BOUNDS = {
+  QUIET_MS: 4_000,
+  DEVELOPER_ABSENT_MS: 180_000,
+} as const;
+
+/**
  * What the service traces of a delegation's path and an ask's quiet end, for
  * the composition's log: the kind alone and how long a held delegation
  * waited, never a word of the call or an id.
@@ -224,6 +240,12 @@ export const LIVE_SESSION_TRACE = {
   DELEGATION_COMPOSED: "delegation-composed",
   DELEGATION_COMPOSED_AFTER_GRACE: "delegation-composed-after-grace",
   RUN_COMPLETED_QUIET: "run-completed-quiet",
+  /** The backend was set working between the developer's words. */
+  LOOP_STARTED: "loop-started",
+  /** The planning model rested, with its reason; nothing more starts until the developer speaks. */
+  LOOP_RESTED: "loop-rested",
+  /** The backend refused to be set working; nothing more starts until the developer speaks. */
+  LOOP_REFUSED: "loop-refused",
 } as const;
 
 export type LiveSessionTraceKind = (typeof LIVE_SESSION_TRACE)[keyof typeof LIVE_SESSION_TRACE];
@@ -232,6 +254,8 @@ export interface LiveSessionTrace {
   readonly kind: LiveSessionTraceKind;
   /** How long a held delegation waited before it was composed. */
   readonly waitedMs?: number;
+  /** Why the planning model rested. */
+  readonly reason?: TurnRestReason;
 }
 
 /**
@@ -294,6 +318,20 @@ export interface LiveSessionStatus {
  */
 type SessionDelay = Deferred.Deferred<void>;
 
+/** Where the service stands in keeping the backend working between the developer's words. */
+interface BackendLoop {
+  /** The planning model rested, or refused to start, since the developer last spoke. */
+  resting: boolean;
+  /** A continued run is being started and has not answered yet. */
+  starting: boolean;
+  /** When the developer last spoke, by the session's clock; nothing before their first words. */
+  developerSpokeAt: number | undefined;
+  /** How many questions the backend queued since the developer last spoke. */
+  questionsHeld: number;
+  /** The quiet the next run waits out, re-armed by every line and every run's end. */
+  beat: SessionDelay | undefined;
+}
+
 interface RetainedDelegation {
   id: string;
   offsetMs: number;
@@ -325,6 +363,10 @@ interface StandingSession {
   /** The grace the oldest retained delegation is held under, and when it was retained; see `RETAINED_DELEGATION_BOUNDS`. */
   retainedGrace: SessionDelay | undefined;
   retainedAt: number | undefined;
+  /** The end of the newest line any ask or continued run handed the backend, on the session's timeline. */
+  heardThroughMs: number;
+  /** The backend's work between the developer's words; see `BACKEND_LOOP_BOUNDS`. */
+  readonly loop: BackendLoop;
   /** How many delegations have been composed into asks, each ask's revision being the count when it was. */
   revisions: number;
   /** How many times the stop key was pressed, so an ask delegated before a press and accepted after it is born silenced. */
@@ -381,6 +423,27 @@ interface StandingSession {
 }
 
 /**
+ * Who opened an exchange's run. An asked run answers the developer's
+ * delegation; a woken run the brain opened of its own, and a continued one
+ * the service opened between the developer's words, answer none, so both
+ * speak session-wide and wait for any asked run before they do. A continued
+ * run is the service's own and no reply anyone waits for, so it neither
+ * holds the call open on idle nor counts what it says as activity.
+ */
+const EXCHANGE_KIND = {
+  ASKED: "asked",
+  WOKEN: "woken",
+  CONTINUED: "continued",
+} as const;
+
+type ExchangeKind = (typeof EXCHANGE_KIND)[keyof typeof EXCHANGE_KIND];
+
+/** Whether the exchange answers no delegation: the brain or the service opened its run. */
+function isOpened(exchange: Exchange): boolean {
+  return exchange.kind !== EXCHANGE_KIND.ASKED;
+}
+
+/**
  * One spoken exchange with the brain: the delegation it answers, the run
  * that carries it, and how much of it has been said. Each delegation is an
  * exchange of its own, a revision of the developer's request: one arriving
@@ -395,8 +458,8 @@ interface Exchange {
   readonly runId: string;
   /** The delegation the run answers; none for a run the brain opened of its own, which speaks session-wide. */
   readonly delegationId: LiveDelegationId;
-  /** Whether the brain opened the run of its own, so its reply waits until no asked run of its session is under way. */
-  readonly woken: boolean;
+  /** Who opened the run: the developer's delegation, the brain of its own, or the service between the developer's words; see `EXCHANGE_KIND`. */
+  readonly kind: ExchangeKind;
   /** Where the delegation came in the session's order, so an older ask accepted late silences nothing newer. */
   readonly revision: number;
   /** Whether a newer delegation or the stop key has silenced the reply; see the interface. */
@@ -434,12 +497,12 @@ function newExchange(
   revision: number,
   sessionId: string,
   askedAt: number,
-  woken = false,
+  kind: ExchangeKind = EXCHANGE_KIND.ASKED,
 ): Exchange {
   return {
     runId,
     delegationId,
-    woken,
+    kind,
     revision,
     silenced: false,
     cancelAsked: false,
@@ -710,7 +773,7 @@ export class LiveSessionService {
       Effect.flatMap(this.#brain.explore(session.sessionId), (submission) =>
         Effect.sync(() => {
           if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return;
-          if (this.#standing === session) this.#registerWoken(submission.runId);
+          if (this.#standing === session) this.#registerOpened(submission.runId);
         }),
       ),
     );
@@ -855,6 +918,7 @@ export class LiveSessionService {
       ),
     );
     session.stops += 1;
+    session.loop.resting = true;
     for (const exchange of this.#exchanges.values()) {
       if (exchange.sessionId === session.sessionId) this.#block(session, exchange);
     }
@@ -918,6 +982,7 @@ export class LiveSessionService {
   /** Whether a reply is still coming that this session would speak: a delegation's under it. */
   #exchangeInFlight(session: StandingSession): boolean {
     for (const exchange of this.#exchanges.values()) {
+      if (exchange.kind === EXCHANGE_KIND.CONTINUED) continue;
       if (exchange.end === undefined && exchange.sessionId === session.sessionId) return true;
     }
     return false;
@@ -976,6 +1041,14 @@ export class LiveSessionService {
         retained: [],
         retainedGrace: undefined,
         retainedAt: undefined,
+        heardThroughMs: 0,
+        loop: {
+          resting: false,
+          starting: false,
+          developerSpokeAt: undefined,
+          questionsHeld: 0,
+          beat: undefined,
+        },
         revisions: 0,
         stops: 0,
         pendingRows: new Map(),
@@ -1073,6 +1146,7 @@ export class LiveSessionService {
       case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
         this.#fragment(session, TRANSCRIPT_SPEAKER.USER, event.delta, event.start_ms, event.end_ms);
         this.#composeRetained(session);
+        this.#developerSpoke(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA:
         this.#fragment(
@@ -1086,6 +1160,7 @@ export class LiveSessionService {
           this.#voiceIn(session, undefined);
           this.#releaseCode(session);
         }
+        this.#armBeat(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
@@ -1293,10 +1368,9 @@ export class LiveSessionService {
     this.#flushRows(session);
     session.revisions += 1;
     const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
-    const question = [
-      renderAskContext(session.ledger.askContext(session.lastDelegationOffsetMs)),
-      UNHEARD_ASK_LINE,
-    ]
+    const context = session.ledger.askContext(session.lastDelegationOffsetMs);
+    this.#heard(session, context.turns);
+    const question = [renderAskContext(context), UNHEARD_ASK_LINE]
       .filter((part) => part.length > 0)
       .join("\n");
     this.#trace({
@@ -1308,6 +1382,86 @@ export class LiveSessionService {
 
   #trace(trace: LiveSessionTrace): void {
     this.#options.onTrace?.(trace);
+  }
+
+  /** The developer spoke: the backend may work again, the questions it held are being answered, and the quiet starts over. */
+  #developerSpoke(session: StandingSession): void {
+    session.loop.resting = false;
+    session.loop.questionsHeld = 0;
+    session.loop.developerSpokeAt = this.#now();
+    this.#armBeat(session);
+  }
+
+  /** Waits out the quiet afresh before the backend is next set working. */
+  #armBeat(session: StandingSession): void {
+    this.#cancelDelay(session.loop.beat);
+    session.loop.beat = this.#after(BACKEND_LOOP_BOUNDS.QUIET_MS, () => {
+      session.loop.beat = undefined;
+      this.#considerContinue(session);
+    });
+  }
+
+  /**
+   * Whether the backend may be set working now: the session stands, the
+   * developer has spoken and not walked away, the model has not rested since,
+   * and nothing is under way that would answer first: no run of any kind, no
+   * ask out or held, and no handoff the voice is in the middle of.
+   */
+  #mayContinue(session: StandingSession): boolean {
+    const loop = session.loop;
+    if (this.#speakable() !== session || this.#stopped) return false;
+    if (loop.resting || loop.starting || loop.developerSpokeAt === undefined) return false;
+    if (this.#now() - loop.developerSpokeAt >= BACKEND_LOOP_BOUNDS.DEVELOPER_ABSENT_MS)
+      return false;
+    if (session.openAsks.size > 0 || session.retained.length > 0) return false;
+    if (session.voicePhase === VOICE_PHASE.HANDING_OFF) return false;
+    for (const exchange of this.#exchanges.values()) {
+      if (exchange.sessionId === session.sessionId && exchange.end === undefined) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Sets the backend working between the developer's words, with the lines
+   * it has not heard and the questions it holds. Note that the run claims no
+   * row, because the developer's lines are still the next delegation's to
+   * attach, and that a refusal rests the loop rather than retrying on every
+   * quiet, since a backend out of reach would only be asked again for nothing.
+   */
+  #considerContinue(session: StandingSession): void {
+    if (!this.#mayContinue(session)) return;
+    const loop = session.loop;
+    const turns = session.ledger.utterances(undefined, { sinceMs: session.heardThroughMs });
+    this.#heard(session, turns);
+    loop.starting = true;
+    const revision = session.revisions;
+    const work = {
+      submissionId: this.#options.createId(),
+      sessionId: session.sessionId,
+      heard: renderAskContext({ turns, ask: undefined }),
+      questionsHeld: loop.questionsHeld,
+      revision,
+    };
+    this.#start(
+      Effect.flatMap(this.#brain.continueWork(work), (submission) =>
+        Effect.sync(() => {
+          loop.starting = false;
+          if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+            loop.resting = true;
+            this.#trace({ kind: LIVE_SESSION_TRACE.LOOP_REFUSED });
+            return;
+          }
+          if (this.#standing !== session) return;
+          this.#registerOpened(submission.runId, EXCHANGE_KIND.CONTINUED, revision);
+          this.#trace({ kind: LIVE_SESSION_TRACE.LOOP_STARTED });
+        }),
+      ),
+    );
+  }
+
+  /** The backend has now been handed these lines, so the next continued run starts after them. */
+  #heard(session: StandingSession, turns: readonly TranscriptUtterance[]): void {
+    for (const turn of turns) session.heardThroughMs = Math.max(session.heardThroughMs, turn.endMs);
   }
 
   /**
@@ -1360,6 +1514,7 @@ export class LiveSessionService {
       renderAskContext(askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs)),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
+    this.#heard(session, askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs).turns);
     this.#trace(
       waitedMs === undefined
         ? { kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED }
@@ -1554,22 +1709,34 @@ export class LiveSessionService {
    * silences nothing itself, because it answers no request of the
    * developer's and must not cut off the one they are waiting on.
    */
-  #registerWoken(runId: string): void {
+  #registerOpened(
+    runId: string,
+    kind: ExchangeKind = EXCHANGE_KIND.WOKEN,
+    revision?: number,
+  ): Exchange | undefined {
     const session = this.#speakable();
-    if (!session || this.#exchanges.has(runId)) return;
-    this.#exchanges.set(
+    if (!session || this.#exchanges.has(runId)) return undefined;
+    const exchange = newExchange(
       runId,
-      newExchange(runId, null, session.revisions, session.sessionId, this.#now(), true),
+      null,
+      revision ?? session.revisions,
+      session.sessionId,
+      this.#now(),
+      kind,
     );
+    // A delegation that landed while the run was being started supersedes it already.
+    if (exchange.revision < session.revisions) exchange.silenced = true;
+    this.#exchanges.set(runId, exchange);
     this.#reportStatus();
+    return exchange;
   }
 
   /** Whether an exchange's reply may be said now: once its actions settled, and for a woken run only while no asked run of its session is under way. */
   #mayReply(exchange: Exchange): boolean {
     if (!exchange.settled) return false;
-    if (!exchange.woken) return true;
+    if (!isOpened(exchange)) return true;
     for (const held of this.#exchanges.values()) {
-      if (held.sessionId === exchange.sessionId && !held.woken && held.end === undefined) {
+      if (held.sessionId === exchange.sessionId && !isOpened(held) && held.end === undefined) {
         return false;
       }
     }
@@ -1579,7 +1746,7 @@ export class LiveSessionService {
   /** Says what each woken exchange of the session held back, once its reply may be said. */
   #releaseWoken(sessionId: string): void {
     for (const held of this.#exchanges.values()) {
-      if (held.sessionId !== sessionId || !held.woken || !this.#mayReply(held)) continue;
+      if (held.sessionId !== sessionId || !isOpened(held) || !this.#mayReply(held)) continue;
       for (const sentence of held.buffered.splice(0)) this.#speakSentence(held, sentence);
       // A woken run that ended while it waited was kept for this; it ends now.
       if (held.end !== undefined && held.finalize === undefined) this.#finalize(held);
@@ -1588,7 +1755,7 @@ export class LiveSessionService {
 
   #onRunEvent(event: LiveBrainRunEvent): void {
     if (event.kind === LIVE_BRAIN_RUN_EVENT.WOKEN) {
-      this.#registerWoken(event.runId);
+      this.#registerOpened(event.runId);
       return;
     }
     const exchange = this.#exchanges.get(event.runId);
@@ -1611,9 +1778,18 @@ export class LiveSessionService {
         return;
       // A queued question is no action's result, so it is spoken without waiting on the settle,
       // and it is the plan's next question rather than the reply, so a silenced run still hands it on.
-      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
+        const session = this.#sessionOf(exchange);
+        if (session) session.loop.questionsHeld += 1;
         this.#speakFor(exchange, queuedQuestionNote(event.question, event.recommendation));
         return;
+      }
+      case LIVE_BRAIN_RUN_EVENT.RESTED: {
+        const session = this.#sessionOf(exchange);
+        if (session) session.loop.resting = true;
+        this.#trace({ kind: LIVE_SESSION_TRACE.LOOP_RESTED, reason: event.reason });
+        return;
+      }
       case LIVE_BRAIN_RUN_EVENT.CALL_ENDING:
         this.#endCall(exchange);
         return;
@@ -1648,7 +1824,7 @@ export class LiveSessionService {
         this.#cancelDelay(exchange.finalize);
         exchange.finalize = this.#after(EXCHANGE_FINALIZE_MS, () => this.#finalize(exchange));
         // An asked run ending may be the pause a woken run's reply was waiting for.
-        if (!exchange.woken) this.#releaseWoken(exchange.sessionId);
+        if (!isOpened(exchange)) this.#releaseWoken(exchange.sessionId);
         return;
       default:
         return;
@@ -1667,7 +1843,7 @@ export class LiveSessionService {
    * whatever the run returns after would be said over the hang-up.
    */
   #endCall(exchange: Exchange): void {
-    if (exchange.woken || exchange.silenced || exchange.endAsked) return;
+    if (isOpened(exchange) || exchange.silenced || exchange.endAsked) return;
     // A later delegation still on its way to the brain has not silenced this run yet, but it counts.
     const session = this.#sessionOf(exchange);
     if (session === undefined || exchange.revision < session.revisions) return;
@@ -1677,6 +1853,8 @@ export class LiveSessionService {
     }
     exchange.endAsked = true;
     this.#silence(exchange);
+    const ending = this.#sessionOf(exchange);
+    if (ending) ending.loop.resting = true;
     this.#options.onCallEnding?.();
   }
 
@@ -1693,10 +1871,13 @@ export class LiveSessionService {
     const session = this.#sessionOf(exchange);
     if (!session) return;
     exchange.lastNoteAt = this.#now();
+    const countsForIdle = exchange.kind !== EXCHANGE_KIND.CONTINUED;
     session.channel.enqueue(
       Effect.suspend(() =>
         Effect.asVoid(
-          session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
+          session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note)), {
+            countsForIdle,
+          }),
         ),
       ),
     );
@@ -1710,13 +1891,13 @@ export class LiveSessionService {
   #finalize(exchange: Exchange): void {
     exchange.finalize = undefined;
     // A woken reply still waiting for its pause is kept until `#releaseWoken` says it.
-    if (exchange.woken && !exchange.silenced && exchange.buffered.length > 0) return;
+    if (isOpened(exchange) && !exchange.silenced && exchange.buffered.length > 0) return;
     if (this.#exchanges.get(exchange.runId) === exchange) this.#exchanges.delete(exchange.runId);
     // Note that the note follows any sentence the run released while it ran,
     // because those told only what it had settled so far. A woken run that did
     // not complete says nothing, since nobody asked for it.
     if (
-      !exchange.woken &&
+      !isOpened(exchange) &&
       exchange.end !== undefined &&
       exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED
     ) {
@@ -1725,7 +1906,7 @@ export class LiveSessionService {
     // An asked run that completed without a word for its delegation still answers it, silently,
     // because the voice waits on every delegation it makes and would otherwise wait on in silence.
     if (
-      !exchange.woken &&
+      !isOpened(exchange) &&
       !exchange.silenced &&
       !exchange.told &&
       exchange.end === LIVE_BRAIN_RUN_END.COMPLETED
@@ -1735,6 +1916,9 @@ export class LiveSessionService {
     }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
     this.#reportStatus();
+    // A run's end is quiet to wait out before the backend is set working again.
+    const session = this.#sessionOf(exchange);
+    if (session) this.#armBeat(session);
   }
 
   /**
@@ -1775,11 +1959,19 @@ export class LiveSessionService {
     if (!session) return;
     const delegationId = this.#delegationOf(exchange);
     exchange.told = true;
+    // What a continued run says is the service's own work, which keeps no call open on idle.
+    const countsForIdle = exchange.kind !== EXCHANGE_KIND.CONTINUED;
     this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
-          const taken = yield* this.#sayChunk(session, delegationId, chunk, silenced);
+          const taken = yield* this.#sayChunk(
+            session,
+            delegationId,
+            chunk,
+            silenced,
+            countsForIdle,
+          );
           if (taken) exchange.spokenChunks += 1;
         }),
       );
@@ -1807,10 +1999,14 @@ export class LiveSessionService {
     delegationId: LiveDelegationId,
     chunk: string,
     silenced: () => boolean = () => false,
+    countsForIdle = true,
   ): Effect.Effect<boolean> {
     return Effect.gen({ self: this }, function* () {
       if (silenced()) return false;
-      const say = () => session.channel.deliver(commentaryAppend(this.#input(delegationId, chunk)));
+      const say = () =>
+        session.channel.deliver(commentaryAppend(this.#input(delegationId, chunk)), {
+          countsForIdle,
+        });
       const first = yield* say();
       const retried = first === APPEND_OUTCOME.REFUSED && !silenced();
       const outcome = retried ? yield* say() : first;
@@ -1870,6 +2066,8 @@ export class LiveSessionService {
     this.#cancelDelay(session.idleTimer);
     this.#cancelDelay(session.retainedGrace);
     session.retainedGrace = undefined;
+    this.#cancelDelay(session.loop.beat);
+    session.loop.beat = undefined;
     session.channel.close();
     session.retained = [];
     if (this.#standing === session) this.#standing = undefined;

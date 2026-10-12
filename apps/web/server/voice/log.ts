@@ -1,5 +1,5 @@
 import type { LiveSessionTraceKind } from "@sidecar/voice/live-session";
-import type { HostedApiError } from "../core.js";
+import type { HostedApiError, TurnRestReason } from "../core.js";
 import type { VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
@@ -34,7 +34,7 @@ export const LOG_EVENT = {
   EXCHANGE_REPORTED: "exchange-reported",
   /** Luke asked the device to end the call once his goodbye has played; the event is all it says. */
   CALL_ENDING: "call-ending",
-  /** The exchange traced a delegation's path or an ask's quiet end: its kind, and how long a held delegation waited. */
+  /** The exchange traced a delegation's path, an ask's quiet end, or the backend's work between asks: its kind, how long a held delegation waited, and why the backend rested. */
   SESSION_TRACE: "session-trace",
   /** The device sent a frame the service does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
@@ -90,7 +90,12 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.EXCHANGE_FAILED }
   | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; reason: string }
   | { event: typeof LOG_EVENT.CALL_ENDING }
-  | { event: typeof LOG_EVENT.SESSION_TRACE; trace: LiveSessionTraceKind; waitedMs?: number }
+  | {
+      event: typeof LOG_EVENT.SESSION_TRACE;
+      trace: LiveSessionTraceKind;
+      waitedMs?: number;
+      reason?: TurnRestReason;
+    }
   | { event: typeof LOG_EVENT.FRAME_REFUSED; type: string | undefined }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
