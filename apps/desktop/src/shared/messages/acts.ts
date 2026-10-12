@@ -16,6 +16,8 @@ import {
 import {
   type CodingAgentAgentAnswer,
   type CodingAgentDefaultAnswer,
+  type CodingAgentInboxAnsweredView,
+  type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -24,6 +26,10 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentInboxAnsweredViewSchema,
+  codingAgentInboxAnswerParamsSchema,
+  codingAgentInboxAnswerViewSchema,
+  codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -212,6 +218,14 @@ export const ACT_KIND = {
    * way keeps it.
    */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
+  /**
+   * The plan's inbox of what its coding agents need of the developer: read
+   * past a cursor (held open by the service while nothing changed), and one
+   * item answered against the revision the panel drew, under the panel's own
+   * key. The window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_INBOX: "codingAgents.inbox",
+  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
@@ -670,6 +684,18 @@ export const ACT = {
       isReadable(dictationTranscribeAnswerViewSchema),
     ),
     refusal: "Could not transcribe the recording on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX]: {
+    payload: actSchema(codingAgentInboxParamsSchema),
+    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
+    refusal: "Could not read the plan's inbox on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
+    payload: actSchema(codingAgentInboxAnswerParamsSchema),
+    result: wireResult<CodingAgentInboxAnsweredView>(
+      isReadable(codingAgentInboxAnsweredViewSchema),
+    ),
+    refusal: "Could not answer the inbox item on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

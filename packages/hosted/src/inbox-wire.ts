@@ -101,7 +101,7 @@ export const INBOX_REPLY = {
   NOT_DONE: "not-done",
 } as const;
 
-type InboxReplyKind = (typeof INBOX_REPLY)[keyof typeof INBOX_REPLY];
+export type InboxReplyKind = (typeof INBOX_REPLY)[keyof typeof INBOX_REPLY];
 
 /** The answers each kind of item takes. */
 const INBOX_REPLIES_OF = {
@@ -221,6 +221,8 @@ export const inboxAnswerRequestSchema = EffectSchema.Struct({
   ...inboxReplySchema.fields,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
+
+export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
 
 /** What an answer comes back as: the item as it then stands, and whether the answer was taken, which it is not where the agent changed the item first. */
 export const inboxAnsweredSchema = EffectSchema.Struct({

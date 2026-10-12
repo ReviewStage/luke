@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@sidecar/gateway";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_REPLY } from "@sidecar/hosted/inbox-wire";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -282,6 +283,36 @@ it.effect(
             GATEWAY_METHOD.CODING_AGENTS_MESSAGE,
             { agentId: "agent-1", text: "Go on.", clientKey: "send-2" },
           ],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "an inbox answer's option and note travel to the host with the answer, and an answer naming neither carries no such field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const itemId = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
+      const chose = {
+        itemId,
+        revision: 2,
+        reply: INBOX_REPLY.CHOSE,
+        choice: "Keep the old column",
+        note: "Drop it after the backfill.",
+        clientKey: "answer-1",
+      };
+      const approved = { itemId, revision: 3, reply: INBOX_REPLY.APPROVED, clientKey: "answer-2" };
+
+      yield* operator.codingAgentInboxAnswer(chose);
+      yield* operator.codingAgentInboxAnswer(approved);
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, chose],
+          [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, approved],
         ],
       );
     }),

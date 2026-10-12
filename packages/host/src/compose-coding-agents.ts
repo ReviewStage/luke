@@ -4,12 +4,16 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentDefaultAnswer,
+  type CodingAgentInboxAnsweredView,
+  type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentInboxAnswerParamsSchema,
+  codingAgentInboxParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -33,15 +37,16 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, and a clip dictated into an agent's box heard as words.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, and the plan's inbox, one item of it answered.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
  * agent, and while an agent's tab shows its running transcript, and every
- * ask is one call of the service answered whole. The transcript read is the
+ * ask is one call of the service answered whole. The transcript read is
  * one the service holds open while the agent runs and nothing new stands,
- * so the window's loop is one held read after another rather than a clock
- * of its own, and the loop ends when the window stops asking. Behind a
+ * and the inbox read another, held while nothing in it changed, so each of
+ * the window's loops is one held read after another rather than a clock of
+ * its own, and a loop ends when the window stops asking. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -65,6 +70,8 @@ export type CodingAgentClient = Pick<
   | "saveProviderKey"
   | "removeProviderKey"
   | "transcribeDictation"
+  | "inbox"
+  | "answerInbox"
 >;
 
 export interface CodingAgentsDependencies {
@@ -236,6 +243,26 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.pullRequest(agentId));
         return carried<CodingAgentPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
+      Effect.gen(function* () {
+        const { planId, after } = yield* read(
+          codingAgentInboxParamsSchema,
+          params,
+          "reading a plan's inbox names the plan and a cursor",
+        );
+        const answer = yield* asked(client.inbox(planId, after));
+        return carried<CodingAgentInboxAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, ...request } = yield* read(
+          codingAgentInboxAnswerParamsSchema,
+          params,
+          "answering an inbox item names the item, the revision it answers, the answer, and the answer's key",
+        );
+        const answer = yield* asked(client.answerInbox(itemId, request));
+        return carried<CodingAgentInboxAnsweredView>(answer);
       }),
   };
 

@@ -1913,3 +1913,41 @@ button.subagent-line:focus-visible {
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* Inbox ----------------------------------------------------------------------- */
+
+/* A choice's option on the Inbox tab (`inbox-board.tsx`): a row the width of
+   its card, its label over its trade-off, picked the way Settings' segments
+   are (`.settings-segment`), the fill of a chosen segment once pressed. The
+   one control of the tab with no kin elsewhere, since no other pick-one
+   carries a line of detail. */
+.inbox-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-primary);
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-option:hover:not(:disabled) {
+  background: var(--selected);
+}
+
+.inbox-option[aria-pressed="true"] {
+  background: var(--raised-strong);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+}
+
+.inbox-option:disabled {
+  opacity: 0.4;
+}
+
+.inbox-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}

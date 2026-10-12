@@ -1481,8 +1481,10 @@ body,
 
 /* An agent's or the draft's tab in the plan's column: its transcript and
    its composer, each keeping to the document's measure in the middle of
-   the column, as they keep to it in a wide side panel. */
-.desktop-agent {
+   the column, as they keep to it in a wide side panel. The plan's Inbox
+   tab is laid out the same way, its cards at that measure. */
+.desktop-agent,
+.desktop-inbox {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   position: relative;
   display: flex;
@@ -1492,7 +1494,8 @@ body,
 }
 
 .desktop-agent [role="log"],
-.desktop-agent .agent-composer {
+.desktop-agent .agent-composer,
+.desktop-inbox .inbox-board {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
@@ -3473,6 +3476,12 @@ body,
 
 .tab[data-unread="true"] .tab-label {
   font-weight: 680;
+}
+
+/* What follows a tab's label, the Inbox's count, is muted as a model's
+   effort is after its name (`.model-label-detail`). */
+.tab-detail {
+  color: var(--text-secondary);
 }
 
 /* The plan's column's tabs and their "+" take what the toolbar leaves

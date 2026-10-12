@@ -31,6 +31,7 @@ import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
+import type { InboxAnswerer, InboxReader } from "./use-plan-inbox";
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -145,6 +146,10 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
+  /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
+  readInbox: InboxReader;
+  /** One answer to an inbox item, as a card sends it. */
+  answerInbox: InboxAnswerer;
 }
 
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
@@ -524,6 +529,16 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readInbox = useCallback<InboxReader>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
+    [act],
+  );
+
+  const answerInbox = useCallback<InboxAnswerer>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
+    [act],
+  );
+
   return {
     agents,
     agentIds: agents?.map((agent) => agent.id),
@@ -556,5 +571,7 @@ export function useCodingAgents(input: {
     readTranscript,
     readPullRequest,
     keywords: input.keywords ?? NO_KEYWORDS,
+    readInbox,
+    answerInbox,
   };
 }
