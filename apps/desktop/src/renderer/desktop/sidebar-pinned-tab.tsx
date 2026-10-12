@@ -152,7 +152,7 @@ export function SidebarPinnedTab({
         <Tooltip label="Unpin">
           <button
             type="button"
-            className="icon-button sidebar-plan-mark"
+            className="sidebar-plan-mark"
             aria-label={`Unpin ${pin.label}`}
             onClick={() => plans.sidePanel.onUnpin(pin.plan, pin.tab)}
             onContextMenu={showMenu}
