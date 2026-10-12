@@ -542,6 +542,38 @@ test("a plan's row marks an agent at work, else its open, draft, or merged pull 
   ]);
 });
 
+test("resting on a plan's row hangs its card beside the row, naming its agents and pull requests", () => {
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        {
+          ...listedPlan("Invites"),
+          agents: agentsSummary({
+            pullRequestTotal: 1,
+            pullRequests: [pullRequest(PULL_REQUEST_STATE.OPEN)],
+          }),
+        },
+      ],
+    },
+  });
+  const row = container.querySelector<HTMLElement>(".sidebar-plan");
+  assert.ok(row);
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const card = document.body.querySelector<HTMLElement>('[role="tooltip"]');
+  assert.ok(card);
+  assert.equal(card.dataset.side, "end");
+  assert.equal(row.getAttribute("aria-describedby"), card.id);
+  assert.equal(card.querySelector(".plan-card-name")?.textContent, "Invites");
+  assert.deepEqual(
+    [...card.querySelectorAll('[aria-label="Pull requests"] > li')].map((line) => line.textContent),
+    ["#128 · Invite by email+12 −3"],
+  );
+});
+
 test("the pinned plans stand under Pinned above the rest only while any are pinned", () => {
   const flat = mount(DEAN, { plans: { plans: [listedPlan("Billing"), listedPlan("Invites")] } });
   const pinned = mount(DEAN, {
