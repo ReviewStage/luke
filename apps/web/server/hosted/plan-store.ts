@@ -1,5 +1,6 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import { readLastEdit, UNKNOWN_AGENT_LABEL } from "@sidecar/database/models/plan-revisions";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { plan } from "@sidecar/database/schemas/plan";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -19,7 +20,6 @@ import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { readPlanTemplate } from "./account-store.js";
-import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 
 /**
  * plan-store.ts -- the named plans an account owns, and the one document each holds.

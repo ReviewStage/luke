@@ -981,7 +981,7 @@ path override from `route-path` (`server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
 
 `GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
-History tab (`server/hosted/plan-revisions.ts`): fifty revisions a page,
+History tab (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
 revision it brought back; `?before=<seq>` reads the page before that

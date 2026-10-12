@@ -1,3 +1,4 @@
+import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
@@ -48,7 +49,6 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./hosted/plan-notes.js";
-import { listRevisions, readRevision } from "./hosted/plan-revisions.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";

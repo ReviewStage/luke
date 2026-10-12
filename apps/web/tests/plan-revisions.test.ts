@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  listRevisions,
+  PLAN_REVISION,
+  type PlanWriter,
+  readRevision,
+} from "@sidecar/database/models/plan-revisions";
 import { user } from "@sidecar/database/schemas/auth";
 import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import { voiceSessions } from "@sidecar/database/schemas/voice";
@@ -25,12 +31,6 @@ import {
   saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import {
-  listRevisions,
-  PLAN_REVISION,
-  type PlanWriter,
-  readRevision,
-} from "../server/hosted/plan-revisions";
 import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
