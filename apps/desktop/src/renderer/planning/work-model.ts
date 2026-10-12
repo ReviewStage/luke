@@ -58,7 +58,7 @@ export interface WorkCallRow {
   running: boolean;
   input: ToolBlock;
   output?: string;
-  /** For a call that started a coding agent, the agent it started; absent before the start answered, for a start refused, and for any other call. */
+  /** For a call that started a coding agent, the agent it started, which its row opens; absent before the start answered, for a start refused, and for any other call. */
   agent?: string;
 }
 

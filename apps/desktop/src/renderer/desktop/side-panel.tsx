@@ -642,6 +642,7 @@ function TabContent({
   standings,
   shown,
   onOpenSubagent,
+  onOpenAgent,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
@@ -667,6 +668,8 @@ function TabContent({
   shown: boolean;
   /** Opens a planning worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
+  /** Opens a coding agent's tab in the plan's column, by the agent. */
+  onOpenAgent: (agentId: string) => void;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -764,6 +767,7 @@ function TabContent({
           earlier={work.earlier}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
+          onOpenAgent={onOpenAgent}
           shown={shown}
           models={agents.models}
         />
@@ -1002,6 +1006,7 @@ export function SidePanel({
   views,
   shown,
   focused,
+  onOpenAgent,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1023,6 +1028,8 @@ export function SidePanel({
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W and ⌘T answer to. */
   focused: boolean;
+  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Work tab asks for. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1132,6 +1139,7 @@ export function SidePanel({
               standings={standings}
               shown={keys}
               onOpenSubagent={openSubagent}
+              onOpenAgent={onOpenAgent}
               onWorkerStatus={views.onWorkerStatus}
               onWorkerHeld={views.onWorkerHeld}
               onOpenFile={panel.onOpenFile}

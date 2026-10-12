@@ -21,6 +21,7 @@ import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { BusyLabel, Spinner } from "../spinner";
 import {
   TranscriptNote,
+  TranscriptOpeningCall,
   TranscriptReasoning,
   TranscriptRows,
   TranscriptSubagent,
@@ -80,11 +81,32 @@ function toolStateOf(call: WorkCallRow): ToolState {
     : TOOL_STATE.OUTPUT_AVAILABLE;
 }
 
-/** A call's row, opening onto its input and what it answered, each as the words the frame carried. */
+/** Opens a coding agent's tab, by the agent, which a start's row reaches through this rather than through every row above it; none where the rows stand in a tab that opens no agent. */
+const OpenAgentContext = createContext<((agentId: string) => void) | undefined>(undefined);
+
+/**
+ * A call's row, opening onto its input and what it answered, each as the
+ * words the frame carried; a coding agent's start, once the agent began,
+ * the one button that opens the agent's tab, as a subagent's row opens its.
+ */
 function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
+  const openAgent = useContext(OpenAgentContext);
   const failed = call.state === PLAN_WORK_STATE.FAILED;
+  const { agent } = call;
+  if (agent !== undefined && openAgent !== undefined) {
+    return (
+      <TranscriptOpeningCall
+        callId={call.id}
+        kind={call.kind}
+        subject={call.subject}
+        state={toolStateOf(call)}
+        onOpen={() => openAgent(agent)}
+      />
+    );
+  }
   return (
     <TranscriptTool
+      data-call-id={call.id}
       kind={call.kind}
       subject={call.subject}
       state={toolStateOf(call)}
@@ -361,6 +383,7 @@ export function PlanWork({
   earlier,
   onLoadEarlier,
   onOpenSubagent,
+  onOpenAgent,
   shown,
   models,
 }: {
@@ -372,6 +395,8 @@ export function PlanWork({
   onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
+  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row asks for; none where nothing opens one. */
+  onOpenAgent?: ((agentId: string) => void) | undefined;
   /** Whether the tab is on screen, which is when a running turn counts how long it has worked. */
   shown: boolean;
   /** The catalog as last read, which names each subagent's model; none before the first read lands. */
@@ -383,27 +408,29 @@ export function PlanWork({
     <section className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
         <ModelsContext.Provider value={models ?? []}>
-          <CountingContext.Provider value={shown}>
-            {rows.length === 0 && earlier === undefined ? (
-              <ConversationEmptyState>
-                <p className="m-0">{WORK_EMPTY_LINE}</p>
-              </ConversationEmptyState>
-            ) : (
-              <Conversation>
-                {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-                <ConversationContent className="pt-0">
-                  {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
-                  {earlier === undefined ? null : (
-                    <EarlierWork key={earlier} onLoad={onLoadEarlier} />
-                  )}
-                  {rows.map((turn) => (
-                    <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
-                  ))}
-                </ConversationContent>
-                <ConversationScrollButton />
-              </Conversation>
-            )}
-          </CountingContext.Provider>
+          <OpenAgentContext.Provider value={onOpenAgent}>
+            <CountingContext.Provider value={shown}>
+              {rows.length === 0 && earlier === undefined ? (
+                <ConversationEmptyState>
+                  <p className="m-0">{WORK_EMPTY_LINE}</p>
+                </ConversationEmptyState>
+              ) : (
+                <Conversation>
+                  {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
+                  <ConversationContent className="pt-0">
+                    {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
+                    {earlier === undefined ? null : (
+                      <EarlierWork key={earlier} onLoad={onLoadEarlier} />
+                    )}
+                    {rows.map((turn) => (
+                      <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
+                    ))}
+                  </ConversationContent>
+                  <ConversationScrollButton />
+                </Conversation>
+              )}
+            </CountingContext.Provider>
+          </OpenAgentContext.Provider>
         </ModelsContext.Provider>
       </OpenSubagentContext.Provider>
     </section>

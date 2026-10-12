@@ -220,6 +220,14 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
+  // A coding agent's start on the Work tab opens the agent's tab in this
+  // column, which a panel filling the window over it first gives way to,
+  // and hands the keys to this column, so ⌘W closes the tab it opened.
+  const openAgent = (agentId: string) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    mainTabs.onChoose({ agent: agentId });
+    setFocus(COLUMN.MAIN);
+  };
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
@@ -351,6 +359,7 @@ function PlanDocument({
           views={views}
           shown={plans.shown}
           focused={sideFocused}
+          onOpenAgent={openAgent}
         />
       ) : null}
     </div>

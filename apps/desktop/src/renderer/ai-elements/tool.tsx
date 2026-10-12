@@ -152,24 +152,20 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectIsCode?: boolean;
 };
 
-/** The one line a call shows: what it did, and where it stands. */
-export function ToolHeader({
+/** How a call's line is set, whether it folds its body open or opens somewhere else. */
+export const TOOL_LINE_CLASS =
+  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary";
+
+/** What a call's line says: its icon, what it did, and where it stands. */
+export function ToolLine({
   state,
   icon,
   label,
   subject,
   subjectIsCode = true,
-  className,
-  ...props
-}: ToolHeaderProps): ReactNode {
+}: Pick<ToolHeaderProps, "state" | "icon" | "label" | "subject" | "subjectIsCode">): ReactNode {
   return (
-    <FoldSummary
-      className={cn(
-        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary",
-        className,
-      )}
-      {...props}
-    >
+    <>
       <span
         className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4"
         aria-hidden="true"
@@ -183,6 +179,29 @@ export function ToolHeader({
         )}
       </span>
       <ToolStateMark state={state} />
+    </>
+  );
+}
+
+/** The one line a call shows: what it did, and where it stands. */
+export function ToolHeader({
+  state,
+  icon,
+  label,
+  subject,
+  subjectIsCode = true,
+  className,
+  ...props
+}: ToolHeaderProps): ReactNode {
+  return (
+    <FoldSummary className={cn(TOOL_LINE_CLASS, className)} {...props}>
+      <ToolLine
+        state={state}
+        icon={icon}
+        label={label}
+        subject={subject}
+        subjectIsCode={subjectIsCode}
+      />
     </FoldSummary>
   );
 }
