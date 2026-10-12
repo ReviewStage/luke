@@ -217,8 +217,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onShowAgent, place);
   }
 
-  function toastAgentEnd({ place, words, failed }: AgentEndToast): void {
-    panels.broadcast(channels.onAgentEnded, { ...place, words, failed });
+  function toastAgentEnd({ place, words, detail, failed }: AgentEndToast): void {
+    panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
   }
 
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {

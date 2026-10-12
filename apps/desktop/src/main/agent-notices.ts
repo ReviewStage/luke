@@ -96,10 +96,11 @@ export interface AgentPlace {
   agentId: string;
 }
 
-/** A turn's end as the window's own toast says it: the words, whether the turn failed, and where its View goes. */
+/** A turn's end as the window's own toast says it: the words, the plan's name under them, whether the turn failed, and where its View goes. */
 export interface AgentEndToast {
   place: AgentPlace;
   words: string;
+  detail: string;
   failed: boolean;
 }
 
@@ -323,6 +324,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         doors.toast({
           place,
           words: text.body,
+          detail: text.title,
           failed: end.agent.status === CODING_AGENT_STATUS.FAILED,
         });
         return;

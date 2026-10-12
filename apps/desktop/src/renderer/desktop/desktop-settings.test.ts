@@ -17,6 +17,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
+import { newestToastAction, newestToastSays } from "#testing/toast";
 import { useAppKeymap } from "../app-commands";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
@@ -382,11 +383,11 @@ const settled = Effect.promise(() =>
 );
 
 function toastSays(): string | undefined {
-  return document.querySelector(".toast")?.textContent ?? undefined;
+  return newestToastSays();
 }
 
 function pressUndo(): void {
-  const button = document.querySelector<HTMLButtonElement>(".toast button");
+  const button = newestToastAction();
   assert.ok(button, "no Undo on the toast");
   act(() => button.click());
 }

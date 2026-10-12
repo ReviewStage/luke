@@ -327,7 +327,7 @@ it.effect(
 );
 
 it.effect(
-  "a window focused on another tab, or a plan left behind, is told in its own toast and posts no notification, once for each turn, and a window behind is told by a notification and shown no toast",
+  "a window focused on another tab, or a plan left behind, is told in its own toast, under the plan's name, and posts no notification, once for each turn, and a window behind is told by a notification and shown no toast",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -343,6 +343,7 @@ it.effect(
         {
           place: { planId: PLAN_ID, agentId: AGENT_ID },
           words: "Fix invitations failed",
+          detail: PLAN_NAME,
           failed: true,
         },
       ]);

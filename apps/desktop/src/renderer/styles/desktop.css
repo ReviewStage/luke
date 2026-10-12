@@ -18,6 +18,8 @@
   --control-height: 30px;
   --control-radius: 8px;
   --control-glyph: 15px;
+  /* The call bar's own row, which the passing notices stand clear of. */
+  --call-row-height: 36px;
   /* The spacing scale: every padding, margin, and gap in the window is one of
      these steps or a name below built from them (docs/DESIGN.md). */
   --space-2: 2px;
@@ -1600,7 +1602,7 @@ body,
 .call-bar {
   display: flex;
   max-width: var(--reading-width);
-  min-height: 36px;
+  min-height: var(--call-row-height);
   align-items: center;
   margin: 0 auto;
   gap: var(--space-12);
@@ -3808,55 +3810,104 @@ body,
   color: var(--on-accent-muted);
 }
 
-/* The window's one passing notice (`toast.tsx`), said quietly at its foot
-   once a note has gone or a menu's copy has landed, and gone itself a moment
-   later: it rises in on the spring, and fades first on its way out. */
-.toast {
+/* The window's passing notices (`toast.tsx`): up to three cards stacked in
+   its bottom-right corner, newest at the bottom, clear of the call bar where
+   one is drawn. Each rises in on the spring and fades first on its way out;
+   the stack itself takes no pointer, so only a card with something to press
+   stands in the way of what is under it. */
+.toast-stack {
   position: fixed;
   z-index: var(--z-toast);
-  bottom: var(--space-24);
-  left: 50%;
+  right: var(--space-16);
+  bottom: var(--space-16);
+  width: min(340px, calc(100vw - 2 * var(--space-16)));
+  pointer-events: none;
+}
+
+.toast-stack > ol {
   display: flex;
-  align-items: center;
-  gap: var(--glyph-gap);
+  flex-direction: column;
+  gap: var(--space-8);
   margin: 0;
-  padding: var(--space-8) var(--space-16);
+  padding: 0;
+  list-style: none;
+}
+
+/* The call bar's row and its padding, and its hairline, then a row's gap. */
+body:has(.desktop-call-bar) .toast-stack {
+  bottom: calc(var(--call-row-height) + 3 * var(--space-12) + 1px);
+}
+
+/* A capture run zeroes the motion tokens on its stage, which the stack drawn
+   at the body's end does not stand under, so it is held still here too. */
+body:has(.app-stage[data-capture="true"]) .toast-stack {
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
+  --duration-hover: 0s;
+}
+
+/* Its glyph, its words, and its action share a first row as tall as the
+   action, so they read across on one line whether or not a second follows. */
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--glyph-gap);
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline-strong);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface-popover);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow:
+    0 1px 2px var(--shadow-soft),
+    0 12px 36px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 560;
+  line-height: 18px;
   pointer-events: none;
-  transform: translateX(-50%);
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
     toast-rise var(--duration-fast) var(--spring-fast);
-  transition: opacity var(--duration-exit) var(--motion-exit);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-exit) var(--motion-exit);
 }
 
 .toast[data-leaving="true"] {
   opacity: 0;
+  transform: translateX(var(--space-8));
 }
 
-/* A capture run zeroes the motion tokens on its stage, which a toast drawn
-   at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .toast {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-}
-
-.toast svg {
-  width: 14px;
-  height: 14px;
+.toast > svg {
+  width: 16px;
+  height: 16px;
   flex: none;
+  margin-top: var(--space-4);
   color: var(--state-complete);
 }
 
-.toast[data-tone="failed"] svg {
+.toast[data-tone="failed"] > svg {
   color: var(--error-text);
+}
+
+/* Its words, and the line under them that says where or what. */
+.toast-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.toast-words {
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.toast-detail {
+  padding-bottom: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 16px;
 }
 
 /* A toast with an action is pointed at, so it takes the pointer that one
@@ -3873,21 +3924,60 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 
-/* The action reads as the link it is, set off from the words before it. */
+/* The action is a small solid button in the full ink, the one thing on the
+   card to press. */
 .toast-action {
-  margin-left: var(--space-4);
-  padding: var(--space-2) var(--space-8);
+  height: 24px;
+  flex: none;
+  padding: 0 var(--space-8);
   border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--state-working);
-  font-size: inherit;
-  font-weight: 640;
-  transition: background-color var(--duration-hover) ease;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface-popover);
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .toast-action:hover {
-  background: var(--selected);
+  opacity: 0.86;
+}
+
+/* A toast that stands until dismissed shows its × on its corner under the
+   pointer or focus, standing over the card's edge so it takes no room from
+   the words. */
+.toast-dismiss {
+  position: absolute;
+  top: calc(-1 * var(--space-8));
+  left: calc(-1 * var(--space-8));
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: var(--surface-popover);
+  box-shadow: 0 1px 2px var(--shadow-soft);
+  color: var(--text-secondary);
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.toast:hover .toast-dismiss,
+.toast:focus-within .toast-dismiss {
+  opacity: 1;
+}
+
+.toast-dismiss:hover {
+  color: var(--text-primary);
+}
+
+.toast-dismiss svg {
+  width: 12px;
+  height: 12px;
 }
 
 @keyframes toast-fade {
@@ -3898,7 +3988,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 
 @keyframes toast-rise {
   from {
-    transform: translateX(-50%) translateY(var(--space-8));
+    transform: translateY(var(--space-12));
   }
 }
 

@@ -37,6 +37,7 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
@@ -183,14 +184,14 @@ const landed = Effect.promise(settle);
 const advance = (millis: number) =>
   Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
 
-/** What the window's toast says, while one stands. */
+/** What the newest toast says, while one stands. */
 function toast(): string | undefined {
-  return document.querySelector(".toast")?.textContent ?? undefined;
+  return newestToastSays();
 }
 
-/** The standing toast's Undo. */
+/** The newest toast's Undo. */
 function undoButton(): HTMLButtonElement {
-  const undo = document.querySelector<HTMLButtonElement>(".toast button");
+  const undo = newestToastAction();
   assert.ok(undo, "no Undo on the toast");
   assert.equal(undo.textContent, "Undo");
   return undo;
@@ -740,7 +741,7 @@ it.effect(
         ["a", false],
       ]);
       assert.equal(toast(), "The plan could not be pinned. Try again.");
-      yield* advance(4_000 + MOTION_DURATION_MS.EXIT);
+      yield* advance(6_000 + MOTION_DURATION_MS.EXIT);
       assert.equal(toast(), undefined);
 
       act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
