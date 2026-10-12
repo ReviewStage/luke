@@ -426,23 +426,20 @@ constant so the query reads as the query it is. A transaction and a row lock
 are the client's own `withTransaction` and a `.for("update")` select inside
 it, unchanged.
 
-`drizzle-kit` is not a dependency and no migration is generated from a schema
-module. Migrations stay hand-written SQL under `packages/database/migrations/`, applied by the
-Effect migrator above, and the modules are hand-maintained beside them:
-`packages/database/migrations/meta/` holds snapshots for `0000`–`0025` alone, from the era when the
-modules were `drizzle-kit`'s input and the migrations its output. What stands
-in for that lost loop is `tests/drizzle-schema.test.ts`, which compares the
-barrel against the `information_schema` of a database `runWebMigrations` has
-just built — PGlite in process, or the Postgres `LUKE_STORE_TEST_DATABASE_URL`
-names on CI — in both directions over the whole public schema: a column a
-module declares and the database has not fails, and so does a column the
-database has and no module declares, which is the direction that catches the
-migration nobody folded in. Name, type, nullability, and primary key are
-compared; defaults, indexes, foreign keys, and the `$type<>()` unions are not.
-Those unions name no Postgres type and are the compile-time claim the whole
-restoration was for — a text column read back as its own vocabulary rather
-than cast by hand under a `// SAFETY:` comment — so the module itself is the
-only thing that holds them.
+The schema modules are the source of truth. `pnpm db:generate` runs
+`drizzle-kit generate` (`packages/database/drizzle.config.ts`, `strict`) and
+writes the migration that brings the newest snapshot under
+`packages/database/migrations/meta/` up to the modules, which the Effect
+migrator above applies; hand-edit the generated SQL only for what drizzle-kit
+cannot know, such as a backfill. `0081_snapshot.json` is the baseline the loop
+restarted from: `0026`–`0080` were hand-written and carry no snapshot.
+`packages/database/src/schemas/__tests__/migrations.test.ts` fails when a
+module changes without its generated migration, and
+`tests/drizzle-schema.test.ts` still compares the barrel against the
+`information_schema` of a database `runWebMigrations` has just built, in both
+directions, which is what catches a generated migration edited into
+disagreement. The `$type<>()` unions name no Postgres type, so the module
+itself is the only thing that holds them.
 
 ## Where a function runs an Effect
 

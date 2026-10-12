@@ -3,7 +3,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@sidecar/hosted/coding-agent-wire";
-import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { plan } from "./plan.js";
@@ -125,13 +125,23 @@ export const codingAgent = pgTable(
  * by that call. The row goes with its conversation, which goes with the
  * agent's.
  */
-export const codingAgentDelegation = pgTable("coding_agent_delegation", {
-  childConversationId: uuid("child_conversation_id")
-    .primaryKey()
-    .references(() => conversations.id, { onDelete: "cascade" }),
-  /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
-  callId: text("call_id"),
-  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
-  model: text("model").notNull(),
-  effort: text("effort").notNull(),
-});
+export const codingAgentDelegation = pgTable(
+  "coding_agent_delegation",
+  {
+    childConversationId: uuid("child_conversation_id").primaryKey(),
+    /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
+    callId: text("call_id"),
+    /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+    model: text("model").notNull(),
+    effort: text("effort").notNull(),
+  },
+  (table) => [
+    // Note that the name is spelled out, because the one Drizzle derives is
+    // longer than Postgres's 63 bytes and the database holds it truncated.
+    foreignKey({
+      name: "coding_agent_delegation_child_conversation_id_conversations_id_",
+      columns: [table.childConversationId],
+      foreignColumns: [conversations.id],
+    }).onDelete("cascade"),
+  ],
+);
