@@ -1,4 +1,5 @@
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -43,6 +44,14 @@ import {
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
+import {
+  closeInInbox,
+  INBOX_REFUSAL,
+  type InboxToolResult,
+  inboxRejected,
+  postToInbox,
+  readOwnInbox,
+} from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import {
@@ -208,6 +217,11 @@ export interface CoderHost {
     input: UnparsedWireValue,
     takenInTurn: number,
   ): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient>;
+  /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
+  inbox(
+    admitted: AdmittedConversation,
+    call: InboxCall,
+  ): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -220,6 +234,12 @@ export interface CoderHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+}
+
+/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema. */
+export interface InboxCall {
+  readonly tool: (typeof INBOX_TOOL)[keyof typeof INBOX_TOOL];
+  readonly input: UnparsedWireValue;
 }
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
@@ -473,6 +493,25 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+      ),
+
+    inbox: (admitted, call) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
+        const { id: agentId, planId } = found.success;
+        const agent = { userId: admitted.target.userId, planId, agentId };
+        switch (call.tool) {
+          case INBOX_TOOL.POST:
+            return yield* postToInbox(agent, call.input);
+          case INBOX_TOOL.CLOSE:
+            return yield* closeInInbox(agent, call.input);
+          case INBOX_TOOL.READ:
+            return yield* readOwnInbox(agent);
+        }
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
       ),
 
     title: (admitted) =>

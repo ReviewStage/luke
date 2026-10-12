@@ -22,9 +22,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the revision it answers, so an answer to an item the agent has since
  * changed is refused rather than taken for the item as it now stands.
  *
- * The agent posts, closes, and reads its items through tools of its own,
- * whose inputs are declared here so the model is shown, eve holds, and the
- * desktop draws one shape. A plan's inbox is read past a cursor the
+ * The agent posts, closes, and reads its items through the tools named
+ * below, whose inputs are declared here so the model is shown, eve holds,
+ * and the desktop draws one shape. A plan's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added.
@@ -57,6 +57,16 @@ export const INBOX_BOUNDS = {
   MAX_CURSOR_CHARS: 64,
   /** The most characters an answer's key may spell; a UUID is the usual. */
   MAX_CLIENT_KEY_CHARS: 128,
+} as const;
+
+/** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
+export const INBOX_TOOL = {
+  /** Posts an item, or replaces the one under the same key. */
+  POST: "post_to_inbox",
+  /** Takes an item back, with why. */
+  CLOSE: "close_inbox_item",
+  /** Reads the agent's items as they stand, answers and all. */
+  READ: "read_inbox",
 } as const;
 
 /** The shapes an item takes, each answered its own way. */
@@ -231,7 +241,7 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
-const INBOX_ANSWER_LEAD = "Inbox answer";
+export const INBOX_ANSWER_LEAD = "Inbox answer";
 
 /** The answer's own words, as the agent reads them. */
 function replyWords(reply: InboxReply): string {

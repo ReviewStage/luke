@@ -86,6 +86,18 @@ service stores its name under your account, with when you pinned it, so the
 pin follows you to every Mac you sign in on. Unpinning it deletes that record,
 and deleting your account removes them all.
 
+**A plan's inbox.** When a coding agent you started on a plan needs a
+decision from you, or something only you can do such as changing a setting
+on GitHub, it posts an item to the plan's inbox on our service: its title,
+the context the agent wrote for it, and any options it offers, stored under
+your account and readable by our own operators, like the agent's transcript.
+The agent can change or withdraw its items, and our service keeps each one
+as it last stood. When you answer an item in Luke, your Mac sends your answer
+and any note you write to our service, which stores it with the item and,
+where the agent asked to hear back, hands it to the agent as one of your
+messages, kept in its transcript. Deleting the plan, or your account, deletes
+its items.
+
 **Your own API keys.** If you add an Anthropic or OpenAI API key of your
 own in Settings, your Mac sends it once, over HTTPS, to our service, which
 first checks it with that provider by asking for the provider's list of

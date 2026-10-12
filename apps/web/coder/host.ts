@@ -3,7 +3,8 @@ import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { UnparsedWireValue } from "../server/core.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
-import { type CoderHost, coderHost } from "../server/hosted/coder-host/host.js";
+import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
+import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
@@ -100,6 +101,21 @@ export function editPlanNotes(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
       return yield* host.editPlan(admitted.success, input, takenInTurn);
+    }),
+  );
+}
+
+/** One call of the agent's inbox tools run under its session, for the tool, which runs here rather than at an edge of its own. */
+export function runInboxTool(
+  auth: SessionAuth,
+  sessionId: string,
+  call: InboxCall,
+): Promise<InboxToolResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
+      return yield* host.inbox(admitted.success, call);
     }),
   );
 }
