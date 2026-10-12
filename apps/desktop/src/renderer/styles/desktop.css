@@ -86,6 +86,15 @@
   /* A destructive act's own button, filled: deep enough to carry white words,
      where the panel's lighter red is drawn as text. */
   --danger-fill: #d4373a;
+  /* The layers that float over the whole window, each drawn at the root of
+     the document: a menu, then a dialog and a hint on one layer, whichever
+     was drawn later on top, then the passing notice over everything. Nothing inside the window's stage reaches
+     them, since the stage is one stacking context under them all; inside it,
+     the whiteboard is a stacking context of its own (`planning.css`). */
+  --z-menu: 20;
+  --z-dialog: 30;
+  --z-tooltip: 30;
+  --z-toast: 31;
 }
 
 /* The light appearance, which the window answers whenever macOS (or Luke's
@@ -1117,7 +1126,7 @@ body,
    hidden for the one layout pass that measures where it fits. */
 .plan-menu {
   position: fixed;
-  z-index: 20;
+  z-index: var(--z-menu);
   display: flex;
   min-width: 196px;
   flex-direction: column;
@@ -2794,7 +2803,7 @@ body,
    tokens, which reduced motion and a capture run already hold still. */
 .confirm-dialog-backdrop {
   position: fixed;
-  z-index: 30;
+  z-index: var(--z-dialog);
   inset: 0;
   display: grid;
   place-items: center;
@@ -2876,7 +2885,7 @@ body,
    arrows and the pointer both move, so a hover draws nothing of its own. */
 .command-palette-backdrop {
   position: fixed;
-  z-index: 30;
+  z-index: var(--z-dialog);
   inset: 0;
   background: var(--scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
@@ -2885,7 +2894,7 @@ body,
 
 .command-palette {
   position: fixed;
-  z-index: 30;
+  z-index: var(--z-dialog);
   top: 18vh;
   left: 50%;
   display: flex;
@@ -3221,7 +3230,7 @@ body,
    later: it rises in on the spring, and fades first on its way out. */
 .toast {
   position: fixed;
-  z-index: 31;
+  z-index: var(--z-toast);
   bottom: var(--space-24);
   left: 50%;
   display: flex;

@@ -11,7 +11,7 @@
 
 .tooltip {
   position: fixed;
-  z-index: 30;
+  z-index: var(--z-tooltip);
   top: 0;
   left: 0;
   display: flex;
