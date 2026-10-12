@@ -114,6 +114,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
         tab: props.tab,
         onTabChange: props.onTabChange,
         plans: props.plans,
+        settings: { rows: undefined, onViewChange: () => undefined },
       }),
     );
   }

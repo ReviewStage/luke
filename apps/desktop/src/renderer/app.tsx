@@ -29,6 +29,7 @@ import { PLANS_PAGE } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
+import { settingsRowsInput } from "./settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
@@ -493,9 +494,18 @@ export function App(): React.JSX.Element {
       {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
       <ToastHost />
-      {/* Every command the window can run now and every plan, behind ⌘K,
-          past the sign-in alone. */}
-      <CommandPalette available={!accountGated} tab={tab} onTabChange={changeTab} plans={plans} />
+      {/* The plans, the open plan's agents, every command the window can
+          run now, and the settings, behind ⌘K, past the sign-in alone. */}
+      <CommandPalette
+        available={!accountGated}
+        tab={tab}
+        onTabChange={changeTab}
+        plans={plans}
+        settings={{
+          rows: settingsRowsInput({ settings, microphone, account: state.account }),
+          onViewChange: setSettingsView,
+        }}
+      />
     </div>
   );
 }
