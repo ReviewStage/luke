@@ -16,6 +16,7 @@ import {
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan, PlanAgentsSummary, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -115,6 +116,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
         onTabChange: props.onTabChange,
         plans: props.plans,
         settings: { rows: undefined, onViewChange: () => undefined },
+        readFiles: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
       }),
     );
   }

@@ -2,8 +2,14 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
+import { PLAN_TREE_ENTRY, type Plan, type PlanSummary } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_CALL_FAILURE,
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
+  type PlanningTreeAnswer,
+} from "@sidecar/hosted/planning-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -102,6 +108,27 @@ const WORK: PlansControl["work"] = {
   ],
 };
 
+/** The open plan's repository listed whole, two files under a folder and one at the root, cut short at the wire's bound or not. */
+function listing(truncated: boolean): PlanningTreeAnswer {
+  return {
+    folder: {
+      path: "",
+      repository: "acme/docs",
+      branch: "main",
+      entries: [
+        { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
+        { name: "src/invites", kind: PLAN_TREE_ENTRY.FOLDER },
+        { name: "src/invites/accept-invite.ts", kind: PLAN_TREE_ENTRY.FILE },
+        { name: "src/invites/invite-email.tsx", kind: PLAN_TREE_ENTRY.FILE },
+        { name: "README.md", kind: PLAN_TREE_ENTRY.FILE },
+      ],
+      truncated,
+    },
+  };
+}
+
+const TREE = listing(false);
+
 const PALETTE = '[cmdk-root=""]';
 
 let root: Root | undefined;
@@ -133,6 +160,10 @@ interface Asked {
   /** Each agent shown, by its plan and its id. */
   agents: [string, string][];
   views: SettingsView[];
+  /** Each read of the open plan's whole repository, by plan. */
+  reads: string[];
+  /** Each file opened in the side panel, and whether in a tab of its own. */
+  browsed: [string, boolean][];
 }
 
 /**
@@ -140,8 +171,21 @@ interface Asked {
  * toolbar standing (which offers Copy and Delete), Settings offered, and the
  * palette over it all, on the tab given.
  */
-function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}): Asked {
-  const asked: Asked = { selected: [], tabs: [], ran: [], agents: [], views: [] };
+function mountWindow(
+  initialTab: PanelTab,
+  overrides: Partial<PlansControl> = {},
+  tree: PlanningTreeAnswer = TREE,
+): Asked {
+  const asked: Asked = {
+    selected: [],
+    tabs: [],
+    ran: [],
+    agents: [],
+    views: [],
+    reads: [],
+    browsed: [],
+  };
+  const base = plansControl();
   const plans = plansControl({
     page: PLANS_PAGE.DOCUMENT,
     plans: [OPEN, ...TWINS],
@@ -151,6 +195,10 @@ function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}
     onSelect: (planId) => asked.selected.push(planId),
     agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
     onShowAgent: (planId, agentId) => asked.agents.push([planId, agentId]),
+    sidePanel: {
+      ...base.sidePanel,
+      onBrowseFile: (_from, path, newTab) => asked.browsed.push([path, newTab]),
+    },
     ...overrides,
   });
   const rows = settingsRowsInput(settingsPanelProps());
@@ -177,6 +225,10 @@ function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}
         },
         plans,
         settings: { rows, onViewChange: (view: SettingsView) => asked.views.push(view) },
+        readFiles: (planId: string) => {
+          asked.reads.push(planId);
+          return Promise.resolve(tree);
+        },
       }),
     );
   }
@@ -192,6 +244,11 @@ function press(target: EventTarget, init: KeyboardEventInit): void {
       new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
     );
   });
+}
+
+/** Lets a read the palette asked for land. */
+async function settle(): Promise<void> {
+  await act(async () => undefined);
 }
 
 function openPalette(): HTMLInputElement {
@@ -275,7 +332,11 @@ test("All lists each kind's best few under its heading, and a kind's filter list
   mountWindow(PANEL_TAB.PLANS);
   openPalette();
   assert.equal(chosenFilter(), "All", "the palette opens on All");
-  assert.deepEqual(headings(), ["Plans", "Agents", "Actions", "Settings"]);
+  assert.deepEqual(
+    headings(),
+    ["Plans", "Agents", "Actions", "Settings"],
+    "no file is listed before a search",
+  );
   const actionsUnderAll = listedRows().filter(
     (row) =>
       row.closest("[cmdk-group]")?.querySelector("[cmdk-group-heading]")?.textContent === "Actions",
@@ -410,6 +471,97 @@ test("a setting is found by a word its description holds, never by letters scatt
     !rows().some((row) => row.startsWith(notify)),
     "no word of it holds the letters typed, though they stand in its description in order",
   );
+});
+
+test("Files lists the repository's files matching the query, each beside its folder, and opens one in a tab of its own", async () => {
+  const asked = mountWindow(PANEL_TAB.SETTINGS);
+  const input = openPalette();
+  pressFilter("Files");
+  await settle();
+  search(input, "invite");
+  assert.deepEqual(
+    rows().sort(),
+    ["accept-invite.ts · src/invites", "invite-email.tsx · src/invites"],
+    "the two files whose paths hold the word, the README and the folders left out",
+  );
+  choose("accept-invite.ts");
+  assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "a file opens on the Plans tab");
+  assert.deepEqual(asked.browsed, [["src/invites/accept-invite.ts", true]]);
+});
+
+test("a file chosen over the version history opens with the history put away", async () => {
+  let closed = 0;
+  const asked = mountWindow(PANEL_TAB.PLANS, {
+    history: versionHistoryControl({ open: true, onClose: () => (closed += 1) }),
+  });
+  const input = openPalette();
+  pressFilter("Files");
+  await settle();
+  search(input, "readme");
+  choose("README.md");
+  assert.equal(closed, 1);
+  assert.deepEqual(asked.browsed, [["README.md", true]]);
+});
+
+test("the repository is read once, the first time a file is searched, and All lists its best files", async () => {
+  const asked = mountWindow(PANEL_TAB.PLANS);
+  let input = openPalette();
+  await settle();
+  assert.deepEqual(asked.reads, [], "opening the palette reads nothing");
+  search(input, "readme");
+  await settle();
+  assert.deepEqual(asked.reads, [OPEN.id]);
+  assert.ok(headings().includes("Files"));
+  assert.ok(rows().includes("README.md"));
+  press(input, { key: "Escape" });
+  input = openPalette();
+  search(input, "accept");
+  await settle();
+  assert.deepEqual(asked.reads, [OPEN.id], "the listing is kept for the next search");
+  assert.ok(rows().includes("accept-invite.ts · src/invites"));
+});
+
+test("with no plan open the Files filter says so quietly and reads nothing", async () => {
+  const asked = mountWindow(PANEL_TAB.PLANS, {
+    page: PLANS_PAGE.NEW,
+    activePlanId: undefined,
+    region: { kind: DOCUMENT_REGION.NONE },
+  });
+  openPalette();
+  pressFilter("Files");
+  await settle();
+  assert.equal(
+    document.querySelector(".command-palette-empty")?.textContent,
+    "Open a plan with a repository to search its files.",
+  );
+  assert.deepEqual(asked.reads, []);
+});
+
+test("a listing cut short at the wire's bound says the search covers only its first entries", async () => {
+  mountWindow(PANEL_TAB.PLANS, {}, listing(true));
+  openPalette();
+  pressFilter("Files");
+  await settle();
+  assert.equal(
+    document.querySelector(".command-palette-notice")?.textContent,
+    "Only the repository's first 50,000 entries are searched.",
+  );
+});
+
+test("a read that did not land says so, and the next opening asks again", async () => {
+  const asked = mountWindow(PANEL_TAB.PLANS, {}, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+  let input = openPalette();
+  pressFilter("Files");
+  await settle();
+  assert.equal(
+    document.querySelector(".command-palette-empty")?.textContent,
+    "The files could not be read.",
+  );
+  press(input, { key: "Escape" });
+  input = openPalette();
+  pressFilter("Files");
+  await settle();
+  assert.deepEqual(asked.reads, [OPEN.id, OPEN.id]);
 });
 
 test("the palette's foot says its keys", () => {

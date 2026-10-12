@@ -3858,6 +3858,14 @@ body,
   font-size: 13px;
 }
 
+/* A quiet line under the rows: the Files filter saying its search is of
+   the repository's first entries alone. */
+.command-palette-notice {
+  padding: var(--space-8) var(--row-inset) var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 @keyframes command-palette-rise {
   from {
     opacity: 0;
