@@ -99,6 +99,7 @@ function Window({
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions,
     settings: settingsPanelProps(),
   });

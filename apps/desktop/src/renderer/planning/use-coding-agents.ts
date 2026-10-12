@@ -32,6 +32,8 @@ import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
 
+/** No words to listen for, one array so a render that has none hands down the same one. */
+const NO_KEYWORDS: readonly string[] = [];
 /**
  * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a task, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
@@ -141,6 +143,8 @@ export interface CodingAgentsControl {
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it. */
   readPullRequest: PullRequestReader;
+  /** The words a dictation into an agent's box is likely to say, read off the open plan. */
+  keywords: readonly string[];
 }
 
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
@@ -191,6 +195,8 @@ export function useCodingAgents(input: {
   onUnarchive: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
+  /** The words a dictation into an agent's box is likely to say; none where nothing is open. */
+  keywords?: readonly string[];
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
@@ -549,5 +555,6 @@ export function useCodingAgents(input: {
     onTitle,
     readTranscript,
     readPullRequest,
+    keywords: input.keywords ?? NO_KEYWORDS,
   };
 }

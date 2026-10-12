@@ -10,6 +10,7 @@ import { test } from "vitest";
 import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
+import * as dictationWire from "./dictation-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
@@ -68,6 +69,8 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
+    dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
+    dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
     codingAgentListAnswerViewSchema: codingAgentView.codingAgentListAnswerViewSchema,
     codingAgentStartParamsSchema: codingAgentView.codingAgentStartParamsSchema,
@@ -81,6 +84,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
+  "dictation-wire": {
+    dictationRequestSchema: dictationWire.dictationRequestSchema,
+    dictationAnswerSchema: dictationWire.dictationAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof dictationWire>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
@@ -119,7 +126,6 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceIdSchema: planWire.workspaceIdSchema,
     agentEditLineSchema: planWire.agentEditLineSchema,
     planAssumptionSchema: planWire.planAssumptionSchema,
-    planExamplePartSchema: planWire.planExamplePartSchema,
     planFieldsSchema: planWire.planFieldsSchema,
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
@@ -148,6 +154,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planFileRequestSchema: planWire.planFileRequestSchema,
     planFileWindowSchema: planWire.planFileWindowSchema,
     planFileRefusalSchema: planWire.planFileRefusalSchema,
+    planFileTextSchema: planWire.planFileTextSchema,
     planFileAnswerSchema: planWire.planFileAnswerSchema,
     planTreeRequestSchema: planWire.planTreeRequestSchema,
     planTreeEntrySchema: planWire.planTreeEntrySchema,

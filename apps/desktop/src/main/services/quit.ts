@@ -34,6 +34,18 @@ export interface DesktopQuit {
    */
   readonly beforeTeardown: (step: () => void) => void;
   /**
+   * A check every quit asked for passes before its teardown begins,
+   * answering whether it holds the quit back: a call standing asks the
+   * developer first (`confirmingHold`).
+   */
+  readonly holdWhile: (hold: () => boolean) => void;
+  /**
+   * Whether a quit asked for now is held back rather than torn down. Only a
+   * standing launch is held, so a teardown already under way, and the
+   * updater's own quit behind it, are never asked twice.
+   */
+  readonly held: () => boolean;
+  /**
    * The one teardown, made once whichever path asks for it: the explicit
    * Quit, a launch that could not stand up, or the updater before it lets
    * Squirrel replace this binary. Every later ask is handed the one under way
@@ -54,6 +66,7 @@ export function desktopQuit(): DesktopQuit {
   let close: (() => Promise<void>) | undefined;
   let tearingDown: Promise<void> | undefined;
   const preamble: (() => void)[] = [];
+  const holds: (() => boolean)[] = [];
 
   return {
     stage: () => stage,
@@ -61,6 +74,10 @@ export function desktopQuit(): DesktopQuit {
     beforeTeardown: (step) => {
       preamble.push(step);
     },
+    holdWhile: (hold) => {
+      holds.push(hold);
+    },
+    held: () => stage === QUIT_STAGE.STANDING && holds.some((hold) => hold()),
     closesThrough: (next) => {
       close = next;
     },
@@ -73,5 +90,42 @@ export function desktopQuit(): DesktopQuit {
       });
       return tearingDown;
     },
+  };
+}
+
+/**
+ * A hold that asks before a quit while `standing` says something would be
+ * lost, as a Mac app asks before it ends a call: the quit is held while the
+ * question stands, a second quit asked meanwhile asks nothing more, and a
+ * yes asks for the quit `again`, which this hold then lets through. Nothing
+ * standing holds nothing, so an ordinary quit asks nothing at all.
+ */
+export function confirmingHold(options: {
+  standing: () => boolean;
+  confirm: () => Promise<boolean>;
+  again: () => void;
+}): () => boolean {
+  const { standing, confirm, again } = options;
+  let asking = false;
+  let agreed = false;
+  return () => {
+    if (agreed || !standing()) return false;
+    if (asking) return true;
+    asking = true;
+    // A question that could not be asked is a no: the call is not ended
+    // without one.
+    void confirm()
+      .then(
+        (yes) => {
+          if (!yes) return;
+          agreed = true;
+          again();
+        },
+        () => undefined,
+      )
+      .finally(() => {
+        asking = false;
+      });
+    return true;
   };
 }

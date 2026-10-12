@@ -591,7 +591,7 @@ it.effect("the holder's scope closing releases a session still standing", () =>
 );
 
 it.effect(
-  "ending the plan call ends a call about another plan gracefully, leaves the same plan's call standing, and leaving the plan ends any call",
+  "ending a plan's call ends the call about that plan gracefully, leaves a call about another plan standing, and naming no plan ends any call",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -602,11 +602,11 @@ it.effect(
       sideband.started(created.sessionId);
       yield* settle();
 
-      yield* f.holder.endPlanCall(INVITES_PLAN);
+      yield* f.holder.endPlanCall(BILLING_PLAN);
       assert.equal(f.holder.sessionStands(), true);
       assert.deepEqual(sideband.sent, []);
 
-      const ending = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
+      const ending = yield* Effect.forkChild(f.holder.endPlanCall(INVITES_PLAN));
       yield* settle();
       assert.deepEqual(sideband.sent, []);
       assert.equal(sideband.hangUps, 1);
@@ -615,7 +615,7 @@ it.effect(
       assert.equal(f.holder.sessionStands(), false);
 
       const billing = yield* f.open(BILLING_PLAN);
-      yield* f.holder.endPlanCall(BILLING_PLAN);
+      yield* f.holder.endPlanCall(INVITES_PLAN);
       assert.equal(f.holder.sessionStands(), true);
       assert.deepEqual(billing.sent, []);
       const leaving = yield* Effect.forkChild(f.holder.endPlanCall(undefined));
@@ -629,7 +629,7 @@ it.effect(
 );
 
 it.effect(
-  "a switch while a planning call is still being created ends that call the moment it stands, and the peer is answered nothing",
+  "ending the call about a plan whose call is still being created ends that call the moment it stands, and the peer is answered nothing",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -638,7 +638,7 @@ it.effect(
       const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
       yield* settle();
 
-      yield* f.holder.endPlanCall(BILLING_PLAN);
+      yield* f.holder.endPlanCall(INVITES_PLAN);
       yield* Deferred.succeed(gate, undefined);
       yield* settle();
       const sideband = f.sidebands[0];
@@ -652,7 +652,7 @@ it.effect(
     }),
 );
 
-it.effect("a switch to the plan being created leaves its call to stand", () =>
+it.effect("ending another plan's call while a call is being created leaves it to stand", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const gate = yield* Deferred.make<void>();
@@ -660,7 +660,7 @@ it.effect("a switch to the plan being created leaves its call to stand", () =>
     const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
     yield* settle();
 
-    yield* f.holder.endPlanCall(INVITES_PLAN);
+    yield* f.holder.endPlanCall(BILLING_PLAN);
     yield* Deferred.succeed(gate, undefined);
     const created = yield* Fiber.join(creating);
     assert.ok(created);
@@ -670,7 +670,7 @@ it.effect("a switch to the plan being created leaves its call to stand", () =>
 );
 
 it.effect(
-  "a switch while the prior session is still closing ahead of a planning call's creation creates nothing about the plan left behind",
+  "ending the call about a plan whose creation waits on the prior session's close creates nothing about it",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -680,7 +680,7 @@ it.effect(
       assert.deepEqual(prior.sent, []);
       assert.equal(prior.hangUps, 1);
 
-      yield* f.holder.endPlanCall(BILLING_PLAN);
+      yield* f.holder.endPlanCall(INVITES_PLAN);
       prior.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
       assert.equal(yield* Fiber.join(creating), undefined);
       assert.deepEqual(f.plans, [BILLING_PLAN]);
@@ -897,10 +897,10 @@ it.effect("an ended call is logged with the hand that ended it and how long it s
       planning.started(created.sessionId);
       yield* settle();
       yield* TestClock.adjust(Duration.seconds(204));
-      const switching = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
+      const deleting = yield* Effect.forkChild(f.holder.endPlanCall(INVITES_PLAN));
       yield* settle();
       planning.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 204);
-      yield* Fiber.join(switching);
+      yield* Fiber.join(deleting);
 
       const peer = yield* f.open(BILLING_PLAN);
       yield* TestClock.adjust(Duration.seconds(3));
@@ -918,7 +918,7 @@ it.effect("an ended call is logged with the hand that ended it and how long it s
       yield* settle();
 
       assert.deepEqual(endLines(lines), [
-        "voice call ended: cause=plan_switched close_reason=close_requested session=sess-1 seconds=204",
+        "voice call ended: cause=plan_deleted close_reason=close_requested session=sess-1 seconds=204",
         "voice call ended: cause=peer_closed peer_reason=channel_closed close_reason=close_requested session=sess-2 seconds=3",
         "voice call ended: cause=sideband_lost close_reason=connection_lost session=sess-3 seconds=0",
       ]);

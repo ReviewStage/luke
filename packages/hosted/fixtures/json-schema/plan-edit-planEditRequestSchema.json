@@ -6,19 +6,15 @@
         "field": {
           "type": "string",
           "enum": [
-            "problem",
-            "outcome",
-            "included",
-            "excluded",
-            "constraints",
-            "changeMap",
-            "contracts",
-            "patterns",
-            "order",
-            "decisions",
-            "verification",
-            "leftToAgent",
-            "dataAndMigration"
+            "context",
+            "goal",
+            "approach",
+            "interfaces",
+            "alternatives",
+            "hardParts",
+            "notDoing",
+            "planOfAttack",
+            "testing"
           ]
         },
         "base": {
@@ -38,195 +34,6 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200000
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "field",
-        "base",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "field": {
-          "type": "string",
-          "enum": [
-            "rules"
-          ]
-        },
-        "base": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "statement": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  },
-                  "examples": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "given": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "when": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "then": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "given",
-                            "when",
-                            "then"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "minItems": 1,
-                        "maxItems": 200
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "statement",
-                  "examples"
-                ],
-                "additionalProperties": false
-              },
-              "minItems": 1,
-              "maxItems": 200
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "value": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "statement": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  },
-                  "examples": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "given": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "when": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "then": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "given",
-                            "when",
-                            "then"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "minItems": 1,
-                        "maxItems": 200
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "statement",
-                  "examples"
-                ],
-                "additionalProperties": false
-              },
-              "minItems": 1,
-              "maxItems": 200
             },
             {
               "type": "null"

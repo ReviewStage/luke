@@ -19,6 +19,12 @@ export const HOSTED_SERVICE_PATH = {
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
+  /**
+   * A clip dictated into a message box, answered with its words (POST).
+   * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
+   * both bodies.
+   */
+  DICTATION: "/api/dictation",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -104,24 +110,35 @@ export function planWorkPath(planId: string, before?: string): string {
   return `${path}?${query}`;
 }
 
-/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line. */
+/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
 export function planFilePath(
   planId: string,
-  window: { readonly path: string; readonly firstLine: number; readonly lastLine: number },
+  window: {
+    readonly path: string;
+    readonly firstLine: number;
+    readonly lastLine: number;
+    readonly raw?: boolean;
+  },
 ): string {
   const query = new URLSearchParams({
     path: window.path,
     first: String(window.firstLine),
     last: String(window.lastLine),
   });
+  if (window.raw === true) query.set("raw", "1");
   return `${planPath(planId)}/file?${query}`;
 }
 
-/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one. */
-export function planTreePath(planId: string, folder: { readonly path: string }): string {
+/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
+export function planTreePath(
+  planId: string,
+  folder: { readonly path: string; readonly recursive?: boolean },
+): string {
   const path = `${planPath(planId)}/tree`;
-  if (folder.path === "") return path;
-  return `${path}?${new URLSearchParams({ path: folder.path })}`;
+  const query = new URLSearchParams();
+  if (folder.path !== "") query.set("path", folder.path);
+  if (folder.recursive === true) query.set("recursive", "1");
+  return query.size === 0 ? path : `${path}?${query}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

@@ -53,7 +53,7 @@ import { db } from "../../db/query.js";
 import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { voiceSessions } from "../../db/voice-schema.js";
-import { lineParts, receivedTextOf } from "../attached-files.js";
+import { lineParts, receivedPartsOf } from "../attached-files.js";
 import { sentLineId } from "../brain-host/ids.js";
 import {
   EpochMillisColumnSchema,
@@ -1860,10 +1860,10 @@ const giveLineToTurn = SqlSchema.void({
 });
 
 /**
- * The oldest run of consecutive awaiting lines whose text, joined as eve
- * coalesces them, is the text received; none where no run matches. A
- * line's text is its words and the text files it carried, as eve was
- * handed them (`attached-files.ts`). Note
+ * The oldest run of consecutive awaiting lines whose parts, joined as eve
+ * coalesces them, are the parts received; none where no run matches. A
+ * line's parts are its words and the files it carried, as eve was handed
+ * them (`attached-files.ts`). Note
  * that the run is read oldest first, because every send is a steer eve
  * receives in the order sent, so two lines sharing their words are taken in
  * that order.
@@ -1873,11 +1873,12 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
   received: string,
 ): readonly Row[] {
   for (let start = 0; start < awaiting.length; start += 1) {
-    let joined: string | undefined;
+    const pieces: string[] = [];
     for (const [offset, row] of awaiting.slice(start).entries()) {
-      const text = receivedTextOf(row.parts);
-      if (text === undefined) break;
-      joined = joined === undefined ? text : `${joined}${COALESCED_LINE_SEPARATOR}${text}`;
+      const parts = receivedPartsOf(row.parts);
+      if (parts === undefined) break;
+      pieces.push(...parts);
+      const joined = pieces.join(COALESCED_LINE_SEPARATOR);
       if (joined === received) return awaiting.slice(start, start + offset + 1);
       // A run whose words already part from the received ones grows no closer by a longer run.
       if (!received.startsWith(joined)) break;

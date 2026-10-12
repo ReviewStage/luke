@@ -1,5 +1,5 @@
-import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
-import { Effect, Option, Result } from "effect";
+import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp } from "../../github/github-app.js";
@@ -20,6 +20,7 @@ import { readPlan } from "../plan-store.js";
 import type { StoreWriter } from "../store/index.js";
 import { sentLineStands } from "../store/message-reads.js";
 import { STORE_WRITE_REFUSAL } from "../store/writer.js";
+import { codingAgentStatusOf } from "./status.js";
 
 /**
  * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Luke's voice.
@@ -72,6 +73,20 @@ const REFUSAL_OF_SEND_OUTCOME = {
   [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
 } as const;
 
+/**
+ * The refusal for an agent whose session has not claimed its record: still
+ * coming up inside the grace its first turn may land in, so the developer
+ * tries again, and past it a session that never started, which the agent's
+ * tab reads as failed, so the developer starts a new one.
+ */
+const unstartedRefusal = (agent: CodingAgent) =>
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) ===
+    CODING_AGENT_STATUS.FAILED
+      ? HOSTED_REFUSAL.AGENT_RETIRED
+      : HOSTED_REFUSAL.AGENT_NOT_READY,
+  );
+
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: EveSessions,
@@ -99,7 +114,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+  if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const dispatch = eve

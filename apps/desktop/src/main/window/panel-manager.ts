@@ -10,6 +10,12 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import {
+  placementOf,
+  placeWindow,
+  readWindowPlacement,
+  writeWindowPlacement,
+} from "./window-placement";
 import { trafficLightsAt } from "./zoom";
 
 interface PanelDuck {
@@ -25,6 +31,17 @@ interface PanelManagerOptions {
   /** The zoom factor a window is created at: the stored size as it stands. */
   zoomFactor: () => number;
   /**
+   * The file the window's place is kept in as it closes and read from as it
+   * opens; none for a run that keeps no place, which opens at the first frame.
+   */
+  placementPath: string | undefined;
+  /**
+   * Whether this process is going, so closing the window lets it go rather
+   * than hiding it. Read from the quit rather than from `before-quit`,
+   * because a quit held for a question is not one that is going.
+   */
+  closing: () => boolean;
+  /**
    * The last panel window went down on its own. All panels closed is how
    * this process decides it is done, and `window-all-closed` can no longer
    * say so once a hidden window of Luke's own stands beside them.
@@ -35,9 +52,10 @@ interface PanelManagerOptions {
 /**
  * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
  *
- * The window Luke opens in: large enough to read a plan beside its questions,
- * and never past the display's work area less a margin, so a small display
- * still shows the whole window with the Dock and the menu bar clear of it.
+ * The window Luke first opens in: large enough to read a plan beside its
+ * questions, and never past the display's work area less a margin, so a
+ * small display still shows the whole window with the Dock and the menu bar
+ * clear of it.
  */
 const DESKTOP_WINDOW = {
   WIDTH: 1280,
@@ -66,12 +84,13 @@ function desktopBounds(display: Display): Rectangle {
 }
 
 /**
- * Luke's one window: an ordinary, resizable app window on the main display,
- * always showing the panel. It is kept under the panel's old name and shape
- * because every caller — the IPC handlers, the tray, the talk key —
- * addresses a panel by display, and the window answers for
- * the display it was opened against. Closing it hides it; the app keeps
- * listening, and the Dock tile or a second launch brings it back.
+ * Luke's one window: an ordinary, resizable app window, opened where it was
+ * last left (`window-placement.ts`) and always showing the panel. It is kept
+ * under the panel's old name and shape because every caller — the IPC
+ * handlers, the tray, the talk key — addresses a panel by display, and the
+ * window answers for the display it was opened against. Closing it hides
+ * it; the app keeps listening, and the Dock tile or a second launch brings
+ * it back.
  */
 export class PanelManager {
   readonly #runMode: RunMode;
@@ -81,10 +100,10 @@ export class PanelManager {
   readonly #rendererUrl: string;
   readonly #zoomFactor: () => number;
   readonly #onAllClosed: (() => void) | undefined;
+  readonly #placementPath: string | undefined;
+  readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  /** Set once a quit begins, so closing the window then destroys it rather than hiding it. */
-  #quitting = false;
   /**
    * Whether the app draws dark, as the window service last said. The launch
    * paints from the resolved appearance before it opens the first window, so
@@ -100,9 +119,8 @@ export class PanelManager {
     this.#rendererUrl = options.rendererUrl;
     this.#zoomFactor = options.zoomFactor;
     this.#onAllClosed = options.onAllClosed;
-    app.on("before-quit", () => {
-      this.#quitting = true;
-    });
+    this.#placementPath = options.placementPath;
+    this.#closing = options.closing;
   }
 
   /**
@@ -241,16 +259,38 @@ export class PanelManager {
     window.focus();
   }
 
+  /** Keeps where the window stands, as it closes, for the next launch to open it there. */
+  #keepPlacement(window: BrowserWindow): void {
+    if (this.#placementPath === undefined) return;
+    writeWindowPlacement(
+      this.#placementPath,
+      placementOf({
+        normal: window.getNormalBounds(),
+        shown: window.getBounds(),
+        zoomed: window.isMaximized(),
+        fullScreen: window.isFullScreen(),
+      }),
+    );
+  }
+
   #create(displayId: number): void {
     const display = this.display(displayId);
     if (!display) return;
-    const bounds = desktopBounds(display);
+    const placement = placeWindow({
+      saved:
+        this.#placementPath === undefined ? undefined : readWindowPlacement(this.#placementPath),
+      workAreas: screen.getAllDisplays().map((each) => each.workArea),
+      first: desktopBounds(display),
+    });
     // Created at the stored zoom, so the first frame is drawn at the size it
     // keeps rather than jumping to it once the page has loaded.
     const zoomFactor = this.#zoomFactor();
 
     const windowOptions: BrowserWindowConstructorOptions = {
-      ...bounds,
+      ...placement.bounds,
+      // Only ever set when true, because a false here takes the green
+      // button's full screen away from the window altogether.
+      ...(placement.fullScreen ? { fullscreen: true } : undefined),
       minWidth: DESKTOP_WINDOW.MIN_WIDTH,
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
       title: "Luke",
@@ -271,6 +311,7 @@ export class PanelManager {
     refuseForeignNavigation(window, this.#rendererUrl);
     window.once("ready-to-show", () => {
       if (window.isDestroyed()) return;
+      if (placement.zoomed) window.maximize();
       // A capture run is a camera, not a person: it shows the window without
       // taking the keyboard from whatever else is running.
       if (this.#runMode.takesFocus) this.#focusWindow(window);
@@ -280,7 +321,8 @@ export class PanelManager {
     // background: the app keeps listening for its keys, and the Dock tile brings
     // the window back. Only a quit lets it go.
     window.on("close", (event) => {
-      if (this.#quitting) return;
+      this.#keepPlacement(window);
+      if (this.#closing()) return;
       event.preventDefault();
       window.hide();
     });

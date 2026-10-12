@@ -378,6 +378,17 @@ only when you press Send.
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
   such switch and writes none.
+- OpenAI, for dictation. When you press the microphone in a message box,
+  your Mac records the microphone until you press ✓ or Enter (or for two
+  minutes at most), then sends the recording through our service, on your
+  account, to OpenAI's transcription model on our key, together with words
+  the plan is likely to contain — its repository's name, its title, and the
+  file paths it names — so they are spelled right. Only the text comes back,
+  into the box at the caret, and it goes nowhere until you send it. Our
+  service keeps neither the recording nor the text: it stores and logs
+  neither, and counts only the recording's length in your daily usage. OpenAI keeps the request and its reply under
+  its own retention policy. ✕ or Escape discards a recording before it is
+  sent.
 - PostHog, for usage data and screen recordings, from the Mac app. The
   counts go through our own service; the recordings go from Luke to PostHog
   directly.
@@ -448,7 +459,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - What you say to Luke on a call goes to that plan's conversation, fixed
   when the call opens and never moved afterwards.
 - Luke does not listen through your microphone except while you hold the
-  talk key. The press opens the microphone and letting go closes it, so
+  talk key, or while a dictation into a message box is recording, which the
+  box shows as a moving waveform with its time and stops at ✓, ✕, Enter, or
+  Escape. The press opens the microphone and letting go closes it, so
   macOS's microphone indicator is lit exactly while the key is down; the stop
   key closes it too, and is the one key that also tells Luke to stop talking,
   while letting go of the talk key lets him finish. If Luke's key helper cannot start, the key reports

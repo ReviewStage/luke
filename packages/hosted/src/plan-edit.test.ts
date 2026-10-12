@@ -8,43 +8,43 @@ const HEADER = { name: "Teammate invitations" } as const;
 
 const OPENED = "- Only an admin can add a member.\n- Admins are a bottleneck.";
 
-/** A plan whose problem holds what the developer's editor opened on. */
+/** A plan whose context holds what the developer's editor opened on. */
 const PLAN: PlanContent = {
   ...EMPTY_PLAN_CONTENT,
-  fields: { ...EMPTY_PLAN_CONTENT.fields, goal: { problem: OPENED, outcome: null } },
+  fields: { ...EMPTY_PLAN_CONTENT.fields, context: OPENED },
 };
 
-/** The plan with its problem holding something else, as Luke left it meanwhile. */
-function withProblem(problem: string | null): PlanContent {
-  return { ...PLAN, fields: { ...PLAN.fields, goal: { problem, outcome: null } } };
+/** The plan with its context holding something else, as Luke left it meanwhile. */
+function withContext(context: string | null): PlanContent {
+  return { ...PLAN, fields: { ...PLAN.fields, context } };
 }
 
-/** The problem an outcome saved, failing the test on a conflict. */
-function savedProblem(outcome: PlanEditOutcome): string | null {
+/** The context an outcome saved, failing the test on a conflict. */
+function savedContext(outcome: PlanEditOutcome): string | null {
   if (!("applied" in outcome)) return assert.fail("expected the edit to apply");
-  return outcome.applied.fields.goal.problem;
+  return outcome.applied.fields.context;
 }
 
 test("an edit of a field still holding its base replaces it", () => {
   const value = "- Only an admin can add a member, by hand.\n- Admins are a bottleneck.";
-  const outcome = applyDeveloperEdit(PLAN, { field: PLAN_FIELD.PROBLEM, base: OPENED, value });
+  const outcome = applyDeveloperEdit(PLAN, { field: PLAN_FIELD.CONTEXT, base: OPENED, value });
 
-  assert.equal(savedProblem(outcome), value);
+  assert.equal(savedContext(outcome), value);
 });
 
 test("clearing a field leaves it unanswered", () => {
   const outcome = applyDeveloperEdit(PLAN, {
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
     value: null,
   });
 
-  assert.equal(savedProblem(outcome), null);
+  assert.equal(savedContext(outcome), null);
 });
 
 test("an edit that changes nothing leaves the content as it was", () => {
   const outcome = applyDeveloperEdit(PLAN, {
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
     value: OPENED,
   });
@@ -54,37 +54,37 @@ test("an edit that changes nothing leaves the content as it was", () => {
 
 test("a point Luke added to the field meanwhile survives the developer's edit of another line", () => {
   const added = `${OPENED}\n- Invites go missing in spam.`;
-  const outcome = applyDeveloperEdit(withProblem(added), {
-    field: PLAN_FIELD.PROBLEM,
+  const outcome = applyDeveloperEdit(withContext(added), {
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
     value: "- Only an owner can add a member.\n- Admins are a bottleneck.",
   });
 
   assert.equal(
-    savedProblem(outcome),
+    savedContext(outcome),
     "- Only an owner can add a member.\n- Admins are a bottleneck.\n- Invites go missing in spam.",
   );
 });
 
 test("an edit of a field that was unanswered when opened lands over what Luke wrote since, where it adds lines", () => {
-  const empty = withProblem(null);
-  const outcome = applyDeveloperEdit(withProblem("- Luke's point."), {
-    field: PLAN_FIELD.PROBLEM,
+  const empty = withContext(null);
+  const outcome = applyDeveloperEdit(withContext("- Luke's point."), {
+    field: PLAN_FIELD.CONTEXT,
     base: null,
     value: "- The developer's point.",
   });
 
   assert.deepEqual(
-    applyDeveloperEdit(empty, { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." }),
-    { applied: withProblem("- Mine.") },
+    applyDeveloperEdit(empty, { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." }),
+    { applied: withContext("- Mine.") },
   );
-  assert.equal(savedProblem(outcome), "- The developer's point.\n- Luke's point.");
+  assert.equal(savedContext(outcome), "- The developer's point.\n- Luke's point.");
 });
 
 test("an edit of a line Luke changed meanwhile conflicts, answering the field as it stands and changing nothing", () => {
   const moved = "- Only an admin or owner can add a member.\n- Admins are a bottleneck.";
-  const outcome = applyDeveloperEdit(withProblem(moved), {
-    field: PLAN_FIELD.PROBLEM,
+  const outcome = applyDeveloperEdit(withContext(moved), {
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
     value: "- Only an owner can add a member.\n- Admins are a bottleneck.",
   });
@@ -94,8 +94,8 @@ test("an edit of a line Luke changed meanwhile conflicts, answering the field as
 
 test("clearing a field Luke wrote in since it was opened conflicts rather than striking words the developer never read", () => {
   const added = `${OPENED}\n- Invites go missing in spam.`;
-  const outcome = applyDeveloperEdit(withProblem(added), {
-    field: PLAN_FIELD.PROBLEM,
+  const outcome = applyDeveloperEdit(withContext(added), {
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
     value: null,
   });
@@ -105,25 +105,21 @@ test("clearing a field Luke wrote in since it was opened conflicts rather than s
 
 test("a heading the developer types into a field stays inside it once formatted", () => {
   const outcome = applyDeveloperEdit(PLAN, {
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     base: OPENED,
-    value: "## Scope\nNot a section.",
+    value: "## Goal\nNot a section.",
   });
   if (!("applied" in outcome)) return assert.fail("expected the edit to apply");
 
   const body = planBody(HEADER, outcome.applied.fields);
-  assert.equal(body.split("\n").filter((line) => line === "## Scope").length, 1);
-  assert.ok(body.includes("\\## Scope\nNot a section."));
+  assert.equal(body.split("\n").filter((line) => line === "## Goal").length, 1);
+  assert.ok(body.includes("\\## Goal\nNot a section."));
 });
 
-const RULE_ONE = { statement: "Any member may invite by email.", examples: null };
-const RULE_TWO = { statement: "Invites expire after 7 days.", examples: null };
-
-/** A plan holding two rules, two questions, and an assumption, as the editor opened on them. */
+/** A plan holding two questions and an assumption, as the editor opened on them. */
 const LISTED: PlanContent = {
   fields: {
     ...EMPTY_PLAN_CONTENT.fields,
-    rules: [RULE_ONE, RULE_TWO],
     openQuestions: ["Who can withdraw an invite?", "How long is a link valid?"],
   },
   assumptions: [{ text: "Invites reuse memberships." }],
@@ -134,41 +130,17 @@ function appliedContent(outcome: PlanEditOutcome): PlanContent {
   return outcome.applied;
 }
 
-test("an edit of one rule lands over a rule Luke added meanwhile, item by item", () => {
-  const added = { statement: "An owner can revoke any invite.", examples: null };
-  const now = { ...LISTED, fields: { ...LISTED.fields, rules: [RULE_ONE, RULE_TWO, added] } };
-  const edited = { ...RULE_ONE, statement: "Any member may invite by email or link." };
+test("an edit of an open question Luke changed meanwhile conflicts with the questions as they stand", () => {
+  const lukes = ["Who can withdraw or resend an invite?", "How long is a link valid?"];
+  const now = { ...LISTED, fields: { ...LISTED.fields, openQuestions: lukes } };
 
   const outcome = applyDeveloperEdit(now, {
-    field: PLAN_FIELD.RULES,
-    base: [RULE_ONE, RULE_TWO],
-    value: [edited, RULE_TWO],
+    field: PLAN_FIELD.OPEN_QUESTIONS,
+    base: LISTED.fields.openQuestions,
+    value: ["Who can revoke an invite?", "How long is a link valid?"],
   });
 
-  assert.deepEqual(appliedContent(outcome).fields.rules, [edited, RULE_TWO, added]);
-});
-
-test("an edit of a rule Luke changed meanwhile conflicts with the rules as they stand", () => {
-  const lukes = { ...RULE_ONE, statement: "Any admin may invite by email." };
-  const now = { ...LISTED, fields: { ...LISTED.fields, rules: [lukes, RULE_TWO] } };
-
-  const outcome = applyDeveloperEdit(now, {
-    field: PLAN_FIELD.RULES,
-    base: [RULE_ONE, RULE_TWO],
-    value: [{ ...RULE_ONE, statement: "Any owner may invite by email." }, RULE_TWO],
-  });
-
-  assert.deepEqual(outcome, { conflict: { current: [lukes, RULE_TWO] } });
-});
-
-test("striking every rule leaves the rules unanswered", () => {
-  const outcome = applyDeveloperEdit(LISTED, {
-    field: PLAN_FIELD.RULES,
-    base: [RULE_ONE, RULE_TWO],
-    value: null,
-  });
-
-  assert.equal(appliedContent(outcome).fields.rules, null);
+  assert.deepEqual(outcome, { conflict: { current: lukes } });
 });
 
 test("an open question struck while Luke added another keeps his and drops the struck one", () => {

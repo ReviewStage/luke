@@ -31,7 +31,12 @@ import {
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { CI_READ_PERMISSIONS } from "../server/github/github-app";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
+} from "../server/hosted/brain-host/bounds";
+import type { AdmittedConversation } from "../server/hosted/brain-host/conversation";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
@@ -47,7 +52,7 @@ import {
 } from "../server/hosted/coder-host/plan-edit";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
-import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+import { CODER_TOOL, CODER_TOOL_SET, opensSandbox } from "../server/hosted/coder-host/tool-set";
 import {
   CURSOR_START,
   cursorOfWire,
@@ -177,9 +182,8 @@ function mintSession(): string {
   return `wrun_01M${String(minted).padStart(22, "0")}`;
 }
 
-/** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
-const openAgent = (
-  host: CoderHost,
+/** An account with one agent started on a plan, on the model given, whose session nothing has claimed yet. */
+const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
   brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
@@ -201,7 +205,18 @@ const openAgent = (
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
     const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-    const auth = ownSeat(userId, agent.conversationId);
+    return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
+  });
+
+/** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
+const openAgent = (
+  host: CoderHost,
+  model = "anthropic/claude-opus-5.5",
+  effort = "high",
+  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+) =>
+  Effect.gen(function* () {
+    const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
     assert.ok(Result.isSuccess(starting));
@@ -369,6 +384,48 @@ const awaitingLine = (target: ConversationTarget, text: string, clientKey: strin
     );
     assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
     return written.success.value;
+  });
+
+/** What eve hands a turn beside its words: the files a message carries. */
+type ReceivedParts = Extract<MessageStreamEvent, { type: "message.received" }>["data"]["parts"];
+
+/**
+ * One turn of the agent's session relayed whole, a minute after the one
+ * before it: the developer's words received, with the files given, the
+ * agent's terse answer, then the turn completed.
+ */
+const exchange = (
+  host: CoderHost,
+  opened: {
+    readonly auth: SessionAuth;
+    readonly sessionId: string;
+    readonly admitted: AdmittedConversation;
+  },
+  turnId: string,
+  said: string,
+  parts?: ReceivedParts,
+) =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust("1 minute");
+    const session = { id: opened.sessionId, auth: opened.auth, turn: { id: turnId } };
+    const sequence = 0;
+    const answer = "Done.";
+    const state = memoryRelayState();
+    for (const event of [
+      stamped({ type: "turn.started", data: { turnId, sequence } }),
+      stamped({
+        type: "message.received",
+        data: { turnId, sequence, message: said, ...(parts === undefined ? undefined : { parts }) },
+      }),
+      stamped({
+        type: "message.completed",
+        data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: answer },
+      }),
+      stamped({ type: "turn.completed", data: { turnId, sequence } }),
+    ]) {
+      // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+      yield* host.relay(event, opened.admitted, session as never, state, {});
+    }
   });
 
 /** Each user line of the transcript by the key it was sent under, with the turn that owns it; a line no key named is absent. */
@@ -685,42 +742,190 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "the agent's title is generated from its plan as its first session starts, tidied of quotes and a full stop, and written once: a restarted session generates nothing, and a rename is never covered",
+    "an agent handed a task of its own is titled from its first exchange as its turn completes, with no plan's name beside it, tidied of quotes and a full stop, and written once: a later turn asks nothing, and a rename is never covered",
     () =>
       Effect.gen(function* () {
-        const model = titleModelAnswering(['"Teammate invitations by email."', "Second title"]);
+        const model = titleModelAnswering(['"Sign-out button in the header."', "Second title"]);
         const host = yield* hostOverStore(model);
-        const { userId, agent, auth, starting } = yield* openAgent(host);
-        yield* host.title(starting);
+        const opened = yield* openAgent(host, undefined, undefined, {
+          planSnapshot: null,
+          task: "Add a sign-out button to the header.",
+        });
+        const { userId, agent } = opened;
+        yield* exchange(host, opened, "turn_0", "Add a sign-out button to the header.");
+        yield* host.title(opened.admitted);
         const titled = yield* readCodingAgent(userId, agent.id);
-        assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
+        assert.equal(Option.getOrThrow(titled).title, "Sign-out button in the header");
         const [asked] = model.doGenerateCalls;
         assert.ok(asked !== undefined);
-        assert.match(
-          JSON.stringify(asked.prompt),
-          /Teammate invitations[\s\S]*Invite a teammate by email/u,
-        );
+        const read = JSON.stringify(asked.prompt);
+        assert.match(read, /Add a sign-out button to the header[\s\S]*Done/u);
+        assert.doesNotMatch(read, /Teammate invitations/u);
 
-        // A later session of the same conversation finds the first recorded, and is no start.
-        const restarted = yield* host.admitStarting(auth, mintSession());
-        assert.ok(Result.isSuccess(restarted));
-        yield* host.title(restarted.success);
+        // A title standing is never asked for again.
+        yield* exchange(host, opened, "turn_1", "Make it red.");
+        yield* host.title(opened.admitted);
         assert.equal(model.doGenerateCalls.length, 1);
 
         // The developer's own name is the last word: a generated title lands only where none stands.
-        yield* renameCodingAgent(userId, agent.id, "Sign-out button");
+        yield* renameCodingAgent(userId, agent.id, "Header sign-out");
         assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Late title"), false);
         const renamed = yield* readCodingAgent(userId, agent.id);
-        assert.equal(Option.getOrThrow(renamed).title, "Sign-out button");
+        assert.equal(Option.getOrThrow(renamed).title, "Header sign-out");
       }),
   );
+
+  it.effect("an agent started from the plan is titled from the plan it said first", () =>
+    Effect.gen(function* () {
+      const model = titleModelAnswering(["Teammate invitations by email"]);
+      const host = yield* hostOverStore(model);
+      const opened = yield* openAgent(host);
+      yield* exchange(host, opened, "turn_0", PLAN_TEXT);
+      yield* host.title(opened.admitted);
+      const titled = yield* readCodingAgent(opened.userId, opened.agent.id);
+      assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
+      const [asked] = model.doGenerateCalls;
+      assert.ok(asked !== undefined);
+      assert.match(JSON.stringify(asked.prompt), /Invite a teammate by email/u);
+    }),
+  );
+
+  it.effect(
+    "a first exchange that names no task, a greeting or an image with no words, is asked again as the next turn completes, and an agent still untitled past its third turn is asked no more",
+    () =>
+      Effect.gen(function* () {
+        const greeted = titleModelAnswering(["", "Flaky login test"]);
+        const greeting = yield* hostOverStore(greeted);
+        const hello = yield* openAgent(greeting, undefined, undefined, {
+          planSnapshot: null,
+          task: "Hi",
+        });
+        yield* exchange(greeting, hello, "turn_0", "Hi");
+        yield* greeting.title(hello.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(hello.userId, hello.agent.id)).title,
+          null,
+        );
+        yield* exchange(greeting, hello, "turn_1", "The login test fails on CI now and then.");
+        yield* greeting.title(hello.admitted);
+        // The retry reads the task that followed the greeting, which the agent's answer does not repeat.
+        assert.match(JSON.stringify(greeted.doGenerateCalls[1]?.prompt), /login test fails on CI/u);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(hello.userId, hello.agent.id)).title,
+          "Flaky login test",
+        );
+
+        const shown = titleModelAnswering(["", "Login screen redesign"]);
+        const imaging = yield* hostOverStore(shown);
+        const image = yield* openAgent(imaging, undefined, undefined, {
+          planSnapshot: null,
+          task: "",
+        });
+        yield* exchange(imaging, image, "turn_0", "", [
+          { type: "file", filename: "login.png", mediaType: "image/png" },
+        ]);
+        yield* imaging.title(image.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(image.userId, image.agent.id)).title,
+          null,
+        );
+        yield* exchange(imaging, image, "turn_1", "Redesign this screen.");
+        yield* imaging.title(image.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(image.userId, image.agent.id)).title,
+          "Login screen redesign",
+        );
+
+        const quiet = titleModelAnswering(["", "", "", "Too late"]);
+        const silent = yield* hostOverStore(quiet);
+        const idle = yield* openAgent(silent, undefined, undefined, {
+          planSnapshot: null,
+          task: "Hi",
+        });
+        for (const turnId of ["turn_0", "turn_1", "turn_2", "turn_3"]) {
+          yield* exchange(silent, idle, turnId, "Hi");
+          yield* silent.title(idle.admitted);
+        }
+        assert.equal(quiet.doGenerateCalls.length, 3);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(idle.userId, idle.agent.id)).title,
+          null,
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent handed files with its task opens its sandbox before its session starts, to stage them: the sandbox's admission claims the record, so the checkout is let in, the start that follows still finds the record its own, and a session older than the one recorded is refused",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const stale = mintSession();
+        const { auth } = yield* unclaimedAgent(undefined, undefined, {
+          planSnapshot: null,
+          task: "Match this mock",
+        });
+        const sessionId = mintSession();
+        // Nothing has claimed the record yet, so the session is not yet the one it runs in.
+        assert.ok(Result.isFailure(yield* host.admit(auth, sessionId)));
+
+        const opening = yield* host.admitSandbox(auth, sessionId);
+        assert.ok(Result.isSuccess(opening));
+        assert.ok(Result.isSuccess(yield* host.admit(auth, sessionId)));
+
+        // The session's start finds the record already its own: still the agent's start.
+        const starting = yield* host.admitStarting(auth, sessionId);
+        assert.ok(Result.isSuccess(starting));
+        assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
+
+        const refused = yield* host.admitSandbox(auth, stale);
+        assert.ok(Result.isFailure(refused));
+        assert.equal(refused.failure, BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION);
+      }),
+  );
+
+  it("a sandbox counts as opened by a sandbox tool's call or a message received with files, and by no words alone or other call", () => {
+    const turnId = "turn_0";
+    const sequence = 0;
+    const received = (
+      parts: Extract<MessageStreamEvent, { type: "message.received" }>["data"]["parts"],
+    ) =>
+      stamped({
+        type: "message.received",
+        data: { turnId, sequence, message: "Match this mock", parts },
+      });
+    const requested = (toolName: string) =>
+      stamped({
+        type: "actions.requested",
+        data: {
+          turnId,
+          sequence,
+          stepIndex: 0,
+          actions: [{ kind: "tool-call", callId: "call-1", toolName, input: {} }],
+        },
+      });
+    assert.equal(
+      opensSandbox(
+        received([
+          { type: "text", text: "Match this mock" },
+          { type: "file", mediaType: "image/png", filename: "mock.png" },
+        ]),
+      ),
+      true,
+    );
+    assert.equal(opensSandbox(requested(CODER_TOOL.READ_FILE)), true);
+    assert.equal(opensSandbox(received([{ type: "text", text: "Match this mock" }])), false);
+    assert.equal(opensSandbox(received(undefined)), false);
+    assert.equal(opensSandbox(requested(CODER_TOOL.WEB_SEARCH)), false);
+  });
 
   it.effect("a title call that fails leaves the agent untitled", () =>
     Effect.gen(function* () {
       const host = yield* hostOverStore(titleModelAnswering([new Error("fixture: provider down")]));
-      const { userId, agent, starting } = yield* openAgent(host);
-      yield* host.title(starting);
-      assert.equal(Option.getOrThrow(yield* readCodingAgent(userId, agent.id)).title, null);
+      const opened = yield* openAgent(host);
+      yield* exchange(host, opened, "turn_0", PLAN_TEXT);
+      yield* host.title(opened.admitted);
+      const untitled = yield* readCodingAgent(opened.userId, opened.agent.id);
+      assert.equal(Option.getOrThrow(untitled).title, null);
     }),
   );
 
@@ -1236,7 +1441,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it, and a receipt no line awaits keeps its words and its files on its own row, a text file read back to a file by its heading",
+    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it and a line of files alone after it, and a receipt of files alone no line awaits keeps them on its own row with no words, a text file read back to a file by its heading",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -1267,8 +1472,18 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           Effect.succeed(true),
         );
         assert.ok(Result.isSuccess(withFiles) && Option.isSome(withFiles.success));
+        const filesAlone = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "",
+            clientKey: "k-alone",
+            attachments: [{ name: "after.png", mediaType: "image/png", data: "iVBORw0KGgo=" }],
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(filesAlone) && Option.isSome(filesAlone.success));
 
-        // eve coalesced the two steers into one message: its summary names the image, its parts hold the words.
+        // eve coalesced the three steers into one message: its summary names the images, its parts hold the words.
         yield* play([
           stamped({
             type: "message.received",
@@ -1276,24 +1491,26 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
               turnId: "turn_0",
               sequence: 0,
               message:
-                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]",
+                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]\n[file: after.png (image/png)]",
               parts: [
                 { type: "text", text: "Plain first." },
                 { type: "text", text: "Look at these." },
                 { type: "text", text: "Attached file: notes.md\n```\n# Notes\n```" },
                 { type: "file", filename: "shot.png", mediaType: "image/png" },
+                { type: "file", filename: "after.png", mediaType: "image/png" },
               ],
             },
           }),
         ]);
-        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files"]), [
+        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files", "k-alone"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
           { turnId: hostTurnId(sessionId, "turn_0") },
           { turnId: hostTurnId(sessionId, "turn_0") },
         ]);
-        assert.equal((yield* developerLines(target)).length, 3);
+        assert.equal((yield* developerLines(target)).length, 4);
 
-        // A receipt no line awaits is written as eve received it: the words, then each file; words
-        // spelled like a file's heading stay words, since the first text part is always the words.
+        // A receipt no line awaits is written as eve received it: its words, empty where it carried
+        // files alone, then each file, a text part spelled as a file's heading read back as that file.
         yield* TestClock.adjust("1 minute");
         yield* play([
           stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
@@ -1341,7 +1558,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           },
         ]);
         assert.deepEqual(rows.at(-1)?.message.parts, [
-          { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```", state: "done" },
+          { type: "text", text: "", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "spec.md",
+            url: "data:text/plain;base64,UmVhZCBpdC4=",
+          },
           {
             type: "file",
             mediaType: "text/plain",
@@ -1481,8 +1704,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
               field: "openQuestions",
               text: "Who may withdraw an invite? Going on as: the member who sent it.",
             },
-            { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
-            { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+            { kind: "add", field: "approach", text: "- Invites expire after 7 days." },
+            { kind: "replace", field: "context", find: "an admin", text: "an owner" },
           ],
         });
 
@@ -1491,13 +1714,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(answer, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 2,
-          missed: ["replace problem"],
+          missed: ["replace context"],
         });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         assert.deepEqual(stored.fields.openQuestions, [
           "Who may withdraw an invite? Going on as: the member who sent it.",
         ]);
-        assert.equal(stored.fields.decisions, "- Invites expire after 7 days.");
+        assert.equal(stored.fields.approach, "- Invites expire after 7 days.");
         assert.ok(stored.plan.document.body.includes("- Who may withdraw an invite?"));
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
@@ -1518,8 +1741,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const outside = unparsedWire({ notes: [{ kind: "add", field: "title", text: "x" }] });
         const two = unparsedWire({
           notes: [
-            { kind: "add", field: "decisions", text: "One." },
-            { kind: "add", field: "decisions", text: "Two." },
+            { kind: "add", field: "approach", text: "One." },
+            { kind: "add", field: "approach", text: "Two." },
           ],
         });
 
@@ -1532,7 +1755,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           reason: PLAN_EDIT_REFUSAL.TOO_MANY,
         });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
-        assert.equal(stored.fields.decisions, null);
+        assert.equal(stored.fields.approach, null);
 
         // An agent handed a task never saw the plan, so it is refused by name.
         const onTask = yield* openAgent(host, "anthropic/claude-opus-5.5", "high", {

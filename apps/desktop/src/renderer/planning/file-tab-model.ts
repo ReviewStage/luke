@@ -3,7 +3,12 @@ import {
   PLAN_FILE_REFUSAL,
   type PlanFileRefusal,
 } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanCodeShowing, PlanFileShown } from "@sidecar/hosted/planning-view";
+import type {
+  PlanCode,
+  PlanCodeShowing,
+  PlanFileShown,
+  PlanningFileAnswer,
+} from "@sidecar/hosted/planning-view";
 import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 
@@ -148,4 +153,28 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
     return { ...window, lines: [...read.lines, ...held.lines] };
   }
   return window;
+}
+
+/** How a raw read of a file's whole text came out: the text, a file the service will not carry whole, or a read that did not land. */
+export const WHOLE_TEXT = {
+  READ: "read",
+  REFUSED: "refused",
+  UNREAD: "unread",
+} as const;
+
+export type WholeText =
+  | { readonly kind: typeof WHOLE_TEXT.READ; readonly text: string }
+  | { readonly kind: typeof WHOLE_TEXT.REFUSED }
+  | { readonly kind: typeof WHOLE_TEXT.UNREAD };
+
+/**
+ * A raw read's answer as a copy or a download of the file hears it: the
+ * file's text as it holds it, its lines uncut; a file the service refuses
+ * to carry whole, as one grown past its bound since it was drawn; or a read
+ * that did not land.
+ */
+export function wholeTextOf(answer: PlanningFileAnswer): WholeText {
+  if ("text" in answer) return { kind: WHOLE_TEXT.READ, text: answer.text.text };
+  if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED };
+  return { kind: WHOLE_TEXT.UNREAD };
 }

@@ -93,7 +93,7 @@ adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
 The organization plugin's tables (`organization`, `member`, `invitation`, and
-`session.active_organization_id`; migration 0082) are transcribed from
+`session.active_organization_id`; migration 0084) are transcribed from
 `auth generate` for 1.6.29 with one edit, instants through `instant()`, and
 keep Better Auth's default model names, since the
 Drizzle adapter finds a model by its export's name. A Luke workspace is an
@@ -110,7 +110,7 @@ member through the plugin over PGlite.
 Every account has a personal workspace, named for the account, slugged
 `personal-<user id>`, with `{"personal":true}` as its metadata text, and named
 the account's own by a `personal_workspace` row (`server/db/personal-workspace-schema.ts`;
-migration 0083, which backfills one for every account in one data-modifying
+migration 0085, which backfills one for every account in one data-modifying
 statement). `hosted/workspace-store.ts`'s `ensurePersonalWorkspace` makes it
 the first time it is asked for, through `hosted/workspace-seams.ts`'s
 `createOrganization` over the plugin, so its organization and owner rows are
@@ -121,7 +121,7 @@ workspace the account is a member of, its personal one first and the rest by
 name. `tests/workspace-store.test.ts` holds the three.
 
 Every plan belongs to one workspace: `plan.organization_id`, not null and
-cascading with the organization (migration 0084, which moves every plan
+cascading with the organization (migration 0086, which moves every plan
 standing into its starter's personal workspace before it sets the column
 not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
@@ -332,12 +332,9 @@ their exact codes besides, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
-CI's Preview probe job (`.github/workflows/preview-probe.yml`) runs it
-against a PR's own preview, found through the head commit's GitHub
-deployment record (`server/preview-deployment.ts`), once the repository
-variable `PREVIEW_PROBE_DOOR` names the door; until then the job does not
-run, since a check that cannot see the deployment would be green over
-nothing. The
+It runs by hand, against an address or a commit's preview found through its
+GitHub deployment record (`server/preview-deployment.ts`); CI does not run
+it, since a PR's preview could take twenty minutes to appear or never come. The
 table is its own file so a `vercel.ts` can one day import it and `vercel.json`
 be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
 bundles only its relative imports, which takes a JSON table and not this
@@ -503,6 +500,17 @@ Those unions name no Postgres type and are the compile-time claim the whole
 restoration was for — a text column read back as its own vocabulary rather
 than cast by hand under a `// SAFETY:` comment — so the module itself is the
 only thing that holds them.
+
+A migration that rewrites data the live release reads is expand and contract,
+for the same reason a dropped column takes two deployments: a production build
+migrates within seconds of its push and goes live up to an hour later, and the
+release before it serves the migrated database all that while. So the first
+deployment teaches every read to decode both the old shape and the new one,
+and the second, once the first is live, carries the migration that rewrites
+the rows. `0082_plan_template_teammate` shipped in one step, and the release
+still serving refused every plan until its own build went live. Each read
+projects only the columns it answers (`plan-store.ts`'s list reads no part of
+the document), so a rewrite reaches only the reads of what it rewrote.
 
 ## Where a function runs an Effect
 
@@ -820,6 +828,26 @@ drop it from the list and redeploy. A row counted unreadable reads
 migration, since a migration holds no key and runs before the deployment
 whose ring it would need.
 
+## The dictation group
+
+`server/dictation-app.ts` answers `POST /api/dictation`: one clip the
+developer dictated into a message box, `{ audio, durationMs, keywords }`
+(`@sidecar/hosted/dictation-wire`), answered `{ text }`. The clip is WebM
+with Opus in base64, held to two minutes and a megabyte and refused past
+either as `request_too_large` before anything goes upstream; `keywords` are
+up to fifty words the desktop expects to hear (the repository, the plan's
+title, the paths it names), each on one line. `server/hosted/transcription.ts`
+sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
+multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
+([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
+Nothing of the clip or the text is stored, logged, traced, or counted as an
+event; a failure logs OpenAI's status alone and answers `unavailable`, as a
+deployment without `OPENAI_API_KEY` does. The day is metered one call and the
+seconds OpenAI billed, or the clip's own length where the answer reports none,
+and a meter the database refused is logged while the text is still answered.
+There is no path on an account's own key. `tests/dictation-app.test.ts`
+answers the route over a scripted OpenAI at its HTTP door.
+
 ## The models group
 
 `server/models-app.ts` answers `GET /api/models`: the models a coding agent
@@ -982,7 +1010,7 @@ included; an account that must sign in with GitHub again is
 Nothing in the group writes a document. The one writer is a planning call's
 notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
 the fixed template (`packages/hosted/src/plan-template.ts`): a point added
-under a field, an example added to a rule, a phrase corrected, or a line
+under a field, a phrase corrected, or a line
 struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
 the fields the plan holds, passing over a note that names a phrase the plan
 does not hold, formats the body, and saves it under a binding of account and
@@ -1071,9 +1099,9 @@ The recent words ride the delegation as context, and whether an answer
 agrees to anything is the planning instructions' to judge. The binding is the session's for life. It is written on
 the `voice_sessions` row as a plain `plan_id`,
 and a re-attach reads it from there, so a later connection cannot move a
-session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time and ends a plan's
-call when the window opens another plan, starts one, or closes, so only one
-plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
+session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time, which outlives
+the plan on screen and moves only when another plan's Talk press hangs it up
+and opens one about that plan, so only one plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
 plans and the re-attach over the real store.
 
 The planning model reads source through one tool,
@@ -1254,7 +1282,9 @@ loads the library at all.
 
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`server/hosted/quota.ts`).
-Nothing is refused on the count, which the admin pages read; a spend limit on
+A dictated clip is counted once it is transcribed instead, as one call and its
+seconds of audio in the row's `dictation_seconds`, beside the voice seconds
+`voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 

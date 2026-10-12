@@ -19,7 +19,7 @@ import { codingAgentActRows } from "./coding-agent-acts";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 /** A synthetic provider key, as Settings carries it once. */
@@ -159,6 +159,11 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`remove:${provider}`);
           return { keys: [] };
+        }),
+      dictationTranscribe: ({ audio, keywords }) =>
+        Effect.sync(() => {
+          asked.push(`transcribe:${audio}:${keywords.join(",")}`);
+          return { text: "Run the tests" };
         }),
     },
   });
@@ -376,5 +381,27 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel's dictated clip reaches the host once, and the voice window cannot send one",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const clip = {
+        kind: ACT_KIND.DICTATION_TRANSCRIBE,
+        payload: { audio: "GkXfow==", durationMs: 1_500, keywords: ["luke"] },
+      } as const;
+
+      const heard = yield* router.performAct(clip, PANEL);
+      const refused = yield* router.performAct(clip, VOICE);
+
+      assert.deepEqual(heard, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { text: "Run the tests" },
+      });
+      assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(asked, ["transcribe:GkXfow==:luke"]);
     }),
 );

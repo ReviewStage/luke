@@ -42,7 +42,7 @@ const ROOT: FolderListing = {
   truncated: false,
 };
 
-test("a root that cannot be listed says why in the tree's place, and Try again lists it and draws the tree", async () => {
+test("a root that cannot be listed says why in the tree's place, and Retry lists it and draws the tree", async () => {
   let refusing = true;
   const tree = mounted((path) =>
     path === "" && refusing
@@ -53,7 +53,7 @@ test("a root that cannot be listed says why in the tree's place, and Try again l
   );
   await tree.settled();
 
-  assert.equal(tree.host.textContent, "GitHub could not be read just now.Try again");
+  assert.equal(tree.host.textContent, "GitHub could not be read just now.Retry");
   refusing = false;
   tree.host.querySelector("button")?.click();
   await tree.settled();
@@ -104,4 +104,182 @@ test("a folder listed short of whole says so under the tree, once", async () => 
     [...tree.host.querySelectorAll(".file-tree-cut")].map((cut) => cut.textContent).join(),
     "Some folders hold more than the tree lists. Open them on GitHub to see the rest.",
   );
+});
+
+/** A repository two folders deep, `src/app` the one folder `src` holds beside its file. */
+function repository(path: string): FolderListing {
+  if (path === "") return ROOT;
+  if (path === "src") {
+    return {
+      entries: [
+        { name: "app", folder: true },
+        { name: "index.ts", folder: false },
+      ],
+      truncated: false,
+    };
+  }
+  if (path === "src/app")
+    return { entries: [{ name: "main.ts", folder: false }], truncated: false };
+  return { entries: [], truncated: false };
+}
+
+/** The rows the tree on screen draws, by path: the frame not hidden. */
+function drawnRows(host: HTMLElement): readonly string[] {
+  const frame = [...host.querySelectorAll<HTMLElement>(".file-tree-view")].find(
+    (each) => !each.hidden,
+  );
+  return [
+    ...(frame
+      ?.querySelector("file-tree-container")
+      ?.shadowRoot?.querySelectorAll<HTMLElement>("[data-item-path]") ?? []),
+  ].map((row) => row.dataset.itemPath ?? "");
+}
+
+test("each file is drawn with its type's icon in that type's colour", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  await tree.settled();
+
+  const shadow = tree.host.querySelector("file-tree-container")?.shadowRoot;
+  assert.ok(
+    shadow?.querySelector("[data-file-tree-colored-icons='true']"),
+    "icons drawn in colour",
+  );
+  assert.equal(
+    tree.row("src/index.ts").querySelector("[data-icon-token]")?.getAttribute("data-icon-token"),
+    "typescript",
+  );
+});
+
+test("a search narrows the rows to the paths holding it, says when none do, and an empty one shows every row again", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("src/app/main.ts", { folder: false, focus: false });
+  await tree.settled();
+
+  tree.handle.search("MAIN");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "src/app/", "src/app/main.ts"]);
+
+  tree.handle.search("nothing like it");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), []);
+  assert.match(tree.host.textContent ?? "", /No files match\./);
+
+  tree.handle.search("");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), [
+    "src/",
+    "src/app/",
+    "src/app/main.ts",
+    "src/index.ts",
+    "README.md",
+  ]);
+  assert.doesNotMatch(
+    [...tree.host.querySelectorAll<HTMLElement>(".file-tree-notice:not([hidden])")]
+      .map((shown) => shown.textContent)
+      .join(),
+    /No files match/,
+  );
+});
+
+test("the filter shows only the files given, every folder open, the tab's file marked and opened on a press, until it is let go", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("README.md", { folder: false, focus: false });
+  tree.handle.only(["src/app/main.ts", "README.md"]);
+  await tree.settled();
+
+  assert.deepEqual(drawnRows(tree.host), ["src/app/", "src/app/main.ts", "README.md"]);
+  const readme = [...tree.host.querySelectorAll<HTMLElement>(".file-tree-view")]
+    .find((each) => !each.hidden)
+    ?.querySelector("file-tree-container")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-item-path='src/app/main.ts']");
+  readme?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  assert.deepEqual(tree.opened, ["src/app/main.ts"]);
+
+  tree.handle.search("readme");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["README.md"]);
+
+  tree.handle.search("");
+  tree.handle.only(undefined);
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
+});
+
+test("a search typed before the folders are listed shows the matches once they land", async () => {
+  const tree = mounted(repository);
+  tree.handle.search("readme");
+  await tree.settled();
+
+  assert.deepEqual(drawnRows(tree.host), ["README.md"]);
+  assert.doesNotMatch(
+    [...tree.host.querySelectorAll<HTMLElement>(".file-tree-notice:not([hidden])")]
+      .map((shown) => shown.textContent)
+      .join(),
+    /No files match/,
+  );
+});
+
+test("handed the whole repository, a search finds a file in a folder never opened, which opens on a press, and letting go of it shows the folders as they were", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("README.md", { folder: false, focus: false });
+  await tree.settled();
+  tree.handle.within([
+    { name: "src", folder: true },
+    { name: "src/app", folder: true },
+    { name: "src/app/main.ts", folder: false },
+    { name: "src/index.ts", folder: false },
+    { name: "README.md", folder: false },
+  ]);
+
+  tree.handle.search("main");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "src/app/", "src/app/main.ts"]);
+  const main = [...tree.host.querySelectorAll<HTMLElement>(".file-tree-view")]
+    .find((each) => !each.hidden)
+    ?.querySelector("file-tree-container")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-item-path='src/app/main.ts']");
+  main?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  assert.deepEqual(tree.opened, ["src/app/main.ts"]);
+
+  tree.handle.search("");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
+});
+
+test("a crumb's list draws one folder's entries as the tree's own rows, folders first and coloured, none opening, the current one marked; a press or Return chooses one, ⌘ in a tab of its own", async () => {
+  const module = window.lukeFileTree;
+  assert.ok(module, "the bundle sets its global");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const chosen: string[] = [];
+  const unmount = module.list(host, {
+    entries: [
+      { name: "README.md", folder: false },
+      { name: "src", folder: true },
+      { name: "index.ts", folder: false },
+    ],
+    current: "index.ts",
+    onChoose: (entry, newTab) =>
+      chosen.push(`${entry.name}${entry.folder ? "/" : ""}${newTab ? " in a new tab" : ""}`),
+  });
+  onTestFinished(() => {
+    unmount();
+    host.remove();
+  });
+  for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+
+  const shadow = host.querySelector("file-tree-container")?.shadowRoot;
+  assert.ok(shadow?.querySelector("[data-file-tree-colored-icons='true']"));
+  const rows = [...(shadow?.querySelectorAll<HTMLElement>("[data-item-path]") ?? [])];
+  assert.deepEqual(
+    rows.map((row) => row.dataset.itemPath),
+    ["src/", "index.ts", "README.md"],
+  );
+  assert.equal(rows[1]?.getAttribute("aria-selected"), "true");
+
+  host.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  rows[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  rows[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, metaKey: true }));
+  assert.deepEqual(chosen, ["index.ts", "src/", "README.md in a new tab"]);
 });

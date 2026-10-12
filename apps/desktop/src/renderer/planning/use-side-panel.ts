@@ -144,7 +144,22 @@ export interface OpenFile {
   readonly opened: number;
   /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs; none for a file opened from Luke's snippet. */
   readonly browsedOn?: string | undefined;
+  /** The files this tab showed before this one, the latest last, which its Back walks. */
+  readonly back?: readonly FileVisit[];
+  /** The files Back walked away from, the latest last, which its Forward walks again. */
+  readonly forward?: readonly FileVisit[];
 }
+
+/** A file a File tab showed, as its history holds it to show again. */
+type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn">;
+
+/** Which way a File tab's history is walked. */
+export const FILE_HISTORY_STEP = {
+  BACK: "back",
+  FORWARD: "forward",
+} as const;
+
+export type FileHistoryStep = (typeof FILE_HISTORY_STEP)[keyof typeof FILE_HISTORY_STEP];
 
 /**
  * What the panel knows of a kind of tab. Note that the open tabs are kept
@@ -390,6 +405,12 @@ export interface SidePanelControl {
    * its own at the strip's end where `newTab` asks.
    */
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  /**
+   * Walks the history of the File tab of `from` a step back or forward,
+   * showing the file it showed there in its place; a file with a tab of its
+   * own by then is chosen there instead.
+   */
+  onFileHistory: (from: string, step: FileHistoryStep) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -587,19 +608,68 @@ function rangeOf(ref: CodeRef): OpenFile["range"] {
     : { startLine: ref.startLine, endLine: ref.endLine };
 }
 
-/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more. */
+/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more, its history kept. */
 function withFileOpened(held: HeldState, ref: CodeRef): HeldState {
   const standing = held.files.find((each) => each.path === ref.path);
+  // Note that the tab keeps the way it came, since it shows the same file.
   const opened: OpenFile = {
     path: ref.path,
     range: rangeOf(ref),
     opened: (standing?.opened ?? 0) + 1,
+    ...(standing?.back === undefined ? undefined : { back: standing.back }),
+    ...(standing?.forward === undefined ? undefined : { forward: standing.forward }),
   };
   const files =
     standing === undefined
       ? [...held.files, opened]
       : held.files.map((each) => (each === standing ? opened : each));
   return { ...held, files, tab: { file: ref.path }, open: true };
+}
+
+/**
+ * The state with the tab a file already has chosen and the panel shown, as
+ * browsing or a step of a tab's history to that file asks: a tab another
+ * plan browsed to moves to this one, since this plan does not draw it.
+ */
+function withOpenFileChosen(
+  held: HeldState,
+  open: OpenFile,
+  drawn: DrawnTabs,
+  planId: string | undefined,
+): HeldState {
+  const tab: SidePanelTab = { file: open.path };
+  const drawnHere = drawn.files.includes(open.path)
+    ? held
+    : {
+        ...held,
+        files: held.files.map((each) => (each === open ? { ...each, browsedOn: planId } : each)),
+      };
+  return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
+}
+
+/** What a File tab's history holds of the file it shows. */
+function visitOf(file: OpenFile): FileVisit {
+  return { path: file.path, range: file.range, browsedOn: file.browsedOn };
+}
+
+/**
+ * The state with the File tab `from` showing the file a step back or
+ * forward along its history, in its place, the one it showed moved to the
+ * other way's end; the tab as it stood where that way holds nothing.
+ */
+function withFileStepped(held: HeldState, from: OpenFile, step: FileHistoryStep): HeldState {
+  const back = from.back ?? [];
+  const forward = from.forward ?? [];
+  const to = step === FILE_HISTORY_STEP.BACK ? back.at(-1) : forward.at(-1);
+  if (to === undefined) return held;
+  const stepped: OpenFile = {
+    ...to,
+    opened: 1,
+    back: step === FILE_HISTORY_STEP.BACK ? back.slice(0, -1) : [...back, visitOf(from)],
+    forward: step === FILE_HISTORY_STEP.BACK ? [...forward, visitOf(from)] : forward.slice(0, -1),
+  };
+  const files = held.files.map((each) => (each === from ? stepped : each));
+  return { ...held, files, tab: { file: to.path }, open: true };
 }
 
 /**
@@ -613,7 +683,13 @@ function withFileBrowsed(
   from: OpenFile | undefined,
   to: string,
 ): HeldState {
-  const browsed: OpenFile = { path: to, range: undefined, opened: 1, browsedOn: planId };
+  const browsed: OpenFile = {
+    path: to,
+    range: undefined,
+    opened: 1,
+    browsedOn: planId,
+    ...(from === undefined ? undefined : { back: [...(from.back ?? []), visitOf(from)] }),
+  };
   const files =
     from === undefined
       ? [...held.files, browsed]
@@ -1040,21 +1116,28 @@ export function useSidePanel(
   const onBrowseFile = useCallback(
     (from: string, path: string, newTab: boolean) =>
       update((held) => {
-        const tab: SidePanelTab = { file: path };
         const open = held.files.find((each) => each.path === path);
-        if (open !== undefined) {
-          const drawnHere = drawn.files.includes(path)
-            ? held
-            : {
-                ...held,
-                files: held.files.map((each) =>
-                  each === open ? { ...each, browsedOn: planId } : each,
-                ),
-              };
-          return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
-        }
+        if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
+        const tab: SidePanelTab = { file: path };
         const standing = newTab ? undefined : held.files.find((each) => each.path === from);
         return withFileBrowsed(withChosenViewed(held, tab, drawn), planId, standing, path);
+      }),
+    [update, drawn, planId],
+  );
+  // Note that a step to a file with a tab of its own by then chooses that
+  // tab and leaves this one as it stands, because a file stands in one tab
+  // at most.
+  const onFileHistory = useCallback(
+    (from: string, step: FileHistoryStep) =>
+      update((held) => {
+        const standing = held.files.find((each) => each.path === from);
+        if (standing === undefined) return held;
+        const ways = step === FILE_HISTORY_STEP.BACK ? standing.back : standing.forward;
+        const to = ways?.at(-1)?.path;
+        if (to === undefined) return held;
+        const open = held.files.find((each) => each.path === to);
+        if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
+        return withFileStepped(withChosenViewed(held, { file: to }, drawn), standing, step);
       }),
     [update, drawn, planId],
   );
@@ -1109,6 +1192,7 @@ export function useSidePanel(
     onRenamePins,
     onOpenFile,
     onBrowseFile,
+    onFileHistory,
     onResize,
   };
 }

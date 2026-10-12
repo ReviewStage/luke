@@ -1,11 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
-import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@sidecar/hosted/plan-wire";
 import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import { useEffect, useRef } from "react";
-import { bundleAtom } from "../bundle-loader";
-import { FILE_TREE_ASSET, type FileTreeHandle, type FolderListing } from "../file-tree/contract";
+import { ListFilterIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { FileTreeHandle, FolderEntry, FolderListing } from "../file-tree/contract";
+import { Tooltip } from "../tooltip";
 import { refusalLine, refusalPasses } from "./file-tab-model";
+import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 import type { ListFolder } from "./folder-listings";
 
 /**
@@ -13,31 +16,48 @@ import type { ListFolder } from "./folder-listings";
  *
  * The tree is drawn by the file tree bundle (`../file-tree/`), loaded the
  * first time a tree is shown and kept for the window's life
- * (`../bundle-loader.ts`). The pane hands it the folders as the panel lists
+ * (`file-tree-bundle.ts`). The pane hands it the folders as the panel lists
  * them (`folder-listings.ts`), a refusal put in the File tab's own words,
  * and reveals the tab's file in it whenever the tab shows another, its
  * folders opened and it marked, as an editor's explorer follows the file
- * shown. Every name here is the repository's, so the pane is left out of
- * the screen recording (`ph-no-capture`).
+ * shown. Over the tree stand a search field, which narrows the rows to the
+ * paths holding what is typed, over the whole repository listed in one read
+ * the first time the field is used, or over the folders listed so far where
+ * that read did not land or was cut short, as the empty field then says; and a filter, which shows only the files
+ * Luke showed on the plan; ⌘F anywhere in the pane takes the caret to the
+ * field. A breadcrumb's folder lets go of both, since it asks to see the
+ * folder whatever was narrowed. Every name here is the repository's, so the
+ * pane is left out of the screen recording (`ph-no-capture`).
  */
 
-/** Where the tree stands while its bundle loads or fails to. */
-const TREE_LOAD_FAILED = "The files could not be shown.";
+/**
+ * What the search covers: not yet asked, the whole repository being read or
+ * read, or only the folders listed so far, the whole having been cut short,
+ * or its read not having landed for the search standing.
+ */
+const SEARCH_SCOPE = {
+  UNREAD: "unread",
+  READING: "reading",
+  WHOLE: "whole",
+  OPENED: "opened",
+  MISSED: "missed",
+} as const;
 
-const fileTreeModuleAtom = bundleAtom(
-  { script: FILE_TREE_ASSET.SCRIPT },
-  () => window.lukeFileTree,
-  TREE_LOAD_FAILED,
-);
+type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
+
+/** A listing's entries as the tree hears them, each by its name or, listed whole, its path. */
+function entriesOf(entries: readonly PlanTreeEntry[]): readonly FolderEntry[] {
+  return entries.map((entry) => ({
+    name: entry.name,
+    folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+  }));
+}
 
 /** A folder's listing as the tree hears it: its entries, or why it is not listed and whether listing again may help. */
 function listingOf(answer: PlanningTreeAnswer): FolderListing {
   if ("folder" in answer) {
     return {
-      entries: answer.folder.entries.map((entry) => ({
-        name: entry.name,
-        folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
-      })),
+      entries: entriesOf(answer.folder.entries),
       truncated: answer.folder.truncated,
     };
   }
@@ -48,18 +68,71 @@ function listingOf(answer: PlanningTreeAnswer): FolderListing {
   };
 }
 
+/** The pane's search field over the tree: Escape clears what is typed, then lets go of the caret. */
+function TreeSearch({
+  field,
+  query,
+  scope,
+  onQuery,
+}: {
+  field: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  scope: SearchScope;
+  onQuery: (query: string) => void;
+}): React.JSX.Element {
+  return (
+    <label className="settings-search-well file-tree-search-well">
+      <SearchIcon />
+      <input
+        ref={field}
+        className="settings-search-input"
+        aria-label="Search files"
+        placeholder={scope === SEARCH_SCOPE.OPENED ? "Search opened folders" : "Search files"}
+        autoComplete="off"
+        spellCheck={false}
+        value={query}
+        onChange={(event) => onQuery(event.target.value)}
+        onKeyDown={(event) => {
+          // Note that an Escape is stopped here, because the window's own
+          // Escape would close the panel behind the field.
+          if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+          event.stopPropagation();
+          if (query.length > 0) onQuery("");
+          else field.current?.blur();
+        }}
+      />
+      {query.length > 0 ? (
+        <button
+          type="button"
+          className="icon-button settings-search-clear"
+          aria-label="Clear search"
+          onClick={() => {
+            onQuery("");
+            field.current?.focus();
+          }}
+        >
+          <CloseIcon />
+        </button>
+      ) : null}
+    </label>
+  );
+}
+
 export function FileTreePane({
-  repository,
   file,
+  shown,
   listFolder,
+  readWhole,
   onOpen,
   onMounted,
 }: {
-  /** The plan's repository, `owner/name`, which the heading names. */
-  repository: string;
   /** The File tab's file, revealed in the tree. */
   file: string;
+  /** The files of the repository Luke showed on the plan, which the filter narrows the tree to. */
+  shown: readonly string[];
   listFolder: ListFolder;
+  /** Lists the whole repository in one read, everything under its root, which the search narrows. */
+  readWhole: () => Promise<PlanningTreeAnswer>;
   /** A file chosen in the tree, to open in the tab, or in a tab of its own where ⌘ was held. */
   onOpen: (path: string, newTab: boolean) => void;
   /** The tree mounted, or taken down: the handle a breadcrumb reveals a folder through. */
@@ -70,10 +143,16 @@ export function FileTreePane({
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<FileTreeHandle | undefined>(undefined);
   const revealed = useRef<string | undefined>(undefined);
+  const field = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [onlyShown, setOnlyShown] = useState(false);
+  const [scope, setScope] = useState<SearchScope>(SEARCH_SCOPE.UNREAD);
+  const everything = useRef<readonly FolderEntry[] | undefined>(undefined);
+  const narrowed = onlyShown && shown.length > 0 ? shown : undefined;
   // Note that the tree is handed doors that read the latest props, so it is
   // mounted once however often the pane is drawn.
-  const latest = useRef({ listFolder, onOpen, onMounted, file });
-  latest.current = { listFolder, onOpen, onMounted, file };
+  const latest = useRef({ listFolder, onOpen, onMounted, file, query, narrowed });
+  latest.current = { listFolder, onOpen, onMounted, file, query, narrowed };
 
   useEffect(() => {
     const element = host.current;
@@ -83,11 +162,25 @@ export function FileTreePane({
       onOpen: (path, newTab) => latest.current.onOpen(path, newTab),
     });
     handle.current = mounted;
+    if (everything.current !== undefined) mounted.within(everything.current);
+    mounted.search(latest.current.query);
+    mounted.only(latest.current.narrowed);
     // Note that the file is revealed before a breadcrumb's folder waiting
     // on the mount, because a later reveal stands in for one still listing.
     revealed.current = latest.current.file;
     mounted.reveal(latest.current.file, { folder: false, focus: false });
-    latest.current.onMounted(mounted);
+    latest.current.onMounted({
+      ...mounted,
+      reveal: (path, options) => {
+        if (options.folder) {
+          mounted.search("");
+          mounted.only(undefined);
+          setQuery("");
+          setOnlyShown(false);
+        }
+        mounted.reveal(path, options);
+      },
+    });
     return () => {
       latest.current.onMounted(undefined);
       handle.current = undefined;
@@ -101,11 +194,64 @@ export function FileTreePane({
     handle.current.reveal(file, { folder: false, focus: false });
   }, [file]);
 
+  // Note that the whole repository is read the first time a search is
+  // typed rather than as the tree opens, because most trees are browsed and
+  // never searched. A read that did not land leaves the search on the
+  // folders listed until the field is emptied, so the next search asks
+  // again and this one asks no more; one cut short leaves it there for good.
+  useEffect(() => {
+    if (query.trim() === "") {
+      if (scope === SEARCH_SCOPE.MISSED) setScope(SEARCH_SCOPE.UNREAD);
+      return;
+    }
+    if (scope !== SEARCH_SCOPE.UNREAD) return;
+    setScope(SEARCH_SCOPE.READING);
+    readWhole().then(
+      (answer) => {
+        if (!("folder" in answer)) return setScope(SEARCH_SCOPE.MISSED);
+        if (answer.folder.truncated) return setScope(SEARCH_SCOPE.OPENED);
+        everything.current = entriesOf(answer.folder.entries);
+        handle.current?.within(everything.current);
+        setScope(SEARCH_SCOPE.WHOLE);
+      },
+      () => setScope(SEARCH_SCOPE.MISSED),
+    );
+  }, [query, scope, readWhole]);
+
+  useEffect(() => {
+    handle.current?.search(query);
+  }, [query]);
+  useEffect(() => {
+    handle.current?.only(narrowed);
+  }, [narrowed]);
+
+  const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
-    <aside className="file-tree-pane ph-no-capture" aria-label="Files">
-      <header className="file-tree-header">
-        <span className="file-tree-title">{repository}</span>
-      </header>
+    <aside
+      className="file-tree-pane ph-no-capture"
+      aria-label="Files"
+      onKeyDown={(event) => {
+        if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey)) return;
+        event.preventDefault();
+        field.current?.focus();
+        field.current?.select();
+      }}
+    >
+      <search className="file-tree-search">
+        <TreeSearch field={field} query={query} scope={scope} onQuery={setQuery} />
+        <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
+          <button
+            type="button"
+            className="icon-button file-tree-filter"
+            aria-label="Only files Luke showed"
+            aria-pressed={onlyShown}
+            disabled={shown.length === 0}
+            onClick={() => setOnlyShown((on) => !on)}
+          >
+            <ListFilterIcon aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </search>
       {module === undefined ? (
         <p className="file-tree-notice">
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}

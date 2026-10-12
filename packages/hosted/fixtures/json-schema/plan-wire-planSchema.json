@@ -143,234 +143,19 @@
     "fields": {
       "type": "object",
       "properties": {
+        "context": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "goal": {
-          "type": "object",
-          "properties": {
-            "problem": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "outcome": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "problem",
-            "outcome"
-          ],
-          "additionalProperties": false
-        },
-        "scope": {
-          "type": "object",
-          "properties": {
-            "included": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "excluded": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "constraints": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "included",
-            "excluded",
-            "constraints"
-          ],
-          "additionalProperties": false
-        },
-        "rules": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "statement": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  },
-                  "examples": {
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "given": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "when": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "then": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 1000
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            }
-                          },
-                          "required": [
-                            "given",
-                            "when",
-                            "then"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "minItems": 1,
-                        "maxItems": 200
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "statement",
-                  "examples"
-                ],
-                "additionalProperties": false
-              },
-              "minItems": 1,
-              "maxItems": 200
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "implementation": {
-          "type": "object",
-          "properties": {
-            "changeMap": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "contracts": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "patterns": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "order": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 200000
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "changeMap",
-            "contracts",
-            "patterns",
-            "order"
-          ],
-          "additionalProperties": false
-        },
-        "decisions": {
           "anyOf": [
             {
               "type": "string",
@@ -382,7 +167,7 @@
             }
           ]
         },
-        "verification": {
+        "approach": {
           "anyOf": [
             {
               "type": "string",
@@ -394,7 +179,67 @@
             }
           ]
         },
-        "leftToAgent": {
+        "interfaces": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alternatives": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hardParts": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notDoing": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "planOfAttack": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "testing": {
           "anyOf": [
             {
               "type": "string",
@@ -414,30 +259,19 @@
             "maxLength": 200000
           },
           "maxItems": 200
-        },
-        "dataAndMigration": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200000
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "required": [
+        "context",
         "goal",
-        "scope",
-        "rules",
-        "implementation",
-        "decisions",
-        "verification",
-        "leftToAgent",
-        "openQuestions",
-        "dataAndMigration"
+        "approach",
+        "interfaces",
+        "alternatives",
+        "hardParts",
+        "notDoing",
+        "planOfAttack",
+        "testing",
+        "openQuestions"
       ],
       "additionalProperties": false
     },
@@ -449,21 +283,16 @@
           "field": {
             "type": "string",
             "enum": [
-              "problem",
-              "outcome",
-              "included",
-              "excluded",
-              "constraints",
-              "rules",
-              "changeMap",
-              "contracts",
-              "patterns",
-              "order",
-              "decisions",
-              "verification",
-              "leftToAgent",
+              "context",
+              "goal",
+              "approach",
+              "interfaces",
+              "alternatives",
+              "hardParts",
+              "notDoing",
+              "planOfAttack",
+              "testing",
               "openQuestions",
-              "dataAndMigration",
               "assumptions"
             ]
           },
@@ -497,7 +326,7 @@
         ],
         "additionalProperties": false
       },
-      "maxItems": 16
+      "maxItems": 11
     }
   },
   "required": [

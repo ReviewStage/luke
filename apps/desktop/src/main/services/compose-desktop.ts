@@ -8,17 +8,19 @@ import {
 } from "@sidecar/host/effect";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Context, Effect, Layer, Stream } from "effect";
+import { callInProgress } from "#shared/messages/voice-view";
 import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
+import { askEndCallAndQuit } from "../window/quit-dialog";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
-import type { DesktopQuit } from "./quit";
+import { confirmingHold, type DesktopQuit } from "./quit";
 import { effectServiceLayer, serviceLayer } from "./service-layer";
 import { createTelemetryService, type TelemetryService } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
@@ -191,6 +193,18 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
+      // A quit asked for while a call stands asks first, as a call app does,
+      // and nothing else holds one.
+      quit.holdWhile(
+        confirmingHold({
+          standing: () => {
+            const { view } = state.snapshot().voice;
+            return view !== undefined && callInProgress(view);
+          },
+          confirm: () => askEndCallAndQuit(windows.panels.primaryPanel()),
+          again: () => config.quit(),
+        }),
+      );
       // The notices read the plans' names from the document and write the
       // unseen agents back into it; a click brings the window forward and
       // asks the panel to open the plan on the agent's tab, and an end the

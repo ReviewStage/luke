@@ -93,7 +93,7 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_EDIT,
     payload: {
       planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-      edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire after 7 days." },
+      edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
     },
   },
   [ACT_KIND.GITHUB_OPEN]: {
@@ -149,6 +149,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
     payload: { provider: "anthropic" },
   },
+  [ACT_KIND.DICTATION_TRANSCRIBE]: {
+    kind: ACT_KIND.DICTATION_TRANSCRIBE,
+    payload: { audio: "GkXfow==", durationMs: 1_500, keywords: ["luke"] },
+  },
   [ACT_KIND.CODING_AGENTS_CHOOSE]: {
     kind: ACT_KIND.CODING_AGENTS_CHOOSE,
     payload: {
@@ -199,7 +203,12 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: { kind: ACT_KIND.MICROPHONE_OPEN_SETTINGS },
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: { kind: ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: { kind: ACT_KIND.WINDOW_FOCUS_PANEL },
+  [ACT_KIND.CALL_SHOW_PLAN]: { kind: ACT_KIND.CALL_SHOW_PLAN },
   [ACT_KIND.WINDOW_COPY_TEXT]: { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "checkout" } },
+  [ACT_KIND.WINDOW_SAVE_FILE]: {
+    kind: ACT_KIND.WINDOW_SAVE_FILE,
+    payload: { name: "invite.ts", text: "export {};" },
+  },
   [ACT_KIND.FEEDBACK_SEND]: {
     kind: ACT_KIND.FEEDBACK_SEND,
     payload: { submission: { kind: "feedback", message: "it works", images: [] } },

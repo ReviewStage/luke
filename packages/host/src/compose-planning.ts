@@ -151,10 +151,11 @@ export interface PlanningDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
   /**
-   * Ends the planning call standing about any plan but `keep`, and waits for
-   * it to end; the call about `keep` is left standing.
+   * Ends the planning call standing about `planId`, or whatever it is about
+   * where none is named, and waits for it to end. A call about another plan
+   * is left standing.
    */
-  endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
+  endPlanCall: (planId: string | undefined) => Effect.Effect<void>;
 }
 
 export interface PlanningComposer extends Composer {
@@ -514,14 +515,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * shows as pending, and the look waits on the board holding it.
    */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
-    if (view.activePlanId !== planId) return;
+    // The call's own copy is kept whatever plan is open, for the floating
+    // call window; the panel's is the active plan's alone.
+    if (view.activePlanId !== planId) {
+      write({ callActivity: activity });
+      return;
+    }
     const was = view.activity?.planner;
     const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
     const looking =
       activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
       was?.action !== LOOK_AT_BOARD_TOOL_NAME;
-    write({ activity });
+    write({ activity, callActivity: activity });
     if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
   }
 
@@ -547,6 +553,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function callEnded(planId: string): void {
     if (telling?.planId === planId) telling = undefined;
+    const { callActivity: _ended, ...rest } = view;
+    view = rest;
+    publish();
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(callEndReads, planId);
   }
@@ -636,10 +645,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (Result.isFailure(read)) return yield* invalid("opening a plan names one plan");
         if (!gate()) return { opened: false };
         const { planId } = read.success;
-        // Note that the plan becomes the active one before the old plan's
-        // call is asked to end, because that end waits on the call closing:
-        // a microphone press or an offer landing inside the wait must bind
-        // to the plan the panel now shows, never the one it is leaving.
+        // Note that a call about the plan left behind goes on standing,
+        // because the call outlives the plan on screen: moving it to this
+        // plan is this plan's own Talk press.
         if (view.activePlanId !== planId) {
           view = {
             ...withoutActivity(view),
@@ -648,7 +656,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           };
           publish();
         }
-        yield* endPlanCall(planId);
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(planId);
@@ -762,10 +769,10 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           }),
         );
       }),
-    // Leaving the plan returns to the list, which was read when the tab showed.
+    // Leaving the plan returns to the list, which was read when the tab
+    // showed, and leaves its call standing, as opening another plan does.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
-        yield* endPlanCall(undefined);
         yield* serial(
           Effect.sync(() => {
             const { activePlanId: _closed, ...rest } = withoutActivity(view);
@@ -788,8 +795,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
-            // Active before the old call's end is waited on, as for opening;
-            // a plan just started has had no call.
+            // A plan just started has had no call. A call about another plan
+            // is left to the start's own Talk press, which moves it here.
             view = {
               ...withoutActivity(view),
               activePlanId: plan.id,
@@ -797,21 +804,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
               transcript: { status: PLANNING_READ.READY, transcript: EMPTY_TRANSCRIPT },
             };
             publish();
-            yield* endPlanCall(plan.id);
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
           }),
         );
       }),
-    // Note that the open plan's call ends before the plan is deleted, because
-    // a call still standing would go on writing a document that is gone.
+    // Note that the plan's call ends before the plan is deleted, open or not,
+    // because a call still standing would go on writing a document that is gone.
     [GATEWAY_METHOD.PLANNING_DELETE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(planningOpenParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) return yield* invalid("deleting a plan names one plan");
         if (!gate()) return { deleted: false };
         const { planId } = read.success;
-        if (view.activePlanId === planId) yield* endPlanCall(undefined);
+        yield* endPlanCall(planId);
         return yield* serial(
           Effect.gen(function* () {
             const deleted = yield* Effect.provide(client.delete(planId), FetchHttpClient.layer);

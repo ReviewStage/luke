@@ -169,6 +169,80 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
   );
 });
 
+test("a stop names the subagent it stopped by that subagent's job, a start in an earlier turn included, and a stop of a task no turn here started names none, though a call sent it more work", () => {
+  const started = turn(PLAN_WORK_STATE.DONE, [
+    { ...call("w", PLAN_WORK_TOOL.WORKER, "Read the styling setup."), task: "worker-1" },
+    {
+      ...call("r", PLAN_WORK_TOOL.WORKER, "Also read the build."),
+      task: "worker-0",
+      input: JSON.stringify({ message: "Also read the build.", taskId: "worker-0" }),
+    },
+    words("A worker is reading it."),
+  ]);
+  const stopping = {
+    ...turn(PLAN_WORK_STATE.RUNNING, [
+      { ...call("c1", PLAN_WORK_TOOL.WORKER_CANCEL, undefined), task: "worker-1" },
+      { ...call("c2", PLAN_WORK_TOOL.WORKER_CANCEL, undefined), task: "worker-0" },
+      call("c3", PLAN_WORK_TOOL.WORKER_CANCEL, undefined),
+    ]),
+    turnId: "turn-2",
+  };
+
+  const [, later] = workRowsOf([started, stopping], true);
+  assert.deepEqual(scanned(later?.rows ?? []), [
+    [TURN_ROW.GROUP, ["Read the styling setup.", undefined, undefined], true],
+  ]);
+});
+
+test("a finished turn's fold names the coding agents it started apart from its tool calls and its subagents, and a start refused is a tool call", () => {
+  const summaryOf = (parts: readonly PlanWorkPart[]) => {
+    const [fold] = rowsOf([turn(PLAN_WORK_STATE.DONE, parts)]);
+    assert.ok(fold?.kind === TURN_ROW.FOLDED);
+    return fold.summary;
+  };
+  const started = (id: string, agent: string) => ({
+    ...call(id, PLAN_WORK_TOOL.START_AGENT, "Investigate a Tailwind migration."),
+    output: JSON.stringify({ status: "accepted", agent: { id: agent, modelName: "Opus 5.5" } }),
+  });
+  const refused = {
+    ...call("r", PLAN_WORK_TOOL.START_AGENT, "Fix the invite emails."),
+    output: JSON.stringify({ status: "rejected", reason: "The plan has no repository." }),
+  };
+
+  assert.equal(
+    summaryOf([
+      call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"),
+      call("w", PLAN_WORK_TOOL.WORKER, "Read the styling setup."),
+      started("s", "agent-1"),
+      call("c", PLAN_WORK_TOOL.WORKER_CANCEL, undefined),
+      words("Started Opus 5.5 on the investigation."),
+    ]),
+    "2 tool calls, 1 subagent, 1 coding agent",
+  );
+  assert.equal(
+    summaryOf([started("s1", "agent-1"), started("s2", "agent-2"), words("Started two agents.")]),
+    "2 coding agents",
+  );
+  assert.equal(summaryOf([refused, words("That did not start.")]), "1 tool call");
+});
+
+test("a coding agent's start runs together with the calls beside it while the turn moves, as any call does", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.RUNNING, [
+      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
+      {
+        ...call("s", PLAN_WORK_TOOL.START_AGENT, "Fix the invite emails."),
+        output: JSON.stringify({ status: "accepted", agent: { id: "agent-1" } }),
+      },
+      call("b", PLAN_WORK_TOOL.READ_AGENT, "agent-1", PLAN_WORK_STATE.RUNNING),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [
+    [TURN_ROW.GROUP, [undefined, "Fix the invite emails.", "agent-1"], true],
+  ]);
+});
+
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
   const rows = rowsOf([
     turn(PLAN_WORK_STATE.DONE, [

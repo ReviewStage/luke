@@ -87,7 +87,6 @@ function mounted(
   registry?: AtomRegistry,
 ) {
   const asked: string[] = [];
-  const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -103,14 +102,14 @@ function mounted(
         file,
         snippet,
         readFile: (window) => readFile(window),
-        openGitHub: (url) => opened.push(url),
+        onRead: () => undefined,
       });
       root.render(registry === undefined ? tab : onRegistry(registry, tab));
       await Promise.resolve();
       await Promise.resolve();
     });
   };
-  return { container, asked, opened, draw };
+  return { container, asked, draw };
 }
 
 /** The numbers of the lines drawn, the lit ones marked. */
@@ -166,7 +165,7 @@ test("a file opens on the window holding its lit lines, and the windows above an
   assert.equal(tab.container.querySelectorAll(".file-tab-edge").length, 0);
 });
 
-test("a File tab spans the side panel: neither its lines nor its heading pad in to the code column the Code feed keeps to", async () => {
+test("a File tab spans the side panel: its lines do not pad in to the code column the Code feed keeps to", async () => {
   const sheet = document.createElement("style");
   sheet.textContent = readFileSync(
     join(import.meta.dirname, "..", "styles", "desktop.css"),
@@ -180,14 +179,11 @@ test("a File tab spans the side panel: neither its lines nor its heading pad in 
   await tab.draw({ path: "src/invite.ts", range: undefined, opened: 1 });
 
   const lines = tab.container.querySelector(".file-tab-lines");
-  const heading = tab.container.querySelector(".file-tab-header");
-  assert.ok(lines instanceof HTMLElement && heading instanceof HTMLElement);
+  assert.ok(lines instanceof HTMLElement);
   // Note that jsdom leaves a custom property unresolved, so a padding reads as the tokens it is made of.
   for (const padding of [
     getComputedStyle(lines).paddingLeft,
     getComputedStyle(lines).paddingRight,
-    getComputedStyle(heading).paddingLeft,
-    getComputedStyle(heading).paddingRight,
   ]) {
     assert.doesNotMatch(padding, /reading-room|file-room/u);
   }
@@ -267,40 +263,6 @@ test("a file shortened since its snippet opens on the window holding its last li
   );
 });
 
-test("the heading's GitHub button names the branch the file was read on and opens it there, its lit lines marked where it still has them, and stands only over a file read", async () => {
-  watchedRows();
-  const tab = mounted(numberedFile(1_200));
-  const github = () => tab.container.querySelector<HTMLButtonElement>(".file-tab-github");
-
-  await tab.draw({ path: "src/invite #2.ts", range: { startLine: 600, endLine: 604 }, opened: 1 });
-  assert.equal(github()?.textContent, "release/2026");
-  assert.equal(tab.container.querySelector("header")?.textContent?.includes("Latest"), false);
-  act(() => github()?.click());
-  await tab.draw({ path: "src/invite #2.ts", range: { startLine: 7, endLine: 7 }, opened: 2 });
-  act(() => github()?.click());
-  await tab.draw({ path: "src/invite #2.ts", range: undefined, opened: 3 });
-  act(() => github()?.click());
-
-  assert.deepEqual(tab.opened, [
-    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L600-L604",
-    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L7",
-    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts",
-  ]);
-  const shortened = mounted(numberedFile(20));
-  await shortened.draw({ path: "src/invite.ts", range: { startLine: 21, endLine: 22 }, opened: 1 });
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  act(() => shortened.container.querySelector<HTMLButtonElement>(".file-tab-github")?.click());
-  assert.deepEqual(shortened.opened, [
-    "https://github.com/acme/relay/blob/release/2026/src/invite.ts",
-  ]);
-  const refused = mounted(() => ({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }));
-  await refused.draw({ path: "src/moved.ts", range: undefined, opened: 1 });
-  assert.equal(refused.container.querySelector(".file-tab-github"), null);
-});
-
 test("a file not on the branch read names the branch over the lines Luke showed of it, which are drawn lit; a read that did not land draws them too, under its offer to read again", async () => {
   const snippet: PlanCode = {
     ref: { path: "apps/web/coder/agent.ts", startLine: 8, endLine: 9 },
@@ -323,7 +285,7 @@ test("a file not on the branch read names the branch over the lines Luke showed 
   await unanswered.draw(file);
   const alert = unanswered.container.querySelector("[role='alert']");
   assert.equal(alert?.querySelector("p")?.textContent, "The file could not be read.");
-  assert.equal(alert?.querySelector("button")?.textContent, "Try again");
+  assert.equal(alert?.querySelector("button")?.textContent, "Retry");
   assert.deepEqual(drawnLines(unanswered.container), ["7", "8 lit", "9 lit", "10"]);
 });
 

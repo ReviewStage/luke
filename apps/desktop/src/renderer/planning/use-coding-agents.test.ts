@@ -19,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { MODEL_CHANGE_FAILED, START_ARCHIVED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
@@ -460,7 +461,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
-      const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
+      const toast = newestToastSays;
       const refused = { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
       tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
       yield* Effect.promise(tab.mount);

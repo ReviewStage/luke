@@ -92,6 +92,8 @@ export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & 
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
   END_CALL: "end-call",
+  /** The standing call's microphone muted, or heard again, whatever plan the panel has open. */
+  TOGGLE_MICROPHONE: "toggle-microphone",
   /** Luke's voice silenced on this Mac for the call standing, and heard again; the session is told nothing. */
   MUTE_SPEAKER: "mute-speaker",
   UNMUTE_SPEAKER: "unmute-speaker",
@@ -119,6 +121,24 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   lukeEndedCall: undefined,
   speakerMuted: false,
 };
+
+/** The statuses of a call still in progress, the ones a planning call holds the panel open through. */
+const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
+  LIVE_STATUS.CONNECTING,
+  LIVE_STATUS.MUTED,
+  LIVE_STATUS.LISTENING,
+  LIVE_STATUS.SPEAKING,
+]);
+
+/**
+ * Whether a planning call is in progress: the developer is talking a plan
+ * through, whatever the panel shows. A call closing or failed is not in
+ * progress. The panel's call bar, the mute chords, and the floating call
+ * window all answer to it.
+ */
+export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "callPlanId">): boolean {
+  return view.callPlanId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
+}
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
 

@@ -36,6 +36,7 @@ import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/messa
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import {
+  TOOL_LINE_CLASS,
   TOOL_STATE,
   Tool,
   type ToolBlock,
@@ -43,6 +44,7 @@ import {
   ToolHeader,
   type ToolHeaderProps,
   ToolInput,
+  ToolLine,
   ToolOutput,
   type ToolState,
   ToolStateMark,
@@ -197,6 +199,45 @@ export function TranscriptTool({
         <ToolOutput block={output} errorText={errorText} />
       </ToolContent>
     </Tool>
+  );
+}
+
+/**
+ * A call whose subject stands in a tab of its own, as a coding agent's start
+ * does once the agent began: the call's line as a call's row draws it, its
+ * icon, what it did, and where it stands, as the one button that opens that
+ * tab rather than folding its input and answer open in place.
+ */
+export function TranscriptOpeningCall({
+  callId,
+  kind,
+  subject,
+  state,
+  onOpen,
+}: {
+  callId: string;
+  kind: CallKind;
+  subject: string | undefined;
+  state: ToolState;
+  onOpen: () => void;
+}): ReactNode {
+  const Icon = CALL_ICON[kind];
+  const words = CALL_WORDS[kind];
+  return (
+    <button
+      type="button"
+      className={cn(TOOL_LINE_CLASS, "w-full text-left text-[12.5px]")}
+      data-call-id={callId}
+      onClick={onOpen}
+    >
+      <ToolLine
+        state={state}
+        icon={<Icon aria-hidden="true" />}
+        label={words.verb}
+        subject={subject}
+        subjectIsCode={words.code}
+      />
+    </button>
   );
 }
 

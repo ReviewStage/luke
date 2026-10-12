@@ -491,7 +491,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's files open the session with it, the words first and each file after them, and files with no task to go with are refused",
+    "a task's files open the session with it, the words first and each file after them, files alone open it with no words part, and files with no task to go with are refused",
     () =>
       Effect.gen(function* () {
         const { owner, plan, eve, ask } = yield* openPlan();
@@ -529,6 +529,27 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             ],
           ],
         );
+
+        const filesAlone = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              task: " ",
+              attachments: [shot],
+            }),
+          ),
+        );
+        assert.equal(filesAlone.agent.brief, CODING_AGENT_BRIEF.TASK);
+        assert.deepEqual(eve.opened.at(-1)?.message.message, [
+          {
+            type: "file",
+            data: "data:image/png;base64,iVBORw0KGgo=",
+            mediaType: "image/png",
+            filename: "shot.png",
+          },
+        ]);
       }),
   );
 
@@ -960,6 +981,77 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
         assert.deepEqual(worker.messages, []);
         assert.equal(worker.title, "Count the routes");
+      }),
+  );
+
+  it.effect(
+    "an ended agent's untitled read with nothing new waits for its own title, due from the turn that just completed, and answers with it the moment it lands; one read past the title call's bound, or of an agent past the turns it is titled in, answers at once, untitled",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan({ titles: true });
+        const line = (text: string) =>
+          userMessage(randomUUID(), text, userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined));
+        const readPast = (agentId: string) =>
+          Effect.gen(function* () {
+            const first = readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT_MESSAGES, owner, { id: agentId })),
+            );
+            assert.equal(first.messages.length, 1);
+            return ask(request(AGENT_MESSAGES, owner, { id: agentId, after: first.cursor }));
+          });
+
+        const due = yield* startedAgent(owner, plan.id, ask);
+        // The turn completes now on the test's clock, which earlier tests have moved on.
+        const ended = yield* agentWroteMessages(due.target, [line("Build it.")]);
+        yield* agentEnded(due.target, ended, yield* Clock.currentTimeMillis);
+        const held = yield* Effect.forkChild(yield* readPast(due.agent.id));
+        yield* TestClock.adjust(Duration.seconds(3));
+        assert.equal(held.pollUnsafe(), undefined);
+        yield* fillCodingAgentTitle(owner, due.agent.id, "Sign-out button");
+        const titled = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(held, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+        );
+        assert.deepEqual(titled.messages, []);
+        assert.equal(titled.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal(titled.title, "Sign-out button");
+
+        const late = yield* startedAgent(owner, plan.id, ask);
+        const greeted = yield* agentWroteMessages(late.target, [line("Hi.")]);
+        yield* agentEnded(late.target, greeted, yield* Clock.currentTimeMillis);
+        yield* TestClock.adjust(CODER.TITLE_TIMEOUT);
+        yield* TestClock.adjust(Duration.seconds(1));
+        // Asked unforked: a read held on the test's clock would never answer.
+        const untitled = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* yield* readPast(late.agent.id),
+        );
+        assert.deepEqual(untitled.messages, []);
+        assert.equal(untitled.title, null);
+
+        // An agent past the turns it is titled in has no title call coming, however recent its end.
+        const past = yield* startedAgent(owner, plan.id, ask);
+        for (let turn = 0; turn <= CODER.TITLE_TURNS; turn += 1) {
+          const wrote = yield* agentWroteMessages(past.target, [line(`Hi ${turn}.`)]);
+          yield* agentEnded(past.target, wrote, yield* Clock.currentTimeMillis);
+        }
+        const first = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id })),
+        );
+        assert.equal(first.messages.length, CODER.TITLE_TURNS + 1);
+        const unawaited = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id, after: first.cursor })),
+        );
+        assert.deepEqual(unawaited.messages, []);
+        assert.equal(unawaited.title, null);
       }),
   );
 
@@ -1837,6 +1929,35 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an agent whose session never started reads as failed past the grace its first turn may land in, saying it never started, and a message to it is refused as an agent ended for good rather than one still starting",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, ask } = yield* openPlan({ eve });
+        const unclaimed = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const line = { text: "Hi", clientKey: randomUUID() };
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.millis(1)));
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: unclaimed.id })),
+        );
+        assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
+        assert.equal(page.failureReason, CODING_AGENT_FAILURE.NOT_STARTED);
+        assert.deepEqual(
+          yield* ask(messageAs(owner, unclaimed.id, line)),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_RETIRED),
+        );
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
     "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {
@@ -2366,6 +2487,50 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message may be files alone: eve is handed the files with no words part, and the line stands in the transcript with empty words and its files",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask } = yield* startedAgent(eve, { running: true });
+        const shot = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" };
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, { text: "", clientKey: randomUUID(), attachments: [shot] }),
+          ),
+        );
+        assert.deepEqual(
+          eve.sent.map((sent) => sent.message.message),
+          [
+            [
+              {
+                type: "file",
+                data: "data:image/png;base64,iVBORw0KGgo=",
+                mediaType: "image/png",
+                filename: "shot.png",
+              },
+            ],
+          ],
+        );
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(page.messages.at(-1)?.parts, [
+          { type: "text", text: "", state: "done" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "shot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
     "a message's files are bounded: a type the route does not take, a text file that is not UTF-8, data that is not bare base64, a nameless file, a file past its type's bound, one file too many, and files past their bound together are refused and eve hears none; files at their bound together, beside words at JSON's widest escape, are taken",
     () =>
       Effect.gen(function* () {
@@ -2769,8 +2934,8 @@ const agentWroteMessages = (target: Target, messages: readonly UIMessage[]) =>
     return turnId;
   });
 
-/** The agent's turn ended well, so the agent reads as completed. */
-const agentEnded = (target: Target, turnId: string) =>
+/** The agent's turn ended well at the instant given, so the agent reads as completed. */
+const agentEnded = (target: Target, turnId: string, at = 1) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     yield* writer.consume(target, {
@@ -2780,7 +2945,7 @@ const agentEnded = (target: Target, turnId: string) =>
       sequence: 1_000,
       status: BRAIN_REQUEST_STATUS.SUCCEEDED,
       responseIds: [],
-      at: 1,
+      at,
     });
   });
 
@@ -2815,6 +2980,8 @@ const endedAgentWithWorker = (options: { readonly titles: boolean }, delegatedAg
     const worker = { userId: owner, conversationId: child };
     yield* agentEnded(worker, yield* agentWroteMessages(worker, [line("Count the routes.")]));
     yield* agentEnded(parent, yield* agentWroteMessages(parent, [line("Build it.")]));
+    // The agent is titled already, so its reads wait on its worker's title alone.
+    yield* fillCodingAgentTitle(owner, stored.id, "Build it");
     /** The read past the page a first read answered at once, since it carried a message. */
     const readPast = (path: string, call?: string) =>
       Effect.gen(function* () {

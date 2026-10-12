@@ -492,3 +492,43 @@ it.effect(
       assert.equal(says(), undefined);
     }),
 );
+
+it.effect(
+  "choosing a button on a card takes the card down, and a press on its words does not",
+  () =>
+    Effect.gen(function* () {
+      const chosen: string[] = [];
+      const registry = yield* registryOnTestClock;
+      const container = document.body.appendChild(document.createElement("div"));
+      root = createRoot(container);
+      act(() => {
+        root?.render(
+          onRegistry(
+            registry,
+            createElement(Tooltip, {
+              label: "Fix the flaky test",
+              card: createElement(
+                "div",
+                null,
+                createElement("p", null, CARD_WORDS),
+                button({ onClick: () => chosen.push("#128") }, "#128 · Retry the upload"),
+              ),
+              children: button({}, "Fix the flaky test"),
+            }),
+          ),
+        );
+      });
+      const card = shownCard();
+      cross(control("Fix the flaky test"), card);
+
+      act(() => card.querySelector("p")?.click());
+      assert.equal(
+        says(),
+        `${CARD_WORDS}#128 · Retry the upload`,
+        "a press on the words leaves it standing",
+      );
+      act(() => control("#128 · Retry the upload").click());
+      assert.deepEqual(chosen, ["#128"]);
+      assert.equal(says(), undefined);
+    }),
+);

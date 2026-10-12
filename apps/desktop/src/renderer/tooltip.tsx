@@ -19,7 +19,10 @@
  * cross onto it, and the pointer on it keeps it standing, its words there
  * to be read and selected, until the pointer leaves it for anywhere but its
  * control. While the pointer is on it, only Escape among the keys takes it
- * down, so the shortcut that copies a selection reaches it. One tooltip
+ * down, so the shortcut that copies a selection reaches it. A card may hold
+ * buttons and links, as GitHub's and Linear's do, and choosing one takes it
+ * down; like theirs, it is the pointer's preview, which the keyboard never
+ * enters, so what a card's buttons do is offered elsewhere too. One tooltip
  * stands in the window at a time: the next to show takes a lingering card
  * down at once.
  *
@@ -68,6 +71,9 @@ const WARM_MS = MOTION_DELAY_MS.HINT;
  * and GitHub's hover cards wait.
  */
 const CARD_LINGER = Duration.millis(180);
+
+/** What a card holds that a press chooses, which takes the card down. */
+const CARD_CHOICE = "button, a[href]";
 
 /** Which side of its control a pill hangs on. */
 const TOOLTIP_SIDE = {
@@ -200,6 +206,7 @@ function TooltipPill({
   cardBeside,
   onCard,
   onCardPress,
+  onCardChoice,
 }: {
   id: string;
   shown: Shown;
@@ -211,6 +218,8 @@ function TooltipPill({
   onCard: (over: boolean) => void;
   /** A press begun on the card. */
   onCardPress: () => void;
+  /** One of the card's buttons or links chosen. */
+  onCardChoice: () => void;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
@@ -226,6 +235,7 @@ function TooltipPill({
   }, [shown, label, carded, cardBeside]);
 
   return createPortal(
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a card's own button's or link's, bubbled up, which its keys press as well.
     <div
       ref={element}
       id={id}
@@ -238,6 +248,15 @@ function TooltipPill({
       onPointerEnter={carded ? () => onCard(true) : undefined}
       onPointerLeave={carded ? () => onCard(false) : undefined}
       onPointerDown={carded ? onCardPress : undefined}
+      onClick={
+        carded
+          ? (event) => {
+              if (event.target instanceof Element && event.target.closest(CARD_CHOICE) !== null) {
+                onCardChoice();
+              }
+            }
+          : undefined
+      }
     >
       {carded ? card : label}
       {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
@@ -255,8 +274,9 @@ function TooltipPill({
  * place, and its focus, while it does. `card`, while given, is drawn in the
  * pill's place, and always describes the control, since it says more than
  * the control's name; `cardBeside` hangs it past the control's end rather
- * than under it, as a list row's card hangs. A card holds nothing to press,
- * so it stays a description the keyboard never enters.
+ * than under it, as a list row's card hangs. A card's buttons and links
+ * take it down once chosen, and stay the pointer's alone, so the card is a
+ * description the keyboard never enters.
  */
 export function Tooltip({
   label,
@@ -407,6 +427,7 @@ export function Tooltip({
           cardBeside={cardBeside}
           onCard={onCard}
           onCardPress={onCardPress}
+          onCardChoice={hide}
         />
       )}
     </>

@@ -419,7 +419,7 @@ test("a retry whose models read fails does not keep the earlier catalog on offer
   refuseModels = true;
   act(() => {
     [...page.querySelectorAll<HTMLElement>("button")]
-      .find((each) => each.textContent === "Try again")
+      .find((each) => each.textContent === "Retry")
       ?.click();
   });
   await settle();

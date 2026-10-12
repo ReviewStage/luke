@@ -21,7 +21,6 @@ import { childConversationId } from "../brain-host/ids.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
   type CodingAgent,
-  fillCodingAgentTitle,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
@@ -29,7 +28,6 @@ import {
   updateCodingAgentBranch,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
-import { readPlan } from "../plan-store.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { promptHashOf } from "../store/index.js";
 import { logStoreFailure } from "../store-failure.js";
@@ -54,7 +52,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import { generateAgentTitle, titleSubagent } from "./title.js";
+import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -71,10 +69,11 @@ import { CODER_TOOL } from "./tool-set.js";
  * with no ask record: a message to a coding agent is written as a line
  * awaiting its turn by the message route, and the relay takes that line
  * into the turn that receives it, so nothing needs binding here. The
- * agent's title is the host's one model call of its own: generated from the
- * plan as the agent's first session starts, written where no title stands
- * yet, and never again, so a name the developer gives is the last word; each
- * worker is named by the same call over the task its delegation handed it.
+ * agent's title is the host's one model call of its own: generated from its
+ * first exchange as one of its first turns ends, written where no title
+ * stands yet, and never again, so a name the developer gives is the last
+ * word; each worker is named by the same call over the task its delegation
+ * handed it.
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
@@ -124,6 +123,14 @@ export interface CoderHost {
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
+  /**
+   * The admission the session's sandbox takes as it opens, claiming the
+   * record as the start does: eve stages a message's files in the sandbox
+   * before the turn opens, so an opening message that carries files opens
+   * the sandbox ahead of `session.started`, when nothing has claimed the
+   * record yet. A session that cannot claim it is refused as `admit` refuses.
+   */
+  admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The admission a worker's resolvers take, on reach alone: eve hands a resolver no lineage, and the child's id is no record's. */
   admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
@@ -195,8 +202,8 @@ export interface CoderHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
-  /** The agent's title generated from its plan and written where none stands, for the first session of the conversation alone; a later session, a failed call, and a title already standing each leave the row as it is. */
-  title(starting: AdmittedConversation): HostEffect<void>;
+  /** The agent's title generated from its first exchange as one of its first turns ends, written where none stands; a later turn, a failed or empty answer, and a title already standing each leave the row as it is. */
+  title(admitted: AdmittedConversation): HostEffect<void>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
   delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
   /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
@@ -331,6 +338,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
     admitStarting: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
+    admitSandbox: (auth, sessionId) =>
+      Effect.gen(function* () {
+        const starting = yield* admitConversation(auth, {
+          id: sessionId,
+          standing: SESSION_STANDING.CLAIMING,
+        });
+        if (Result.isFailure(starting)) return starting;
+        yield* claimRuntimeSession(starting.success.target, sessionId, new Date(seams.now()));
+        return yield* admitConversation(auth, {
+          id: sessionId,
+          standing: SESSION_STANDING.CURRENT,
+        });
+      }),
     admitDelegated: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.DELEGATED }),
 
@@ -460,23 +480,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
       ),
 
-    title: (starting) =>
+    title: (admitted) =>
       Effect.gen(function* () {
-        // A session the conversation already ran one before is a restart, not the agent's start.
-        if (starting.runtimeSessionId !== undefined) return;
         const model = seams.titleModel();
         if (model === undefined) return;
-        const found = yield* agentOf(starting);
+        const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return;
-        const agent = found.success;
-        const plan = yield* readPlan(starting.caller, agent.planId);
-        if (Option.isNone(plan)) return;
-        const title = yield* generateAgentTitle(model, {
-          planName: plan.value.plan.name,
-          handed: agent.task ?? agent.planSnapshot ?? "",
-        });
-        if (Option.isNone(title)) return;
-        yield* fillCodingAgentTitle(starting.target.userId, agent.id, title.value);
+        yield* titleCodingAgent(model, admitted.target, found.success);
       }),
 
     delegationTitle: (admitted, callId, task) =>

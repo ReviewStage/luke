@@ -9,6 +9,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { captionStripProps } from "#testing/captions";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl, usedPlan } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB } from "../panel-tabs";
@@ -215,6 +216,7 @@ function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): Re
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps(),
   });
@@ -440,6 +442,33 @@ test("folding the sidebar glides the plan's title, while dragging the sidebar's 
 
   press(page, '[aria-label="Hide sidebar"]');
   assert.ok(animating(title));
+});
+
+test("a panel opened over a column it leaves too narrow for the pinned summary glides the document as the summary folds to its rail", () => {
+  motion(MOTION.ON);
+  // The column is 1200 wide beside a shut panel and 800 beside an open one,
+  // and the document stands left of the pinned summary or of the rail.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const open = document.querySelector(".side-panel:not([data-leaving])") !== null;
+    if (this.classList.contains("desktop-plan-main")) {
+      return DOMRect.fromRect({ width: open ? 800 : 1200 });
+    }
+    if (!this.classList.contains("plan-body")) return DOMRect.fromRect();
+    const rail = document.querySelector('.plan-summary[data-mode="rail"]') !== null;
+    return DOMRect.fromRect({ x: rail ? 400 : 300, width: 720 });
+  });
+  const page = show();
+  const body = find(page, ".desktop-document .plan-body");
+  press(page, '[aria-label="Show panel"]');
+  finishAll();
+
+  // The column reports its new width once it is laid out, after the panel's own commit.
+  act(() => relayout());
+
+  assert.equal(find(page, ".plan-summary").getAttribute("data-mode"), "rail");
+  assert.deepEqual(startOf(body), { transform: "translateX(-100px)" });
 });
 
 test("under reduced motion folding the sidebar moves the plan's title at once", () => {

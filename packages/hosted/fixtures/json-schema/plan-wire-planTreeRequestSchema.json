@@ -4,6 +4,9 @@
     "path": {
       "type": "string",
       "maxLength": 1024
+    },
+    "recursive": {
+      "type": "boolean"
     }
   },
   "required": [

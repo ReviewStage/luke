@@ -16,6 +16,7 @@ import { childConversationId } from "./brain-host/ids.js";
 import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { conversationOwnerOf } from "./brain-host/recorded-session.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
+import { subagentModelsByCall } from "./child-models.js";
 import { childTitlesByCall } from "./child-titles.js";
 import { type PlanStoreEffect, readPlan } from "./plan-store.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
@@ -57,7 +58,7 @@ const workerJournalsOf = Effect.fnUntraced(function* (userId: string, conversati
   return read.ok ? read.value.map((row) => row.message) : [];
 });
 
-/** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one, or nothing where the turn wrote none or it does not read. */
+/** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one and the model each ran on, or nothing where the turn wrote none or it does not read. */
 const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
   const read = yield* readMessageByClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
   const message = read.ok ? read.value[0]?.message : undefined;
@@ -76,7 +77,8 @@ const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnR
   }
   const parent = { userId, conversationId: turn.conversationId };
   const titles = yield* childTitlesByCall(parent, children);
-  return { turn, message, subagents, titles };
+  const models = yield* subagentModelsByCall(userId, subagents);
+  return { turn, message, subagents, titles, models };
 });
 
 /** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first. */
@@ -141,7 +143,7 @@ export function readPlanWork(
     const oldest = page.turns[0];
     return Option.some({
       turns: journaled.map((each) =>
-        planWorkOf(each.turn, each.message, each.subagents, each.titles),
+        planWorkOf(each.turn, each.message, each.subagents, each.titles, each.models),
       ),
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
       ...(code === undefined ? undefined : { code }),

@@ -163,6 +163,7 @@ function Window({
     plans,
     history,
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps({ view, onViewChange: setView }),
   });

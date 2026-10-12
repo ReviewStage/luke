@@ -261,6 +261,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       window.sidecar.onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
         else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
+        else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
+          drive(orchestrator.toggleMicrophone());
         else if (command === VOICE_COMMAND.MUTE_SPEAKER) drive(orchestrator.muteSpeaker(true));
         else if (command === VOICE_COMMAND.UNMUTE_SPEAKER) drive(orchestrator.muteSpeaker(false));
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {

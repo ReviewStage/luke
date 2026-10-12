@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { highlightSnippet } from "@sidecar/host";
-import { BrowserWindow, clipboard, ipcMain } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -29,7 +29,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
   const { launch } = config;
-  const { panels, voiceWindow, hotkeys } = windows;
+  const { panels, voiceWindow, callWindow, hotkeys } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -40,6 +40,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
+    callWindow,
     state,
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
@@ -72,6 +73,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
       openExternal: config.openExternal,
+      saveFile: async (sender, name, text) => {
+        const window = BrowserWindow.fromWebContents(sender);
+        const options = { defaultPath: name };
+        const chosen = await (window === null
+          ? dialog.showSaveDialog(options)
+          : dialog.showSaveDialog(window, options));
+        if (chosen.canceled || chosen.filePath === undefined) return false;
+        await fs.promises.writeFile(chosen.filePath, text, "utf8");
+        return true;
+      },
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({
@@ -131,6 +142,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
+      call: callWindow.owns(sender),
     }),
     router: createActRouter(rows),
     run,

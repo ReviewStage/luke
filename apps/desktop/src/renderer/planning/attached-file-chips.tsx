@@ -1,41 +1,34 @@
-import {
-  base64Bytes,
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-} from "@sidecar/hosted/coding-agent-wire";
-import { DocumentIcon, RemoveIcon } from "@sidecar/panel";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import { RemoveIcon } from "@sidecar/panel";
 import { isRecord, isWireString } from "@sidecar/wire";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import {
+  ATTACHMENT_VIEW,
+  attachmentView,
+  chipBase64,
+  type FileChip,
+  sizeLabel,
+} from "./attachment-model";
+import { AttachmentViewer } from "./attachment-viewer";
+import { FileTypeIcon } from "./file-type-icon";
 
 /**
  * attached-file-chips.tsx -- the files on a message as a row of chips: in the message box, each with its way off, and over the developer's bubble in the transcript.
  *
- * An image is its thumbnail; any other file is a document glyph, its name,
- * and its size, as every chat draws one. Both read the file's bytes from a
- * `data:` URL, the one the message box made or the one the service kept on
- * the developer's row, so a transcript read back after a restart draws the
- * same row. A file the service kept no bytes of, one eve staged in the
- * sandbox before the row was written, is drawn by its name alone.
+ * An image is its thumbnail; any other file is its type's icon as the file
+ * tree draws it (`file-type-icon.tsx`), its name, and its size, as every
+ * chat draws one. Both read the file's bytes from a `data:` URL, the one the
+ * message box made or the one the service kept on the developer's row, so a
+ * transcript read back after a restart draws the same row. A press on a chip
+ * opens its file over the window (`attachment-viewer.tsx`), walking the
+ * message's files from there; a chip's way off in the box takes it off
+ * without opening it. A file the service kept no bytes of, one eve staged
+ * in the sandbox before the row was written, is drawn by its name alone,
+ * with nothing to open and nothing to walk to.
  */
-
-/** One file as a chip draws it: its name, its type, and its bytes as a `data:` URL, empty where there are none. */
-export interface FileChip {
-  readonly name: string;
-  readonly mediaType: string;
-  readonly url: string;
-}
 
 /** How the AI SDK spells a file part's type. */
 const FILE_PART = "file";
-
-const KILOBYTE = 1_000;
-const MEGABYTE = 1_000_000;
-
-/** A size as a chip says it: kilobytes up to a megabyte, then megabytes to one place. */
-function sizeLabel(bytes: number): string {
-  if (bytes < MEGABYTE) return `${String(Math.max(1, Math.round(bytes / KILOBYTE)))} KB`;
-  return `${(bytes / MEGABYTE).toFixed(1)} MB`;
-}
 
 /** The files the message box holds, as chips. */
 export function attachmentChips(attachments: readonly CodingAgentAttachment[]): FileChip[] {
@@ -61,6 +54,21 @@ export function messageFileChips(message: CodingAgentMessage): FileChip[] {
   );
 }
 
+/** What a chip shows: an image's thumbnail, or any other file's icon, name, and size where it has bytes. */
+function ChipFace({ file }: { file: FileChip }): React.JSX.Element {
+  const base64 = chipBase64(file);
+  if (base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
+    return <img src={file.url} alt={file.name} />;
+  }
+  return (
+    <>
+      <FileTypeIcon name={file.name} />
+      <span className="attached-file-name">{file.name}</span>
+      {base64 === "" ? null : <span className="attached-file-size">{sizeLabel(base64)}</span>}
+    </>
+  );
+}
+
 export function AttachedFileChips({
   files,
   onRemove,
@@ -69,40 +77,48 @@ export function AttachedFileChips({
   /** Takes one file off the message, by its place; nothing in the transcript, whose files are sent. */
   onRemove?: ((index: number) => void) | undefined;
 }): ReactNode {
+  // The file open over the window, by its place among those that carry bytes.
+  const [viewing, setViewing] = useState<number | undefined>(undefined);
   if (files.length === 0) return null;
+  const openable = files.filter((file) => chipBase64(file) !== "");
   return (
     <ul className="attached-files" aria-label="Attached files">
-      {files.map((file, index) => {
-        const base64 = file.url.startsWith("data:")
-          ? file.url.slice(file.url.indexOf(",") + 1)
-          : "";
-        const image = file.mediaType.startsWith("image/") && base64 !== "";
-        return (
-          <li key={`${String(index)}-${file.name}`} className="attached-file" title={file.name}>
-            {image ? (
-              <img src={file.url} alt={file.name} />
-            ) : (
-              <>
-                <DocumentIcon />
-                <span className="attached-file-name">{file.name}</span>
-                {base64 === "" ? null : (
-                  <span className="attached-file-size">{sizeLabel(base64Bytes(base64))}</span>
-                )}
-              </>
-            )}
-            {onRemove === undefined ? null : (
-              <button
-                type="button"
-                className="attached-file-remove"
-                aria-label={`Remove ${file.name}`}
-                onClick={() => onRemove(index)}
-              >
-                <RemoveIcon />
-              </button>
-            )}
-          </li>
-        );
-      })}
+      {files.map((file, index) => (
+        <li key={`${String(index)}-${file.name}`} className="attached-file" title={file.name}>
+          {chipBase64(file) === "" ? (
+            <span className="attached-file-face">
+              <ChipFace file={file} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="attached-file-face"
+              aria-label={`Open ${file.name}`}
+              onClick={() => setViewing(openable.indexOf(file))}
+            >
+              <ChipFace file={file} />
+            </button>
+          )}
+          {onRemove === undefined ? null : (
+            <button
+              type="button"
+              className="attached-file-remove"
+              aria-label={`Remove ${file.name}`}
+              onClick={() => onRemove(index)}
+            >
+              <RemoveIcon />
+            </button>
+          )}
+        </li>
+      ))}
+      {viewing === undefined ? null : (
+        <AttachmentViewer
+          files={openable}
+          at={viewing}
+          onAt={setViewing}
+          onClose={() => setViewing(undefined)}
+        />
+      )}
     </ul>
   );
 }

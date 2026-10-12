@@ -21,7 +21,9 @@ import { planUnits } from "./plan-reveal";
  * is compared with: a unit only one of them holds is drawn added or struck
  * whole, and a unit both hold that differs is drawn with its words written
  * in and struck out where they changed, word by word (`plan-diff.ts`). The
- * assumptions are compared as a list. Everything here is pure.
+ * assumptions are compared as a list. A section's "Edited by" names the
+ * save that last changed it, which is found as the revision it moved on.
+ * Everything here is pure.
  */
 
 /** How a unit or an assumption of a version stands against the plan it is compared with. */
@@ -91,19 +93,31 @@ export function revisionSummary(line: PlanRevisionLine): string {
   return line.changes === 1 ? "1 change" : `${line.changes} changes`;
 }
 
-/** A rule's heading, whose number moves when a rule before it comes or goes. */
-const RULE_HEADING = /^### Rule \d+: /u;
-
 /**
- * A unit's key: its first line, which is its heading, or the plan's title
- * for the first. A rule is known by its statement rather than its number,
- * so a rule struck before others strikes that rule, and the rules after it
- * read as renumbered rather than rewritten.
+ * The revision that made the save at `at`, among revisions read newest
+ * first: the oldest whose latest save is at or after it. A save moves its
+ * revision's latest save on to its own moment or just past it, and every
+ * revision older than that one last moved before the save, so the first
+ * revision older than the save stands just past the one that made it.
+ * Nothing where every revision read is at or after the save and an older
+ * page is still to be read (`complete` false), since the one that made it
+ * may stand there; the oldest where none is.
  */
+export function revisionOfSave(
+  revisions: readonly PlanRevisionLine[],
+  at: number,
+  complete: boolean,
+): number | undefined {
+  const before = revisions.findIndex((line) => line.lastEdit.at < at);
+  if (before === -1) return complete ? revisions.at(-1)?.seq : undefined;
+  // A save newer than the newest revision is the newest's, as close as the history comes.
+  return (revisions[before - 1] ?? revisions[before])?.seq;
+}
+
+/** A unit's key: its first line, which is its heading, or the plan's title for the first. */
 function unitKey(words: string): string {
   const end = words.indexOf("\n");
-  const heading = end === -1 ? words : words.slice(0, end);
-  return heading.replace(RULE_HEADING, "### Rule: ");
+  return end === -1 ? words : words.slice(0, end);
 }
 
 /** A space between two words that changed, which a reader takes as part of the change around it. */
@@ -202,8 +216,8 @@ function loneUnit(
 /**
  * The units of the version shown against the base's, in reading order. The
  * units are lined up by their headings; a run struck and the run written in
- * its place are paired one for one, so a rule whose statement was reworded
- * reads as one rule changed rather than one gone and one new.
+ * its place are paired one for one, so a section that took another's place
+ * reads as one unit changed rather than one gone and one new.
  */
 function unitsAgainst(base: readonly string[], shown: readonly string[]): VersionUnit[] {
   const runs = diffArrays(base.map(unitKey), shown.map(unitKey));

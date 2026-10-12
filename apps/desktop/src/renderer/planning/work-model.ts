@@ -1,3 +1,4 @@
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
@@ -8,6 +9,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -29,7 +31,8 @@ import {
  * they are, reasoning only where it has any, each call named by its kind
  * (`turn-rows.ts`) with the one input a reader looks for first set apart
  * as its subject, and a worker on its own row, never in a group, because
- * it runs on after its call. The rows those blocks fold into are
+ * it runs on after its call. A stop names the subagent it stopped by that
+ * subagent's job, wherever among the turns its start stands. The rows those blocks fold into are
  * `turn-rows.ts`'s, the same an agent's tab folds its turns into.
  */
 
@@ -55,6 +58,8 @@ export interface WorkCallRow {
   running: boolean;
   input: ToolBlock;
   output?: string;
+  /** For a call that started a coding agent, the agent it started, which its row opens; absent before the start answered, for a start refused, and for any other call. */
+  agent?: string;
 }
 
 export type WorkBlock =
@@ -72,11 +77,12 @@ export type WorkBlock =
 
 export type WorkWorkerBlock = Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
 
-/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, and its title, where the service said. */
+/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, its title, and the catalog id of the model it ran on, where the service said. */
 interface WorkSessionRow {
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
   title?: string;
+  model?: string;
   startedAt?: number;
   endedAt?: number;
 }
@@ -114,7 +120,7 @@ const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.OTHER]: CALL_KIND.OTHER,
 } as const satisfies Record<PlanWorkTool, CallKind>;
 
-/** How the fold reads a block: a worker on a row of its own, every other call grouped. */
+/** How the fold reads a block: a worker on a row of its own, every other call grouped, a start that began a coding agent counted apart. */
 const WORK_READING: RowReading<WorkBlock> = {
   key: (block, index) =>
     block.kind === WORK_BLOCK.CALL || block.kind === WORK_BLOCK.WORKER
@@ -127,7 +133,7 @@ const WORK_READING: RowReading<WorkBlock> = {
       case WORK_BLOCK.REASONING:
         return ROW_PART.NOTE;
       case WORK_BLOCK.CALL:
-        return ROW_PART.CALL;
+        return block.call.agent === undefined ? ROW_PART.CALL : ROW_PART.CODING_AGENT;
       case WORK_BLOCK.WORKER:
         return ROW_PART.SUBAGENT;
     }
@@ -140,6 +146,15 @@ const WORK_READING: RowReading<WorkBlock> = {
 export function workerJob(call: WorkCallRow): string {
   const job = cardTitle(call.subject ?? "");
   return job === "" ? CALL_WORDS[call.kind].verb : job;
+}
+
+/** The effort a worker's pair says: none, because the planning model's turns record none, which the label leaves unsaid. */
+const UNRECORDED_EFFORT = "";
+
+/** What a subagent runs on, as its row and its tab's card name it, an agent's subagent alike: the model its session ran on; none where the service named none. */
+export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
+  const model = worker.session?.model;
+  return model === undefined ? undefined : { model, effort: UNRECORDED_EFFORT };
 }
 
 /**
@@ -173,8 +188,19 @@ export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined):
   );
 }
 
+/** What a coding agent's start answers, read for the one field that says it began one: the agent it started. */
+const decodeStartedAgent = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ agent: Schema.Struct({ id: Schema.String }) })),
+);
+
+/** The agent a call started, read off its answer; nothing for any other call, or a start refused, which answers no agent. */
+function startedAgentOf(kind: CallKind, output: string | undefined): string | undefined {
+  if (kind !== CALL_KIND.START_AGENT || output === undefined) return undefined;
+  return Option.getOrUndefined(Option.map(decodeStartedAgent(output), (answer) => answer.agent.id));
+}
+
 /** The fields of a call's input the tab reads apart from the rest. */
-const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message" } as const;
+const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message", TASK: "taskId" } as const;
 
 type InputField = (typeof INPUT_FIELD)[keyof typeof INPUT_FIELD];
 
@@ -204,17 +230,26 @@ function inputBlock(kind: CallKind, input: string): ToolBlock {
     : { kind: TOOL_BLOCK.COMMAND, text: command };
 }
 
+/** The job of each subagent the turns started, by eve's id for its task, as its line names it; the first call naming a task is its start. */
+type JobsByTask = ReadonlyMap<string, string>;
+
 function callRowOf(
   part: Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>,
   moving: boolean,
+  jobs: JobsByTask,
 ): WorkCallRow {
   const kind = CALL_KIND_OF_TOOL[part.tool];
+  const stopped =
+    part.tool === PLAN_WORK_TOOL.WORKER_CANCEL && part.task !== undefined
+      ? jobs.get(part.task)
+      : undefined;
   const subject =
     part.tool === PLAN_WORK_TOOL.OTHER
       ? part.name
       : kind === CALL_KIND.WEB_PAGE && part.subject !== undefined
         ? pageName(part.subject)
-        : part.subject;
+        : (stopped ?? part.subject);
+  const agent = startedAgentOf(kind, part.output);
   return {
     id: part.id,
     kind,
@@ -223,6 +258,7 @@ function callRowOf(
     running: moving && part.state === PLAN_WORK_STATE.RUNNING,
     input: inputBlock(kind, part.input),
     ...(part.output === undefined ? undefined : { output: part.output }),
+    ...(agent === undefined ? undefined : { agent }),
   };
 }
 
@@ -238,13 +274,14 @@ function rowsOf(
   moving: boolean,
   done: boolean,
   grouped: boolean,
+  jobs: JobsByTask,
 ): readonly TurnRow<WorkBlock>[] {
   const blocks: WorkBlock[] = parts.map((part) => {
     if (part.type === PLAN_WORK_PART.TEXT) return { kind: WORK_BLOCK.TEXT, text: part.text };
     if (part.type === PLAN_WORK_PART.REASONING) {
       return { kind: WORK_BLOCK.REASONING, text: part.text };
     }
-    const call = callRowOf(part, moving);
+    const call = callRowOf(part, moving, jobs);
     if (part.tool !== PLAN_WORK_TOOL.WORKER) return { kind: WORK_BLOCK.CALL, call };
     return {
       kind: WORK_BLOCK.WORKER,
@@ -255,7 +292,7 @@ function rowsOf(
         : {
             session: {
               earlierOmitted: part.session.earlierOmitted,
-              rows: rowsOf(part.session.parts, part.id, call.running, false, false),
+              rows: rowsOf(part.session.parts, part.id, call.running, false, false, jobs),
               ...(part.session.startedAt === undefined
                 ? undefined
                 : { startedAt: part.session.startedAt }),
@@ -263,11 +300,28 @@ function rowsOf(
                 ? undefined
                 : { endedAt: part.session.endedAt }),
               ...(part.session.title === undefined ? undefined : { title: part.session.title }),
+              ...(part.session.model === undefined ? undefined : { model: part.session.model }),
             },
           }),
     };
   });
   return turnRows(blocks, WORK_READING, { key, moving, done, grouped });
+}
+
+/**
+ * The job of each subagent the turns started, by its task, so a stop in a
+ * later turn still names it. Note that only a start names a task's job,
+ * never a call that sent the task more work, whose message is no job of the
+ * subagent's, so a task whose start is on a page not read names none.
+ */
+function jobsOf(turns: readonly PlanWorkTurn[]): JobsByTask {
+  const jobs = new Map<string, string>();
+  for (const part of turns.flatMap((turn) => turn.parts)) {
+    if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) continue;
+    if (part.task === undefined || inputField(part.input, INPUT_FIELD.TASK) !== undefined) continue;
+    jobs.set(part.task, workerJob(callRowOf(part, false, jobs)));
+  }
+  return jobs;
 }
 
 /**
@@ -279,6 +333,7 @@ export function workRowsOf(
   turns: readonly PlanWorkTurn[] | undefined,
   callLive: boolean,
 ): readonly WorkTurnRow[] {
+  const jobs = jobsOf(turns ?? []);
   return (turns ?? []).map((turn) => {
     const moving = callLive && turn.state === PLAN_WORK_STATE.RUNNING;
     const left = turn.state === PLAN_WORK_STATE.RUNNING && !moving;
@@ -288,7 +343,14 @@ export function workRowsOf(
       ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
-      rows: rowsOf(turn.parts, turn.turnId, moving, turn.state === PLAN_WORK_STATE.DONE, true),
+      rows: rowsOf(
+        turn.parts,
+        turn.turnId,
+        moving,
+        turn.state === PLAN_WORK_STATE.DONE,
+        true,
+        jobs,
+      ),
     };
   });
 }

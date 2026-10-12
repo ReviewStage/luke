@@ -137,7 +137,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
           const { scribe } = yield* scribeFor(userId, planId, [
-            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
           ]);
 
           scribe.observe(said("What's the problem today?", 0, 1_200));
@@ -159,8 +159,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
           const { scribe } = yield* scribeFor(userId, planId, [
-            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
-            { notes: [added(PLAN_FIELD.OUTCOME, OUTCOME)] },
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
+            { notes: [added(PLAN_FIELD.GOAL, OUTCOME)] },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_500));
@@ -195,7 +195,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
             {
               paced: {
                 notes: [
-                  { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "an owner" },
+                  { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find, text: "an owner" },
                 ],
               },
             },
@@ -209,7 +209,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           );
           // The plan is written while the notetaker's answer is still streaming.
           yield* saveNotes({ userId, planId }, [
-            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "a manager" },
+            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find, text: "a manager" },
           ]);
           const written = yield* readPlan(userId, planId);
           while (pace()) yield* settle;
@@ -232,7 +232,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const { userId, planId } = yield* openDraftedPlan;
           const read = Option.getOrThrow(yield* readPlan(userId, planId));
           const { scribe, drafts } = yield* scribeFor(userId, planId, [
-            { notes: [added(PLAN_FIELD.OUTCOME, `- ${OUTCOME}`)] },
+            { notes: [added(PLAN_FIELD.GOAL, `- ${OUTCOME}`)] },
           ]);
 
           scribe.observe(heard("Members should invite by email.", 0, 1_500));
@@ -247,9 +247,9 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           assert.deepEqual(saved?.fields, stored.fields);
           assert.deepEqual(saved?.fieldEdits, stored.plan.fieldEdits);
           assert.deepEqual(
-            saved?.fieldEdits?.find((edit) => edit.field === PLAN_FIELD.OUTCOME),
+            saved?.fieldEdits?.find((edit) => edit.field === PLAN_FIELD.GOAL),
             {
-              field: PLAN_FIELD.OUTCOME,
+              field: PLAN_FIELD.GOAL,
               actor: PLAN_ACTOR.NOTETAKER,
               at: saved?.savedAt,
               duringCall: true,
@@ -264,7 +264,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe } = yield* scribeFor(userId, planId, [
-          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+          { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
         ]);
 
         scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
@@ -307,8 +307,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe } = yield* scribeFor(userId, planId, [
-          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
-          { notes: [added(PLAN_FIELD.OUTCOME, OUTCOME)] },
+          { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
+          { notes: [added(PLAN_FIELD.GOAL, OUTCOME)] },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -335,16 +335,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const { userId, planId } = yield* openPlan;
           const corrected = "Only an owner can add someone to a workspace.";
           const { scribe } = yield* scribeFor(userId, planId, [
-            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
             {
               notes: [
                 {
                   kind: NOTE_KIND.REPLACE,
-                  field: PLAN_FIELD.PROBLEM,
+                  field: PLAN_FIELD.CONTEXT,
                   find: "an admin",
                   text: "an owner",
                 },
-                added(PLAN_FIELD.OUTCOME, OUTCOME),
+                added(PLAN_FIELD.GOAL, OUTCOME),
               ],
             },
           ]);
@@ -359,7 +359,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
           assert.ok(body.includes(OUTCOME));
-          assert.ok(body.includes(`### Problem\n\n${corrected}\n`));
+          assert.ok(body.includes(`## Context\n\n${corrected}\n`));
         }),
       ),
   );
@@ -372,7 +372,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const { userId, planId } = yield* openPlan;
           const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
             new Error("the provider is unavailable"),
-            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -403,7 +403,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
           const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [
-            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM), added(PLAN_FIELD.OUTCOME, OUTCOME)] },
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM), added(PLAN_FIELD.GOAL, OUTCOME)] },
           ]);
 
           scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
@@ -440,7 +440,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const { scribe, drafts, reports } = yield* scribeFor(userId, planId, [
           {
             brokenAfter: {
-              notes: [added(PLAN_FIELD.PROBLEM, PROBLEM), added(PLAN_FIELD.OUTCOME, OUTCOME)],
+              notes: [added(PLAN_FIELD.CONTEXT, PROBLEM), added(PLAN_FIELD.GOAL, OUTCOME)],
             },
           },
         ]);
@@ -464,7 +464,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe, writing } = yield* scribeFor(userId, planId, [
-          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+          { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -526,20 +526,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const stored = yield* savedBody(userId, planId);
           const find = "an admin";
           const notes: readonly PlanNote[] = [
-            added(PLAN_FIELD.PROBLEM, "- Invites sent by hand are lost in email threads."),
-            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "an owner" },
+            added(PLAN_FIELD.CONTEXT, "- Invites sent by hand are lost in email threads."),
+            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find, text: "an owner" },
             added(
-              PLAN_FIELD.OUTCOME,
+              PLAN_FIELD.GOAL,
               "Members invite teammates themselves, and each invite is tracked until accepted.",
             ),
-            {
-              kind: NOTE_KIND.ADD_EXAMPLE,
-              rule: 2,
-              given: "An invite withdrawn by its sender",
-              when: "the teammate opens its link",
-              // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-              then: "the link says the invite is no longer valid", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-            },
+            added(
+              PLAN_FIELD.TESTING,
+              "- When the teammate opens the link of an invite its sender withdrew, then the link says the invite is no longer valid.",
+            ),
             added(PLAN_FIELD.OPEN_QUESTIONS, "How long does an invite link stay valid?"),
           ];
           const { scribe, asked, pace, drafts } = yield* scribeFor(userId, planId, [
@@ -595,11 +591,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
               notes: [
                 {
                   kind: NOTE_KIND.REPLACE,
-                  field: PLAN_FIELD.PROBLEM,
+                  field: PLAN_FIELD.CONTEXT,
                   find: "a phrase nobody said",
                   text: "Everything.",
                 },
-                added(PLAN_FIELD.OUTCOME, OUTCOME),
+                added(PLAN_FIELD.GOAL, OUTCOME),
               ],
             },
           ]);
@@ -609,10 +605,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
           assert.ok(body.includes(OUTCOME));
-          assert.ok(body.includes(INVITATIONS_DRAFT.fields.goal.problem ?? "?"));
+          assert.ok(body.includes(INVITATIONS_DRAFT.fields.context ?? "?"));
           assert.ok(!body.includes("Everything."));
           assert.deepEqual(reports, [
-            "The plan's notetaker named what the plan does not hold: replace problem",
+            "The plan's notetaker named what the plan does not hold: replace context",
           ]);
         }),
       ),
@@ -648,11 +644,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const { userId, planId } = yield* openDraftedPlan;
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire after 7 days." },
+          { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
         );
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.LEFT_TO_AGENT, base: null, value: "The email's wording." },
+          { field: PLAN_FIELD.INTERFACES, base: null, value: "None: no signature changes." },
         );
         const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
 
@@ -666,7 +662,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const lines = promptText(asked[0]).split("\n");
         assert.equal(
           lines[lines.indexOf("[fields the developer wrote]") + 1],
-          `${PLAN_FIELD.DECISIONS}, ${PLAN_FIELD.LEFT_TO_AGENT}`,
+          `${PLAN_FIELD.APPROACH}, ${PLAN_FIELD.INTERFACES}`,
         );
       }),
     ),

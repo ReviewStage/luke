@@ -3,18 +3,16 @@ import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
-import { PencilIcon, PlusIcon, RemoveIcon } from "@sidecar/panel";
+import { PencilIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { rendererRuntime } from "../renderer-runtime";
+import { RetryButton } from "../retry-button";
 import {
   CONFLICT_NOTE,
-  EDIT_DRAFT,
-  EDITOR_BOUNDS,
   type EditTarget,
-  type ExampleDraft,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
@@ -22,14 +20,12 @@ import {
   editorOpened,
   editorRefused,
   editorRetried,
-  editorRuleStruck,
   editorSent,
   editorTookLukes,
   editorTyped,
   FIELD_EDITOR_STATE,
   type FieldEditor,
   pendingSave,
-  type RuleDraft,
 } from "./plan-field-editor-model";
 
 /**
@@ -37,18 +33,16 @@ import {
  *
  * A field of the document opens in an editor on a click into its words, or
  * from its pencil, which is the keyboard's way in; the heading stays drawn
- * above it, since the formatter owns every heading. A text field, the open
- * questions, and the assumptions open in one text box (the lists one item
- * to a line); a rule opens as its statement and its examples, Given, When,
- * and Then, each its own input, with an example added or struck and the
- * rule struck by button. The words save a beat after the developer stops
+ * above it, since the formatter owns every heading. A section, the open
+ * questions, and the assumptions each open in one text box (the lists one
+ * item to a line). The words save a beat after the developer stops
  * typing and again as the editor closes, on Esc, ⌘↩, or focus leaving it,
  * and the editor waits for that save before it goes
  * (`plan-field-editor-model.ts` decides every save). An editor stays where it
  * opened while it stands, even once its first save draws the field it edits
  * elsewhere in the document, so the inputs never move under the typing. The
- * inputs are textareas and inputs, never `contenteditable`: the session
- * recording masks an input's value itself, and the editor stands under
+ * box is a textarea, never `contenteditable`: the session recording masks an
+ * input's value itself, and the editor stands under
  * `ph-no-capture` besides, so not even the rhythm of the typing is recorded.
  * Unsaved words live in this window's memory alone and are never written to
  * disk.
@@ -82,12 +76,10 @@ export interface FieldEditing {
   readonly host: EditorHost | undefined;
   readonly open: (target: EditTarget, host: EditorHost) => void;
   readonly typeText: (text: string) => void;
-  readonly typeRule: (rule: RuleDraft) => void;
   readonly close: () => void;
   readonly keepMine: () => void;
   readonly takeLukes: () => void;
   readonly retry: () => void;
-  readonly strikeRule: () => void;
 }
 
 /**
@@ -175,8 +167,7 @@ export function useFieldEditing(
       setEditor(editorOpened(target, content));
       setHost(where);
     },
-    typeText: (text) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.TEXT, text })),
-    typeRule: (rule) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.RULE, rule })),
+    typeText: (text) => changed((now) => editorTyped(now, text)),
     // The save starts with the close, not a render later, since the close may
     // be focus leaving for another plan that takes the document with it.
     close: () => {
@@ -192,19 +183,7 @@ export function useFieldEditing(
       latest.current = editorRetried(latest.current);
       send();
     },
-    strikeRule: () => {
-      if (latest.current === undefined) return;
-      latest.current = editorRuleStruck(latest.current);
-      setEditor(latest.current);
-      send();
-    },
   };
-}
-
-/** What an editor and its pencil call the field it edits, in the developer's words. */
-export function targetLabel(target: EditTarget, ruleCount: number): string {
-  if (target.field !== PLAN_FIELD.RULES) return PLAN_FIELD_HEADING[target.field];
-  return target.rule < ruleCount ? `Rule ${target.rule + 1}` : "New rule";
 }
 
 /** What stands under the inputs: Luke's change and the choice it asks, a failed save and its retry, or a save under way. */
@@ -232,9 +211,7 @@ function EditorNote({
     return (
       <div className="plan-field-note" role="alert">
         <span>{editor.state.note}</span>
-        <button type="button" className="toolbar-button" onClick={editing.retry}>
-          Try again
-        </button>
+        <RetryButton onRetry={editing.retry} />
       </div>
     );
   }
@@ -256,116 +233,21 @@ function placeholderOf(target: EditTarget): string {
   }
 }
 
-/** The clauses of an example, in the order the template writes them, each with its label. */
-const EXAMPLE_CLAUSES = [
-  { key: "given", label: "Given" },
-  { key: "when", label: "When" },
-  { key: "then", label: "Then" },
-] as const satisfies readonly { key: keyof ExampleDraft; label: string }[];
-
-/** An example with no clause written yet. */
-const EMPTY_EXAMPLE: ExampleDraft = {
-  given: "",
-  when: "",
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: "", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-};
-
-/** A rule's inputs: its statement, each example's clauses, and the buttons that add and strike. */
-function RuleFields({
-  rule,
-  label,
-  standing,
-  editing,
-}: {
-  rule: RuleDraft;
-  label: string;
-  standing: boolean;
-  editing: FieldEditing;
-}): React.JSX.Element {
-  const withExamples = (examples: readonly ExampleDraft[]) =>
-    editing.typeRule({ ...rule, examples });
-  return (
-    <div className="plan-rule-fields">
-      <input
-        className="plan-field-input plan-rule-statement"
-        value={rule.statement}
-        aria-label={`${label} statement`}
-        placeholder="One sentence that holds in every case"
-        maxLength={EDITOR_BOUNDS.RULE_CHARS}
-        // biome-ignore lint/a11y/noAutofocus: the developer asked for this rule's editor, so typing goes there.
-        autoFocus
-        onChange={(event) => editing.typeRule({ ...rule, statement: event.target.value })}
-      />
-      {rule.examples.map((example, index) => (
-        // An example has no id of its own: its place among the rule's examples is its identity while the editor stands.
-        // oxlint-disable-next-line react/no-array-index-key -- the draft's order is its identity.
-        <div className="plan-rule-example" key={index}>
-          {EXAMPLE_CLAUSES.map(({ key, label: clause }) => (
-            <input
-              key={key}
-              className="plan-field-input"
-              value={example[key]}
-              aria-label={`Example ${index + 1} ${clause}`}
-              placeholder={clause}
-              maxLength={EDITOR_BOUNDS.EXAMPLE_PART_CHARS}
-              onChange={(event) =>
-                withExamples(
-                  rule.examples.map((held, at) =>
-                    at === index ? { ...held, [key]: event.target.value } : held,
-                  ),
-                )
-              }
-            />
-          ))}
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={`Remove example ${index + 1}`}
-            onClick={() => withExamples(rule.examples.filter((_, at) => at !== index))}
-          >
-            <RemoveIcon />
-          </button>
-        </div>
-      ))}
-      <div className="plan-rule-actions">
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={() => withExamples([...rule.examples, EMPTY_EXAMPLE])}
-        >
-          Add example
-        </button>
-        {standing ? (
-          <button type="button" className="toolbar-button" onClick={editing.strikeRule}>
-            Delete rule
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /**
- * One field in its editor: the unit's heading drawn as it stands (a rule's
- * by its number, since its statement is being typed), the inputs, and what
- * stands under them. Focus leaving the editor closes it, unless it moved to
- * another of the editor's own inputs or buttons.
+ * One field in its editor: the section's heading drawn as it stands, the
+ * box, and what stands under it. Focus leaving the editor closes it, unless
+ * it moved to another of the editor's own buttons.
  */
 export function PlanFieldEditor({
   heading,
   editor,
-  ruleCount,
   editing,
 }: {
   heading: string | undefined;
   editor: FieldEditor;
-  ruleCount: number;
   editing: FieldEditing;
 }): React.JSX.Element {
-  const label = targetLabel(editor.target, ruleCount);
-  const { draft } = editor;
-  const standing = "rule" in editor.target && editor.target.rule < ruleCount;
+  const label = PLAN_FIELD_HEADING[editor.target.field];
   return (
     <section
       className="plan-field-editor ph-no-capture"
@@ -382,20 +264,16 @@ export function PlanFieldEditor({
       }}
     >
       {heading === undefined ? null : <MarkdownMessage words={heading} className="plan-unit" />}
-      {draft.kind === EDIT_DRAFT.RULE ? (
-        <RuleFields rule={draft.rule} label={label} standing={standing} editing={editing} />
-      ) : (
-        <textarea
-          className="plan-field-input"
-          value={draft.text}
-          aria-label={label}
-          placeholder={placeholderOf(editor.target)}
-          // biome-ignore lint/a11y/noAutofocus: the developer asked for this field's editor, so typing goes there.
-          autoFocus
-          spellCheck
-          onChange={(event) => editing.typeText(event.target.value)}
-        />
-      )}
+      <textarea
+        className="plan-field-input"
+        value={editor.draft}
+        aria-label={label}
+        placeholder={placeholderOf(editor.target)}
+        // biome-ignore lint/a11y/noAutofocus: the developer asked for this field's editor, so typing goes there.
+        autoFocus
+        spellCheck
+        onChange={(event) => editing.typeText(event.target.value)}
+      />
       <EditorNote editor={editor} editing={editing} />
     </section>
   );
@@ -411,20 +289,16 @@ function editsOnClick(target: EventTarget): boolean {
 /**
  * A unit the developer can edit, drawn as the document draws it, which opens
  * its editor on a click into its words that selects nothing, or from its
- * pencil, or, for a new rule, from its plus.
+ * pencil.
  */
 export function EditableUnit({
   target,
   host,
-  label,
-  adds,
   editing,
   children,
 }: {
   target: EditTarget;
   host: EditorHost;
-  label: string;
-  adds: boolean;
   editing: FieldEditing;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -441,13 +315,13 @@ export function EditableUnit({
       <button
         type="button"
         className="icon-button plan-unit-edit"
-        aria-label={adds ? "Add rule" : `Edit ${label}`}
+        aria-label={`Edit ${PLAN_FIELD_HEADING[target.field]}`}
         onClick={(event) => {
           event.stopPropagation();
           editing.open(target, host);
         }}
       >
-        {adds ? <PlusIcon /> : <PencilIcon />}
+        <PencilIcon />
       </button>
     </div>
   );

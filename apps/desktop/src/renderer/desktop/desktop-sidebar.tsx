@@ -21,6 +21,7 @@ import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { runAppCommand, useAppCommand } from "../app-commands";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
@@ -36,6 +37,7 @@ import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
+import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { updateInSidebar, updateRow } from "../update-row";
@@ -648,6 +650,7 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
+  call,
 }: {
   sidebar: SidebarCollapse;
   identity: LukeIdentityProps;
@@ -657,6 +660,8 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
+  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
+  call: CallCardInput | undefined;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const composing = onPlans && plans.page === PLANS_PAGE.NEW;
@@ -789,12 +794,10 @@ export function DesktopSidebar({
             own; its name is for a screen reader alone. */}
         <nav className="sidebar-group" aria-label="Plans">
           {plans.listFailed ? (
-            <p className="sidebar-note" role="alert">
-              Your plans could not be read.{" "}
-              <button type="button" className="link-button" onClick={plans.onRetryList}>
-                Try again
-              </button>
-            </p>
+            <div className="sidebar-note sidebar-failure" role="alert">
+              <p>Your plans couldn't be loaded.</p>
+              <RetryButton onRetry={plans.onRetryList} />
+            </div>
           ) : null}
           {plans.signedIn &&
           plans.plans.length === 0 &&
@@ -822,6 +825,7 @@ export function DesktopSidebar({
       </div>
 
       <div className="sidebar-foot">
+        <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
         <SidebarUpdate updates={updates} />
         <AccountButton
           account={account}

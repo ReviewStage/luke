@@ -109,6 +109,10 @@
           "dest": "/api/default.js?route=admin/users"
         },
         {
+          "src": "/api/dictation",
+          "dest": "/api/default.js?route=dictation"
+        },
+        {
           "src": "/api/events",
           "dest": "/api/default.js?route=events"
         },

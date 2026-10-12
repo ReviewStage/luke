@@ -4,7 +4,6 @@ import {
   type PlanFieldWriter,
   planAgentEditSchema,
   planBody,
-  planBodyTidied,
   planFieldWriterSchema,
 } from "@sidecar/hosted/plan-template";
 import {
@@ -95,41 +94,58 @@ export interface PlanChanges {
   readonly archived?: boolean;
 }
 
-/** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
-const PLAN_COLUMNS = {
+/**
+ * The columns a line of the list reads: none of the document. Note that the
+ * list projects these alone, because a migration that reshapes the document
+ * lands before the build that reads the new shape is live, and a list that
+ * decoded the document would then refuse every plan rather than just the one
+ * opened.
+ */
+const PLAN_SUMMARY_COLUMNS = {
   id: plan.id,
-  userId: plan.userId,
   organizationId: plan.organizationId,
   name: plan.name,
+  repository: plan.repository,
+  pinnedAt: plan.pinnedAt,
+  archivedAt: plan.archivedAt,
+  createdAt: plan.createdAt,
+  updatedAt: plan.updatedAt,
+};
+
+/** The columns every other read and every `returning` projects, so a row decodes one way whatever wrote it. */
+const PLAN_COLUMNS = {
+  ...PLAN_SUMMARY_COLUMNS,
+  userId: plan.userId,
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
   agentEdits: plan.agentEdits,
   fieldWriters: plan.fieldWriters,
-  repository: plan.repository,
-  pinnedAt: plan.pinnedAt,
-  archivedAt: plan.archivedAt,
   conversationId: plan.conversationId,
-  createdAt: plan.createdAt,
-  updatedAt: plan.updatedAt,
 };
 
-const PlanRowSchema = Schema.Struct({
+const PlanSummaryRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.String,
   organizationId: Schema.String,
   name: Schema.String,
+  repository: Schema.NullOr(Schema.String),
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
+  createdAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+});
+
+type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
+
+const PlanRowSchema = Schema.Struct({
+  ...PlanSummaryRowSchema.fields,
+  userId: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
   fieldWriters: Schema.Array(planFieldWriterSchema),
-  repository: Schema.NullOr(Schema.String),
-  pinnedAt: Schema.NullOr(InstantColumnSchema),
-  archivedAt: Schema.NullOr(InstantColumnSchema),
   conversationId: Schema.NullOr(Schema.String),
-  createdAt: InstantColumnSchema,
-  updatedAt: InstantColumnSchema,
 });
 
 type PlanRow = typeof PlanRowSchema.Type;
@@ -200,16 +216,17 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 
 /**
  * The row's document, as the window and the model read it. Note that a plan
- * whose body is still empty, never saved or reset, reads as the untouched
- * template formatted here rather than stored, so it is always the current
- * template's. The row's own account is the one its agents are read under.
+ * whose body is still empty, never saved or carried onto a new template,
+ * reads as its fields formatted here rather than stored, so it is always the
+ * current template's. The row's own account is the one its agents are read under.
  * Its last edit is its newest revision, or, before its history begins, the
  * newest save a coding agent made; each field it has a writer for says who.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
+    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
+    const body = row.body === "" ? planBody({ name: summary.name }, fields) : row.body;
     const labels = yield* agentLabelsOf(row);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
@@ -218,7 +235,6 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
     const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
       Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
     );
-    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
     return {
       plan: {
         ...summary,
@@ -249,7 +265,7 @@ function planOf(row: PlanRow): PlanStoreEffect<Plan> {
  * v0.7.1 is no longer supported. A pin and an archive are answered only where
  * they stand, so a plan that is neither reads as every plan did before them.
  */
-function summaryOf(row: PlanRow): PlanSummary {
+function summaryOf(row: PlanSummaryRow): PlanSummary {
   const createdAt = row.createdAt.getTime();
   return {
     id: row.id,
@@ -290,10 +306,10 @@ const insertPlan = SqlSchema.findOne({
 
 const findPlans = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
-  Result: PlanRowSchema,
+  Result: PlanSummaryRowSchema,
   execute: ({ userId, includeArchived }) =>
     db
-      .select(PLAN_COLUMNS)
+      .select(PLAN_SUMMARY_COLUMNS)
       .from(plan)
       .where(and(planReachableBy(userId), includeArchived ? undefined : isNull(plan.archivedAt)))
       .orderBy(desc(plan.createdAt), desc(plan.id)),
@@ -588,7 +604,7 @@ export function savePlanDocument(
  */
 function retitledBody(row: PlanRow, name: string): string {
   if (row.body === "" || row.fields === null) return row.body;
-  if (planBodyTidied(row.body) !== planBody({ name: row.name }, row.fields)) return row.body;
+  if (row.body !== planBody({ name: row.name }, row.fields)) return row.body;
   const retitled = planBody({ name }, row.fields);
   return retitled.length > PLAN_BOUNDS.MAX_BODY_CHARS ? row.body : retitled;
 }

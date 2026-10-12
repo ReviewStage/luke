@@ -124,8 +124,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * default stands as it was. The same PATCH carrying a title instead renames
  * the agent, the one write of the title that covers whatever stands, and an
  * empty title clears it so the tab falls back to the model's name; the
- * title generated as the agent started lands only where none stands, so a
- * rename is never undone. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
+ * title generated from the agent's first exchange as a turn of its ends
+ * lands only where none stands, so a rename is never undone. A Stop
+ * (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
  * anything the agent pushed stays.
@@ -142,8 +143,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the
  * agent's; a read of an ended agent, or worker, with nothing new waits for a
- * title still due, since a short worker's lands after its agent ended and a
- * reader stops at that read.
+ * title still due, the agent's own or a worker's, since each can land after
+ * the turn ended and a reader stops at that read.
  */
 
 const AGENTS_PATH = {
@@ -245,10 +246,10 @@ const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * What a read of an ended agent, or of its worker, waits on for a worker's
- * title: the worker named, or any of the agent's where none is; nothing on
- * a deployment that generates no titles, which is one without Luke's
- * Anthropic key, the title model's (`coder-host/model.ts`).
+ * What a read of an ended agent, or of its worker, waits on for a title:
+ * the worker named, or the agent's own or any of its workers' where none
+ * is; nothing on a deployment that generates no titles, which is one
+ * without Luke's Anthropic key, the title model's (`coder-host/model.ts`).
  */
 const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   parent: ConversationTarget,
@@ -338,11 +339,10 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { idempotencyKey, model, effort, contextWindow, task, attachments } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
-  // and a window without them is a window of no model; files go only with a task.
+  // and a window without them is a window of no model.
   if (
     (model === undefined) !== (effort === undefined) ||
-    (contextWindow !== undefined && model === undefined) ||
-    (attachments !== undefined && task === undefined)
+    (contextWindow !== undefined && model === undefined)
   ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -465,12 +465,17 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
     return yield* sendMessageEndpoint(seams, writer, request);
   }
   const after = yield* cursorOf(request);
-  const { agent, target } = yield* reachedAgent(seams, request);
+  const { userId, agent, target } = yield* reachedAgent(seams, request);
   const titleAwaited = yield* titleAwaitedOf(target);
   const page = yield* hostedStoreOrUnavailable(
     transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
   );
-  return transcriptResponse(page, agent.title);
+  // The title is read after the page, since it lands after a turn ends, which a held read may span.
+  const titled = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agent.id));
+  return transcriptResponse(
+    page,
+    Option.match(titled, { onNone: () => agent.title, onSome: (now) => now.title }),
+  );
 });
 
 /** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */

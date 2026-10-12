@@ -9,6 +9,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
+import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { CopyMessageAction } from "./copy-message";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
@@ -157,9 +158,7 @@ export function PlanTranscript({
               <p className="m-0" role="alert">
                 The transcript could not be read.
               </p>
-              <button type="button" className="toolbar-button" onClick={onRetry}>
-                Try again
-              </button>
+              <RetryButton onRetry={onRetry} />
             </>
           ) : null}
         </ConversationEmptyState>

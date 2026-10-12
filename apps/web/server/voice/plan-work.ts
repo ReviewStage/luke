@@ -1,4 +1,5 @@
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -78,6 +79,7 @@ const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWithdrawalInput = Schema.is(WITHDRAW_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
+const isCancelInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.TASK_CANCEL]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
@@ -218,6 +220,7 @@ function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolea
   const tool = TOOL_OF_NAME.get(name) ?? PLAN_WORK_TOOL.OTHER;
   const called = callStateOf(part, state);
   const subject = subjectOf(tool, part);
+  const task = taskOf(tool, part);
   const output = outputOf(tool, part);
   return {
     type: PLAN_WORK_PART.TOOL,
@@ -231,6 +234,7 @@ function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolea
     ...(subject === undefined
       ? undefined
       : { subject: cut(subject, PLAN_WORK_BOUNDS.SUBJECT_CHARS) }),
+    ...(task === undefined || task.length > PLAN_WORK_BOUNDS.NAME_CHARS ? undefined : { task }),
     input: inputOf(tool, part),
     ...(output === undefined ? undefined : { output: cut(output, PLAN_WORK_BOUNDS.TEXT_CHARS) }),
   };
@@ -309,6 +313,15 @@ function startedTaskOf(part: StoredToolPart): string | undefined {
   return STARTED_TASK.exec(part.output)?.[1];
 }
 
+/** The subagent task a call started, sent work to, or stopped; nothing for a call that touches no task, or a start that has not answered. */
+function taskOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined {
+  if (tool === PLAN_WORK_TOOL.WORKER_CANCEL) {
+    return isCancelInput(part.input) ? part.input.taskId : undefined;
+  }
+  if (tool !== PLAN_WORK_TOOL.WORKER) return undefined;
+  return sentTaskOf(part) ?? startedTaskOf(part);
+}
+
 /**
  * The worker calls of a journal that send work to a task the journal did not
  * start, whose start only the conversation's other journals hold: a worker
@@ -354,7 +367,10 @@ export function workerSessionCallsOf(
 }
 
 /** One of a subagent's turn journals as its session is read: the message, when it opened, and when it closed. */
-export type SubagentJournal = Pick<StoredMessageRecord, "message" | "createdAt" | "finishedAt">;
+export type SubagentJournal = Pick<
+  StoredMessageRecord,
+  "message" | "createdAt" | "finishedAt" | "turnId"
+>;
 
 /**
  * When a subagent's newest task began and ended, read off that task's
@@ -377,14 +393,17 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * them. A call that started a subagent carries the subagent's own session,
  * read from the journals of its child conversation (`subagents`, by the
  * call's id) and drawn by the same walk, its calls running while the
- * subagent does, with when its newest task began and ended, and its title
- * where one landed on that child (`titles`, by the call's id).
+ * subagent does, with when its newest task began and ended, its title
+ * where one landed on that child (`titles`, by the call's id), and the
+ * model its newest task ran on where its turn row named one (`models`, by
+ * the call's id, `hosted/child-models.ts`).
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
+  models: ReadonlyMap<string, string> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
@@ -392,12 +411,16 @@ export function planWorkOf(
     if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
     const messages = journals.map((each) => each.message);
     const title = titles.get(part.id);
+    const model = models.get(part.id);
     return {
       ...part,
       session: {
         ...newest(partsOf(messages, part.state)),
         ...sessionSpanOf(journals),
         ...(title === undefined ? undefined : { title }),
+        ...(model === undefined || model.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
+          ? undefined
+          : { model }),
       },
     };
   });

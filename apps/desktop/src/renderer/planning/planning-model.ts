@@ -498,25 +498,6 @@ export function callStatus(
   };
 }
 
-/** The statuses of a call still in progress, the ones a planning call holds the panel open through. */
-const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
-  LIVE_STATUS.CONNECTING,
-  LIVE_STATUS.MUTED,
-  LIVE_STATUS.LISTENING,
-  LIVE_STATUS.SPEAKING,
-]);
-
-/**
- * Whether a planning call is in progress: the developer is talking a plan
- * through and reading the document it writes. A call closing or failed is
- * not in progress.
- */
-export function planningCallInProgress(
-  view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
-): boolean {
-  return view.callPlanId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
-}
-
 /** What the microphone button does when pressed. */
 export const MICROPHONE_PRESS = {
   /** Nothing: voice cannot run, or no plan is open. */

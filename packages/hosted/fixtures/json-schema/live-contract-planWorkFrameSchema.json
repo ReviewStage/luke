@@ -129,6 +129,10 @@
                     "type": "string",
                     "maxLength": 300
                   },
+                  "task": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
                   "input": {
                     "type": "string",
                     "maxLength": 4000
@@ -237,6 +241,10 @@
                                   "type": "string",
                                   "maxLength": 300
                                 },
+                                "task": {
+                                  "type": "string",
+                                  "maxLength": 64
+                                },
                                 "input": {
                                   "type": "string",
                                   "maxLength": 4000
@@ -268,6 +276,10 @@
                       "title": {
                         "type": "string",
                         "maxLength": 80
+                      },
+                      "model": {
+                        "type": "string",
+                        "maxLength": 200
                       }
                     },
                     "required": [

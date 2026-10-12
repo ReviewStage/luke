@@ -40,13 +40,11 @@ const NAME = "Teammate invitations";
 
 const FIELDS: PlanFields = {
   ...EMPTY_PLAN_FIELDS,
-  goal: { problem: "- Only an admin can add a member.", outcome: "- Invites land by email." },
-  scope: { included: "- Email invites.", excluded: null, constraints: null },
-  rules: [
-    { statement: "An invite expires after 7 days.", examples: null },
-    { statement: "Only admins invite.", examples: null },
-  ],
-  decisions: "- Links are single use.",
+  context: "- Only an admin can add a member.",
+  goal: "- Invites land by email.",
+  approach: "- Links are single use.",
+  hardParts: "- An invite expires after 7 days.",
+  notDoing: "- Link invites.",
 };
 
 /** When the developer last looked at the plan, on the service's clock. */
@@ -145,12 +143,11 @@ function bylines(container: HTMLElement): readonly (readonly [string, string])[]
   });
 }
 
-/** What heads each section tinted as changed since the last look: its heading, or a rule's statement. */
+/** The heading of each section tinted as changed since the last look. */
 function changed(container: HTMLElement): readonly string[] {
   return [...container.querySelectorAll(".plan-changed")].map(
     (section) =>
-      section.querySelector(".markdown-heading, .plan-assumptions-heading, .plan-rule-body > p")
-        ?.textContent ?? "",
+      section.querySelector(".markdown-heading, .plan-assumptions-heading")?.textContent ?? "",
   );
 }
 
@@ -176,10 +173,10 @@ it.effect(
         {
           ...PLAN,
           fieldEdits: [
-            edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
-            edit(PLAN_FIELD.OUTCOME, PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(5))),
-            edit(PLAN_FIELD.DECISIONS, PLAN_ACTOR.AGENT, ago(Duration.hours(26))),
-            edit(PLAN_FIELD.RULES, PLAN_ACTOR.NOTETAKER, ago(Duration.minutes(3))),
+            edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
+            edit(PLAN_FIELD.GOAL, PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(5))),
+            edit(PLAN_FIELD.APPROACH, PLAN_ACTOR.AGENT, ago(Duration.hours(26))),
+            edit(PLAN_FIELD.HARD_PARTS, PLAN_ACTOR.NOTETAKER, ago(Duration.minutes(3))),
             edit(PLAN_FIELD.ASSUMPTIONS, PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(1))),
           ],
         },
@@ -188,10 +185,10 @@ it.effect(
       yield* landed;
 
       assert.deepEqual(bylines(container), [
-        ["Problem", "Edited by Luke during your call · 2h ago"],
-        ["Outcome", "Edited by you · 5m ago"],
-        ["Rules", "Edited by Luke during your call · 3m ago"],
-        ["Decisions", "Edited by Command K board · 1d ago"],
+        ["Context", "Edited by Luke during your call · 2h ago"],
+        ["Goal", "Edited by you · 5m ago"],
+        ["Approach", "Edited by Command K board · 1d ago"],
+        ["Hard parts", "Edited by Luke during your call · 3m ago"],
         ["Assumptions", "Edited by you · 1m ago"],
       ]);
     }),
@@ -204,22 +201,16 @@ it.effect(
       lookedAt(LOOKED_AT);
       const { container } = open(
         savedSince([
-          edit(PLAN_FIELD.INCLUDED, PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
-          edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
-          edit(PLAN_FIELD.RULES, PLAN_ACTOR.AGENT, LOOKED_AT + 2),
-          edit(PLAN_FIELD.OUTCOME, PLAN_ACTOR.DEVELOPER, LOOKED_AT + 3),
+          edit(PLAN_FIELD.NOT_DOING, PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
+          edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
+          edit(PLAN_FIELD.HARD_PARTS, PLAN_ACTOR.AGENT, LOOKED_AT + 2),
+          edit(PLAN_FIELD.GOAL, PLAN_ACTOR.DEVELOPER, LOOKED_AT + 3),
           edit(PLAN_FIELD.ASSUMPTIONS, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 4),
         ]),
         yield* registryOnTestClock,
       );
 
-      assert.deepEqual(changed(container), [
-        "Problem",
-        "Rules",
-        "An invite expires after 7 days.",
-        "Only admins invite.",
-        "Assumptions",
-      ]);
+      assert.deepEqual(changed(container), ["Context", "Hard parts", "Assumptions"]);
       assert.equal(changedNote(container), "Changed since you last looked · 3 sections");
     }),
 );
@@ -227,7 +218,7 @@ it.effect(
 it.effect("Dismiss clears the tint and the count, and the next visit shows nothing changed", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     assert.equal(changedNote(first.container), "Changed since you last looked · 1 section");
 
@@ -246,7 +237,7 @@ it.effect("Dismiss clears the tint and the count, and the next visit shows nothi
 it.effect("a plan never looked at on this Mac shows nothing changed", () =>
   Effect.gen(function* () {
     const { container } = open(
-      savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]),
+      savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]),
       yield* registryOnTestClock,
     );
 
@@ -258,12 +249,12 @@ it.effect("a plan never looked at on this Mac shows nothing changed", () =>
 it.effect("a plan held open for the look is seen: the next visit shows nothing changed", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     yield* landed;
     yield* TestClock.adjust(PLAN_LOOK);
     yield* landed;
-    assert.deepEqual(changed(first.container), ["Problem"], "lit for the rest of the visit");
+    assert.deepEqual(changed(first.container), ["Context"], "lit for the rest of the visit");
     first.leave();
 
     const again = open(plan, yield* registryOnTestClock);
@@ -276,7 +267,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       lookedAt(LOOKED_AT);
-      const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       const first = open(plan, yield* registryOnTestClock);
       yield* landed;
       first.redraw(plan, true);
@@ -316,6 +307,7 @@ function Window({ plan, versions }: { plan: Plan; versions: boolean }): React.JS
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps(),
   });
@@ -326,7 +318,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       lookedAt(LOOKED_AT);
-      const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       const registry = yield* registryOnTestClock;
       const container = document.createElement("div");
       document.body.append(container);
@@ -336,7 +328,7 @@ it.effect(
         act(() => root.render(onRegistry(registry, createElement(Window, { plan, versions }))));
       draw(false);
       yield* landed;
-      assert.deepEqual(changed(container), ["Problem"]);
+      assert.deepEqual(changed(container), ["Context"]);
 
       draw(true);
       yield* landed;
@@ -344,7 +336,7 @@ it.effect(
       yield* landed;
       draw(false);
       yield* landed;
-      assert.deepEqual(changed(container), ["Problem"]);
+      assert.deepEqual(changed(container), ["Context"]);
       act(() => root.unmount());
       roots.splice(roots.indexOf(root), 1);
 
@@ -355,7 +347,7 @@ it.effect(
 it.effect("a plan left before the look keeps its changes lit for the next visit", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     yield* landed;
     yield* TestClock.adjust(Duration.subtract(PLAN_LOOK, Duration.millis(1)));
@@ -363,7 +355,7 @@ it.effect("a plan left before the look keeps its changes lit for the next visit"
     first.leave();
 
     const again = open(plan, yield* registryOnTestClock);
-    assert.deepEqual(changed(again.container), ["Problem"]);
+    assert.deepEqual(changed(again.container), ["Context"]);
   }),
 );
 
@@ -374,7 +366,7 @@ it.effect(
       lookedAt(LOOKED_AT);
       const first = open(PLAN, yield* registryOnTestClock);
       yield* landed;
-      const live = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const live = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       first.redraw({
         ...live,
         document: { ...live.document, body: planBody({ name: NAME }, FIELDS).concat("\nMore.") },

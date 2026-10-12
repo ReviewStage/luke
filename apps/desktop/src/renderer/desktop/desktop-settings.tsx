@@ -4,6 +4,7 @@ import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { SETTINGS_PAGE } from "../settings/pages";
 import { pageResetControl } from "../settings/reset";
@@ -58,11 +59,14 @@ export function DesktopSettings({
   sidebar,
   history,
   settings,
+  call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   settings: SettingsPanelProps;
+  /** The call card, at the page list's foot, as the plans' sidebar draws it above its account row. */
+  call: CallCardInput | undefined;
   /** Leaves Settings for wherever it was opened from. */
   onExit: () => void;
 }): React.JSX.Element {
@@ -153,6 +157,9 @@ export function DesktopSettings({
               })}
             </ul>
           )}
+        </div>
+        <div className="sidebar-foot">
+          <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
         </div>
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />

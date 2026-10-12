@@ -30,8 +30,13 @@ export function usedPlan(id: string): OpenPlan {
   };
 }
 
-/** The plan's summary unpinned, its press ignored, so a page drawn over it draws no summary beside its column. */
-export const UNPINNED_SUMMARY: SummaryPin = { pinned: false, onToggle: ignore };
+/** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
+export const UNPINNED_SUMMARY: SummaryPin = {
+  pinned: false,
+  onToggle: ignore,
+  wide: true,
+  onMeasured: ignore,
+};
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
 export function versionHistoryControl(
@@ -59,6 +64,7 @@ export function codingAgentsControl(
   return {
     agents: [],
     agentIds: [],
+    keywords: [],
     draft: undefined,
     onNewDraft: () => "draft",
     onDraftChange: ignore,
@@ -150,6 +156,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onRenamePins: ignore,
       onOpenFile: ignore,
       onBrowseFile: ignore,
+      onFileHistory: ignore,
       onResize: ignore,
     },
     unreadTabs: [],

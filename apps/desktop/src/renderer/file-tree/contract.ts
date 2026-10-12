@@ -13,6 +13,11 @@
  *
  * A path is the repository's, from its root, without a leading or trailing
  * slash; the root itself is the empty path.
+ *
+ * The same bundle answers what icon a file's type draws as, so a file
+ * attached to a message (`../planning/attached-file-chips.tsx`) is drawn as
+ * the tree draws it, without Pierre's icons riding in the bundle every
+ * window parses.
  */
 
 /** One entry of a folder: its name within the folder, and whether it is a folder itself. */
@@ -53,7 +58,7 @@ export interface RevealOptions {
   readonly focus: boolean;
 }
 
-/** The tree as mounted: bring a path into view, and take the tree down. */
+/** The tree as mounted: bring a path into view, narrow the rows shown, and take the tree down. */
 export interface FileTreeHandle {
   /**
    * Lists and opens each folder above the path, then scrolls it into view:
@@ -62,12 +67,49 @@ export interface FileTreeHandle {
    * listed waits for it.
    */
   readonly reveal: (path: string, options: RevealOptions) => void;
+  /**
+   * Shows only the rows whose path holds the query, the folders above them
+   * opened, or says no file matches; the empty query shows every row again.
+   */
+  readonly search: (query: string) => void;
+  /** Shows only these files, every folder above them opened, or the whole repository for none. */
+  readonly only: (paths: readonly string[] | undefined) => void;
+  /**
+   * Hands the tree every entry of the repository, each named by its path
+   * from the root, which a search then narrows in place of the folders
+   * listed so far.
+   */
+  readonly within: (entries: readonly FolderEntry[]) => void;
   readonly unmount: () => void;
+}
+
+/** One folder's entries drawn as the tree draws them, which a breadcrumb's list is. */
+export interface FolderListProps {
+  readonly entries: readonly FolderEntry[];
+  /** The entry the list stands for, marked and taking the keyboard; none for the repository's root. */
+  readonly current: string | undefined;
+  /** An entry chosen by a press or Return, in a tab of its own where ⌘ was held. */
+  readonly onChoose: (entry: FolderEntry, newTab: boolean) => void;
+}
+
+/**
+ * A file's type icon as the tree draws it: the symbol to draw, from the
+ * sheet the bundle adds to the document the first time one is asked for,
+ * and the type it stands for, which the panel colours it by
+ * (`styles/planning.css`).
+ */
+export interface FileTypeIcon {
+  readonly symbol: string;
+  readonly type: string;
 }
 
 /** What the file tree bundle sets on `window` once it has loaded. */
 export interface FileTreeModule {
   readonly mount: (host: HTMLElement, props: FileTreeProps) => FileTreeHandle;
+  /** Draws one folder's entries in rows the tree's own, its icons, hover, and keys; answers how to take it down. */
+  readonly list: (host: HTMLElement, props: FolderListProps) => () => void;
+  /** The type icon of a file by its name alone. */
+  readonly fileIcon: (name: string) => FileTypeIcon;
 }
 
 declare global {

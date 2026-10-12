@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentUsage,
+  hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
@@ -19,14 +20,17 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { imageFiles } from "../feedback-images";
+import { RetryButton } from "../retry-button";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
+import { DictateButton, DictationStrip } from "./dictation-strip";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
+import { DICTATION_PHASE, useDictation } from "./use-dictation";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
@@ -48,9 +52,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
- * there are words, disabled while there are none and the agent is idle, and
- * Stop while there are none and a turn runs, which is the one Stop the tab
- * has. A message that did not go stays in the box with why under the card
+ * there are words or files, disabled while there are neither and the agent
+ * is idle, and Stop while there are neither and a turn runs, which is the
+ * one Stop the tab has. A message that did not go stays in the box with why under the card
  * and Retry, which sends it again under the same key, so a send whose
  * answer was lost reaches the agent once; an agent that takes no message
  * any more keeps the box, disabled, with the reason under it; a change of
@@ -66,16 +70,20 @@ import type { AgentModelControl } from "./use-agent-model";
  * is taken, and files dropped on the card are, each drawn as a chip above
  * the words with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the card while the rest still come
- * (`attached-files.ts`). Words still carry every message, so files with no
- * words keep Send disabled and the placeholder asks for a message to send
- * them with.
+ * (`attached-files.ts`). A message is words, files, or both, as the wire
+ * takes it (`hasWordsOrFiles`), so files alone send too.
+ *
+ * Words can be spoken into the box as well: the microphone left of the "+"
+ * records in place of the foot's controls until ✓ or Enter sends the clip
+ * to be heard and the words land at the caret, or ✕ or Escape drops it
+ * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
+ * is said in the same note a file's refusal is.
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
 const PLACEHOLDER = {
   FIRST: "Ask to make changes",
   FOLLOW_UP: "Send a follow up",
-  FILES: "Add a message to send these files",
 } as const;
 
 /** The buttons' names, which are their tooltips too. */
@@ -115,6 +123,7 @@ export function AgentComposer({
   doors,
   onStop,
   followsUp,
+  keywords = [],
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
@@ -136,6 +145,8 @@ export function AgentComposer({
   onStop: () => Promise<void>;
   /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
   followsUp: boolean;
+  /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
+  keywords?: readonly string[] | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -154,14 +165,23 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const empty = composer.draft.trim() === "";
+  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const note = composer.closed ?? refusal ?? composer.note ?? model?.note;
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries =
     composer.closed === undefined && refusal === undefined && composer.note !== undefined;
-  let placeholder: string = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
-  if (composer.attachments.length > 0) placeholder = PLACEHOLDER.FILES;
+  const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
+
+  const dictation = useDictation({
+    field,
+    draft: () => latest.current.draft,
+    setDraft: (next) => latest.current.setDraft(next),
+    maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+    keywords,
+    onNote: setRefusal,
+  });
+  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
   useEffect(() => {
@@ -169,6 +189,7 @@ export function AgentComposer({
   }, []);
 
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (dictation.onFieldKey(event)) return;
     if (event.key === "Escape") {
       event.stopPropagation();
       event.currentTarget.blur();
@@ -241,6 +262,7 @@ export function AgentComposer({
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           value={composer.draft}
           disabled={held}
+          readOnly={dictating}
           onChange={(event) => composer.setDraft(event.currentTarget.value)}
           onKeyDown={onFieldKey}
           onPaste={(event) => {
@@ -252,69 +274,79 @@ export function AgentComposer({
           }}
         />
         <PromptInputFooter>
-          <PromptInputTools>
-            {model === undefined ? null : (
-              <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
-            )}
-            <AgentContextRing context={context} brief={brief} />
-            <PublishedChip published={published} doors={doors} />
-          </PromptInputTools>
-          <div className="agent-composer-actions">
-            <Tooltip label={BUTTON.ATTACH}>
-              <button
-                type="button"
-                className="icon-button agent-composer-attach"
-                aria-label={BUTTON.ATTACH}
-                disabled={held}
-                onClick={() => picker.current?.click()}
-              >
-                <PlusIcon />
-              </button>
-            </Tooltip>
-            <input
-              ref={picker}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => {
-                const picked = Array.from(event.currentTarget.files ?? []);
-                // Cleared so the same file can be picked again after it was taken off.
-                event.currentTarget.value = "";
-                attach(picked);
-              }}
-            />
-            {showsStop ? (
-              <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
-                <PromptInputSubmit
-                  type="button"
-                  status={stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING}
-                  aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
-                  disabled={stopping}
-                  onClick={stop}
+          {dictating ? (
+            <DictationStrip dictation={dictation} />
+          ) : (
+            <>
+              <PromptInputTools>
+                {model === undefined ? null : (
+                  <AgentModelChip
+                    model={model}
+                    models={models}
+                    readModels={readModels}
+                    usage={usage}
+                  />
+                )}
+                <AgentContextRing context={context} brief={brief} />
+                <PublishedChip published={published} doors={doors} />
+              </PromptInputTools>
+              <div className="agent-composer-actions">
+                <DictateButton dictation={dictation} disabled={held} />
+                <Tooltip label={BUTTON.ATTACH}>
+                  <button
+                    type="button"
+                    className="icon-button agent-composer-attach"
+                    aria-label={BUTTON.ATTACH}
+                    disabled={held}
+                    onClick={() => picker.current?.click()}
+                  >
+                    <PlusIcon />
+                  </button>
+                </Tooltip>
+                <input
+                  ref={picker}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    const picked = Array.from(event.currentTarget.files ?? []);
+                    // Cleared so the same file can be picked again after it was taken off.
+                    event.currentTarget.value = "";
+                    attach(picked);
+                  }}
                 />
-              </Tooltip>
-            ) : (
-              <Tooltip label={BUTTON.SEND}>
-                <PromptInputSubmit
-                  aria-label={BUTTON.SEND}
-                  status={
-                    composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
-                  }
-                  disabled={held || empty || reading > 0}
-                />
-              </Tooltip>
-            )}
-          </div>
+                {showsStop ? (
+                  <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
+                    <PromptInputSubmit
+                      type="button"
+                      status={
+                        stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING
+                      }
+                      aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
+                      disabled={stopping}
+                      onClick={stop}
+                    />
+                  </Tooltip>
+                ) : (
+                  <Tooltip label={BUTTON.SEND}>
+                    <PromptInputSubmit
+                      aria-label={BUTTON.SEND}
+                      status={
+                        composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
+                      }
+                      disabled={held || empty || reading > 0}
+                    />
+                  </Tooltip>
+                )}
+              </div>
+            </>
+          )}
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (
         <p className="agent-note agent-composer-note" role="alert">
           <span>{note}</span>
-          {retries ? (
-            <button type="button" className="toolbar-button" onClick={composer.retry}>
-              Retry
-            </button>
-          ) : null}
+          {retries ? <RetryButton onRetry={composer.retry} /> : null}
         </p>
       ) : null}
     </div>

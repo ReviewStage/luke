@@ -601,36 +601,6 @@
   font-weight: 620;
 }
 
-/* Reads as a link because that is what it does, though it is a button: the
-   page is opened by the main process, not navigated to here. */
-.link-button {
-  display: inline;
-  padding: 0;
-  /* Rounded for the ring's sake rather than its own, the way the tab is: with
-     no radius the ring is a hard rectangle around a run of text. The offset is
-     what keeps it off the glyphs, since the box hugs them. */
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--state-working);
-  font-size: inherit;
-  font-weight: 640;
-  outline-offset: 3px;
-  white-space: nowrap;
-  transition: color var(--duration-hover) ease;
-}
-
-.link-button:hover {
-  color: var(--text-primary);
-}
-
-/* Quiet while the key it sits beside is being written, like every other control
-   on that line: a link that still reads as live is an invitation to disturb an
-   entry that is already on its way. */
-.link-button:disabled {
-  color: var(--text-tertiary);
-}
-
 .link-icon {
   width: 9px;
   height: 9px;

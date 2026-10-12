@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   IDLE_VOICE_VIEW,
   SILENT_VOICE_LEVELS,
@@ -10,6 +11,7 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
+import { useCallCommands } from "./call-commands";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -197,6 +199,10 @@ export function useVoiceView(): VoiceViewState {
     ),
     luke: useVoiceActive(levelReport, WAVEFORM_VOICE.LUKE, view.lukeSpeaking),
   };
+
+  useCallCommands(view, state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED, (command) =>
+    tell(ACT_KIND.VOICE_COMMAND, { command }),
+  );
 
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });

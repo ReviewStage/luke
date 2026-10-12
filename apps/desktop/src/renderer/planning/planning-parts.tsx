@@ -6,7 +6,6 @@ import {
   SpeakerOffIcon,
 } from "@sidecar/panel";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { useAppCommand } from "../app-commands";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
 import type { CallStatus } from "./planning-model";
@@ -30,7 +29,7 @@ const PLANNER_THINKING = "Thinking";
 const NOTETAKER_WRITING = "Notetaker · Writing notes";
 
 /** Each call control's name for a reader and its hover, by whether it is on. */
-const CALL_CONTROL_LABEL = {
+export const CALL_CONTROL_LABEL = {
   MUTE_MICROPHONE: "Mute microphone",
   UNMUTE_MICROPHONE: "Unmute microphone",
   MUTE_SPEAKER: "Mute speaker",
@@ -117,8 +116,9 @@ function CallToggle({
  * always have. The speaker silences Luke on this Mac alone; the call goes on.
  * A call the tab reports a status for is drawn as the call even where it
  * offers no stop, a fixture's staged call or one closing, since the press
- * on each control is the one it always was; the two mutes' chords are
- * offered only while the call is in progress.
+ * on each control is the one it always was. The two mutes' chords are not
+ * the bar's to offer: they answer while any call is in progress, wherever the
+ * panel stands (`useCallCommands`).
  */
 export function CallBar({
   status,
@@ -134,11 +134,6 @@ export function CallBar({
   stop: { shown: boolean; onPress: () => void };
 }): React.JSX.Element {
   const inProgress = stop.shown;
-  useAppCommand(
-    APP_COMMAND.TOGGLE_MICROPHONE,
-    inProgress && microphone.enabled ? microphone.onPress : undefined,
-  );
-  useAppCommand(APP_COMMAND.TOGGLE_SPEAKER, inProgress ? speaker.onPress : undefined);
   if (!inProgress && status === undefined) {
     return (
       <footer className="call-bar" data-call="false">

@@ -1,30 +1,44 @@
-import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@sidecar/hosted/plan-wire";
+import { useAtomValue } from "@effect/atom-react";
+import { PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { ChevronRightIcon } from "lucide-react";
-import { Fragment, useState } from "react";
-import {
-  ActionMenu,
-  dropBelow,
-  MENU_ALIGN,
-  type MenuAction,
-  useActionMenu,
-} from "../desktop/action-menu";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { MENU_DROP } from "../desktop/action-menu";
+import type { FolderEntry } from "../file-tree/contract";
+import { fileTreeModuleAtom } from "./file-tree-bundle";
 import type { ListFolder } from "./folder-listings";
 
 /**
- * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, every folder one press from the tree.
+ * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that lists where it stands.
  *
- * A press on the repository or a folder reveals it in the tree beside the
- * tab, opening the tree where it is closed, as a devtool's breadcrumbs
- * browse. The chevron after each lists that folder's entries in a menu, the
- * one the path goes on to among them, as Xcode's jump bar and VS Code's
- * breadcrumbs do: a file chosen there opens in the tab, a folder is
- * revealed in the tree. The folder is listed through what the tree has
- * already listed (`folder-listings.ts`), so a menu of a folder the tree has
- * open asks nothing.
+ * Each crumb is the one control: a press lists the folder it stands in, its
+ * siblings among them and itself marked, as VS Code's breadcrumbs and
+ * Xcode's jump bar do, and the repository lists the root. The list is drawn
+ * by the file tree bundle in rows the tree's own (`../file-tree/`), icons,
+ * hover, type, and keys alike, so a crumb's list reads as a slice of the
+ * tree beside it. A file chosen there opens in the tab; a folder is
+ * revealed in the tree, opening the tree where it is closed. The chevrons
+ * between are the path's punctuation and nothing more. The folder is listed
+ * through what the tree has already listed (`folder-listings.ts`), so a list
+ * of a folder the tree has open asks nothing. Every name here is the
+ * repository's, so the list is left out of the screen recording
+ * (`ph-no-capture`), as the tree is.
  */
 
-/** Where a folder listed in a chevron's menu stands: being read, or read, its entries or nothing where it could not be. */
-type Listed = { readonly folder: string; readonly entries: readonly PlanTreeEntry[] | undefined };
+/** A row of the tree as the compact density draws it, which the list's height is counted in. */
+const ROW_HEIGHT = 24;
+/** The tallest a crumb's list stands before it scrolls, and the room it keeps from the window's edges. */
+const LIST_BOUNDS = { MAX_HEIGHT: 320, WIDTH: 260, MARGIN: 8, INSET: 4 } as const;
+
+/** A folder listed in a crumb's list: the crumb, by its place in the path; its entries, or nothing where it could not be; and the crumb's own entry among them. */
+interface Listed {
+  readonly at: number;
+  readonly folder: string;
+  readonly entries: readonly FolderEntry[] | undefined;
+  readonly current: string | undefined;
+  readonly opener: HTMLElement;
+}
 
 /** A folder's path from the root, of a file's path cut after `count` segments. */
 function folderOf(segments: readonly string[], count: number): string {
@@ -36,30 +50,113 @@ function entryPath(folder: string, name: string): string {
   return folder === "" ? name : `${folder}/${name}`;
 }
 
-/** The menu's actions for a folder's entries: its folders, then its files, each as the tree sorts them. */
-function entryGroups(
-  listed: Listed,
-  onReveal: (path: string) => void,
-  onOpen: (path: string) => void,
-): readonly (readonly MenuAction[])[] {
-  if (listed.entries === undefined) {
-    return [[{ label: "Could not list this folder", onSelect: () => undefined, disabled: true }]];
-  }
-  const byName = [...listed.entries].sort((a, b) => a.name.localeCompare(b.name));
-  const action = (entry: PlanTreeEntry, folder: boolean): MenuAction => ({
-    label: folder ? `${entry.name}/` : entry.name,
-    onSelect: () => {
-      const path = entryPath(listed.folder, entry.name);
-      if (folder) onReveal(path);
-      else onOpen(path);
-    },
-  });
-  const folders = byName.filter((entry) => entry.kind === PLAN_TREE_ENTRY.FOLDER);
-  const files = byName.filter((entry) => entry.kind !== PLAN_TREE_ENTRY.FOLDER);
-  return [
-    folders.map((entry) => action(entry, true)),
-    files.map((entry) => action(entry, false)),
-  ].filter((group) => group.length > 0);
+/**
+ * A crumb's list, hung under the crumb over the window as a menu is. It
+ * closes as a menu does: Escape, which hands the keyboard back to the
+ * crumb, a press elsewhere, or the window losing the keyboard or changing
+ * its size.
+ */
+function FolderList({
+  label,
+  listed,
+  onChoose,
+  onClose,
+}: {
+  label: string;
+  listed: Listed;
+  onChoose: (entry: FolderEntry, newTab: boolean) => void;
+  onClose: (returnFocus: boolean) => void;
+}): React.JSX.Element {
+  const loaded = useAtomValue(fileTreeModuleAtom);
+  const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
+  const box = useRef<HTMLDivElement>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number; height: number } | undefined>(
+    undefined,
+  );
+  const latest = useRef({ onChoose, onClose });
+  latest.current = { onChoose, onClose };
+  const { entries, current, opener } = listed;
+
+  // The list hangs under the crumb, as tall as its rows up to its bound and
+  // no taller than the room left under the crumb, its rows scrolling within.
+  const rows = entries?.length ?? 1;
+  useLayoutEffect(() => {
+    const bounds = opener.getBoundingClientRect();
+    const widest = window.innerWidth - LIST_BOUNDS.WIDTH - LIST_BOUNDS.MARGIN;
+    const top = bounds.bottom + MENU_DROP;
+    const wanted = Math.min(rows * ROW_HEIGHT + 2 * LIST_BOUNDS.INSET, LIST_BOUNDS.MAX_HEIGHT);
+    const room = window.innerHeight - top - LIST_BOUNDS.MARGIN;
+    setAt({
+      left: Math.max(LIST_BOUNDS.MARGIN, Math.min(bounds.left, widest)),
+      top,
+      height: Math.max(ROW_HEIGHT + 2 * LIST_BOUNDS.INSET, Math.min(wanted, room)),
+    });
+  }, [opener, rows]);
+
+  // Note that the list takes the keyboard itself where no row of it can,
+  // as over an empty folder or one not listed, so Escape still reaches it.
+  useEffect(() => {
+    const element = box.current;
+    if (at === undefined || element === null || element.contains(document.activeElement)) return;
+    element.focus({ preventScroll: true });
+  }, [at]);
+
+  useEffect(() => {
+    const element = host.current;
+    if (module === undefined || element === null || entries === undefined) return undefined;
+    return module.list(element, {
+      entries,
+      current,
+      onChoose: (entry, newTab) => latest.current.onChoose(entry, newTab),
+    });
+  }, [module, entries, current]);
+
+  // Note that a press on the crumb is left to the crumb, whose own press
+  // is what closes the list it opened.
+  useEffect(() => {
+    const pressed = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (box.current?.contains(target) || opener.contains(target)) return;
+      latest.current.onClose(false);
+    };
+    const leave = () => latest.current.onClose(false);
+    document.addEventListener("pointerdown", pressed, true);
+    window.addEventListener("blur", leave);
+    window.addEventListener("resize", leave);
+    return () => {
+      document.removeEventListener("pointerdown", pressed, true);
+      window.removeEventListener("blur", leave);
+      window.removeEventListener("resize", leave);
+    };
+  }, [opener]);
+
+  return createPortal(
+    <div
+      ref={box}
+      className="file-crumb-list ph-no-capture"
+      role="dialog"
+      aria-label={label}
+      tabIndex={-1}
+      data-placed={String(at !== undefined)}
+      style={{ ...at, width: LIST_BOUNDS.WIDTH }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Note that the Escape is stopped here, because the window's own would close the panel behind the list.
+        event.stopPropagation();
+        latest.current.onClose(true);
+      }}
+    >
+      {entries === undefined || AsyncResult.isFailure(loaded) ? (
+        <p className="file-crumb-notice">
+          {entries === undefined ? "Could not list this folder." : "The files could not be shown."}
+        </p>
+      ) : (
+        <div className="file-crumb-tree" ref={host} />
+      )}
+    </div>,
+    document.body,
+  );
 }
 
 export function FileBreadcrumbs({
@@ -74,26 +171,57 @@ export function FileBreadcrumbs({
   /** The tab's file, from the repository's root. */
   path: string;
   listFolder: ListFolder;
-  /** Reveals a folder in the tree, the root for the empty path, opening the tree where it is closed. */
+  /** Reveals a folder chosen in a crumb's list in the tree, opening the tree where it is closed. */
   onReveal: (folder: string) => void;
-  /** Opens a file chosen in a chevron's menu in the tab. */
-  onOpen: (path: string) => void;
+  /** Opens a file chosen in a crumb's list in the tab, or in a tab of its own where `newTab` asks. */
+  onOpen: (path: string, newTab: boolean) => void;
 }): React.JSX.Element {
   const segments = path.split("/");
-  const menu = useActionMenu(true);
   const [listed, setListed] = useState<Listed | undefined>(undefined);
+  const asked = useRef(0);
+  // The crumb whose folder is being listed, so a second press on it lets the list go before it opens.
+  const pending = useRef<HTMLElement | undefined>(undefined);
 
-  // The folder's entries, listed as its chevron opens their menu.
-  const showEntries = (folder: string, button: HTMLElement) => {
-    const placement = {
-      ...dropBelow(button),
-      x: button.getBoundingClientRect().left,
-      align: MENU_ALIGN.START,
-    };
+  const close = (returnFocus: boolean) => {
+    asked.current += 1;
+    pending.current = undefined;
+    if (returnFocus) listed?.opener.focus();
+    setListed(undefined);
+  };
+
+  // The folder's entries, listed as a crumb opens its list; a press on the
+  // crumb whose list stands closes it, and a later press stands in for one
+  // still listing.
+  const showEntries = (
+    at: number,
+    folder: string,
+    current: string | undefined,
+    opener: HTMLElement,
+  ) => {
+    if (listed?.opener === opener || pending.current === opener) return close(false);
+    asked.current += 1;
+    pending.current = opener;
+    const ticket = asked.current;
     listFolder(folder).then((answer) => {
-      setListed({ folder, entries: "folder" in answer ? answer.folder.entries : undefined });
-      menu.show(placement, button);
+      if (ticket !== asked.current) return;
+      pending.current = undefined;
+      const entries =
+        "folder" in answer
+          ? answer.folder.entries.map((entry) => ({
+              name: entry.name,
+              folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+            }))
+          : undefined;
+      setListed({ at, folder, entries, current, opener });
     });
+  };
+
+  const choose = (entry: FolderEntry, newTab: boolean) => {
+    if (listed === undefined) return;
+    const chosen = entryPath(listed.folder, entry.name);
+    close(false);
+    if (entry.folder) onReveal(chosen);
+    else onOpen(chosen, newTab);
   };
 
   const crumbs = [repository, ...segments];
@@ -102,48 +230,40 @@ export function FileBreadcrumbs({
       <ol>
         {crumbs.map((name, at) => {
           const last = at === crumbs.length - 1;
-          const folder = folderOf(segments, at);
+          // The repository lists the root; any other crumb the folder it stands in.
+          const folder = folderOf(segments, Math.max(0, at - 1));
           return (
             // Note that a crumb is keyed by the path it ends, since a name may stand twice in one.
-            <Fragment key={folder}>
-              <li>
-                {last ? (
-                  <span className="file-breadcrumb" aria-current="page">
-                    {name}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="file-breadcrumb"
-                    onClick={() => onReveal(folder)}
-                  >
-                    {name}
-                  </button>
-                )}
-              </li>
-              {last ? null : (
-                <li>
-                  <button
-                    type="button"
-                    className="file-breadcrumb-chevron"
-                    aria-label={`Entries of ${at === 0 ? repository : folder}`}
-                    aria-haspopup="menu"
-                    onClick={(event) => showEntries(folder, event.currentTarget)}
-                  >
-                    <ChevronRightIcon aria-hidden="true" />
-                  </button>
+            <Fragment key={folderOf(segments, at)}>
+              {at === 0 ? null : (
+                <li className="file-breadcrumb-separator" aria-hidden="true">
+                  <ChevronRightIcon />
                 </li>
               )}
+              <li>
+                <button
+                  type="button"
+                  className="file-breadcrumb"
+                  aria-current={last ? "page" : undefined}
+                  aria-haspopup="dialog"
+                  aria-expanded={listed?.at === at}
+                  onClick={(event) =>
+                    showEntries(at, folder, at === 0 ? undefined : name, event.currentTarget)
+                  }
+                >
+                  {name}
+                </button>
+              </li>
             </Fragment>
           );
         })}
       </ol>
-      {menu.open === undefined || listed === undefined ? null : (
-        <ActionMenu
+      {listed === undefined ? null : (
+        <FolderList
           label={listed.folder === "" ? repository : listed.folder}
-          menu={menu.open}
-          groups={entryGroups(listed, onReveal, onOpen)}
-          onClose={menu.close}
+          listed={listed}
+          onChoose={choose}
+          onClose={close}
         />
       )}
     </nav>

@@ -73,91 +73,51 @@ export type PlanAssumption = typeof planAssumptionSchema.Type;
 export const PLAN_FIELD_BOUNDS = {
   /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
   MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
-  /** A rule's statement is its heading, so it is one sentence. */
-  MAX_RULE_CHARS: 500,
-  /** One part of an example is a clause drawn on one line. */
-  MAX_EXAMPLE_PART_CHARS: 1_000,
-  /** The most rules, examples of one rule, or open questions. */
+  /** The most open questions or assumptions. */
   MAX_ITEMS: 200,
 } as const;
-
-/** A list that is present only once it holds something. */
-function nonEmptyList<S extends EffectSchema.Top>(item: S) {
-  return EffectSchema.Array(item).check(
-    EffectSchema.isMinLength(1),
-    EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
-  );
-}
 
 /** An ordinary answer: null while unanswered, otherwise nonblank text. */
 const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS));
 
-/** One clause of a rule's example, null while unknown. */
-export const planExamplePartSchema = EffectSchema.NullOr(
-  trimmedText(PLAN_FIELD_BOUNDS.MAX_EXAMPLE_PART_CHARS),
-);
-
-const exampleSchema = EffectSchema.Struct({
-  given: planExamplePartSchema,
-  when: planExamplePartSchema,
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: planExamplePartSchema, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-});
-
-const ruleSchema = EffectSchema.Struct({
-  statement: trimmedText(PLAN_FIELD_BOUNDS.MAX_RULE_CHARS),
-  examples: EffectSchema.NullOr(nonEmptyList(exampleSchema)),
-});
-
 /**
- * Every section and field of the fixed template, in its order: what the
- * service keeps for a plan, and what the window edits a field of
- * (`plan-template.ts` formats them into the body).
+ * Every section of the fixed template, in its order: what the service keeps
+ * for a plan, and what the window edits a section of (`plan-template.ts`
+ * formats them into the body).
  */
 export const planFieldsSchema = EffectSchema.Struct({
-  goal: EffectSchema.Struct({ problem: ANSWER, outcome: ANSWER }),
-  scope: EffectSchema.Struct({ included: ANSWER, excluded: ANSWER, constraints: ANSWER }),
-  rules: EffectSchema.NullOr(nonEmptyList(ruleSchema)),
-  implementation: EffectSchema.Struct({
-    changeMap: ANSWER,
-    contracts: ANSWER,
-    patterns: ANSWER,
-    order: ANSWER,
-  }),
-  decisions: ANSWER,
-  verification: ANSWER,
-  leftToAgent: ANSWER,
+  context: ANSWER,
+  goal: ANSWER,
+  approach: ANSWER,
+  interfaces: ANSWER,
+  alternatives: ANSWER,
+  hardParts: ANSWER,
+  notDoing: ANSWER,
+  planOfAttack: ANSWER,
+  testing: ANSWER,
   openQuestions: EffectSchema.Array(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS)).check(
     EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
   ),
-  dataAndMigration: ANSWER,
 });
 
 export type PlanFields = typeof planFieldsSchema.Type;
 
 /** Every field a note may be taken under, in the template's order: the fields above, then the assumptions. */
 export const PLAN_FIELD = {
-  PROBLEM: "problem",
-  OUTCOME: "outcome",
-  INCLUDED: "included",
-  EXCLUDED: "excluded",
-  CONSTRAINTS: "constraints",
-  RULES: "rules",
-  CHANGE_MAP: "changeMap",
-  CONTRACTS: "contracts",
-  PATTERNS: "patterns",
-  ORDER: "order",
-  DECISIONS: "decisions",
-  VERIFICATION: "verification",
-  LEFT_TO_AGENT: "leftToAgent",
+  CONTEXT: "context",
+  GOAL: "goal",
+  APPROACH: "approach",
+  INTERFACES: "interfaces",
+  ALTERNATIVES: "alternatives",
+  HARD_PARTS: "hardParts",
+  NOT_DOING: "notDoing",
+  PLAN_OF_ATTACK: "planOfAttack",
+  TESTING: "testing",
   OPEN_QUESTIONS: "openQuestions",
-  DATA_AND_MIGRATION: "dataAndMigration",
   ASSUMPTIONS: "assumptions",
 } as const;
 
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
-export type PlanRule = typeof ruleSchema.Type;
-export type PlanExample = typeof exampleSchema.Type;
 
 /** The one saved document of a plan, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
@@ -322,6 +282,8 @@ export const planPullRequestLineSchema = EffectSchema.Struct({
   checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
   additions: countedNumber,
   deletions: countedNumber,
+  /** Its page on GitHub, which the hover card opens; absent from a service before it was sent. */
+  url: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type PlanPullRequestLine = typeof planPullRequestLineSchema.Type;
@@ -600,6 +562,8 @@ export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
 export const PLAN_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
+  /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */
+  MAX_TEXT_CHARS: 1024 * 1024,
 } as const;
 
 /**
@@ -630,7 +594,12 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
   );
 }
 
-/** One window of a file of the plan's repository, as the File tab asks it (GET `/api/plans/{id}/file`): the path, and its first and last line. */
+/**
+ * One window of a file of the plan's repository, as the File tab asks it
+ * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
+ * with `raw`, the file's whole text, its lines uncut, as a copy or a
+ * download of the file asks it, the window then standing for nothing.
+ */
 export const planFileRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -638,6 +607,7 @@ export const planFileRequestSchema = EffectSchema.Struct({
   ),
   firstLine: codeLineSchema,
   lastLine: codeLineSchema,
+  raw: EffectSchema.optionalKey(EffectSchema.Boolean),
 }).check(EffectSchema.makeFilter(fileWindowIsReadable));
 
 export type PlanFileRequest = typeof planFileRequestSchema.Type;
@@ -672,9 +642,18 @@ export const planFileRefusalSchema = EffectSchema.Struct({
   branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** The File tab's read answered: the window, or why the file is not shown. */
+/** A file of the plan's repository read raw: the path, the repository and the branch read, and the whole text as the file holds it. */
+export const planFileTextSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
+  text: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_FILE_BOUNDS.MAX_TEXT_CHARS)),
+});
+
+/** The File tab's read answered: the window, the whole text where it was read raw, or why the file is not shown. */
 export const planFileAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ file: planFileWindowSchema }),
+  EffectSchema.Struct({ text: planFileTextSchema }),
   planFileRefusalSchema,
 ]);
 
@@ -689,16 +668,25 @@ export const PLAN_TREE_ENTRY = {
 export const PLAN_TREE_BOUNDS = {
   /** The most entries one folder's listing carries; a folder holding more is listed to here and says it was cut. */
   MAX_ENTRIES: 5_000,
+  /** The most entries a listing of everything under a folder carries, which the tree's search reads; one holding more is listed to here and says it was cut. */
+  MAX_RECURSIVE_ENTRIES: 50_000,
 } as const;
 
-/** One folder of the plan's repository, as the File tab's tree asks it (GET `/api/plans/{id}/tree`): its path from the repository's root, empty for the root itself. */
+/**
+ * One folder of the plan's repository, as the File tab's tree asks it (GET
+ * `/api/plans/{id}/tree`): its path from the repository's root, empty for
+ * the root itself, and whether everything under it is asked, every entry
+ * then named by its path from the folder, as the tree's search reads the
+ * whole repository in one listing.
+ */
 export const planTreeRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
+  recursive: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type PlanTreeRequest = typeof planTreeRequestSchema.Type;
 
-/** One entry of a folder: its name within the folder, and whether it is a folder or a file. */
+/** One entry of a folder: its name within the folder, its path from the folder in a recursive listing, and whether it is a folder or a file. */
 export const planTreeEntrySchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -722,7 +710,7 @@ export const planTreeFolderSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
   entries: EffectSchema.Array(planTreeEntrySchema).check(
-    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_ENTRIES),
+    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES),
   ),
   truncated: EffectSchema.Boolean,
 });

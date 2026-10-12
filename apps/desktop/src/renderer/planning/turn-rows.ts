@@ -10,8 +10,9 @@
  * panel): calls next to one another are one group that is open while it is
  * the turn's latest work on a turn that moves and folded once the model
  * moved on, and a finished turn folds everything ahead of its last words
- * into one line saying how much it holds, its subagents named apart from
- * its other calls, so it reads as its answer. That
+ * into one line saying how much it holds, its subagents and the coding
+ * agents it started named apart from its other calls, so it reads as its
+ * answer. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -64,11 +65,11 @@ export const CALL_WORDS = {
   [CALL_KIND.TODOS]: { verb: "Updated the to-dos:", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
-  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the coding agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
-  [CALL_KIND.START_AGENT]: { verb: "Started an agent", code: false },
+  [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
@@ -88,6 +89,8 @@ export const ROW_PART = {
   LONE_CALL: "lone-call",
   /** A subagent, which stands on a row of its own because it runs on after its call, and which a fold counts apart from the calls. */
   SUBAGENT: "subagent",
+  /** A call that started a coding agent, which runs together with the calls beside it as a call does, and which a fold counts apart from them. */
+  CODING_AGENT: "coding-agent",
   /** Anything else, which ends a run and is not counted: reasoning. */
   NOTE: "note",
 } as const;
@@ -141,17 +144,24 @@ export function groupSummary(calls: number): string {
 interface Held {
   readonly calls: number;
   readonly subagents: number;
+  readonly codingAgents: number;
   readonly messages: number;
 }
 
 /** What a finished turn's folded lead says it holds. */
-function foldedSummary({ calls, subagents, messages }: Held): string {
+function foldedSummary({ calls, subagents, codingAgents, messages }: Held): string {
   const said = [
     ...(calls > 0 ? [plural(calls, "tool call", "tool calls")] : []),
     ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
+    ...(codingAgents > 0 ? [plural(codingAgents, "coding agent", "coding agents")] : []),
     ...(messages > 0 ? [plural(messages, "message", "messages")] : []),
   ];
   return said.join(", ");
+}
+
+/** Whether a block runs together with the calls beside it. */
+function runsWithCalls(part: RowPart): boolean {
+  return part === ROW_PART.CALL || part === ROW_PART.CODING_AGENT;
 }
 
 /** A block with the key its row is drawn under. */
@@ -197,7 +207,7 @@ function groupedRows<B>(
     group = [];
   };
   for (const each of blocks) {
-    if (read.part(each.block) === ROW_PART.CALL) {
+    if (runsWithCalls(read.part(each.block))) {
       group.push(each);
       continue;
     }
@@ -208,18 +218,20 @@ function groupedRows<B>(
   return rows;
 }
 
-/** How many calls, subagents, and of the model's messages a lead's blocks hold. */
+/** How many calls, subagents, coding agents started, and of the model's messages a lead's blocks hold. */
 function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
   let calls = 0;
   let subagents = 0;
+  let codingAgents = 0;
   let messages = 0;
   for (const { block } of blocks) {
     const part = read.part(block);
     if (part === ROW_PART.CALL || part === ROW_PART.LONE_CALL) calls += 1;
     if (part === ROW_PART.SUBAGENT) subagents += 1;
+    if (part === ROW_PART.CODING_AGENT) codingAgents += 1;
     if (part === ROW_PART.WORDS) messages += 1;
   }
-  return { calls, subagents, messages };
+  return { calls, subagents, codingAgents, messages };
 }
 
 /**
@@ -251,7 +263,8 @@ export function turnRows<B>(
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
-  if (held.calls + held.subagents === 0) return groupedRows(keyed, read, turn.moving, turn.grouped);
+  if (held.calls + held.subagents + held.codingAgents === 0)
+    return groupedRows(keyed, read, turn.moving, turn.grouped);
   return [
     {
       kind: TURN_ROW.FOLDED,

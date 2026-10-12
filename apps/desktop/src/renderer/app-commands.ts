@@ -79,15 +79,21 @@ export function useAppCommand(command: AppCommand, run: (() => void) | undefined
 /**
  * The keymap, answering only while `enabled`: the window's content has the
  * keyboard, not a sheet over it. A chord is claimed only when an offer
- * stands, and a held chord runs once rather than once per repeat.
+ * stands, and a held chord runs once rather than once per repeat, its
+ * repeats claimed whether or not an offer still stands.
  */
 export function useAppKeymap(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     const handleKey = (event: KeyboardEvent) => {
       const command = commandForKey(KEYED, event);
-      if (command === undefined || !offers.get(command)?.length) return;
+      if (command === undefined) return;
       if (shortcutEditsText(APP_SHORTCUTS[command].chord) && typingInto(event.target)) return;
+      // Note that a held chord's repeats stay the window's even once its
+      // offer is gone, because a repeat falling through to the menu bar runs
+      // what the press never asked for: a held ⌘W closing the tab, and then
+      // the window behind it.
+      if (!event.repeat && !offers.get(command)?.length) return;
       event.preventDefault();
       if (!event.repeat) runAppCommand(command);
     };

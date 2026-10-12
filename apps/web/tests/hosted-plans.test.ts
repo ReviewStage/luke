@@ -13,9 +13,11 @@ import {
   type PlanDocument,
   type PlanField,
 } from "@sidecar/hosted/plan-wire";
+import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
+import { plan } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -133,10 +135,6 @@ function between(body: string, from: string, to: string): string {
 
 const countOf = (text: string, part: string) => text.split(part).length - 1;
 
-/** Whether a note lands among the rules, whose examples name their rule by its number. */
-const isRuleNote = (note: PlanNote) =>
-  note.kind === NOTE_KIND.ADD_EXAMPLE || note.field === PLAN_FIELD.RULES;
-
 it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
   it.effect("a plan starts in the workspace it was handed, and its summary names it", () =>
     Effect.gen(function* () {
@@ -191,12 +189,12 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
       const relayBody = (yield* resumedDocument(userId, relay.id)).body;
       const ledgerBody = (yield* resumedDocument(userId, ledger.id)).body;
-      const relayProblem = INVITATIONS_DRAFT.fields.goal.problem ?? "?";
+      const relayContext = INVITATIONS_DRAFT.fields.context ?? "?";
       assert.ok(relayBody.startsWith("# Teammate invitations\n"));
-      assert.ok(relayBody.includes(relayProblem));
+      assert.ok(relayBody.includes(relayContext));
       assert.ok(ledgerBody.startsWith("# Billing export\n"));
-      assert.ok(ledgerBody.includes(SMALL_FEATURE.fields.goal.problem ?? "?"));
-      assert.ok(!ledgerBody.includes(relayProblem));
+      assert.ok(ledgerBody.includes(SMALL_FEATURE.fields.context ?? "?"));
+      assert.ok(!ledgerBody.includes(relayContext));
     }),
   );
 
@@ -216,25 +214,13 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         assert.deepEqual(saved.assumptions, INVITATIONS_DRAFT.assumptions);
         const { body } = saved;
         assert.deepEqual(templateHeadingsOf(body), TEMPLATE_HEADINGS);
+        assert.equal(between(body, "## Context", "## Goal"), INVITATIONS_DRAFT.fields.context);
+        assert.equal(between(body, "## Goal", "## Approach"), UNANSWERED);
         assert.equal(
-          between(body, "### Problem", "### Outcome"),
-          INVITATIONS_DRAFT.fields.goal.problem,
+          between(body, "## Hard parts", "## Not doing"),
+          INVITATIONS_DRAFT.fields.hardParts,
         );
-        assert.equal(between(body, "### Outcome", "## Scope"), UNANSWERED);
-        assert.equal(
-          between(body, "## Rules", "## Implementation"),
-          [
-            "### Rule 1: Any member may invite by email.",
-            "",
-            "- **Given** A member sends an invite",
-            "  **When** the teammate opens it",
-            `  **Then** ${UNANSWERED}`,
-            "",
-            "### Rule 2: A withdrawn invite's link never grants access.",
-            "",
-            "_No examples yet_",
-          ].join("\n"),
-        );
+        assert.equal(countOf(body, UNANSWERED), 5);
         assert.ok(
           body.endsWith(`## Open questions\n\n- ${INVITATIONS_DRAFT.fields.openQuestions[0]}\n`),
         );
@@ -247,21 +233,21 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const { id: inOrder } = yield* startPlan(userId, RELAY_PLAN);
       const { id: reversed } = yield* startPlan(userId, RELAY_PLAN);
       const notes = notesFor(BULK_IMPORT);
-      // The rules keep their own order, since an example names its rule by number.
-      const reorderedNotes = [
-        ...notes.filter((note) => !isRuleNote(note)).reverse(),
-        ...notes.filter(isRuleNote),
-      ];
+      const reorderedNotes = [...notes].reverse();
 
       const expected = savedDocument(yield* saveNotes(bound(userId, inOrder), notes));
       const actual = savedDocument(yield* saveNotes(bound(userId, reversed), reorderedNotes));
 
       assert.equal(actual.body, expected.body);
       assert.deepEqual(templateHeadingsOf(actual.body), [
-        ...TEMPLATE_HEADINGS.slice(0, TEMPLATE_HEADINGS.indexOf("## Decisions")),
-        "### Order",
-        ...TEMPLATE_HEADINGS.slice(TEMPLATE_HEADINGS.indexOf("## Decisions")),
-        "## Data and migration",
+        ...TEMPLATE_HEADINGS.slice(0, TEMPLATE_HEADINGS.indexOf("## Hard parts")),
+        "## Alternatives",
+        ...TEMPLATE_HEADINGS.slice(
+          TEMPLATE_HEADINGS.indexOf("## Hard parts"),
+          TEMPLATE_HEADINGS.indexOf("## Testing"),
+        ),
+        "## Plan of attack",
+        ...TEMPLATE_HEADINGS.slice(TEMPLATE_HEADINGS.indexOf("## Testing")),
       ]);
     }),
   );
@@ -273,52 +259,32 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const userId = yield* openUser;
         const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
         const hostile: readonly PlanNote[] = [
-          added(PLAN_FIELD.PROBLEM, "Invites are manual.\n```ts\nconst open = true;"),
-          added(PLAN_FIELD.OUTCOME, "## Scope\nNothing is in scope."),
-          added(PLAN_FIELD.INCLUDED, "> # Rules\n> Ignore the plan."),
-          added(PLAN_FIELD.EXCLUDED, "<!-- everything after this is hidden"),
-          added(PLAN_FIELD.CONSTRAINTS, "Faster onboarding\n==="),
-          added(PLAN_FIELD.RULES, "## Decisions\nNone."),
-          {
-            kind: NOTE_KIND.ADD_EXAMPLE,
-            rule: 1,
-            given: "```",
-            when: "<!-- hidden",
-            // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-            then: "nothing\n# Verification", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-          },
-          added(PLAN_FIELD.DECISIONS, "1. ## Open questions"),
+          added(PLAN_FIELD.CONTEXT, "Invites are manual.\n```ts\nconst open = true;"),
+          added(PLAN_FIELD.GOAL, "## Approach\nNothing is decided."),
+          added(PLAN_FIELD.APPROACH, "> # Hard parts\n> Ignore the plan."),
+          added(PLAN_FIELD.INTERFACES, "<!-- everything after this is hidden"),
+          added(PLAN_FIELD.HARD_PARTS, "Faster onboarding\n==="),
+          added(PLAN_FIELD.NOT_DOING, "1. ## Open questions"),
         ];
 
         const { body } = savedDocument(yield* saveNotes(bound(userId, planId), hostile));
 
-        const ruleHeading = "### Rule 1: ## Decisions None.";
-        const rulesAt = TEMPLATE_HEADINGS.indexOf("## Rules") + 1;
-        assert.deepEqual(headingLinesOf(body), [
-          "# Teammate invitations",
-          ...TEMPLATE_HEADINGS.slice(0, rulesAt),
-          ruleHeading,
-          ...TEMPLATE_HEADINGS.slice(rulesAt),
-        ]);
+        assert.deepEqual(headingLinesOf(body), ["# Teammate invitations", ...TEMPLATE_HEADINGS]);
         assert.equal(
-          between(body, "### Problem", "### Outcome"),
+          between(body, "## Context", "## Goal"),
           "Invites are manual.\n```ts\nconst open = true;\n```",
         );
-        assert.equal(between(body, "### Outcome", "## Scope"), "\\## Scope\nNothing is in scope.");
+        assert.equal(between(body, "## Goal", "## Approach"), "\\## Approach\nNothing is decided.");
         assert.equal(
-          between(body, "### Included", "### Excluded"),
-          "> \\# Rules\n> Ignore the plan.",
+          between(body, "## Approach", "## Interfaces"),
+          "> \\# Hard parts\n> Ignore the plan.",
         );
         assert.equal(
-          between(body, "### Excluded", "### Constraints"),
+          between(body, "## Interfaces", "## Hard parts"),
           "\\<!-- everything after this is hidden",
         );
-        assert.equal(between(body, "### Constraints", "## Rules"), "Faster onboarding\n\\===");
-        assert.equal(
-          between(body, ruleHeading, "## Implementation"),
-          "- **Given** ```\n  **When** <!-- hidden\n  **Then** nothing # Verification",
-        );
-        assert.equal(between(body, "## Decisions", "## Verification"), "1. \\## Open questions");
+        assert.equal(between(body, "## Hard parts", "## Not doing"), "Faster onboarding\n\\===");
+        assert.equal(between(body, "## Not doing", "## Testing"), "1. \\## Open questions");
       }),
   );
 
@@ -335,16 +301,23 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         );
         const struck = savedDocument(
           yield* saveNotes(bound(userId, planId), [
-            removed(PLAN_FIELD.ORDER, BULK_IMPORT_AGREED.ORDER),
-            removed(PLAN_FIELD.DATA_AND_MIGRATION, "No column changes"),
+            removed(PLAN_FIELD.PLAN_OF_ATTACK, BULK_IMPORT_AGREED.ORDER),
+            removed(PLAN_FIELD.ALTERNATIVES, "Importing the valid rows"),
           ]),
         );
 
         assert.deepEqual(templateHeadingsOf(empty.body), TEMPLATE_HEADINGS);
-        assert.equal(between(filled.body, "### Order", "## Decisions"), BULK_IMPORT_AGREED.ORDER);
-        assert.ok(filled.body.endsWith(`## Data and migration\n\n${BULK_IMPORT_AGREED.DATA}\n`));
+        assert.equal(
+          between(filled.body, "## Plan of attack", "## Testing"),
+          BULK_IMPORT_AGREED.ORDER,
+        );
+        assert.equal(
+          between(filled.body, "## Alternatives", "## Hard parts"),
+          BULK_IMPORT_AGREED.ALTERNATIVE,
+        );
         assert.deepEqual(templateHeadingsOf(struck.body), TEMPLATE_HEADINGS);
-        assert.ok(!struck.body.includes(BULK_IMPORT_AGREED.DATA));
+        assert.ok(!struck.body.includes(BULK_IMPORT_AGREED.ORDER));
+        assert.ok(!struck.body.includes(BULK_IMPORT_AGREED.ALTERNATIVE));
         assert.equal(countOf(struck.body, UNANSWERED), 0);
       }),
   );
@@ -357,16 +330,13 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
       const { body } = savedDocument(
         yield* saveNotes(bound(userId, planId), [
-          removed(PLAN_FIELD.VERIFICATION, "existing layout test"),
+          removed(PLAN_FIELD.TESTING, "existing layout test"),
         ]),
       );
 
-      assert.equal(between(body, "## Verification", "## Left to the agent"), UNANSWERED);
+      assert.equal(between(body, "## Testing", "## Open questions"), UNANSWERED);
       assert.equal(countOf(body, UNANSWERED), 1);
-      assert.equal(
-        between(body, "## Decisions", "## Verification"),
-        SMALL_FEATURE.fields.decisions,
-      );
+      assert.equal(between(body, "## Not doing", "## Testing"), SMALL_FEATURE.fields.notDoing);
     }),
   );
 
@@ -382,26 +352,26 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const noContract = "Not applicable: no contract outside the app changes.";
 
         yield* saveNotes(binding, [
-          added(PLAN_FIELD.RULES, everyMember),
+          added(PLAN_FIELD.HARD_PARTS, everyMember),
           added(PLAN_FIELD.ASSUMPTIONS, everyMember),
         ]);
         const proposed = yield* resumedDocument(userId, planId);
-        // Corrected: the rule is rewritten, and the non-applicable field set aside.
+        // Corrected: the hard part is rewritten, and the non-applicable field set aside.
         yield* saveNotes(binding, [
-          replaced(PLAN_FIELD.RULES, everyMember, adminsOnly),
+          replaced(PLAN_FIELD.HARD_PARTS, everyMember, adminsOnly),
           replaced(PLAN_FIELD.ASSUMPTIONS, everyMember, adminsOnly),
-          added(PLAN_FIELD.CONTRACTS, noContract),
+          added(PLAN_FIELD.INTERFACES, noContract),
           added(PLAN_FIELD.ASSUMPTIONS, noContract),
         ]);
         const settled = yield* resumedDocument(userId, planId);
 
         assert.deepEqual(proposed.assumptions, [{ text: everyMember }]);
-        assert.ok(proposed.body.includes(`\n### Rule 1: ${everyMember}\n`));
-        assert.ok(settled.body.includes(`\n### Rule 1: ${adminsOnly}\n`));
+        assert.equal(between(proposed.body, "## Hard parts", "## Not doing"), everyMember);
+        assert.equal(between(settled.body, "## Hard parts", "## Not doing"), adminsOnly);
         assert.ok(!settled.body.includes(everyMember));
         assert.deepEqual(settled.assumptions, [{ text: adminsOnly }, { text: noContract }]);
-        assert.equal(between(settled.body, "### Contracts", "### Patterns to follow"), noContract);
-        assert.equal(between(settled.body, "## Verification", "## Left to the agent"), UNANSWERED);
+        assert.equal(between(settled.body, "## Interfaces", "## Hard parts"), noContract);
+        assert.equal(between(settled.body, "## Testing", "## Open questions"), UNANSWERED);
       }),
   );
 
@@ -416,16 +386,13 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
       assert.equal(countOf(body, UNANSWERED), 0);
       assert.equal(
-        between(body, "### Contracts", "### Patterns to follow"),
-        SMALL_FEATURE.fields.implementation.contracts,
+        between(body, "## Interfaces", "## Hard parts"),
+        SMALL_FEATURE.fields.interfaces,
       );
-      assert.equal(
-        between(body, "## Decisions", "## Verification"),
-        SMALL_FEATURE.fields.decisions,
-      );
+      assert.equal(between(body, "## Approach", "## Interfaces"), SMALL_FEATURE.fields.approach);
       assert.ok(
-        between(body, "## Rules", "## Implementation").includes(
-          '  **Then** the tab reads "No plans yet. Start one with New plan."',
+        between(body, "## Testing", "## Open questions").includes(
+          'the tab reads "No plans yet. Start one with New plan."',
         ),
       );
     }),
@@ -443,18 +410,18 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const decision = "Rows are validated before any is written.";
 
         const result = yield* saveNotes(bound(userId, planId), [
-          added(PLAN_FIELD.DECISIONS, decision),
+          added(PLAN_FIELD.APPROACH, decision),
         ]);
 
         const { body, assumptions } = savedDocument(result);
         assert.equal(
-          between(body, "## Decisions", "## Verification"),
-          `${BULK_IMPORT_AGREED.DECISION}\n\n${decision}`,
+          between(body, "## Approach", "## Interfaces"),
+          `${BULK_IMPORT_AGREED.APPROACH}\n\n${decision}`,
         );
         assert.equal(
           body.replace(`\n\n${decision}`, ""),
           before.body,
-          "nothing but the decision moved",
+          "nothing but the approach moved",
         );
         assert.deepEqual(assumptions, BULK_IMPORT.assumptions);
         assert.deepEqual(yield* resumedDocument(userId, planId), { body, assumptions });
@@ -473,21 +440,14 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
         const { body, assumptions } = savedDocument(
           yield* saveNotes(bound(userId, planId), [
-            replaced(PLAN_FIELD.PROBLEM, "a phrase nobody said", "Everything."),
+            replaced(PLAN_FIELD.CONTEXT, "a phrase nobody said", "Everything."),
             removed(PLAN_FIELD.ASSUMPTIONS, "Invites expire in a day."),
-            {
-              kind: NOTE_KIND.ADD_EXAMPLE,
-              rule: 3,
-              given: "A third rule",
-              when: "it was never made",
-              // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-              then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-            },
-            added(PLAN_FIELD.OUTCOME, outcome),
+            removed(PLAN_FIELD.HARD_PARTS, "a hard part nobody named"),
+            added(PLAN_FIELD.GOAL, outcome),
           ]),
         );
 
-        assert.equal(between(body, "### Outcome", "## Scope"), outcome);
+        assert.equal(between(body, "## Goal", "## Approach"), outcome);
         assert.equal(body.replace(outcome, UNANSWERED), before.body);
         assert.deepEqual(assumptions, before.assumptions);
       }),
@@ -501,11 +461,11 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const before = yield* resumedDocument(userId, planId);
       const long = "x".repeat(40_000);
       const oversized = [
-        PLAN_FIELD.OUTCOME,
-        PLAN_FIELD.INCLUDED,
-        PLAN_FIELD.EXCLUDED,
-        PLAN_FIELD.CHANGE_MAP,
-        PLAN_FIELD.CONTRACTS,
+        PLAN_FIELD.GOAL,
+        PLAN_FIELD.APPROACH,
+        PLAN_FIELD.INTERFACES,
+        PLAN_FIELD.NOT_DOING,
+        PLAN_FIELD.TESTING,
       ].map((field) => added(field, long));
 
       const result = yield* saveNotes(bound(userId, planId), oversized);
@@ -571,6 +531,35 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       assert.equal(yield* deletePlan(teammate, started.id), true);
       assert.equal(Option.isNone(yield* readPlan(starter, started.id)), true);
     }),
+  );
+
+  it.effect(
+    "a plan whose saved fields are in a shape this build does not read still lists beside the rest",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const relay = yield* startPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
+        const ledger = yield* startPlan(userId, LEDGER_PLAN);
+        // The fields as the template before 0082 kept them, as a migration
+        // landing ahead of the build that reads its shape leaves a row.
+        yield* db
+          .update(plan)
+          .set({
+            fields: sql`'{"goal":{"problem":null,"outcome":null},"implementation":{"order":null}}'::jsonb`,
+          })
+          .where(eq(plan.id, relay.id));
+
+        const listed = yield* listPlans(userId);
+
+        assert.deepEqual(
+          listed.map(({ id, name }) => [id, name]),
+          [
+            [ledger.id, LEDGER_PLAN.name],
+            [relay.id, RELAY_PLAN.name],
+          ],
+        );
+      }),
   );
 
   it.effect("a second account cannot read, write, or delete another's plan", () =>
@@ -644,38 +633,14 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
   );
 
   it.effect(
-    "a rename formats again a body saved while a rule kept its list marker, the marker dropped",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
-        const fields = {
-          ...EMPTY_PLAN_FIELDS,
-          rules: [{ statement: "- Links expire in a week.", examples: null }],
-        };
-        const body = planBody(RELAY_PLAN, fields).replace("Rule 1: ", "Rule 1: - ");
-        yield* savePlanDocument(userId, planId, { body, assumptions: [] }, { fields });
-
-        const renamed = yield* updatePlan(userId, planId, { name: "Team invites" });
-
-        const renamedBody = Option.getOrThrow(renamed).document.body;
-        assert.ok(renamedBody.startsWith("# Team invites\n"));
-        assert.ok(renamedBody.includes("\n### Rule 1: Links expire in a week.\n"));
-      }),
-  );
-
-  it.effect(
     "a rename whose heading would carry a full body past its bound keeps the body as saved, and the plan still reads",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
         const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
-        const withProblem = (problem: string) => ({
-          ...EMPTY_PLAN_FIELDS,
-          goal: { ...EMPTY_PLAN_FIELDS.goal, problem },
-        });
-        const room = PLAN_BOUNDS.MAX_BODY_CHARS - planBody(RELAY_PLAN, withProblem("x")).length;
-        const fields = withProblem("x".repeat(room - 9));
+        const withContext = (context: string) => ({ ...EMPTY_PLAN_FIELDS, context });
+        const room = PLAN_BOUNDS.MAX_BODY_CHARS - planBody(RELAY_PLAN, withContext("x")).length;
+        const fields = withContext("x".repeat(room - 9));
         const body = planBody(RELAY_PLAN, fields);
         yield* savePlanDocument(userId, planId, { body, assumptions: [] }, { fields });
 

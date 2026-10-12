@@ -157,6 +157,11 @@ function fakeService() {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
       }),
+    transcribeDictation: (clip) =>
+      Effect.sync(() => {
+        asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
+        return { text: "Run the tests" };
+      }),
   };
   return { client, asked };
 }
@@ -354,5 +359,35 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a dictated clip passes through to the service once and is answered with its words, and a clip the schema refuses is refused in words that hold none of it",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const heard = yield* call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
+        audio: "GkXfow==",
+        durationMs: 1_500,
+        keywords: ["luke"],
+      });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, { audio: "not base64!", keywords: ["luke"] }),
+      );
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
+        audio: "GkXfow==",
+        durationMs: 1_500,
+        keywords: [],
+      });
+
+      assert.deepEqual(heard, { text: "Run the tests" });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.ok(!JSON.stringify(refused).includes("not base64!"));
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, ["transcribe:GkXfow==:luke"]);
+      assert.deepEqual(signedOut.asked, []);
     }),
 );

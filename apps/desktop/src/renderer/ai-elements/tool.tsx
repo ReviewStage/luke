@@ -19,8 +19,8 @@ import { cn } from "./utils";
  * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
  * the whole of it opens the call: the tool's icon, what the call did in
  * a few words, and where it stands, a spinner while it runs and a red
- * mark if it failed, in a 16px seat that stays, empty, once it has ended
- * well, so the row never changes shape as the answer lands. There is no chevron:
+ * mark if it failed, trailing the words so that only their cut moves when
+ * the mark goes; a call that ended well keeps no seat for one. There is no chevron:
  * the icon leads, and a hover fill says the line opens. The body under
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
@@ -39,13 +39,15 @@ export const TOOL_STATE = {
 
 export type ToolState = (typeof TOOL_STATE)[keyof typeof TOOL_STATE];
 
-/** What each state's mark says to a reader who cannot see it. */
+/** The states that draw a mark: every one but a call that ended well. */
+type MarkedToolState = Exclude<ToolState, typeof TOOL_STATE.OUTPUT_AVAILABLE>;
+
+/** What each drawn mark says to a reader who cannot see it. */
 const STATE_LABEL = {
   [TOOL_STATE.INPUT_STREAMING]: "Running",
   [TOOL_STATE.INPUT_AVAILABLE]: "Running",
-  [TOOL_STATE.OUTPUT_AVAILABLE]: "Completed",
   [TOOL_STATE.OUTPUT_ERROR]: "Failed",
-} as const satisfies Record<ToolState, string>;
+} as const satisfies Record<MarkedToolState, string>;
 
 /** How a block of the body is drawn: a command behind its prompt, a patch with its lines coloured, words as they are, or JSON. */
 export const TOOL_BLOCK = {
@@ -116,11 +118,12 @@ export function Tool({ className, children, ...props }: ToolProps): ReactNode {
 }
 
 /**
- * Where the call stands, in a 16px seat of its own: a spinner, a red mark,
- * or nothing drawn for a call that ended well, since that is every call's
- * end and a mark on each says nothing. The seat still says it aloud.
+ * Where the call stands, at 16px: a spinner while it runs or a red mark if
+ * it failed. A call that ended well draws nothing, no empty seat and no gap
+ * beside it, since that is every call's end and a mark on each says nothing.
  */
 export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
+  if (state === TOOL_STATE.OUTPUT_AVAILABLE) return null;
   return (
     <span
       className="flex size-4 shrink-0 items-center justify-center"
@@ -128,7 +131,7 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
       role="img"
       aria-label={STATE_LABEL[state]}
     >
-      {state === TOOL_STATE.OUTPUT_AVAILABLE ? null : state === TOOL_STATE.OUTPUT_ERROR ? (
+      {state === TOOL_STATE.OUTPUT_ERROR ? (
         <XIcon className="size-4 text-danger" aria-hidden="true" />
       ) : (
         <SpinnerRing className="text-muted-foreground" />
@@ -149,24 +152,20 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectIsCode?: boolean;
 };
 
-/** The one line a call shows: what it did, and where it stands. */
-export function ToolHeader({
+/** How a call's line is set, whether it folds its body open or opens somewhere else. */
+export const TOOL_LINE_CLASS =
+  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary";
+
+/** What a call's line says: its icon, what it did, and where it stands. */
+export function ToolLine({
   state,
   icon,
   label,
   subject,
   subjectIsCode = true,
-  className,
-  ...props
-}: ToolHeaderProps): ReactNode {
+}: Pick<ToolHeaderProps, "state" | "icon" | "label" | "subject" | "subjectIsCode">): ReactNode {
   return (
-    <FoldSummary
-      className={cn(
-        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary",
-        className,
-      )}
-      {...props}
-    >
+    <>
       <span
         className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4"
         aria-hidden="true"
@@ -180,6 +179,29 @@ export function ToolHeader({
         )}
       </span>
       <ToolStateMark state={state} />
+    </>
+  );
+}
+
+/** The one line a call shows: what it did, and where it stands. */
+export function ToolHeader({
+  state,
+  icon,
+  label,
+  subject,
+  subjectIsCode = true,
+  className,
+  ...props
+}: ToolHeaderProps): ReactNode {
+  return (
+    <FoldSummary className={cn(TOOL_LINE_CLASS, className)} {...props}>
+      <ToolLine
+        state={state}
+        icon={icon}
+        label={label}
+        subject={subject}
+        subjectIsCode={subjectIsCode}
+      />
     </FoldSummary>
   );
 }

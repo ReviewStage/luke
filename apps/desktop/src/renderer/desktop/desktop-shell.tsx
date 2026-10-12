@@ -4,6 +4,7 @@ import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -147,7 +148,8 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * sidebar was, and leaves the same way; it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or pinning the plan's summary
+ * opening, shutting, or growing the side panel, or the plan's summary pinned
+ * or folded to its rail, by a press or by its column's room
  * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
@@ -164,6 +166,7 @@ export function DesktopShell({
   plans,
   history,
   sidebar,
+  call,
   captions,
   settings,
 }: {
@@ -174,6 +177,8 @@ export function DesktopShell({
   plans: PlansControl;
   history: NavigationHistory;
   sidebar: SidebarCollapse;
+  /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
+  call: CallCardInput | undefined;
   captions: CaptionStripProps;
   settings: SettingsPanelProps;
 }): React.JSX.Element {
@@ -211,6 +216,7 @@ export function DesktopShell({
           sidebar={sidebar}
           history={history}
           settings={settings}
+          call={call}
           onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
         />
         <CaptionStrip {...captions} />
@@ -228,6 +234,7 @@ export function DesktopShell({
           plans={plans}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
         />
+        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
         <CaptionStrip {...captions} />
       </div>
     );
@@ -258,6 +265,7 @@ export function DesktopShell({
         onTabChange={onTabChange}
         account={account}
         updates={settings.updates}
+        call={sidebar.collapsed ? undefined : call}
       />
       <main className="desktop-main">
         <DesktopPlans
@@ -268,6 +276,11 @@ export function DesktopShell({
         />
       </main>
       {captionsInColumn ? null : captionStrip}
+      {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
+      <CallCardDock
+        call={sidebar.collapsed ? call : undefined}
+        surface={CALL_CARD_SURFACE.FLOATING}
+      />
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls">
         <SidebarToggle sidebar={sidebar} />
@@ -289,7 +302,7 @@ export function DesktopShell({
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: plans.sidePanel.open,
           panelFullScreen: plans.sidePanel.fullScreen,
-          summaryPinned: summary.pinned,
+          summaryPinned: summary.pinned && summary.wide,
         }}
       />
     </div>

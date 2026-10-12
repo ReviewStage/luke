@@ -60,6 +60,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type DrawnTabs,
   drawsSubagent,
+  type FileHistoryStep,
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
@@ -75,6 +76,7 @@ import {
   type WorkTurnRow,
   type WorkWorkerBlock,
   workerCallIds,
+  workerChoice,
   workerJob,
   workerOf,
   workRowsOf,
@@ -359,7 +361,7 @@ function stripTabs(input: {
             movedAt: session?.endedAt,
             state: stateWords,
           }),
-          choice: undefined,
+          choice: worker && workerChoice(worker),
           transcript: worker && workerTranscript(worker),
         };
       }
@@ -475,7 +477,7 @@ function PanelTabs({
   const kinds = stripTabs({ panel, unread, agents, subagents, files, held, copied });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
-  // is left to fall through to nothing rather than to the window.
+  // falls through to the menu bar, which closes the window (`app-menu.ts`).
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
@@ -640,11 +642,13 @@ function TabContent({
   standings,
   shown,
   onOpenSubagent,
+  onOpenAgent,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
   fileTree,
   onBrowseFile,
+  onFileHistory,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -664,6 +668,8 @@ function TabContent({
   shown: boolean;
   /** Opens a planning worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
+  /** Opens a coding agent's tab in the plan's column, by the agent. */
+  onOpenAgent: (agentId: string) => void;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -674,6 +680,8 @@ function TabContent({
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
+  /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
+  onFileHistory: (from: string, step: FileHistoryStep) => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
   if (isFileTab(tab)) {
@@ -691,12 +699,19 @@ function TabContent({
           repository={repository}
           file={file}
           snippet={snippetOf(shownCode, file)}
+          shownCode={shownCode}
           readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
           readFolder={(path) => act(ACT_KIND.PLANNING_TREE, { planId, path })}
+          readWhole={() => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
           openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
+          history={{
+            canGoBack: (file.back?.length ?? 0) > 0,
+            canGoForward: (file.forward?.length ?? 0) > 0,
+            onStep: (step) => onFileHistory(file.path, step),
+          }}
         />
       </Fragment>
     );
@@ -752,7 +767,9 @@ function TabContent({
           earlier={work.earlier}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
+          onOpenAgent={onOpenAgent}
           shown={shown}
+          models={agents.models}
         />
       );
   }
@@ -989,6 +1006,7 @@ export function SidePanel({
   views,
   shown,
   focused,
+  onOpenAgent,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1010,6 +1028,8 @@ export function SidePanel({
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W and ⌘T answer to. */
   focused: boolean;
+  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Work tab asks for. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1119,11 +1139,13 @@ export function SidePanel({
               standings={standings}
               shown={keys}
               onOpenSubagent={openSubagent}
+              onOpenAgent={onOpenAgent}
               onWorkerStatus={views.onWorkerStatus}
               onWorkerHeld={views.onWorkerHeld}
               onOpenFile={panel.onOpenFile}
               fileTree={fileTree}
               onBrowseFile={panel.onBrowseFile}
+              onFileHistory={panel.onFileHistory}
             />
           </div>
         )}

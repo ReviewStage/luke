@@ -2,7 +2,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentAttachment, CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import {
+  type CodingAgentAttachment,
+  type CodingAgentMessage,
+  hasWordsOrFiles,
+} from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import {
   type AgentRun,
@@ -59,7 +63,7 @@ export interface AgentComposerControl {
   note: string | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
-  /** Sends the words in the box, trimmed, under a fresh key; nothing on an empty box, a send out, or a closed agent. */
+  /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box, a send out, or a closed agent. */
   send: () => void;
   /** Sends the words in the box again under the failed message's key, so a send whose answer was lost reaches the agent once. */
   retry: () => void;
@@ -140,8 +144,8 @@ export function useAgentComposer(input: {
     known: ReadonlySet<string> = knownDeveloperRows(messages),
   ) => {
     const text = held.draft.trim();
-    if (text === "" || held.sending || held.closed !== undefined) return;
     const { attachments } = held;
+    if (!hasWordsOrFiles(text, attachments) || held.sending || held.closed !== undefined) return;
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
     const line: SentLine = { id, text, attachments, known };
     setHeld((was) => ({

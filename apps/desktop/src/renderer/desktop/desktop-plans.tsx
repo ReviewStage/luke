@@ -12,6 +12,7 @@ import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
@@ -125,7 +126,8 @@ function PlanDocument({
   const views = useTabViews();
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, plans.sidePanel.open, area);
+  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
   const summaryCard = useId();
   // The column the pointer or the focus last went into holds the keys. Note
   // that it is heard on the plan's area as it bubbles, because the columns
@@ -174,9 +176,7 @@ function PlanDocument({
             <p role="alert">{line}</p>
           )}
           {region.kind === DOCUMENT_REGION.FAILED ? (
-            <button type="button" className="primary-button" onClick={plans.onRetryDocument}>
-              Try again
-            </button>
+            <RetryButton onRetry={plans.onRetryDocument} />
           ) : null}
           {/* A plan that cannot be drawn offers no menu, so its way back to
               the new-plan page is said here. */}
@@ -219,6 +219,14 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
+  // A coding agent's start on the Work tab opens the agent's tab in this
+  // column, which a panel filling the window over it first gives way to,
+  // and hands the keys to this column, so ⌘W closes the tab it opened.
+  const openAgent = (agentId: string) => {
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    mainTabs.onChoose({ agent: agentId });
+    setFocus(COLUMN.MAIN);
+  };
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
@@ -226,7 +234,7 @@ function PlanDocument({
       {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-      <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
+      <div ref={setColumn} className="desktop-plan-main" hidden={sidePanel.fullScreen}>
         <Toolbar
           heading={
             <MainTabStrip
@@ -277,12 +285,7 @@ function PlanDocument({
             )}
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
-          <SummaryButton
-            layout={summaryLayout}
-            pinned={summary.pinned}
-            panelOpen={sidePanel.open}
-            cardId={summaryCard}
-          />
+          <SummaryButton layout={summaryLayout} cardId={summaryCard} />
         </Toolbar>
         {/* The summary stands beside what the column shows, under the
             toolbar and over the call bar, which both span the column. */}
@@ -301,7 +304,7 @@ function PlanDocument({
                 key={String(archived)}
                 plan={plan}
                 live={plans.live}
-                onShowHistory={() => plans.history.onOpen(plan.id)}
+                onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
                 {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
                 looks={looks}
               />
@@ -355,6 +358,7 @@ function PlanDocument({
           views={views}
           shown={plans.shown}
           focused={sideFocused}
+          onOpenAgent={openAgent}
         />
       ) : null}
     </div>
@@ -372,7 +376,7 @@ export function DesktopPlans({
   looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
-  /** Whether the plan's summary stands pinned beside its column, held by the shell, whose panes glide as it turns. */
+  /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
 }): React.JSX.Element {
   switch (plans.page) {

@@ -37,6 +37,9 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
   codingAgentPullRequestAnswerViewSchema,
+  type DictationTranscribeAnswerView,
+  type DictationTranscribeParams,
+  dictationTranscribeAnswerViewSchema,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -231,6 +234,10 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key removed; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** One dictated clip, carried once; its words, or why there are none. */
+  dictationTranscribe(
+    params: DictationTranscribeParams,
+  ): Effect.Effect<DictationTranscribeAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -461,6 +468,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           path: params.path,
           firstLine: params.firstLine,
           lastLine: params.lastLine,
+          ...(params.raw === undefined ? undefined : { raw: params.raw }),
         }),
         (answer): PlanningFileAnswer =>
           (answer.ok
@@ -471,7 +479,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningTree: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_TREE, { planId: params.planId, path: params.path }),
+        client.call(GATEWAY_METHOD.PLANNING_TREE, {
+          planId: params.planId,
+          path: params.path,
+          ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
+        }),
         (answer): PlanningTreeAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
@@ -667,6 +679,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    dictationTranscribe: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
+          audio: params.audio,
+          durationMs: params.durationMs,
+          keywords: [...params.keywords],
+        }),
+        codingAgentAnswer(dictationTranscribeAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

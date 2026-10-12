@@ -18,6 +18,8 @@
   --control-height: 30px;
   --control-radius: 8px;
   --control-glyph: 15px;
+  /* The call bar's own row, which the passing notices stand clear of. */
+  --call-row-height: 36px;
   /* The spacing scale: every padding, margin, and gap in the window is one of
      these steps or a name below built from them (docs/DESIGN.md). */
   --space-2: 2px;
@@ -450,6 +452,23 @@ body,
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.45;
+}
+
+/* The list's failure: its sentence, then the retry under it, drawn back by
+   its own inset so its glyph starts where the words do. */
+.sidebar-failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.sidebar-failure p {
+  margin: 0;
+}
+
+.sidebar-failure .quiet-button {
+  margin-left: calc(-1 * var(--space-8));
 }
 
 .sidebar-plans {
@@ -1226,6 +1245,38 @@ body,
   outline-offset: 1px;
 }
 
+/* A small act beside a line of words, a failure's retry
+   (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
+   the muted voice of the words it follows, lit like any other on hover, and
+   tighter at its sides, since it stands beside words rather than in a
+   toolbar. A failed row that is itself the button draws the retry's glyph
+   and word in its own colour (`.retry-label`), its hover lighting both. */
+.quiet-button {
+  padding: 0 var(--space-8);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quiet-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.retry-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-left: var(--space-4);
+  font-weight: 600;
+}
+
+.retry-label svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  align-self: center;
+}
+
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
    alert in one cell, only the state's own drawn, so a copy crossfades in
    place, the check in the success colour, and the button never moves. */
@@ -1353,6 +1404,15 @@ body,
   margin-left: var(--space-24);
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+/* A setting's check at its end while it is on. */
+.plan-menu-check {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: 0 0 auto;
+  margin-left: var(--space-24);
+  color: var(--text-secondary);
 }
 
 .plan-menu-rule {
@@ -1496,7 +1556,8 @@ body,
   text-align: left;
 }
 
-.plan-edit-link:hover {
+.plan-edit-link:hover,
+.plan-edit-link:focus-visible {
   color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 0.2em;
@@ -1650,7 +1711,7 @@ body,
 .call-bar {
   display: flex;
   max-width: var(--reading-width);
-  min-height: 36px;
+  min-height: var(--call-row-height);
   align-items: center;
   margin: 0 auto;
   gap: var(--space-12);
@@ -2607,20 +2668,18 @@ body,
 /* What the column shows, beside the plan's summary: under the toolbar and
    over the call bar, which both span the column. The room the summary takes
    is said once here, so the call bar's row below centres on the room the
-   document above it is centred in. A summary on its way out takes none. */
+   document above it is centred in. */
 .desktop-plan-main {
   --summary-width: 240px;
   --summary-rail-width: calc(var(--control-height) + 2 * var(--space-8));
   --summary-room: 0px;
 }
 
-.desktop-plan-main:has(
-  > .desktop-plan-body > .plan-summary[data-mode="column"]:not([data-leaving])
-) {
+.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="column"]) {
   --summary-room: var(--summary-width);
 }
 
-.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="rail"]:not([data-leaving])) {
+.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="rail"]) {
   --summary-room: var(--summary-rail-width);
 }
 
@@ -2654,43 +2713,90 @@ body,
   background: var(--desktop-ground);
 }
 
-/* Folded, the glyphs alone in a rail, under the chevron that hangs the card. */
+/* Collapsed, the panel's kinds alone in a rail under the chevron that
+   expands it, one glyph after the next at one even step. */
+.plan-summary[data-mode="rail"],
+.plan-summary[data-mode="rail"] > .plan-summary-rows {
+  align-items: center;
+  gap: var(--list-gap);
+}
+
 .plan-summary[data-mode="rail"] {
   width: var(--summary-rail-width);
-  align-items: center;
-  gap: var(--space-12);
   padding: var(--space-8);
 }
 
-/* Leaving, it gives the column its room back at once and slides out over it. */
-.plan-summary[data-leaving] {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+/* The toolbar's button is drawn on while the summary is pinned, as it is
+   while the card it hangs stands. */
+.summary-toggle[aria-pressed="true"] {
+  background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
+  color: var(--text-primary);
 }
 
-/* Over an open panel, or hung from the rail's chevron, the whole summary
-   stands in a card under the toolbar's button, drawn as a menu is. */
+/* Expanded where it cannot be pinned, the whole summary stands in a card
+   over the rail's own footprint, its top and right edges the rail's, drawn
+   as a menu is, and its chevron, shown while the pointer is on it, stands
+   on the very spot of the rail's: as far in from the card's outer edges as
+   the rail's padding, less the card's border. Its first line is that
+   chevron's height, so the heading on it stands level with it. */
 .plan-summary-card {
+  --card-edge: 1px;
   position: absolute;
   z-index: 2;
-  top: var(--space-4);
-  right: var(--column-inset);
+  top: 0;
+  right: 0;
   display: flex;
   box-sizing: border-box;
   width: var(--summary-width);
-  max-height: calc(100% - var(--space-16));
+  max-height: 100%;
   flex-direction: column;
   gap: var(--section-gap);
-  padding: var(--space-12) var(--menu-inset);
+  padding: calc(var(--space-8) - var(--card-edge)) var(--menu-inset) var(--space-12);
   overflow-y: auto;
-  border: 1px solid var(--hairline);
+  border: var(--card-edge) solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
   box-shadow: 0 16px 40px var(--shadow);
   outline: none;
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  transform-origin: top right;
+  animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.plan-summary-collapse {
+  position: absolute;
+  top: calc(var(--space-8) - var(--card-edge));
+  right: calc(var(--space-8) - var(--card-edge));
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.plan-summary-card:hover .plan-summary-collapse,
+.plan-summary-collapse:focus-visible {
+  opacity: 1;
+}
+
+.plan-summary-card > .plan-summary-section:first-of-type > .plan-summary-heading {
+  display: flex;
+  min-height: var(--control-height);
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.plan-summary-card > .plan-summary-empty {
+  padding-top: var(--space-8);
+  padding-right: var(--control-height);
+}
+
+/* It grows out of the rail it stands over rather than dropping as a menu
+   does, so its chevron never leaves the spot it shares with the rail's. */
+@keyframes summary-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }
 
 .plan-summary-heading {
@@ -3813,55 +3919,104 @@ body,
   color: var(--on-accent-muted);
 }
 
-/* The window's one passing notice (`toast.tsx`), said quietly at its foot
-   once a note has gone or a menu's copy has landed, and gone itself a moment
-   later: it rises in on the spring, and fades first on its way out. */
-.toast {
+/* The window's passing notices (`toast.tsx`): up to three cards stacked in
+   its bottom-right corner, newest at the bottom, clear of the call bar where
+   one is drawn. Each rises in on the spring and fades first on its way out;
+   the stack itself takes no pointer, so only a card with something to press
+   stands in the way of what is under it. */
+.toast-stack {
   position: fixed;
   z-index: var(--z-toast);
-  bottom: var(--space-24);
-  left: 50%;
+  right: var(--space-16);
+  bottom: var(--space-16);
+  width: min(340px, calc(100vw - 2 * var(--space-16)));
+  pointer-events: none;
+}
+
+.toast-stack > ol {
   display: flex;
-  align-items: center;
-  gap: var(--glyph-gap);
+  flex-direction: column;
+  gap: var(--space-8);
   margin: 0;
-  padding: var(--space-8) var(--space-16);
+  padding: 0;
+  list-style: none;
+}
+
+/* The call bar's row and its padding, and its hairline, then a row's gap. */
+body:has(.desktop-call-bar) .toast-stack {
+  bottom: calc(var(--call-row-height) + 3 * var(--space-12) + 1px);
+}
+
+/* A capture run zeroes the motion tokens on its stage, which the stack drawn
+   at the body's end does not stand under, so it is held still here too. */
+body:has(.app-stage[data-capture="true"]) .toast-stack {
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
+  --duration-hover: 0s;
+}
+
+/* Its glyph, its words, and its action share a first row as tall as the
+   action, so they read across on one line whether or not a second follows. */
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--glyph-gap);
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline-strong);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface-popover);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow:
+    0 1px 2px var(--shadow-soft),
+    0 12px 36px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 560;
+  line-height: 18px;
   pointer-events: none;
-  transform: translateX(-50%);
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
     toast-rise var(--duration-fast) var(--spring-fast);
-  transition: opacity var(--duration-exit) var(--motion-exit);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-exit) var(--motion-exit);
 }
 
 .toast[data-leaving="true"] {
   opacity: 0;
+  transform: translateX(var(--space-8));
 }
 
-/* A capture run zeroes the motion tokens on its stage, which a toast drawn
-   at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .toast {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-}
-
-.toast svg {
-  width: 14px;
-  height: 14px;
+.toast > svg {
+  width: 16px;
+  height: 16px;
   flex: none;
+  margin-top: var(--space-4);
   color: var(--state-complete);
 }
 
-.toast[data-tone="failed"] svg {
+.toast[data-tone="failed"] > svg {
   color: var(--error-text);
+}
+
+/* Its words, and the line under them that says where or what. */
+.toast-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.toast-words {
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.toast-detail {
+  padding-bottom: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 16px;
 }
 
 /* A toast with an action is pointed at, so it takes the pointer that one
@@ -3878,21 +4033,60 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 
-/* The action reads as the link it is, set off from the words before it. */
+/* The action is a small solid button in the full ink, the one thing on the
+   card to press. */
 .toast-action {
-  margin-left: var(--space-4);
-  padding: var(--space-2) var(--space-8);
+  height: 24px;
+  flex: none;
+  padding: 0 var(--space-8);
   border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--state-working);
-  font-size: inherit;
-  font-weight: 640;
-  transition: background-color var(--duration-hover) ease;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface-popover);
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .toast-action:hover {
-  background: var(--selected);
+  opacity: 0.86;
+}
+
+/* A toast that stands until dismissed shows its × on its corner under the
+   pointer or focus, standing over the card's edge so it takes no room from
+   the words. */
+.toast-dismiss {
+  position: absolute;
+  top: calc(-1 * var(--space-8));
+  left: calc(-1 * var(--space-8));
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: var(--surface-popover);
+  box-shadow: 0 1px 2px var(--shadow-soft);
+  color: var(--text-secondary);
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.toast:hover .toast-dismiss,
+.toast:focus-within .toast-dismiss {
+  opacity: 1;
+}
+
+.toast-dismiss:hover {
+  color: var(--text-primary);
+}
+
+.toast-dismiss svg {
+  width: 12px;
+  height: 12px;
 }
 
 @keyframes toast-fade {
@@ -3903,14 +4097,18 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 
 @keyframes toast-rise {
   from {
-    transform: translateX(-50%) translateY(var(--space-8));
+    transform: translateY(var(--space-12));
   }
 }
 
 /* A sidebar plan's card: its name wrapped to two lines with how long ago it
    was updated at the head's right, its repository under the name, then a
    few lines each for its agents and its pull requests, each list under a
-   hairline, a glyph column at their start and a muted corner at their end. */
+   hairline, a glyph column at their start and a muted corner at their end.
+   The repository, an agent, and a pull request are buttons that look like
+   the lines around them until the pointer is on one, which washes it as a
+   menu's row is washed, bled into the card's inset so its words stay in
+   line with the rest. */
 .plan-card {
   display: flex;
   flex-direction: column;
@@ -3957,6 +4155,19 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-size: 11.5px;
 }
 
+.plan-card-repository,
+.plan-card-line {
+  margin: 0 calc(-1 * var(--space-6));
+  padding: var(--space-2) var(--space-6);
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+
+:is(button.plan-card-repository, button.plan-card-line):hover {
+  background: var(--raised-strong);
+}
+
 .plan-card-repository :is(.repository-picture, .account-mark) {
   width: 12px;
   height: 12px;
@@ -3966,15 +4177,15 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-lines {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   margin: 0;
-  padding: var(--space-6) 0 0;
+  padding: var(--space-4) 0 0;
   border-top: 1px solid var(--hairline);
   list-style: none;
 }
 
 .plan-card-line {
   display: flex;
+  width: calc(100% + 2 * var(--space-6));
   min-width: 0;
   align-items: center;
   gap: var(--space-6);
@@ -4012,5 +4223,5 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 }
 
 .plan-card-more {
-  padding-left: calc(12px + var(--space-6));
+  padding: var(--space-2) 0 0 calc(12px + var(--space-6));
 }

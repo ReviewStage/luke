@@ -607,7 +607,7 @@ test("a worker's line in the Work tab is one button saying where the subagent st
   const work = page.querySelector('section[aria-label="Work"]');
   assert.ok(work);
   const lines = [...work.querySelectorAll<HTMLElement>("[data-subagent-row]")];
-  // Each line is the one button: its job, and the state mark every call's row wears.
+  // Each line is the one button: its job, and the state mark a call's row wears while it runs.
   assert.deepEqual(
     lines.map((line) => [
       line.tagName,
@@ -616,7 +616,7 @@ test("a worker's line in the Work tab is one button saying where the subagent st
     ]),
     [
       ["BUTTON", running, "Running"],
-      ["BUTTON", done, "Completed"],
+      ["BUTTON", done, undefined],
     ],
   );
   assert.equal(work.querySelector('[aria-label="Open in tab"]'), null);
@@ -970,7 +970,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
   await act(async () => {
     await Promise.resolve();
   });
-  assert.equal(row()?.textContent, "Could not read earlier work. Try again");
+  assert.equal(row()?.textContent, "Could not read earlier work. Retry");
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
 
@@ -1820,7 +1820,7 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
 /** An archived plan, its sections written so the document offers its editors where it may. */
 const ARCHIVED_FIELDS: PlanFields = {
   ...EMPTY_PLAN_FIELDS,
-  goal: { problem: "- Only an admin can add a member.", outcome: null },
+  context: "- Only an admin can add a member.",
 };
 const ARCHIVED_PLAN: Plan = {
   ...PLAN,
@@ -4021,4 +4021,53 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
     "Working…",
     "Queue A lets an admin revoke.",
   ]);
+});
+
+test("a coding agent's start on the Work tab opens the agent's tab in the plan's column, which then holds the keys, its tab already chosen or not", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
+    agents: codingAgentsControl({ agents: [TITLED_AGENT], agentIds: [TITLED_AGENT.id] }),
+    work: {
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1_000,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-start",
+              tool: PLAN_WORK_TOOL.START_AGENT,
+              name: "start_coding_agent",
+              state: PLAN_WORK_STATE.DONE,
+              subject: "Add a sign-out button.",
+              input: "{}",
+              output: JSON.stringify({ status: "accepted", agent: { id: TITLED_AGENT.id } }),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const start = page.querySelector<HTMLElement>('.side-panel [data-call-id="call-start"]');
+  assert.ok(start);
+  const pressStart = () =>
+    act(() => {
+      start.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      start.click();
+    });
+  pressStart();
+  assert.equal(columnChosen(page), TITLED_AGENT.title);
+
+  // Pressed again with the agent's tab already chosen, nothing in the column moves, and still it holds the keys.
+  pressStart();
+  assert.equal(columnChosen(page), TITLED_AGENT.title);
+  keydown({ key: "t", metaKey: true });
+  assert.ok(document.querySelector(".desktop-toolbar .tab-add-menu"), "the column's + menu");
+  assert.equal(document.querySelector(".side-panel .tab-add-menu"), null);
 });

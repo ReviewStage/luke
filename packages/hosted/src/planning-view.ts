@@ -11,6 +11,7 @@ import {
   planCreateRequestSchema,
   planFileRefusalSchema,
   planFileRequestSchema,
+  planFileTextSchema,
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
@@ -185,8 +186,9 @@ const planWorkReasoningPartSchema = EffectSchema.Struct({
 /**
  * One call the planning model made: which tool, by kind and by name; its
  * state; the one input a reader looks for first (the command, the query, the
- * page, the file), as its subject; and the whole input and output as text,
- * each cut to its bound.
+ * page, the file), as its subject; the subagent task it started, sent work
+ * to, or stopped; and the whole input and output as text, each cut to its
+ * bound.
  */
 const planWorkToolPartSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(PLAN_WORK_PART.TOOL),
@@ -196,6 +198,10 @@ const planWorkToolPartSchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
   subject: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
+  ),
+  /** The subagent task a `worker` call started or sent work to, or a `worker-cancel` call stopped, by eve's id for it, so the stop names the subagent it stopped; absent for any other call, before a start answered, and from a service older than it. */
+  task: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
   ),
   input: workText,
   output: EffectSchema.optionalKey(workText),
@@ -211,7 +217,8 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's, when its newest task began and ended, and its title. Note that it stands one level deep, because the wire shows no
+ * model's, when its newest task began and ended, its title, and the model
+ * it ran on. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
@@ -225,6 +232,10 @@ const planWorkSessionSchema = EffectSchema.Struct({
   /** Its short title, generated from the first task it was handed; absent until that lands, where none could be generated, and from a service older than it. */
   title: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+  ),
+  /** The catalog id of the model its newest task ran on, such as `openai/gpt-6.1-sol`, which its row names as an agent's subagent row names its pair; absent before that task's turn named one, and from a service older than it. */
+  model: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   ),
 });
 
@@ -362,6 +373,13 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /**
+   * What each part of Luke is doing on the standing call, whichever plan it
+   * is about, as last told: what the floating call window draws while the
+   * call's plan is not the one open. Absent before the first word and once
+   * the call has ended.
+   */
+  callActivity: EffectSchema.optionalKey(planActivitySchema),
   /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
   /** What was said on the active plan's calls as last read; absent with no plan open. */
@@ -556,9 +574,10 @@ const planFileShownSchema = EffectSchema.Struct({
 
 export type PlanFileShown = typeof planFileShownSchema.Type;
 
-/** The File tab's read, as the window hears it: the window coloured, why the file is not shown, or that the service did not answer. */
+/** The File tab's read, as the window hears it: the window coloured, the whole text read raw, why the file is not shown, or that the service did not answer. */
 export const planningFileAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ file: planFileShownSchema }),
+  EffectSchema.Struct({ text: planFileTextSchema }),
   planFileRefusalSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
 ]);

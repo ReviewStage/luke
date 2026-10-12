@@ -112,59 +112,6 @@
   content: "";
 }
 
-/* A rule as an item of a numbered list (`plan-rule.tsx`): its number muted
-   in a gutter of its own, its statement in the body's weight beside it, and
-   its examples beneath the statement. The number takes the writing mark's
-   accent while the caret types in its rule. */
-.plan-rule {
-  display: grid;
-  grid-template-columns: 1.6em minmax(0, 1fr);
-  column-gap: 0.4em;
-}
-
-.plan-rule-number {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.plan-rule.plan-writing .plan-rule-number {
-  color: var(--accent);
-}
-
-/* A rule's examples: one compact block each, set in from the statement on a
-   hairline, each Given, When, and Then on its own line behind a muted label
-   of one width, so the clauses line up. */
-.plan-rule-body ul {
-  display: grid;
-  gap: var(--space-8);
-  margin-top: var(--space-8);
-  padding-left: 0;
-  list-style: none;
-}
-
-.plan-rule-body li {
-  padding: var(--space-2) 0 var(--space-2) var(--space-12);
-  border-left: 2px solid var(--hairline-strong);
-  font-size: 0.93em;
-  line-height: 1.55;
-  white-space: pre-line;
-}
-
-.plan-rule-body li + li {
-  margin-top: 0;
-}
-
-/* Note that a label takes none of the gap `markdown.css` opens between a
-   list item's children, which as an inline-block it would otherwise take. */
-.plan-rule-body li > strong {
-  display: inline-block;
-  min-width: 3.4em;
-  margin-top: 0;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
 /* A unit or assumption as it settles: a tint behind it that fades, on
    opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
    leave nothing lit. */
@@ -279,11 +226,31 @@
 }
 
 .plan-unit-attributed:hover .plan-unit-byline,
+.plan-unit-attributed:focus-within .plan-unit-byline,
 .plan-unit-editable:hover .plan-unit-byline,
 .plan-unit-editable:focus-within .plan-unit-byline,
 .plan-assumptions:hover > .plan-unit-byline,
 .plan-assumptions:focus-within > .plan-unit-byline {
   opacity: 1;
+}
+
+/* Where the window offers the version history, the line opens it on the
+   section's last change, so it is a press drawn as the quiet line it was,
+   underlined only under the pointer or the keyboard, as the line over the
+   document is. Note that it takes the pointer although it fades out, because
+   a pointer on it is on its section, which shows it. */
+button.plan-unit-byline {
+  border-radius: 4px;
+  background: none;
+  pointer-events: auto;
+  text-align: left;
+}
+
+button.plan-unit-byline:hover,
+button.plan-unit-byline:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 /* A section changed since the developer last looked: a still wash of Luke's
@@ -305,10 +272,12 @@
 }
 
 /* How many sections changed since the last look, under the "Edited by"
-   line in the same muted weight, with its dismissal. */
+   line in the same muted weight, with its dismissal, held to the line's
+   own height so the button does not push the document down. */
 .plan-changed-note {
+  --control-height: 22px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-6);
   margin: -6px 0 12px;
   color: var(--text-secondary);
@@ -345,31 +314,6 @@
 .plan-field-input:focus {
   border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
   outline: none;
-}
-
-/* A rule in its editor: the statement on its own line, each example's
-   Given, When, and Then side by side with its remove, then the buttons that
-   add an example or strike the rule. One-line inputs, so no box grows. */
-.plan-rule-fields {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.plan-rule-fields .plan-field-input {
-  min-height: 0;
-  padding: var(--space-6) var(--space-8);
-}
-
-.plan-rule-example {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.plan-rule-actions {
-  display: flex;
-  gap: var(--space-8);
 }
 
 /* The sections the body leaves out while they hold nothing, offered after
@@ -488,26 +432,6 @@ button.code-card-path:hover {
   background: var(--code-ground);
 }
 
-.file-tab-header {
-  min-height: calc(24px + 2 * var(--space-2));
-}
-
-/* The button that opens the file on GitHub, naming the branch it was read
-   on, keeps to the header's right as a card's actions do. */
-.file-tab-github {
-  min-width: 0;
-  flex: 0 1 auto;
-  margin-left: auto;
-  padding: 0 var(--space-8);
-  color: var(--text-secondary);
-  font-size: 11.5px;
-}
-
-.file-tab-github .account-mark {
-  width: 13px;
-  height: 13px;
-}
-
 .file-tab-lines {
   min-height: 0;
   flex: 1;
@@ -517,22 +441,97 @@ button.code-card-path:hover {
   scrollbar-width: thin;
 }
 
-/* A File tab beside its repository's tree: the file takes the room the
-   tree leaves, and the tree keeps to the right, as an editor's explorer
-   docked there does. */
+/* The File tabs' settings (file-view-settings.ts): lines unwrapped scroll
+   sideways together, each as wide as the longest, so the lit lines' ground
+   runs under the whole of every one; and the numbers' gutter may be gone. */
+.file-tab-lines[data-wrap="false"] {
+  overflow-x: auto;
+}
+
+.file-tab-lines[data-wrap="false"] > .code-line {
+  width: max-content;
+  min-width: 100%;
+}
+
+.file-tab-lines[data-wrap="false"] .code-line-text {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.file-tab-lines[data-line-numbers="false"] .code-line-number {
+  display: none;
+}
+
+.file-tab-lines[data-line-numbers="false"] .code-line-text {
+  padding-left: var(--space-12);
+}
+
+/* A File tab beside its repository's tree, under one bar across both: the
+   file takes the room the tree leaves, and the tree keeps to the right, as
+   an editor's explorer docked there does. */
 .file-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.file-view-body {
   display: flex;
   min-height: 0;
   flex: 1;
 }
 
-.file-view > .file-tab {
+.file-view-body > .file-tab {
   min-width: 0;
 }
 
-/* The heading's path as breadcrumbs: each folder a press that reveals it
-   in the tree, each chevron a menu of the folder's entries. The crumbs
-   give way from the left, so the file's own name stays in sight. */
+/* The bar: history, the path, then the file's actions and the tree's
+   toggle at its end, in the window's toolbar buttons. */
+.file-view-bar {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  font-size: 12px;
+}
+
+.file-view-history,
+.file-view-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.file-view-actions {
+  margin-left: auto;
+}
+
+.file-view-actions .account-mark {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+}
+
+/* A plan with no repository names the file plainly, cut from its left. */
+.file-view-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  direction: rtl;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The bar's path as breadcrumbs: each crumb a press that lists where it
+   stands, the chevrons between plain. The crumbs give way from the left,
+   so the file's own name stays in sight. */
 .file-breadcrumbs {
   min-width: 0;
   flex: 0 1 auto;
@@ -555,7 +554,7 @@ button.code-card-path:hover {
 }
 
 .file-breadcrumbs li:last-child,
-.file-breadcrumbs li:has(> .file-breadcrumb-chevron) {
+.file-breadcrumbs .file-breadcrumb-separator {
   flex-shrink: 0;
 }
 
@@ -571,11 +570,13 @@ button.code-card-path:hover {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
 }
 
-button.file-breadcrumb:hover,
-.file-breadcrumb-chevron:hover,
-.file-breadcrumb-chevron[aria-expanded="true"] {
+.file-breadcrumb:hover,
+.file-breadcrumb[aria-expanded="true"] {
   background: var(--selected);
   color: var(--text-primary);
 }
@@ -584,39 +585,63 @@ button.file-breadcrumb:hover,
   color: var(--text-primary);
 }
 
-.file-breadcrumb-chevron {
+.file-breadcrumb-separator {
   display: flex;
-  width: 16px;
-  height: 20px;
   align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
   color: var(--text-tertiary);
 }
 
-.file-breadcrumb-chevron svg {
+.file-breadcrumb-separator svg {
   width: 12px;
   height: 12px;
 }
 
-/* The heading's tree toggle keeps to its right, after the GitHub button
-   where that stands, and reads as on while the tree is shown. */
-.file-tree-toggle {
-  margin-left: auto;
+/* A crumb's list, hung under the crumb over the window as a menu is, its
+   rows the tree's own (file-breadcrumbs.tsx). */
+.file-crumb-list {
+  position: fixed;
+  z-index: var(--z-menu);
+  display: flex;
+  max-height: calc(100vh - 16px);
+  flex-direction: column;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface-popover);
+  box-shadow: 0 12px 32px var(--shadow);
+  -webkit-app-region: no-drag;
 }
 
-.file-tab-github + .file-tree-toggle {
-  margin-left: 0;
+.file-crumb-list[data-placed="false"] {
+  visibility: hidden;
 }
 
-.file-tree-toggle[aria-pressed="true"] {
+/* The list holds the keyboard itself only over a folder with no row to take it, which shows no ring. */
+.file-crumb-list:focus {
+  outline: none;
+}
+
+.file-crumb-tree {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.file-crumb-notice {
+  margin: 0;
+  padding: var(--space-4) var(--space-8);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* The tree's toggle reads as on while the tree is shown, as the side
+   panel's own toggle does. */
+.file-tree-toggle[aria-expanded="true"] {
   color: var(--text-primary);
 }
 
-/* The tree beside a File tab, its heading level with the tab's. */
+/* The tree beside a File tab, its search level with the tab's heading. */
 .file-tree-pane {
   display: flex;
   width: min(264px, 40%);
@@ -626,21 +651,35 @@ button.file-breadcrumb:hover,
   border-left: 1px solid var(--hairline);
 }
 
-.file-tree-header {
+/* The tree's search field and its filter, in one row over the tree: the
+   app's search well, a step shorter to sit in the panel's heading row. */
+.file-tree-search {
+  --control-height: 26px;
   display: flex;
-  min-height: calc(24px + 2 * var(--space-2));
   align-items: center;
   gap: var(--control-gap);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
+  padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  font-size: 11.5px;
 }
 
-.file-tree-title {
+.file-tree-search-well {
+  min-width: 0;
+  height: var(--control-height);
   flex: 1;
-  color: var(--text-secondary);
-  font-weight: 600;
+  border-radius: var(--control-radius);
+}
+
+.file-tree-search-well .settings-search-input {
+  font-size: 12.5px;
+}
+
+.file-tree-filter {
+  flex: 0 0 auto;
+}
+
+.file-tree-filter[aria-pressed="true"] {
+  background: var(--selected);
+  color: var(--text-primary);
 }
 
 .file-tree-notice {
@@ -658,7 +697,8 @@ button.file-breadcrumb:hover,
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list. */
-.file-tree-host {
+.file-tree-host,
+.file-crumb-tree {
   --trees-bg-override: transparent;
   --trees-bg-muted-override: var(--raised);
   --trees-fg-override: var(--text-primary);
@@ -677,9 +717,24 @@ button.file-breadcrumb:hover,
   flex-direction: column;
 }
 
-.file-tree-host > * {
+.file-tree-host > *,
+.file-tree-view > *,
+.file-crumb-tree > * {
   min-height: 0;
   flex: 1;
+}
+
+/* Each tree the pane may show draws in a frame of its own, the one not
+   standing hidden. */
+.file-tree-view {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.file-tree-view[hidden],
+.file-tree-host > .file-tree-notice[hidden] {
+  display: none;
 }
 
 /* The line under the tree saying a folder was listed short of whole. */
@@ -956,6 +1011,14 @@ button.file-breadcrumb:hover,
   font-size: 12px;
 }
 
+/* A failed read under the transcript: its sentence, and the retry beside it. */
+.agent-failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
 /* The room under the transcript for the composer, with no rule between
    them: the card's own edge is where the transcript ends. It keeps to the
    tab's foot where no transcript stands above it, as in a draft's tab. */
@@ -1001,12 +1064,64 @@ button.file-breadcrumb:hover,
   padding-left: 4px;
 }
 
-/* The "+" that attaches files, just left of the round Send or Stop. */
+/* The microphone and the "+" that attaches files, just left of the round
+   Send or Stop; the New Plan card's microphone, left of Start. */
 .agent-composer-actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: 4px;
+}
+
+/* A dictation standing in place of the card's foot: the voice's bars
+   across it, newest at the right, the time so far, and the two ways out,
+   ✓ as round as the Send it stands in for. */
+.dictation-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--text-secondary);
+}
+
+.dictation-wave {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  overflow: clip;
+}
+
+.dictation-wave-bar {
+  flex: none;
+  width: 2px;
+  height: 100%;
+  border-radius: 999px;
+  background: currentColor;
+  transform: scaleY(0.08);
+}
+
+.dictation-clock {
+  flex: none;
+  min-width: 34px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dictation-transcribing {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 12.5px;
 }
 
 /* Files dragged over the box: the card's edge brightens as it does under
@@ -1034,27 +1149,54 @@ button.file-breadcrumb:hover,
   justify-content: flex-end;
 }
 
-/* An image is its thumbnail; any other file a glyph, its name, and its
-   size, on a chip as tall as the thumbnail. */
+/* An image is its thumbnail; any other file its type's icon, its name, and
+   its size, on a chip as tall as the thumbnail. The chip's face is the
+   press that opens the file, washed under the pointer as a row is. */
 .attached-file {
   position: relative;
   display: flex;
   max-width: 220px;
   height: 48px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--section-fill);
+  transition: border-color var(--duration-hover) ease;
+}
+
+.attached-file-face {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 10px;
+  border-radius: 7px;
+  background: none;
   color: var(--text-secondary);
   font-size: 12px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.attached-file-face {
+  cursor: pointer;
+}
+
+button.attached-file-face:hover {
+  background: var(--raised-strong);
+}
+
+.attached-file:has(button.attached-file-face:hover) {
+  border-color: var(--hairline-strong);
 }
 
 .attached-file:has(img) {
   width: 64px;
-  padding: 0;
   overflow: visible;
+}
+
+.attached-file-face:has(img) {
+  padding: 0;
 }
 
 .attached-file img {
@@ -1063,9 +1205,14 @@ button.file-breadcrumb:hover,
   height: 100%;
   border-radius: 7px;
   object-fit: cover;
+  transition: filter var(--duration-hover) ease;
 }
 
-.attached-file > svg {
+button.attached-file-face:hover img {
+  filter: brightness(1.12);
+}
+
+.attached-file-face > svg {
   width: 16px;
   height: 16px;
   flex: none;
@@ -1080,6 +1227,111 @@ button.file-breadcrumb:hover,
 
 .attached-file-size {
   flex: none;
+}
+
+/* A file's type icon in its type's colour, as the file tree draws it:
+   Pierre's own colour for each type of the complete set (`@pierre/trees`'
+   stylesheet), in the palette `base.css` repeats from it. A type Pierre
+   colours nowhere takes the muted ink the tree gives it. */
+.file-type-icon {
+  color: var(--text-secondary);
+  fill: currentColor;
+}
+
+.file-type-icon:is([data-file-type="default"], [data-file-type="text"]) {
+  color: var(--file-icon-gray);
+}
+
+.file-type-icon:is(
+  [data-file-type="npm"],
+  [data-file-type="postcss"],
+  [data-file-type="ruby"],
+  [data-file-type="svelte"],
+  [data-file-type="yml"]
+) {
+  color: var(--file-icon-red);
+}
+
+.file-type-icon[data-file-type="git"] {
+  color: var(--file-icon-vermilion);
+}
+
+.file-type-icon:is(
+  [data-file-type="claude"],
+  [data-file-type="html"],
+  [data-file-type="json"],
+  [data-file-type="rust"],
+  [data-file-type="svg"],
+  [data-file-type="swift"],
+  [data-file-type="zig"],
+  [data-file-type="zip"]
+) {
+  color: var(--file-icon-orange);
+}
+
+.file-type-icon:is(
+  [data-file-type="babel"],
+  [data-file-type="browserslist"],
+  [data-file-type="javascript"]
+) {
+  color: var(--file-icon-yellow);
+}
+
+.file-type-icon:is(
+  [data-file-type="bash"],
+  [data-file-type="markdown"],
+  [data-file-type="svgo"],
+  [data-file-type="vue"]
+) {
+  color: var(--file-icon-green);
+}
+
+.file-type-icon:is([data-file-type="mcp"], [data-file-type="prettier"], [data-file-type="table"]) {
+  color: var(--file-icon-teal);
+}
+
+.file-type-icon:is(
+  [data-file-type="go"],
+  [data-file-type="oxc"],
+  [data-file-type="react"],
+  [data-file-type="tailwind"]
+) {
+  color: var(--file-icon-cyan);
+}
+
+.file-type-icon:is(
+  [data-file-type="biome"],
+  [data-file-type="c"],
+  [data-file-type="cpp"],
+  [data-file-type="docker"],
+  [data-file-type="python"],
+  [data-file-type="typescript"],
+  [data-file-type="vscode"],
+  [data-file-type="webpack"]
+) {
+  color: var(--file-icon-blue);
+}
+
+.file-type-icon:is(
+  [data-file-type="bootstrap"],
+  [data-file-type="css"],
+  [data-file-type="eslint"],
+  [data-file-type="terraform"],
+  [data-file-type="wasm"]
+) {
+  color: var(--file-icon-indigo);
+}
+
+.file-type-icon:is([data-file-type="astro"], [data-file-type="database"], [data-file-type="vite"]) {
+  color: var(--file-icon-purple);
+}
+
+.file-type-icon:is([data-file-type="graphql"], [data-file-type="image"], [data-file-type="sass"]) {
+  color: var(--file-icon-pink);
+}
+
+.file-type-icon[data-file-type="bun"] {
+  color: var(--file-icon-mauve);
 }
 
 /* Its way off sits on the chip's corner, as a feedback screenshot's does. */
@@ -1106,6 +1358,138 @@ button.file-breadcrumb:hover,
 .attached-file-remove svg {
   width: 8px;
   height: 8px;
+}
+
+/* A file opened over the window (attachment-viewer.tsx): the dialog's
+   dimmed window and card, the file's name and its buttons along the top,
+   and the file under them, an image fitted to the window, a text file's
+   lines scrolling inside the card, any other file its icon over Download. */
+.attachment-viewer {
+  display: flex;
+  min-width: min(360px, 100%);
+  max-width: min(1200px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  background: var(--surface-popover);
+  box-shadow: 0 24px 64px var(--shadow-deep);
+  color: var(--text-primary);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.attachment-viewer:focus {
+  outline: none;
+}
+
+.attachment-viewer[data-view="text"] {
+  width: min(880px, 100%);
+  height: calc(100vh - 2 * var(--space-24));
+}
+
+.attachment-viewer[data-view="other"] {
+  width: min(400px, 100%);
+}
+
+.attachment-viewer-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-6) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.attachment-viewer-header > .file-type-icon,
+.attachment-viewer-header > .icon-button-glyph {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-right: var(--space-4);
+}
+
+.attachment-viewer-title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-viewer-size {
+  flex: none;
+  margin: 0 auto 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attachment-viewer-walk {
+  display: flex;
+  align-items: center;
+}
+
+.attachment-viewer-place {
+  min-width: 48px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.attachment-viewer-body {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.attachment-viewer[data-view="image"] .attachment-viewer-body {
+  display: grid;
+  place-items: center;
+  background: var(--section-fill);
+}
+
+.attachment-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 2 * var(--space-24) - 50px);
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+.attachment-viewer-lines {
+  overflow: auto;
+  background: var(--code-ground);
+  user-select: text;
+}
+
+.attachment-viewer-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-24);
+  text-align: center;
+}
+
+.attachment-viewer-other > .file-type-icon,
+.attachment-viewer-other > .icon-button-glyph {
+  width: 48px;
+  height: 48px;
+}
+
+.attachment-viewer-other-name {
+  max-width: 100%;
+  margin: var(--space-6) 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.attachment-viewer-other-size {
+  margin: 0 0 var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* An archived plan's agent takes no message, so its composer's place says

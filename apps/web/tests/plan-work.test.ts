@@ -412,6 +412,45 @@ test("the worker reads as running while its turn is parked on it, and as done on
   );
 });
 
+test("a worker's start and the stop of its task carry the task, so the stop names the subagent it stopped; a call that touches no task carries none", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: EVE_DELEGATION_TOOL.WORKER,
+          input: { message: "Read the styling setup." },
+          output:
+            "Started task worker-13zmbg. Its result will arrive in a <task_result> message. To send it another message, call worker again with taskId worker-13zmbg.",
+        },
+      ]),
+      ...callingStep(FIRST_EVE_TURN, 1, [
+        { toolName: START_CODING_AGENT_TOOL.name, input: { task: "Investigate." }, output: {} },
+        {
+          toolName: EVE_DELEGATION_TOOL.TASK_CANCEL,
+          input: { taskId: "worker-13zmbg" },
+          output: "Stopped worker-13zmbg's current work; it won't report back.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 2, "Started Opus 5.5 on it."),
+    ],
+    standing,
+  );
+
+  const work = await worked(target, standing);
+  assert.deepEqual(
+    work.parts.map((part) => (part.type === PLAN_WORK_PART.TOOL ? [part.tool, part.task] : [])),
+    [
+      [PLAN_WORK_TOOL.WORKER, "worker-13zmbg"],
+      [PLAN_WORK_TOOL.START_AGENT, undefined],
+      [PLAN_WORK_TOOL.WORKER_CANCEL, "worker-13zmbg"],
+      [],
+    ],
+  );
+});
+
 test("a turn says when it ended once it has, and no end while it runs", async () => {
   const target = await conversation();
   const standing = standingFor(target);
@@ -860,6 +899,38 @@ test("a plan's work read back carries each worker's own session from its child c
     type: PLAN_WORK_PART.TEXT,
     text: "Both libraries revoke.",
   });
+});
+
+test("a plan's work read back names the model a worker's newest task ran on, as the catalog names it, and none for a worker whose turn named none", async () => {
+  const sessionOn = async (model: string | undefined) => {
+    const target = await planConversation();
+    const standing = standingFor(target);
+    await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+    const [worker] = (await worked(target, standing)).parts;
+    assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+    const child = {
+      userId: target.userId,
+      conversationId: childConversationId(target.conversationId, worker.id),
+    };
+    await database.run(openChildConversation(target, child.conversationId, "worker"));
+    const { model: _scripted, ...childStanding } = standingFor(child);
+    await play(
+      [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Both libraries revoke.")],
+      {
+        ...childStanding,
+        ...(model === undefined ? undefined : { model }),
+        turn: RELAY_TURN.CHILD,
+      },
+    );
+    const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+    assert.ok(Option.isSome(read));
+    const [drawn] = read.value.turns[0]?.parts ?? [];
+    assert.ok(drawn?.type === PLAN_WORK_PART.TOOL && drawn.session !== undefined);
+    return drawn.session;
+  };
+
+  assert.equal((await sessionOn("gpt-6.1-sol")).model, "openai/gpt-6.1-sol");
+  assert.equal((await sessionOn(undefined)).model, undefined);
 });
 
 test("a plan's work read back carries a worker's title from its child conversation, on the call that started it and on a later call steering the same task; an untitled worker carries none", async () => {

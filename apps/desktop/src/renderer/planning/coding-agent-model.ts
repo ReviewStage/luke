@@ -99,6 +99,7 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
   [CODING_AGENT_FAILURE.PROVIDER_KEY]:
     "your API key was refused or can't be read; check Settings › API keys",
+  [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 

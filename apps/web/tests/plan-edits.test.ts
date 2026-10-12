@@ -37,10 +37,10 @@ const openPlan = Effect.gen(function* () {
   return { userId, planId: plan.id };
 });
 
-/** A plan whose problem holds what Luke wrote on a call. */
+/** A plan whose context holds what Luke wrote on a call. */
 const openWrittenPlan = Effect.gen(function* () {
   const opened = yield* openPlan;
-  yield* saveNotes(opened, [added(PLAN_FIELD.PROBLEM, LUKES)], CALL);
+  yield* saveNotes(opened, [added(PLAN_FIELD.CONTEXT, LUKES)], CALL);
   return opened;
 });
 
@@ -65,12 +65,12 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         const plan = savedPlan(
           yield* saveDeveloperEdit(
             { userId, planId },
-            { field: PLAN_FIELD.PROBLEM, base: LUKES, value },
+            { field: PLAN_FIELD.CONTEXT, base: LUKES, value },
           ),
         );
 
-        assert.equal(plan.fields?.goal.problem, value);
-        assert.ok(plan.document.body.includes(`### ${PLAN_HEADING.PROBLEM}\n\n${value}`));
+        assert.equal(plan.fields?.context, value);
+        assert.ok(plan.document.body.includes(`## ${PLAN_HEADING.CONTEXT}\n\n${value}`));
         assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
         assert.equal(plan.lastEdit?.duringCall, false);
         assert.deepEqual((yield* storedOf(userId, planId)).plan.document, plan.document);
@@ -88,7 +88,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         const { userId, planId } = yield* openWrittenPlan;
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.PROBLEM, "- Invites go missing in spam.")],
+          [added(PLAN_FIELD.CONTEXT, "- Invites go missing in spam.")],
           CALL,
         );
 
@@ -96,7 +96,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
           yield* saveDeveloperEdit(
             { userId, planId },
             {
-              field: PLAN_FIELD.PROBLEM,
+              field: PLAN_FIELD.CONTEXT,
               base: LUKES,
               value: "- Only an owner can add a member.\n- Admins are a bottleneck.",
             },
@@ -104,7 +104,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         );
 
         assert.equal(
-          plan.fields?.goal.problem,
+          plan.fields?.context,
           "- Only an owner can add a member.\n- Admins are a bottleneck.\n- Invites go missing in spam.",
         );
       }),
@@ -120,7 +120,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
           [
             {
               kind: NOTE_KIND.REPLACE,
-              field: PLAN_FIELD.PROBLEM,
+              field: PLAN_FIELD.CONTEXT,
               find: "an admin",
               text: "an owner",
             },
@@ -131,7 +131,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
 
         const result = yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.PROBLEM, base: LUKES, value: "- Only a member can add a member." },
+          { field: PLAN_FIELD.CONTEXT, base: LUKES, value: "- Only a member can add a member." },
         );
 
         assert.deepEqual(result, {
@@ -150,7 +150,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         const mine = "- Only an owner can add a member.\n- Admins are a bottleneck.";
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.PROBLEM, base: LUKES, value: mine },
+          { field: PLAN_FIELD.CONTEXT, base: LUKES, value: mine },
         );
 
         const noted = yield* saveNotes(
@@ -158,7 +158,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
           [
             {
               kind: NOTE_KIND.REPLACE,
-              field: PLAN_FIELD.PROBLEM,
+              field: PLAN_FIELD.CONTEXT,
               find: "an admin",
               text: "a manager",
             },
@@ -167,21 +167,21 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         );
 
         assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
-        assert.equal((yield* storedOf(userId, planId)).fields.goal.problem, mine);
+        assert.equal((yield* storedOf(userId, planId)).fields.context, mine);
       }),
   );
 
   it.effect(
-    "an edit of the rules and of the assumptions saves each list whole, as the developer's",
+    "an edit of the open questions and of the assumptions saves each list whole, as the developer's",
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        const rule = { statement: "Any member may invite by email.", examples: null };
+        const question = "Who can withdraw an invite?";
 
         savedPlan(
           yield* saveDeveloperEdit(
             { userId, planId },
-            { field: PLAN_FIELD.RULES, base: null, value: [rule] },
+            { field: PLAN_FIELD.OPEN_QUESTIONS, base: [], value: [question] },
           ),
         );
         const plan = savedPlan(
@@ -195,8 +195,8 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
           ),
         );
 
-        assert.deepEqual(plan.fields?.rules, [rule]);
-        assert.ok(plan.document.body.includes("### Rule 1: Any member may invite by email."));
+        assert.deepEqual(plan.fields?.openQuestions, [question]);
+        assert.ok(plan.document.body.includes(`## Open questions\n\n- ${question}\n`));
         assert.deepEqual(plan.document.assumptions, [{ text: "Invites reuse memberships." }]);
         assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
       }),
@@ -207,13 +207,13 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
       const { userId, planId } = yield* openPlan;
       yield* saveDeveloperEdit(
         { userId, planId },
-        { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+        { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* saveDeveloperEdit(
         { userId, planId },
         {
-          field: PLAN_FIELD.DECISIONS,
+          field: PLAN_FIELD.APPROACH,
           base: "Invites expire.",
           value: "Invites expire after 7 days.",
         },
@@ -239,7 +239,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
         const result = yield* saveDeveloperEdit(
           { userId, planId },
           {
-            field: PLAN_FIELD.DECISIONS,
+            field: PLAN_FIELD.APPROACH,
             base: null,
             value: "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
           },
@@ -261,7 +261,7 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
 
       const result = yield* saveDeveloperEdit(
         { userId: intruder.userId, planId },
-        { field: PLAN_FIELD.PROBLEM, base: LUKES, value: "- Taken over." },
+        { field: PLAN_FIELD.CONTEXT, base: LUKES, value: "- Taken over." },
       );
 
       assert.deepEqual(result, {

@@ -12,13 +12,14 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
-import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
+import { dictationKeywords } from "./dictation-keywords";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -48,7 +49,6 @@ import {
   type PlansPage,
   pendingMark,
   pinnedRepositories,
-  planningCallInProgress,
   plansPage,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
@@ -108,7 +108,8 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * that agent, and the agents main says ended unseen read in semibold until their
  * tab is shown (`main/agent-notices.ts`). The open plan's history is the
  * tab's as well (`use-plan-history.ts`): its version history, opened from
- * the plan's menu or its "Edited by" line, takes the whole window in the
+ * the plan's menu or its "Edited by" line, or from a section's on the
+ * revision that last changed the section, takes the whole window in the
  * plan's place (`desktop-version-history.tsx`) until it is left or another
  * plan opens, and a version restored through the service is answered with
  * the window's toast. The side panel stands as it was behind it.
@@ -256,10 +257,20 @@ export interface PlansControl {
 export interface VersionHistoryControl extends PlanHistoryControl {
   /** Whether the plan's version history takes the window in its place. */
   open: boolean;
-  /** Opens a plan's version history on the plan as it stands, opening the plan first where it is not the open one. */
-  onOpen: (planId: string) => void;
+  /**
+   * Opens a plan's version history on the plan as it stands, or, given the
+   * moment of a save, on the revision that made it, opening the plan first
+   * where it is not the open one.
+   */
+  onOpen: (planId: string, save?: number) => void;
   /** Leaves the version history for the plan, its side panel as it was. */
   onClose: () => void;
+}
+
+/** The plan whose version history stands, and the save whose revision it opened on. */
+interface HistoryOpening {
+  readonly planId: string;
+  readonly save: number | undefined;
 }
 
 /**
@@ -342,8 +353,12 @@ export function usePlansTab(input: {
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
-  /** The plan whose version history stands in the window, which it does only while that plan is the one bound for. */
-  const [historyFor, setHistoryFor] = useState<string | undefined>(undefined);
+  /**
+   * The plan whose version history stands in the window, which it does only
+   * while that plan is the one bound for, and the save whose revision it
+   * opened on, none for the plan as it stands.
+   */
+  const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -386,6 +401,18 @@ export function usePlansTab(input: {
   // the agents they draw, so the opening reaches them through this late binding.
   const mainRef = useRef<MainTabsControl | undefined>(undefined);
   const openDocument = viewed.document.plan;
+  // The open plan's own words, which a dictation into one of its agents' boxes listens for.
+  const dictationWords = useMemo(
+    () =>
+      openDocument === undefined || openDocument.id !== viewed.activePlanId
+        ? []
+        : dictationKeywords({
+            repository: openDocument.repository,
+            title: openDocument.name,
+            body: openDocument.document.body,
+          }),
+    [openDocument, viewed.activePlanId],
+  );
   // A fixture's plans have no agents, as they are read from nowhere.
   const agents = useCodingAgents({
     acts: input.acts,
@@ -399,6 +426,7 @@ export function usePlansTab(input: {
         markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
     },
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    keywords: dictationWords,
   });
   // The calls heard on the open plan, each held past its end until the
   // record's copy catches up; a fixture's open plan is drawn with its own
@@ -508,8 +536,8 @@ export function usePlansTab(input: {
   const openPlanId = planning.activePlanId;
   const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
   // The version history is the plan's, so another plan, or none, leaves it.
-  if (historyFor !== undefined && historyFor !== boundFor) setHistoryFor(undefined);
-  const historyOpen = historyFor !== undefined && historyFor === boundFor;
+  if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
+  const historyOpen = historyFor !== undefined && historyFor.planId === boundFor;
   const select = useCallback(
     (planId: string) => {
       const ask = { planId, over: openPlanId };
@@ -714,8 +742,7 @@ export function usePlansTab(input: {
     callPlanId: voice.view.callPlanId,
     voiceStatus: voice.view.voiceStatus,
   });
-  const live =
-    planningCallInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
+  const live = callInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
@@ -800,6 +827,7 @@ export function usePlansTab(input: {
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.plan.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
     shown: shown && historyOpen,
+    seek: historyFor?.save,
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) =>
       toast(
@@ -853,9 +881,9 @@ export function usePlansTab(input: {
   };
 
   // A plan's version history opens over the plan, so another plan opens first.
-  const openHistory = (planId: string) => {
+  const openHistory = (planId: string, save?: number) => {
     if (planId !== boundFor) select(planId);
-    setHistoryFor(planId);
+    setHistoryFor({ planId, save });
   };
 
   // The new-plan page is the tab's home, so only an open plan steps back,

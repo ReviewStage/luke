@@ -8,13 +8,16 @@ import type { FolderEntry, RevealOptions } from "./contract";
  * outside it: each folder enters the tree empty, and the tree's own change
  * notice, which an open raises, is when a folder open but not yet listed
  * is read. A folder is read once; one that could not be read closes again,
- * so opening it once more reads it again. Pierre names a folder by its path
+ * so opening it once more reads it again. A folder listed that holds one
+ * folder and nothing else opens that one too, because the tree draws such
+ * a chain as one row (`flattenEmptyDirectories`), the row stands for the
+ * folder at its end, and that one must open for the row to read as opened. Pierre names a folder by its path
  * with a trailing slash, which is added and taken off at this file's edges,
  * so the repository's own paths are all the rest of the panel sees.
  */
 
 /** The path Pierre's tree names an entry by: a folder's ends in a slash. */
-function treePath(path: string, folder: boolean): string {
+export function treePath(path: string, folder: boolean): string {
   return folder ? `${path}/` : path;
 }
 
@@ -32,6 +35,20 @@ function joined(folder: string, name: string): string {
 function folderItem(tree: FileTree, folder: string): FileTreeDirectoryHandle | undefined {
   const item = tree.getItem(treePath(folder, true));
   return item !== null && "expand" in item ? item : undefined;
+}
+
+/**
+ * Marks one entry as the one shown, though a ⌘-press had added others to
+ * the marks, and scrolls it to the middle of the tree.
+ */
+export function markAlone(tree: FileTree, id: string, focus: boolean): void {
+  for (const selected of tree.getSelectedPaths()) {
+    if (selected !== id) tree.getItem(selected)?.deselect();
+  }
+  const item = tree.getItem(id);
+  if (item === null) return;
+  if (!item.isSelected()) item.select();
+  tree.scrollToPath(id, { focus, offset: "center" });
 }
 
 /** The folders a path stands in, the root first and the nearest last. */
@@ -84,6 +101,11 @@ export function browseFolders(tree: FileTree, readFolder: ListEntries): FolderBr
         tree.batch(
           added.map((entry) => ({ type: "add", path: treePath(entry.path, entry.folder) })),
         );
+        // Note that the root is no row of its own, so a lone folder there is drawn as itself.
+        const [lone, ...others] = added;
+        if (folder !== "" && lone?.folder && others.length === 0) {
+          folderItem(tree, lone.path)?.expand();
+        }
         return true;
       },
       () => missed(folder),
@@ -116,15 +138,10 @@ export function browseFolders(tree: FileTree, readFolder: ListEntries): FolderBr
       if (item !== undefined && !item.isExpanded()) item.expand();
     }
     const id = treePath(path, options.folder);
-    const item = tree.getItem(id);
-    if (item === null) return;
-    if (!options.folder) {
-      for (const selected of tree.getSelectedPaths()) {
-        if (selected !== id) tree.getItem(selected)?.deselect();
-      }
-      if (!item.isSelected()) item.select();
+    if (!options.folder) markAlone(tree, id, options.focus);
+    else if (tree.getItem(id) !== null) {
+      tree.scrollToPath(id, { focus: options.focus, offset: "center" });
     }
-    tree.scrollToPath(id, { focus: options.focus, offset: "center" });
   };
 
   return { reveal, dispose: unsubscribe };

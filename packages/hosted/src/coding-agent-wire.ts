@@ -124,6 +124,8 @@ export const CODING_AGENT_FAILURE = {
   ABANDONED: "abandoned",
   /** The account's own API key for the model's provider was refused, out of quota, or can no longer be read; it is replaced in Settings. */
   PROVIDER_KEY: "provider_key",
+  /** The agent's session never started, so no turn ran; a new agent is the way on. */
+  NOT_STARTED: "not_started",
   OTHER: "other",
 } as const;
 
@@ -230,29 +232,48 @@ function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
 
+/** A message's words, trimmed and bounded, and empty where the files carry the message alone. */
+const messageWordsSchema = EffectSchema.Trim.check(
+  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+);
+
+/** Whether a message carries anything: words, files, or both, never neither. The words are trimmed already. */
+export function hasWordsOrFiles(
+  words: string,
+  attachments: readonly CodingAgentAttachment[] | undefined,
+): boolean {
+  return words !== "" || (attachments ?? []).length > 0;
+}
+
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
  * window beside them where it is the standard one. A task, where the
  * developer wrote one, is the agent's first message in the plan's place,
- * bounded as a message is, with the files the developer attached to it;
- * with none, the agent is handed the plan, and files go only with a task.
+ * bounded as a message is: its words, the files the developer attached to
+ * it, or both. With none, the agent is handed the plan, and files go only
+ * with a task.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
-  task: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
+  task: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
-});
+}).check(
+  EffectSchema.makeFilter(({ task, attachments }) =>
+    task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),
+  ),
+);
 
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
 
 /**
  * Messaging an agent (POST): the developer's words, trimmed and bounded,
- * the files they attached, where they did, and the client's own key for
+ * the files they attached, words or files or both but never neither, and
+ * the client's own key for
  * this one send, which a retry carries again
  * so the service answers what the first send did rather than sending the
  * words a second time. The message steers the turn under way, so the model
@@ -262,10 +283,10 @@ export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
  * is running.
  */
 export const codingAgentMessageRequestSchema = EffectSchema.Struct({
-  text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  text: messageWordsSchema,
   clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
-});
+}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
 

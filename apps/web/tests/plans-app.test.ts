@@ -224,6 +224,17 @@ const refusal = (status: number, error: string): Answer => ({ status, body: { er
 /** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
 const CONTENTS = new Map([
   ["src/invite.ts", () => fileContents("one\ntwo\n" + "x".repeat(500) + "\nfour")],
+  ["src/marked.ts", () => fileContents("\uFEFFa\r\nb")],
+  [
+    "src/latin1.txt",
+    () =>
+      Response.json({
+        type: "file",
+        size: 3,
+        encoding: "base64",
+        content: Buffer.from([0x61, 0xe9, 0x62]).toString("base64"),
+      }),
+  ],
   ["assets/logo.png", () => fileContents("\u0089PNG\u0000\u0000")],
   [
     "big.json",
@@ -306,13 +317,51 @@ const TREES = new Map<string, () => Response>([
   ["main:flaky", () => Response.json({ message: "Server Error" }, { status: 502 })],
 ]);
 
+/** What the git trees API holds of the fixture repository asked recursively, by tree-ish: the root whole, and one GitHub cut short. */
+const RECURSIVE_TREES = new Map<string, () => Response>([
+  [
+    "main:",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry(".env", "blob", "100644"),
+          gitEntry(".env.d", "tree", "040000"),
+          gitEntry(".env.d/keys.pem", "blob", "100644"),
+          gitEntry("README.md", "blob", "100644"),
+          gitEntry("src", "tree", "040000"),
+          gitEntry("src/app", "tree", "040000"),
+          gitEntry("src/app/main.ts", "blob", "100644"),
+          gitEntry("src/invite.ts", "blob", "100644"),
+        ],
+        truncated: false,
+      }),
+  ],
+  [
+    "main:huge",
+    () => Response.json({ tree: [gitEntry("a.ts", "blob", "100644")], truncated: true }),
+  ],
+  [
+    "main:deep",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry("a.ts", "blob", "100644"),
+          gitEntry(`${"nested/".repeat(150)}b.ts`, "blob", "100644"),
+        ],
+        truncated: false,
+      }),
+  ],
+]);
+
 const TREES_PATH = /^\/repos\/Acme\/Relay\/git\/trees\/(.+)$/u;
 
 /** The fixture repository's files and folders, as GitHub answers them on the repository's own paths. */
 function repositoryOf(sent: SentToGitHub): Response | undefined {
-  const named = TREES_PATH.exec(new URL(sent.url).pathname);
+  const url = new URL(sent.url);
+  const named = TREES_PATH.exec(url.pathname);
   if (named === null) return contentsOf(sent);
-  const tree = TREES.get(decodeURIComponent(named[1] ?? ""));
+  const trees = url.searchParams.get("recursive") === "1" ? RECURSIVE_TREES : TREES;
+  const tree = trees.get(decodeURIComponent(named[1] ?? ""));
   return tree === undefined ? Response.json({ message: "Not Found" }, { status: 404 }) : tree();
 }
 
@@ -436,6 +485,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* recordCodingAgentPublished(owner, agent.id, {
             ...PULL_REQUEST,
             number: index + 1,
+            url: `https://github.com/Acme/Relay/pull/${index + 1}`,
             state,
           });
           yield* TestClock.adjust("1 minute");
@@ -456,6 +506,34 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             [3, PULL_REQUEST_STATE.MERGED],
             [4, PULL_REQUEST_STATE.CLOSED],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a listed plan names two pull requests of one number in two repositories apart, each with its own page",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const plan = yield* startPlan(owner, { name: RELAY.name });
+        const pages = [PULL_REQUEST.url, "https://github.com/Acme/Ledger/pull/128"];
+        for (const url of pages) {
+          const agent = yield* startAgent(owner, plan.id);
+          yield* recordCodingAgentPublished(owner, agent.id, { ...PULL_REQUEST, url });
+          yield* TestClock.adjust("1 minute");
+        }
+
+        const { plans } = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+
+        const agents = plans.find((listed) => listed.id === plan.id)?.agents;
+        assert.equal(agents?.pullRequestTotal, 2);
+        assert.deepEqual(
+          agents?.pullRequests.map((pullRequest) => pullRequest.url).sort(),
+          [...pages].sort(),
         );
       }),
   );
@@ -513,6 +591,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             checks: CHECK_SUMMARY.FAILING,
             additions: 214,
             deletions: 9,
+            url: "https://github.com/Acme/Relay/pull/128",
           },
         ]);
       }),
@@ -755,7 +834,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             request(EDIT, owner, {
               id: planId,
               method: "POST",
-              body: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+              body: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
             }),
           );
         const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED);
@@ -781,7 +860,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         // The archive takes no new work and loses none under way: a call's notes still land.
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.DECISIONS, "Invites expire after a week."),
+          added(PLAN_FIELD.APPROACH, "Invites expire after a week."),
         ]);
         assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
         const held = readAnswer(
@@ -790,7 +869,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(ONE_PLAN, owner, { id: planId })),
         ).plan;
         assert.equal(held.name, RELAY.name);
-        assert.equal(held.fields?.decisions, "Invites expire after a week.");
+        assert.equal(held.fields?.approach, "Invites expire after a week.");
         assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { board: { elements: [], appliedDrawing: 0 } },
@@ -845,7 +924,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             id: planId,
             method: "POST",
             body: {
-              field: PLAN_FIELD.DECISIONS,
+              field: PLAN_FIELD.APPROACH,
               base: null,
               value: " Invites expire after 7 days. ",
             },
@@ -854,7 +933,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
 
         const answered = readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, edited);
         assert.ok("plan" in answered);
-        assert.equal(answered.plan.fields?.decisions, "Invites expire after 7 days.");
+        assert.equal(answered.plan.fields?.approach, "Invites expire after 7 days.");
         assert.equal(answered.plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
         const { plan } = readAnswer(
           planAnswerSchema,
@@ -877,16 +956,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const edit = (body: WireBoundaryInput) =>
           ask(request(EDIT, owner, { id: planId, method: "POST", body }));
 
-        const conflicted = yield* edit({ field: PLAN_FIELD.PROBLEM, base: null, value: null });
+        const conflicted = yield* edit({ field: PLAN_FIELD.CONTEXT, base: null, value: null });
         const oversized = yield* edit({
-          field: PLAN_FIELD.DECISIONS,
+          field: PLAN_FIELD.APPROACH,
           base: null,
           value: "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
         });
 
         assert.deepEqual(conflicted, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { conflict: { current: INVITATIONS_DRAFT.fields.goal.problem } },
+          body: { conflict: { current: INVITATIONS_DRAFT.fields.context } },
         });
         assert.deepEqual(oversized, {
           status: HOSTED_HTTP_STATUS.OK,
@@ -903,7 +982,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const body = { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." };
+        const body = { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." };
 
         assert.deepEqual(
           yield* ask(request(EDIT, other, { id: planId, method: "POST", body })),
@@ -914,7 +993,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             request(EDIT, owner, {
               id: planId,
               method: "POST",
-              body: { field: PLAN_FIELD.RULES, base: null, value: "Not a text field." },
+              body: { field: PLAN_FIELD.OPEN_QUESTIONS, base: [], value: "Not a list." },
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
@@ -1831,6 +1910,70 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
+    "asked recursively, a folder is listed whole in one read, each entry by its path, nothing inside a folder named as a secret file though the folder is named; one GitHub cut short, or holding a path longer than the wire carries, says so; and a recursive query other than 1 is invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const whole = (query: Record<string, string>) =>
+          ask(request(TREE, owner, { id: planId, query }));
+
+        const root = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ recursive: "1" }),
+        );
+        const AS_FILE = PLAN_TREE_ENTRY.FILE;
+        const AS_FOLDER = PLAN_TREE_ENTRY.FOLDER;
+        assert.deepEqual(root, {
+          folder: {
+            path: "",
+            repository: "Acme/Relay",
+            branch: "main",
+            entries: [
+              { name: ".env", kind: AS_FILE },
+              { name: ".env.d", kind: AS_FOLDER },
+              { name: "README.md", kind: AS_FILE },
+              { name: "src", kind: AS_FOLDER },
+              { name: "src/app", kind: AS_FOLDER },
+              { name: "src/app/main.ts", kind: AS_FILE },
+              { name: "src/invite.ts", kind: AS_FILE },
+            ],
+            truncated: false,
+          },
+        });
+        const huge = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ path: "huge", recursive: "1" }),
+        );
+        assert.ok("folder" in huge);
+        assert.equal(huge.folder.truncated, true);
+        const deep = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ path: "deep", recursive: "1" }),
+        );
+        assert.ok("folder" in deep);
+        assert.deepEqual(deep.folder.entries, [{ name: "a.ts", kind: AS_FILE }]);
+        assert.equal(
+          deep.folder.truncated,
+          true,
+          "a path longer than the wire carries is left out, and said",
+        );
+        assert.deepEqual(
+          yield* whole({ recursive: "yes" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
     "a folder is refused as a file is: one named as a secret file, one inside it, and a path leaving the tree before GitHub is asked; nothing at the path, or a file there, missing on the branch; GitHub failing as unavailable; a plan with no repository as having none; and a path named twice as invalid",
     () =>
       Effect.gen(function* () {
@@ -1875,6 +2018,66 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         twice.searchParams.append("path", "docs");
         assert.deepEqual(
           yield* ask(new Request(twice, { headers: { authorization: `Bearer ${owner}` } })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a raw read carries the file's whole text as it holds it, its long lines uncut and its byte-order mark and line endings kept, refuses bytes that are not UTF-8, is held to the same rule, and a raw query other than 1 is invalid",
+    () =>
+      Effect.gen(function* () {
+        const reached = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(reached);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const read = (path: string, raw: string) =>
+          ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "1", raw } }));
+
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read("src/invite.ts", "1"),
+          ),
+          {
+            text: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              branch: "main",
+              text: `one\ntwo\n${"x".repeat(500)}\nfour`,
+            },
+          },
+        );
+        const marked = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* read("src/marked.ts", "1"),
+        );
+        assert.ok("text" in marked);
+        assert.deepEqual(
+          [...Buffer.from(marked.text.text)],
+          [0xef, 0xbb, 0xbf, 0x61, 0x0d, 0x0a, 0x62],
+          "the bytes GitHub holds, its byte-order mark and line endings kept",
+        );
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read("src/latin1.txt", "1"),
+          ),
+          { refusal: PLAN_FILE_REFUSAL.NOT_TEXT },
+          "bytes that are not UTF-8 are refused rather than carried changed",
+        );
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* read(".env", "1")),
+          { refusal: PLAN_FILE_REFUSAL.SECRET },
+        );
+        assert.deepEqual(
+          yield* read("src/invite.ts", "yes"),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
       }),
@@ -1934,13 +2137,13 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
   /**
    * The owner's plan written twice, far enough apart to be two revisions:
-   * the problem first, then the outcome.
+   * the context first, then the goal.
    */
   const twoRevisions = (userId: string, planId: string) =>
     Effect.gen(function* () {
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")]);
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")]);
       yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.OUTCOME, "Members invite by email.")]);
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.GOAL, "Members invite by email.")]);
     });
 
   it.effect(

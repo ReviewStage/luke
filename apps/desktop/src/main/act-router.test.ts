@@ -23,7 +23,7 @@ import {
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 
 const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
 
@@ -189,7 +189,7 @@ it.effect("a row is handed the sender's standing, which no payload can claim", (
         },
       }),
     );
-    const voice: ActSender = { sender: SENDER, panel: false, voice: true };
+    const voice: ActSender = { sender: SENDER, panel: false, voice: true, call: false };
     yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL);
     yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, voice);
     assert.deepEqual(seen, [PANEL, voice]);

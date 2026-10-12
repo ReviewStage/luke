@@ -20,6 +20,7 @@ import {
   MESSAGE_ROLE,
   type StoredUIMessage,
   storedToolName,
+  TURN_STATUS,
 } from "../../core.js";
 import { childConversationId } from "../brain-host/ids.js";
 import {
@@ -30,6 +31,7 @@ import {
   delegationTitlesOf,
   latestTurnsOf,
   readCodingAgentContext,
+  readCodingAgentOfConversation,
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
@@ -41,7 +43,12 @@ import {
   type MessageCursor,
   type StoredMessageRecord,
 } from "../store/index.js";
-import { type LatestTurn, readMessageByClientId, turnsNamed } from "../store/message-reads.js";
+import {
+  type LatestTurn,
+  readMessageByClientId,
+  turnsBefore,
+  turnsNamed,
+} from "../store/message-reads.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -350,16 +357,40 @@ export function delegationPast(
   );
 }
 
-/** Whether a held read waits on a worker's title, asked at each look inside the hold. */
+/** Whether a held read waits on a title, the agent's own or a worker's, asked at each look inside the hold. */
 export type TitleAwaited = TranscriptEffect<boolean>;
 
-/** A read that waits on no worker's title: one whose deployment generates none. */
+/** A read that waits on no title: one whose deployment generates none. */
 export const NO_TITLE_AWAITED: TitleAwaited = Effect.succeed(false);
 
+/** Whether the agent's own title may still land: the agent untitled, its newest turn one of the turns it is titled in, and that turn completed inside the title call's bound, which is when that call is made. */
+function ownTitleMayLand(target: ConversationTarget, since: Date): TranscriptEffect<boolean> {
+  return Effect.gen(function* () {
+    const own = yield* readCodingAgentOfConversation(target.userId, target.conversationId);
+    if (Option.isNone(own) || own.value.title !== null) return false;
+    const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+    const newest = turns.get(target.conversationId);
+    const completed =
+      newest?.status === TURN_STATUS.SETTLED &&
+      newest.settledAt !== null &&
+      newest.settledAt >= since;
+    if (!completed) return false;
+    const ran = yield* turnsBefore(
+      target.userId,
+      target.conversationId,
+      CODER.TITLE_TURNS,
+      undefined,
+    );
+    return !ran.earlier;
+  });
+}
+
 /**
- * Whether a worker's title may still land: the one worker named, or any of
- * the parent's where none is, still untitled and delegated inside the title
- * call's own bound, past which the call that would fill it has given up.
+ * Whether a title may still land: the one worker named, or, where none is,
+ * any of the parent's or the agent's own, each still untitled and its call
+ * made inside the call's own bound, past which the call that would fill it
+ * has given up. A worker's call is made as it is delegated, the agent's as
+ * a turn of its completes.
  */
 export function titleMayLand(
   parent: ConversationTarget,
@@ -369,9 +400,8 @@ export function titleMayLand(
     const now = yield* Clock.currentTimeMillis;
     const since = new Date(now - Duration.toMillis(CODER.TITLE_TIMEOUT));
     const untitled = yield* untitledDelegationsSince(parent, since);
-    return childConversationId === undefined
-      ? untitled.size > 0
-      : untitled.has(childConversationId);
+    if (childConversationId !== undefined) return untitled.has(childConversationId);
+    return untitled.size > 0 || (yield* ownTitleMayLand(parent, since));
   });
 }
 
@@ -384,9 +414,9 @@ export function titleMayLand(
  * that ended meanwhile still says so. The agent's own transcript names the
  * agent as `own`, whose context its pages carry; a worker's names none.
  * An ended agent's empty page is held too while `titleAwaited` says a
- * worker's title may still land, because a reader stops at that page and a
- * short worker's title lands after its agent ended; the page that ends that
- * hold carries the title.
+ * title may still land, because a reader stops at that page and the
+ * agent's own title, or a short worker's, lands after its turn ended; the
+ * page that ends that hold carries the title.
  */
 export function transcriptPast(
   target: ConversationTarget,

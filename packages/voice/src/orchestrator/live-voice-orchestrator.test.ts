@@ -175,6 +175,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
     beginTalk: (planId?: string) => orchestrator.beginTalk(planId),
     talkAboutPlan: (planId: string) => orchestrator.talkAboutPlan(planId),
+    toggleMicrophone: () => orchestrator.toggleMicrophone(),
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
     stopCall: () => orchestrator.stopCall(),
@@ -1056,7 +1057,7 @@ it.effect(
 );
 
 it.effect(
-  "a talk key press naming the open plan opens a call about it, and over another plan's call hangs that call up first",
+  "a talk key press naming the open plan opens a call about it, and over another plan's call speaks into that call rather than hanging it up",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1065,52 +1066,97 @@ it.effect(
       });
       const billingCall = f.latest();
       assert.ok(billingCall);
+      assert.deepEqual(billingCall.openings, [{ planId: BILLING_PLAN }]);
       billingCall.started();
       yield* Fiber.join(billing);
       yield* f.endTalk();
 
-      const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
-      yield* settleFibers();
-      assert.equal(billingCall.status, LIVE_STATUS.IDLE);
-      const planCall = f.latest();
-      assert.ok(planCall && planCall !== billingCall);
-      assert.deepEqual(planCall.openings, [{ planId: INVITES_PLAN }]);
-      planCall.started();
-      yield* Fiber.join(held);
-      assert.equal(planCall.status, LIVE_STATUS.LISTENING);
-      // Still held to talk: the release mutes the plan's call and leaves it standing.
-      yield* f.endTalk();
-      assert.equal(planCall.status, LIVE_STATUS.MUTED);
+      // The window now shows another plan: the hold is heard on the call standing.
       yield* f.beginTalk(INVITES_PLAN);
-      assert.equal(f.latest(), planCall);
-      assert.equal(planCall.status, LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(f.calls.length, 1);
+      assert.equal(billingCall.status, LIVE_STATUS.LISTENING);
+      assert.equal(f.views.at(-1)?.callPlanId, BILLING_PLAN);
+      yield* f.endTalk();
+      assert.equal(billingCall.status, LIVE_STATUS.MUTED);
+      assert.equal(billingCall.closes, 0);
     }),
 );
 
 it.effect(
-  "a talk key let go of while another plan's call is still hanging up opens no plan call",
+  "a talk key press over a call the host is closing waits it out, then opens a call about the open plan if still held and nothing once let go",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const billing = yield* Effect.forkChild(f.beginTalk(BILLING_PLAN), {
-        startImmediately: true,
+      const closingBillingCall = Effect.gen(function* () {
+        const pressed = yield* Effect.forkChild(f.beginTalk(BILLING_PLAN), {
+          startImmediately: true,
+        });
+        const call = f.latest();
+        assert.ok(call);
+        call.started();
+        yield* Fiber.join(pressed);
+        yield* f.endTalk();
+        const closed = yield* Deferred.make<void>();
+        call.closing = Deferred.await(closed);
+        yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(call) });
+        yield* settleFibers();
+        return { call, closed };
       });
-      const billingCall = f.latest();
-      assert.ok(billingCall);
-      billingCall.started();
-      yield* Fiber.join(billing);
-      yield* f.endTalk();
 
-      const closed = yield* Deferred.make<void>();
-      billingCall.closing = Deferred.await(closed);
+      const first = yield* closingBillingCall;
+      const letGo = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+      yield* settleFibers();
+      yield* f.endTalk();
+      yield* Deferred.succeed(first.closed, undefined);
+      yield* settleFibers();
+      yield* Fiber.join(letGo);
+      assert.equal(f.latest(), first.call);
+
+      const second = yield* closingBillingCall;
       const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
       yield* settleFibers();
-      yield* f.endTalk();
+      yield* Deferred.succeed(second.closed, undefined);
+      yield* settleFibers();
+      const next = f.latest();
+      assert.ok(next && next !== second.call);
+      assert.deepEqual(next.openings, [{ planId: INVITES_PLAN }]);
+      next.started();
+      yield* Fiber.join(held);
+      assert.equal(next.status, LIVE_STATUS.LISTENING);
+    }),
+);
+
+it.effect(
+  "the microphone chord toggles the standing call whatever plan is open, and over no call or a closing one opens nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.toggleMicrophone();
+      assert.equal(f.calls.length, 0);
+
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(BILLING_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      assert.equal(call.status, LIVE_STATUS.LISTENING);
+      yield* f.toggleMicrophone();
+      assert.equal(call.status, LIVE_STATUS.MUTED);
+      yield* f.toggleMicrophone();
+      assert.equal(call.status, LIVE_STATUS.LISTENING);
+
+      const closed = yield* Deferred.make<void>();
+      call.closing = Deferred.await(closed);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(call) });
+      yield* settleFibers();
+      yield* f.toggleMicrophone();
       yield* Deferred.succeed(closed, undefined);
       yield* settleFibers();
-      assert.equal(billingCall.status, LIVE_STATUS.IDLE);
-      assert.equal(f.latest(), billingCall);
-      yield* Fiber.join(held);
+      assert.equal(f.calls.length, 1);
+      assert.equal(call.status, LIVE_STATUS.IDLE);
     }),
 );
 

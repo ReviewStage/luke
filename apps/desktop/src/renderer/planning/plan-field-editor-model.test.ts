@@ -5,15 +5,12 @@ import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import {
-  EDIT_DRAFT,
-  type EditDraft,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
   editorKeptMine,
   editorOpened,
   editorRetried,
-  editorRuleStruck,
   editorSent,
   editorTookLukes,
   editorTyped,
@@ -21,34 +18,20 @@ import {
   FIELD_EDITOR_STATE,
   type FieldEditor,
   pendingSave,
-  textFieldOfUnit,
 } from "./plan-field-editor-model";
 
 const LUKES = "- Only an admin can add a member.";
 
-const RULE = {
-  statement: "Any member may invite by email.",
-  examples: [
-    // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-    { given: "A member", when: "they invite", then: "an email goes out" }, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-  ],
-};
-
 const CONTENT: PlanContent = {
   fields: {
     ...EMPTY_PLAN_CONTENT.fields,
-    goal: { problem: LUKES, outcome: null },
-    rules: [RULE],
+    context: LUKES,
     openQuestions: ["Who can withdraw an invite?"],
   },
   assumptions: [{ text: "Invites reuse memberships." }],
 };
 
-const PROBLEM = { field: PLAN_FIELD.PROBLEM } as const;
-
-function text(words: string): EditDraft {
-  return { kind: EDIT_DRAFT.TEXT, text: words };
-}
+const CONTEXT = { field: PLAN_FIELD.CONTEXT } as const;
 
 /** The save an editor would make now, failing the test where it has none. */
 function saved(editor: FieldEditor) {
@@ -57,36 +40,37 @@ function saved(editor: FieldEditor) {
   return request;
 }
 
-test("a unit is known as the field its heading names, a rule by its number, and the rules' heading as a new rule", () => {
-  assert.equal(textFieldOfUnit("### Problem\n\n- Only admins."), PLAN_FIELD.PROBLEM);
-  assert.deepEqual(editTargetOfUnit("## Decisions\n\n_Unanswered_", 1), {
-    field: PLAN_FIELD.DECISIONS,
+test("a unit is known as the field its heading names, and the title and old headings as none", () => {
+  assert.deepEqual(editTargetOfUnit("## Context\n\n- Only admins."), {
+    field: PLAN_FIELD.CONTEXT,
   });
-  assert.deepEqual(editTargetOfUnit("### Rule 2: Invites expire.", 3), {
-    field: PLAN_FIELD.RULES,
-    rule: 1,
+  assert.deepEqual(editTargetOfUnit("## Approach\n\n_Unanswered_"), {
+    field: PLAN_FIELD.APPROACH,
   });
-  assert.deepEqual(editTargetOfUnit("## Rules", 3), { field: PLAN_FIELD.RULES, rule: 3 });
-  assert.deepEqual(editTargetOfUnit("## Open questions\n\n- Who?", 0), {
+  assert.deepEqual(editTargetOfUnit("## Plan of attack\n\n1. Schema."), {
+    field: PLAN_FIELD.PLAN_OF_ATTACK,
+  });
+  assert.deepEqual(editTargetOfUnit("## Open questions\n\n- Who?"), {
     field: PLAN_FIELD.OPEN_QUESTIONS,
   });
-  assert.equal(editTargetOfUnit("## Goal", 0), undefined);
-  assert.equal(editTargetOfUnit("# Teammate invitations", 0), undefined);
+  assert.equal(editTargetOfUnit("### Context\n\n- Only admins."), undefined);
+  assert.equal(editTargetOfUnit("## Rules"), undefined);
+  assert.equal(editTargetOfUnit("# Teammate invitations"), undefined);
 });
 
 test("an editor opens on the field as it stands, and has nothing to save until the words change", () => {
-  const opened = editorOpened(PROBLEM, CONTENT);
-  const outcome = editorOpened({ field: PLAN_FIELD.OUTCOME }, CONTENT);
+  const opened = editorOpened(CONTEXT, CONTENT);
+  const goal = editorOpened({ field: PLAN_FIELD.GOAL }, CONTENT);
 
-  assert.deepEqual(opened.draft, text(LUKES));
+  assert.deepEqual(opened.draft, LUKES);
   assert.equal(pendingSave(opened), undefined);
-  assert.equal(pendingSave(editorTyped(opened, text(`${LUKES}\n`))), undefined);
-  assert.equal(pendingSave(editorTyped(outcome, text("  "))), undefined);
+  assert.equal(pendingSave(editorTyped(opened, `${LUKES}\n`)), undefined);
+  assert.equal(pendingSave(editorTyped(goal, "  ")), undefined);
 });
 
 test("words cleared to nothing save the field as unanswered", () => {
-  assert.deepEqual(saved(editorTyped(editorOpened(PROBLEM, CONTENT), text("  \n "))), {
-    field: PLAN_FIELD.PROBLEM,
+  assert.deepEqual(saved(editorTyped(editorOpened(CONTEXT, CONTENT), "  \n ")), {
+    field: PLAN_FIELD.CONTEXT,
     base: LUKES,
     value: null,
   });
@@ -97,109 +81,34 @@ test("the open questions and the assumptions open one to a line, and save each l
   const assumptions = editorOpened({ field: PLAN_FIELD.ASSUMPTIONS }, CONTENT);
   const typed = "- Who can withdraw an invite?\n\n2. How long is a link valid?";
 
-  assert.deepEqual(questions.draft, text("Who can withdraw an invite?"));
-  assert.deepEqual(saved(editorTyped(questions, text(typed))), {
+  assert.deepEqual(questions.draft, "Who can withdraw an invite?");
+  assert.deepEqual(saved(editorTyped(questions, typed)), {
     field: PLAN_FIELD.OPEN_QUESTIONS,
     base: ["Who can withdraw an invite?"],
     value: ["Who can withdraw an invite?", "How long is a link valid?"],
   });
-  assert.deepEqual(saved(editorTyped(assumptions, text(""))), {
+  assert.deepEqual(saved(editorTyped(assumptions, "")), {
     field: PLAN_FIELD.ASSUMPTIONS,
     base: [{ text: "Invites reuse memberships." }],
     value: [],
   });
 });
 
-test("a rule opens as its statement and examples, and saves as the rules with that one changed", () => {
-  const opened = editorOpened({ field: PLAN_FIELD.RULES, rule: 0 }, CONTENT);
-  const changed = editorTyped(opened, {
-    kind: EDIT_DRAFT.RULE,
-    rule: {
-      statement: " Any member may invite by email or link. ",
-      examples: [
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-        { given: "A member", when: "they invite", then: "" }, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        // biome-ignore lint/suspicious/noThenProperty: the same key, for the same reason.
-        { given: " ", when: "", then: "" }, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      ],
-    },
-  });
-
-  assert.equal(opened.draft.kind, EDIT_DRAFT.RULE);
-  assert.deepEqual(saved(changed), {
-    field: PLAN_FIELD.RULES,
-    base: [RULE],
-    value: [
-      {
-        statement: "Any member may invite by email or link.",
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-        examples: [{ given: "A member", when: "they invite", then: null }], // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      },
-    ],
-  });
-});
-
-test("a new rule is added after the rules standing; a struck rule is saved as the rules without it", () => {
-  const added = editorTyped(editorOpened({ field: PLAN_FIELD.RULES, rule: 1 }, CONTENT), {
-    kind: EDIT_DRAFT.RULE,
-    rule: { statement: "Invites expire after 7 days.", examples: [] },
-  });
-  const struck = editorRuleStruck(editorOpened({ field: PLAN_FIELD.RULES, rule: 0 }, CONTENT));
-
-  assert.deepEqual(saved(added).value, [
-    RULE,
-    { statement: "Invites expire after 7 days.", examples: null },
-  ]);
-  assert.equal(saved(struck).value, null);
-  assert.ok(struck.closing);
-});
-
-test("a rule's statement saves without the list marker it was typed with", () => {
-  const added = editorTyped(editorOpened({ field: PLAN_FIELD.RULES, rule: 1 }, CONTENT), {
-    kind: EDIT_DRAFT.RULE,
-    rule: { statement: "- Invites expire after 7 days.", examples: [] },
-  });
-
-  assert.deepEqual(saved(added).value, [
-    RULE,
-    { statement: "Invites expire after 7 days.", examples: null },
-  ]);
-});
-
-test("a rule saved with a list marker opens without it, saves nothing untouched, and saves clean once changed", () => {
-  const marked = { statement: "- Links expire.", examples: null };
-  const content = { ...CONTENT, fields: { ...CONTENT.fields, rules: [marked] } };
-  const opened = editorOpened({ field: PLAN_FIELD.RULES, rule: 0 }, content);
-  const changed = editorTyped(opened, {
-    kind: EDIT_DRAFT.RULE,
-    rule: { statement: "Links expire in a week.", examples: [] },
-  });
-
-  assert.deepEqual(opened.draft, {
-    kind: EDIT_DRAFT.RULE,
-    rule: { statement: "Links expire.", examples: [] },
-  });
-  assert.equal(pendingSave(opened), undefined);
-  assert.deepEqual(saved(changed).value, [
-    { statement: "Links expire in a week.", examples: null },
-  ]);
-});
-
 test("one save is out at a time; words typed meanwhile save after it lands, from what it saved", () => {
-  const typed = editorTyped(editorOpened(PROBLEM, CONTENT), text("- Only owners."));
+  const typed = editorTyped(editorOpened(CONTEXT, CONTENT), "- Only owners.");
   const out = editorSent(typed, saved(typed));
-  const typedMore = editorTyped(out, text("- Only owners, by email."));
+  const typedMore = editorTyped(out, "- Only owners, by email.");
 
   assert.equal(pendingSave(typedMore), undefined);
   assert.deepEqual(saved(editorAnswered(typedMore, { saved: true })), {
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     base: "- Only owners.",
     value: "- Only owners, by email.",
   });
 });
 
 test("a conflict holds the developer's words and saves nothing until they choose", () => {
-  const typed = editorTyped(editorOpened(PROBLEM, CONTENT), text("- Mine."));
+  const typed = editorTyped(editorOpened(CONTEXT, CONTENT), "- Mine.");
   const conflicted = editorAnswered(editorSent(typed, saved(typed)), {
     conflict: { current: "- Luke's newer words." },
   });
@@ -208,36 +117,36 @@ test("a conflict holds the developer's words and saves nothing until they choose
     kind: FIELD_EDITOR_STATE.CONFLICT,
     current: "- Luke's newer words.",
   });
-  assert.deepEqual(conflicted.draft, text("- Mine."));
+  assert.deepEqual(conflicted.draft, "- Mine.");
   assert.equal(pendingSave(conflicted), undefined);
   assert.equal(editorCloses(editorCloseAsked(conflicted)), false);
 });
 
 test("keeping mine saves the developer's words over what the field holds now", () => {
-  const typed = editorTyped(editorOpened(PROBLEM, CONTENT), text("- Mine."));
+  const typed = editorTyped(editorOpened(CONTEXT, CONTENT), "- Mine.");
   const kept = editorKeptMine(
     editorAnswered(editorSent(typed, saved(typed)), { conflict: { current: "- Luke's." } }),
   );
 
-  assert.deepEqual(saved(kept), { field: PLAN_FIELD.PROBLEM, base: "- Luke's.", value: "- Mine." });
+  assert.deepEqual(saved(kept), { field: PLAN_FIELD.CONTEXT, base: "- Luke's.", value: "- Mine." });
 });
 
 test("taking Luke's puts his words in the editor and closes it with nothing to save", () => {
   const opened = editorOpened({ field: PLAN_FIELD.OPEN_QUESTIONS }, CONTENT);
-  const typed = editorTyped(opened, text("Mine?"));
+  const typed = editorTyped(opened, "Mine?");
   const took = editorTookLukes(
     editorAnswered(editorSent(typed, saved(typed)), {
       conflict: { current: ["Who can withdraw?", "Luke's question?"] },
     }),
   );
 
-  assert.deepEqual(took.draft, text("Who can withdraw?\nLuke's question?"));
+  assert.deepEqual(took.draft, "Who can withdraw?\nLuke's question?");
   assert.equal(pendingSave(took), undefined);
   assert.ok(editorCloses(took));
 });
 
 test("a failed save keeps the words, says why, and waits to be tried again or typed on", () => {
-  const typed = editorTyped(editorOpened(PROBLEM, CONTENT), text("- Mine."));
+  const typed = editorTyped(editorOpened(CONTEXT, CONTENT), "- Mine.");
   const out = editorSent(typed, saved(typed));
   const unanswered = editorAnswered(out, { failure: PLAN_CALL_FAILURE.UNANSWERED });
   const tooLong = editorAnswered(out, { failure: PLAN_EDIT_REFUSAL.TOO_LONG });
@@ -253,17 +162,17 @@ test("a failed save keeps the words, says why, and waits to be tried again or ty
   assert.equal(pendingSave(unanswered), undefined);
   assert.equal(editorCloses(editorCloseAsked(unanswered)), false);
   assert.equal(saved(editorRetried(unanswered)).value, "- Mine.");
-  assert.equal(saved(editorTyped(unanswered, text("- Mine, again."))).value, "- Mine, again.");
+  assert.equal(saved(editorTyped(unanswered, "- Mine, again.")).value, "- Mine, again.");
 });
 
 test("an editor asked to close waits for its words to save, then closes", () => {
-  const typed = editorCloseAsked(editorTyped(editorOpened(PROBLEM, CONTENT), text("- Mine.")));
+  const typed = editorCloseAsked(editorTyped(editorOpened(CONTEXT, CONTENT), "- Mine."));
   const out = editorSent(typed, saved(typed));
 
   assert.equal(editorCloses(typed), false);
   assert.equal(editorCloses(out), false);
   assert.ok(editorCloses(editorAnswered(out, { saved: true })));
-  assert.ok(editorCloses(editorCloseAsked(editorOpened(PROBLEM, CONTENT))));
+  assert.ok(editorCloses(editorCloseAsked(editorOpened(CONTEXT, CONTENT))));
 });
 
 test("an item with line breaks opened and closed saves nothing, and keeps its breaks when another line changes", () => {
@@ -275,26 +184,7 @@ test("an item with line breaks opened and closed saves nothing, and keeps its br
 
   assert.equal(pendingSave(opened), undefined);
   assert.deepEqual(
-    saved(editorTyped(opened, text("Check access when revoked\nInvites reuse accounts."))).value,
+    saved(editorTyped(opened, "Check access when revoked\nInvites reuse accounts.")).value,
     [{ text: "Check access\nwhen revoked" }, { text: "Invites reuse accounts." }],
   );
-});
-
-test("keeping mine on a rule that moved while Luke struck one before it saves it where it now stands", () => {
-  const first = { statement: "Admins approve invites.", examples: null };
-  const content = { ...CONTENT, fields: { ...CONTENT.fields, rules: [first, RULE] } };
-  const edited = { statement: "Any member may invite by email or link.", examples: [] };
-  const typed = editorTyped(editorOpened({ field: PLAN_FIELD.RULES, rule: 1 }, content), {
-    kind: EDIT_DRAFT.RULE,
-    rule: edited,
-  });
-  const conflicted = editorAnswered(editorSent(typed, saved(typed)), {
-    conflict: { current: [RULE] },
-  });
-
-  assert.deepEqual(saved(editorKeptMine(conflicted)), {
-    field: PLAN_FIELD.RULES,
-    base: [RULE],
-    value: [{ statement: edited.statement, examples: null }],
-  });
 });

@@ -37,6 +37,7 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
@@ -189,14 +190,14 @@ const landed = Effect.promise(settle);
 const advance = (millis: number) =>
   Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
 
-/** What the window's toast says, while one stands. */
+/** What the newest toast says, while one stands. */
 function toast(): string | undefined {
-  return document.querySelector(".toast")?.textContent ?? undefined;
+  return newestToastSays();
 }
 
-/** The standing toast's Undo. */
+/** The newest toast's Undo. */
 function undoButton(): HTMLButtonElement {
-  const undo = document.querySelector<HTMLButtonElement>(".toast button");
+  const undo = newestToastAction();
   assert.ok(undo, "no Undo on the toast");
   assert.equal(undo.textContent, "Undo");
   return undo;
@@ -368,6 +369,75 @@ it.effect(
       act(() => undo.click());
       yield* landed;
       assert.equal(toast(), "The restore could not be undone. Try again.");
+    }),
+);
+
+it.effect(
+  "Version history opened at a section's save opens on the revision that made it, and from the plan's line again on the newest",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, planning: EDITED },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().history.onOpen(PLAN.id, revisionLine(1).lastEdit.at));
+      yield* landed;
+      assert.equal(tab.control().history.open, true);
+      assert.equal(tab.control().history.viewing?.line.seq, 1);
+      assert.equal(tab.control().history.viewing?.current, false);
+
+      act(() => tab.control().history.onClose());
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+    }),
+);
+
+it.effect(
+  "a section's save made while the version history was away, and saved over since, is sought in the history read again, not the list kept from before",
+  () =>
+    Effect.gen(function* () {
+      const head = { seq: 2 };
+      const editedAt = (at: number): PlanningView => ({
+        ...EDITED,
+        document: {
+          status: PLANNING_READ.READY,
+          plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true } },
+        },
+      });
+      const tab = mount(
+        { shown: true, planning: editedAt(20) },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({
+              revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
+            }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      act(() => tab.control().history.onClose());
+
+      // The section's save made the third revision, and another writer the fourth.
+      head.seq = 4;
+      tab.stand({ planning: editedAt(40) });
+      yield* landed;
+      act(() => tab.control().history.onOpen(PLAN.id, revisionLine(3).lastEdit.at - 1));
+      process.stderr.write(
+        `DBG ${JSON.stringify(tab.control().history.list)} sel=${tab.control().history.selected}\n`,
+      );
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 3);
     }),
 );
 
@@ -754,7 +824,7 @@ it.effect(
         ["a", false],
       ]);
       assert.equal(toast(), "The plan could not be pinned. Try again.");
-      yield* advance(4_000 + MOTION_DURATION_MS.EXIT);
+      yield* advance(6_000 + MOTION_DURATION_MS.EXIT);
       assert.equal(toast(), undefined);
 
       act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));

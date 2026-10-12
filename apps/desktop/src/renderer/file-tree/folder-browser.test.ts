@@ -30,7 +30,7 @@ const REPOSITORY = new Map<string, readonly FolderEntry[]>([
 /** Pierre's tree over a repository read as `answer` answers, every folder asked written down. */
 function browsing(answer: (path: string) => readonly FolderEntry[] | undefined) {
   const asked: string[] = [];
-  const tree = new FileTree({ paths: [], flattenEmptyDirectories: false });
+  const tree = new FileTree({ paths: [], flattenEmptyDirectories: true });
   const host = document.createElement("div");
   document.body.append(host);
   tree.render({ containerWrapper: host });
@@ -47,11 +47,14 @@ function browsing(answer: (path: string) => readonly FolderEntry[] | undefined) 
   const settled = async () => {
     for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
   };
-  /** The rows the tree draws open now, each by its depth and name. */
+  /** The rows the tree draws open now, each by its depth and name, a row folders share by their path. */
   const rows = () =>
     tree
       .getVisibleRows(0, tree.getVisibleCount())
-      .map((row) => `${"  ".repeat(row.depth)}${row.name}${row.kind === "directory" ? "/" : ""}`);
+      .map(
+        (row) =>
+          `${"  ".repeat(row.depth)}${row.isFlattened ? row.path.slice(0, -1) : row.name}${row.kind === "directory" ? "/" : ""}`,
+      );
   return { tree, browser, asked, settled, rows };
 }
 
@@ -112,4 +115,22 @@ test("a folder that could not be read closes, and is read again when it is opene
   await settled();
   assert.deepEqual(asked, ["", "docs", "docs"]);
   assert.deepEqual(rows().slice(0, 2), ["docs/", "  STYLE.md"]);
+});
+
+test("a folder holding one folder alone opens that one too, so the row the two share reads as opened and lists what the inner one holds", async () => {
+  const nested = new Map<string, readonly FolderEntry[]>([
+    ["", [{ name: "lib", folder: true }]],
+    ["lib", [{ name: "core", folder: true }]],
+    ["lib/core", [{ name: "store.ts", folder: false }]],
+  ]);
+  const { tree, asked, settled, rows } = browsing((path) => nested.get(path));
+  await settled();
+
+  const lib = tree.getItem("lib/");
+  assert.ok(lib !== null && "expand" in lib, "lib is a folder");
+  lib.expand();
+  await settled();
+
+  assert.deepEqual(asked, ["", "lib", "lib/core"]);
+  assert.deepEqual(rows(), ["lib/core/", "  store.ts"]);
 });

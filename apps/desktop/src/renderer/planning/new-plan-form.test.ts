@@ -398,7 +398,7 @@ test("a list the host could not read says why in the menu and offers to try agai
   assert.match(page.find("[role=alert]").textContent ?? "", /Sign in with GitHub/u);
   assert.deepEqual(page.rows(), []);
   const again = [...page.container.querySelectorAll("button")].find(
-    (button) => button.textContent === "Try again",
+    (button) => button.textContent === "Retry",
   );
   assert.ok(again, "the menu offers to try again");
   await act(async () => again.click());

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import {
+  callInProgress,
   IDLE_VOICE_VIEW,
   isLiveStatus,
   isVoiceCommand,
@@ -10,6 +11,8 @@ import {
   VOICE_COMMAND,
   type VoiceView,
 } from "./voice-view";
+
+const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 test("every live status is recognized and nothing else is", () => {
   for (const status of Object.values(LIVE_STATUS)) {
@@ -19,9 +22,9 @@ test("every live status is recognized and nothing else is", () => {
   assert.equal(isLiveStatus(1), false);
 });
 
-test("the five voice commands are the whole set", () => {
+test("the six voice commands are the whole set", () => {
   const commands = Object.values(VOICE_COMMAND);
-  assert.equal(commands.length, 5);
+  assert.equal(commands.length, 6);
   assert.equal(isVoiceCommand("ask-text"), false);
   for (const command of commands) assert.equal(isVoiceCommand(command), true);
   assert.equal(isVoiceCommand("stop-microphone"), false);
@@ -66,4 +69,17 @@ test("a view carrying the call's words is a voice view, and a line naming no spe
     },
   } as unknown as VoiceView;
   assert.equal(isVoiceView(overWire(malformed)), false);
+});
+
+test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {
+  const on = (voiceStatus: LiveStatus, callPlanId: string | undefined) =>
+    callInProgress({ ...IDLE_VOICE_VIEW, voiceStatus, callPlanId });
+  assert.equal(on(LIVE_STATUS.CONNECTING, PLAN), true);
+  assert.equal(on(LIVE_STATUS.LISTENING, PLAN), true);
+  assert.equal(on(LIVE_STATUS.SPEAKING, PLAN), true);
+  assert.equal(on(LIVE_STATUS.MUTED, PLAN), true);
+  assert.equal(on(LIVE_STATUS.LISTENING, undefined), false);
+  assert.equal(on(LIVE_STATUS.CLOSING, PLAN), false);
+  assert.equal(on(LIVE_STATUS.FAILED, PLAN), false);
+  assert.equal(on(LIVE_STATUS.IDLE, undefined), false);
 });

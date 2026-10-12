@@ -64,6 +64,7 @@ import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const STARTED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
 function plan(id: string, name: string, body: string, updatedAt: number): Plan {
   return {
@@ -370,10 +371,10 @@ function subject(
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
-      endPlanCall: (keep) =>
+      endPlanCall: (planId) =>
         Effect.gen(function* () {
-          const planId = standing.about?.planId;
-          if (planId === undefined || planId === keep) return;
+          const about = standing.about?.planId;
+          if (about === undefined || (planId !== undefined && about !== planId)) return;
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
@@ -519,7 +520,7 @@ it.effect(
       const yours = { actor: PLAN_ACTOR.DEVELOPER, at: 5, duringCall: false } as const;
       const invites: Plan = {
         ...plan(INVITES, "Teammate invitations", "# Teammate invitations", 10),
-        fieldEdits: [{ field: PLAN_FIELD.PROBLEM, ...yours }],
+        fieldEdits: [{ field: PLAN_FIELD.CONTEXT, ...yours }],
       };
       const { call, last, planning } = yield* subject(fakeService([invites]));
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
@@ -527,12 +528,12 @@ it.effect(
 
       const named = [
         {
-          field: PLAN_FIELD.DECISIONS,
+          field: PLAN_FIELD.APPROACH,
           label: "Command K board",
           ...yours,
           actor: PLAN_ACTOR.AGENT,
         },
-        { field: PLAN_FIELD.PROBLEM, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
+        { field: PLAN_FIELD.CONTEXT, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
       ];
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
@@ -558,7 +559,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
       });
 
       assert.deepEqual(answer, { saved: true });
@@ -582,7 +583,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
+        edit: { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
       });
 
       assert.deepEqual(answer, { conflict: { current: "- Luke's words." } });
@@ -601,7 +602,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
       });
       const edited = last()?.document;
 
@@ -666,19 +667,24 @@ it.effect(
     }),
 );
 
-it.effect("activity on the call about a plan the panel does not have open is dropped", () =>
-  Effect.gen(function* () {
-    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
-    const { call, planning, told } = yield* subject(fakeService([invites]));
-    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-    const drawn = told.length;
+it.effect(
+  "activity on the call about a plan the panel does not have open is the call's alone, and goes when that call ends",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-    planning.showActivity(activityFrame(BILLING, { planner: {}, notes: false }));
+      const working = { planner: { action: "ls src" }, notes: false };
+      planning.showActivity(activityFrame(BILLING, working));
+      assert.deepEqual(last()?.callActivity, working);
+      assert.equal(last()?.activity, undefined);
 
-    assert.equal(told.length, drawn);
-    assert.equal(planning.snapshot().activity, undefined);
-  }),
+      planning.callEnded(BILLING);
+      assert.equal(last()?.callActivity, undefined);
+      assert.equal(last()?.activePlanId, INVITES);
+    }),
 );
 
 it.effect("leaving the open plan or switching to another clears the activity drawn for it", () =>
@@ -855,6 +861,22 @@ it.effect("deleting a plan that is not open leaves the open plan and its call st
     assert.deepEqual(standing.about, { planId: INVITES });
     assert.equal(last()?.activePlanId, INVITES);
     assert.deepEqual(last()?.plans, [summary(invites)]);
+  }),
+);
+
+it.effect("deleting a plan that is not open ends the call still standing about it", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const standing: StandingCall = { about: { planId: BILLING } };
+    const { call, last } = yield* subject(fakeService([billing, invites]), { call: standing });
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: BILLING });
+
+    assert.equal(standing.about, undefined);
+    assert.equal(last()?.activePlanId, INVITES);
   }),
 );
 
@@ -1309,65 +1331,30 @@ it.effect("a list read that left before a plan started never marks the new plan 
 );
 
 it.effect(
-  "only one plan is spoken: opening or starting another plan and leaving the plan each end the open plan's call, and a desk call or the same plan's call is left standing",
+  "a call outlives the plan on screen: opening another plan, starting one, and leaving the plan each leave it standing, and a sign-out ends it",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const billing = plan(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
       const call: StandingCall = { about: { planId: INVITES } };
-      const { call: ask } = yield* subject(service, { call });
+      const { call: ask, planning } = yield* subject(service, { call });
 
       yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
       assert.deepEqual(call.about, { planId: INVITES });
-      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
-      assert.equal(call.about, undefined);
-
-      call.about = { planId: BILLING };
-      const started = plan(INVITES, "Teammate invitations", "", 30);
-      service.createAnswer = { ok: true, answer: started };
-      yield* ask(GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" });
-      assert.equal(call.about, undefined);
-
-      call.about = { planId: INVITES };
-      yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
-      assert.equal(call.about, undefined);
-
-      call.about = { planId: undefined };
-      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
-      yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
-      assert.deepEqual(call.about, { planId: undefined });
-    }),
-);
-
-it.effect(
-  "a plan opened while the old plan's call is still closing is already the active one",
-  () =>
-    Effect.gen(function* () {
-      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
-      const closed = yield* Deferred.make<void>();
-      const standing: StandingCall = { about: undefined };
-      const { call, last, planning } = yield* subject(fakeService([billing, invites]), {
-        call: standing,
-      });
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-      standing.about = { planId: INVITES };
-      standing.closing = Deferred.await(closed);
-
-      const opening = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING }),
-      );
-      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
-      // A press or an offer inside the wait reads the plan the window is moving to.
-      assert.deepEqual(standing.about, { planId: INVITES });
       assert.equal(planning.activePlanId(), BILLING);
-      assert.equal(last()?.activePlanId, BILLING);
 
-      yield* Deferred.succeed(closed, undefined);
-      yield* Fiber.join(opening);
-      assert.equal(standing.about, undefined);
-      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
+      service.createAnswer = { ok: true, answer: plan(STARTED, "Audit log", "", 30) };
+      yield* ask(GATEWAY_METHOD.PLANNING_START, { name: "Audit log" });
+      assert.deepEqual(call.about, { planId: INVITES });
+
+      yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.deepEqual(call.about, { planId: INVITES });
+      assert.equal(planning.activePlanId(), undefined);
+
+      yield* planning.reset;
+      assert.equal(call.about, undefined);
     }),
 );
 
