@@ -1184,7 +1184,7 @@ body,
   line-height: 1.65;
 }
 
-.desktop-document .plan-unit + .plan-unit {
+.desktop-document .plan-body > * + * {
   margin-top: 1.5em;
 }
 

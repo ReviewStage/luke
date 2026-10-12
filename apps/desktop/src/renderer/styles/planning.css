@@ -49,8 +49,11 @@
 }
 
 /* A plan is a document rather than a message, so its sections breathe. Every
-   unit after the header block opens on a section or field heading. */
-.plan-unit + .plan-unit {
+   unit after the header block opens on a section or field heading. Note that
+   the gap is the body's children's rather than `.plan-unit`'s own, because a
+   unit is drawn inside a wrapper where it can be edited or carries a byline,
+   and an editor stands in its place while it is open. */
+.plan-body > * + * {
   margin-top: 1.1em;
 }
 
@@ -191,9 +194,10 @@
 
 /* The field open in its editor: the heading as the document draws it, then
    a box that grows with its words, in the document's own type, so the words
-   do not jump as it opens or closes. */
-.plan-field-editor {
-  margin: var(--space-4) 0;
+   do not jump as it opens or closes. It takes the gap of the unit it stands
+   in for, and opens its box as far under the heading as the unit's words. */
+.plan-field-editor > * + * {
+  margin-top: 0.5em;
 }
 
 .plan-field-input {
