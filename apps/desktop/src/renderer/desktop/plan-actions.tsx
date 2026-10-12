@@ -23,7 +23,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
-import { PlanStatusMark } from "./plan-card";
+import { PlanCard, PlanStatusMark } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
 /**
@@ -90,7 +90,9 @@ function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuA
 
 /**
  * Pin and Archive at a sidebar row's end, standing in the time's place while
- * the row is hovered or reached from the keyboard. Each runs what its menu
+ * the row is hovered or reached from the keyboard. Rested on, the row hangs
+ * the plan's card beside it (`plan-card.tsx`): its name in full, its
+ * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
  * item runs, and only the open plan's Archive names ⇧⌘A, because the chord
  * archives the open plan rather than the row under the pointer. They are the
  * row's siblings rather than inside it, so a press on one opens nothing.
@@ -356,30 +358,43 @@ export function SidebarPlan({
           {repository}
         </div>
       ) : (
-        <button
-          ref={row}
-          type="button"
-          className="sidebar-plan"
-          aria-current={current ? "page" : undefined}
-          data-menu-open={String(actions.open)}
-          data-unread={String(unread)}
-          disabled={actions.deletion.busy}
-          onClick={() => {
-            actions.close(false);
-            onOpen();
-          }}
-          onContextMenu={showMenu}
+        <Tooltip
+          label={plan.name}
+          card={
+            <PlanCard
+              plan={plan}
+              models={plans.agents.models ?? []}
+              pictures={plans.repositories.pictures}
+              now={now}
+            />
+          }
+          cardBeside
         >
-          <span className="sidebar-plan-line">
-            <span className="sidebar-plan-name">{plan.name}</span>
-            {unread ? <span className="visually-hidden">(unread)</span> : null}
-            <span className="sidebar-plan-time">
-              <PlanStatusMark plan={plan} />
-              {sinceText(plan.updatedAt, now)}
+          <button
+            ref={row}
+            type="button"
+            className="sidebar-plan"
+            aria-current={current ? "page" : undefined}
+            data-menu-open={String(actions.open)}
+            data-unread={String(unread)}
+            disabled={actions.deletion.busy}
+            onClick={() => {
+              actions.close(false);
+              onOpen();
+            }}
+            onContextMenu={showMenu}
+          >
+            <span className="sidebar-plan-line">
+              <span className="sidebar-plan-name">{plan.name}</span>
+              {unread ? <span className="visually-hidden">(unread)</span> : null}
+              <span className="sidebar-plan-time">
+                <PlanStatusMark plan={plan} />
+                {sinceText(plan.updatedAt, now)}
+              </span>
             </span>
-          </span>
-          {repository}
-        </button>
+            {repository}
+          </button>
+        </Tooltip>
       )}
       {rename.editing ? null : (
         <SidebarPlanMarks

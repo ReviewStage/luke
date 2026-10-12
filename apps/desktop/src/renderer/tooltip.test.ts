@@ -252,3 +252,48 @@ test("a card too wide for the room past its control's start is drawn whole insid
   hover("Fix the flaky test");
   assert.equal(pill()?.style.left, `${window.innerWidth - 280 - 6}px`);
 });
+
+test("a card hung beside its control stands past the control's end, level with its top, and held inside the window", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      createElement(
+        "div",
+        null,
+        createElement(Tooltip, {
+          label: "Teammate invitations",
+          card: createElement("p", null, "Teammate invitations"),
+          cardBeside: true,
+          children: button({}, "Teammate invitations"),
+        }),
+        createElement(Tooltip, {
+          label: "Billing export",
+          card: createElement("p", null, "Billing export"),
+          cardBeside: true,
+          children: button({}, "Billing export"),
+        }),
+      ),
+    );
+  });
+  vi.spyOn(control("Teammate invitations"), "getBoundingClientRect").mockReturnValue(
+    new DOMRect(8, 100, 240, 40),
+  );
+  vi.spyOn(control("Billing export"), "getBoundingClientRect").mockReturnValue(
+    new DOMRect(8, window.innerHeight - 30, 240, 40),
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "tooltip" ? 200 : 0;
+  });
+
+  hover("Teammate invitations");
+  assert.equal(pill()?.dataset.side, "end");
+  assert.equal(pill()?.style.left, `${8 + 240 + 6}px`);
+  assert.equal(pill()?.style.top, "100px");
+  leave("Teammate invitations");
+
+  hover("Billing export");
+  assert.equal(pill()?.style.top, `${window.innerHeight - 200 - 6}px`);
+});

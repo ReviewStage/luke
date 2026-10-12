@@ -56,6 +56,10 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
   transform-origin: bottom center;
 }
 
+.tooltip[data-side="end"] {
+  transform-origin: top left;
+}
+
 @keyframes tooltip-in {
   from {
     opacity: 0;

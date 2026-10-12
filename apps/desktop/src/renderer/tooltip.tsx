@@ -54,6 +54,8 @@ const WARM_MS = MOTION_DELAY_MS.HINT;
 const TOOLTIP_SIDE = {
   BELOW: "below",
   ABOVE: "above",
+  /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
+  END: "end",
 } as const;
 
 type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
@@ -95,13 +97,27 @@ function clampTo(value: number, size: number, room: number): number {
 
 /**
  * Where a pill of this size goes for its control: below it, or above where
- * the window ends; centred on it, or from its start for a card.
+ * the window ends; centred on it, or from its start for a card. A card hung
+ * beside its control stands past the control's end, level with its top and
+ * held inside the window.
  */
-function pillPlace(shown: Shown, width: number, height: number, card: boolean): PillPlace {
+function pillPlace(
+  shown: Shown,
+  width: number,
+  height: number,
+  card: { readonly beside: boolean } | undefined,
+): PillPlace {
   const anchor = shown.anchor.getBoundingClientRect();
+  if (card?.beside === true) {
+    return {
+      left: clampTo(anchor.right + TOOLTIP_GAP, width, window.innerWidth),
+      top: clampTo(anchor.top, height, window.innerHeight),
+      side: TOOLTIP_SIDE.END,
+    };
+  }
   const below = anchor.bottom + TOOLTIP_GAP;
   const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
-  const left = card ? anchor.left : anchor.left + anchor.width / 2 - width / 2;
+  const left = card === undefined ? anchor.left + anchor.width / 2 - width / 2 : anchor.left;
   return {
     left: clampTo(left, width, window.innerWidth),
     top: fits ? below : anchor.top - TOOLTIP_GAP - height,
@@ -146,12 +162,14 @@ function TooltipPill({
   label,
   command,
   card,
+  cardBeside,
 }: {
   id: string;
   shown: Shown;
   label: string;
   command: KeyedCommand | undefined;
   card: ReactNode;
+  cardBeside: boolean;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
@@ -162,8 +180,9 @@ function TooltipPill({
     if (drawn === null) return;
     // Note that its layout size is read rather than its box, because the box
     // is still scaled short by the fade it waits to play.
-    setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, carded));
-  }, [shown, label, carded]);
+    const placed = carded ? { beside: cardBeside } : undefined;
+    setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+  }, [shown, label, carded, cardBeside]);
 
   return createPortal(
     <div
@@ -191,17 +210,20 @@ function TooltipPill({
  * label it raises no pill, so a control whose hint comes and goes keeps its
  * place, and its focus, while it does. `card`, while given, is drawn in the
  * pill's place, and always describes the control, since it says more than
- * the control's name.
+ * the control's name; `cardBeside` hangs it past the control's end rather
+ * than under it, as a list row's card hangs.
  */
 export function Tooltip({
   label,
   command,
   card,
+  cardBeside = false,
   children,
 }: {
   label: string | undefined;
   command?: KeyedCommand;
   card?: ReactNode;
+  cardBeside?: boolean;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
@@ -276,7 +298,14 @@ export function Tooltip({
     <>
       {anchor}
       {shown === undefined || label === undefined ? null : (
-        <TooltipPill id={id} shown={shown} label={label} command={command} card={card} />
+        <TooltipPill
+          id={id}
+          shown={shown}
+          label={label}
+          command={command}
+          card={card}
+          cardBeside={cardBeside}
+        />
       )}
     </>
   );
