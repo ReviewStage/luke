@@ -243,6 +243,7 @@ const planningHost = (
       openAi,
       deploymentSecret: () => undefined,
       eveOrigin: () => undefined,
+      titleModel: () => undefined,
       scriptedModel: () => true,
       spend,
       now: () => NOW,

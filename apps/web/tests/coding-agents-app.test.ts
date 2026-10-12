@@ -72,6 +72,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { childConversationId, sentLineId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
+import { fillChildTitle } from "../server/hosted/child-titles";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
@@ -806,7 +807,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(early.pollUnsafe(), undefined);
         yield* recordDelegation(
           parent,
-          child.conversationId,
+          callId,
           { model: "openai/gpt-6.1-sol", effort: "low" },
           CODER_TOOL.DELEGATE,
         );
@@ -863,6 +864,82 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
         assert.deepEqual(starting.messages, []);
         assert.equal(starting.status, CODING_AGENT_STATUS.STARTING);
+      }),
+  );
+
+  it.effect(
+    "a worker's title is carried on its own page, and every titled worker on the agent's page by the call that delegated it, an untitled one named nowhere",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const parent = { userId: owner, conversationId: stored.value.conversationId };
+        const choice = { model: "openai/gpt-6.1-sol", effort: "low" };
+        const titled = {
+          userId: owner,
+          conversationId: childConversationId(parent.conversationId, "call-t1"),
+        };
+        yield* recordDelegation(parent, "call-t1", choice, CODER_TOOL.DELEGATE);
+        yield* recordDelegation(parent, "call-t2", choice, CODER_TOOL.DELEGATE);
+        assert.equal(
+          yield* fillChildTitle(parent, titled.conversationId, "Count the routes"),
+          true,
+        );
+        // A title is filled once: a second lands nowhere.
+        assert.equal(yield* fillChildTitle(parent, titled.conversationId, "Later title"), false);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(titled, {
+          turnId,
+          origin: TURN_ORIGIN.CHILD,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(titled, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(titled.conversationId),
+          turnId,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.CHILD,
+          trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+          at: 0,
+        });
+        yield* writer.consume(titled, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(titled.conversationId),
+          turnId,
+          sequence: 2,
+          message: userMessage(
+            randomUUID(),
+            "Count the routes.",
+            userMetadataOf(BRAIN_TURN_TRIGGER.CHILD_TASK, undefined),
+          ),
+        });
+
+        const worker = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-t1" })),
+        );
+        assert.equal(worker.title, "Count the routes");
+        assert.equal(worker.subagentTitles, undefined);
+
+        // The agent has no turn of its own yet, so its read is held to the hold's end.
+        const reading = yield* Effect.forkChild(
+          ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        const own = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(reading, CODER.MESSAGES_POLL),
+        );
+        assert.deepEqual(own.subagentTitles, [{ callId: "call-t1", title: "Count the routes" }]);
       }),
   );
 
@@ -1964,7 +2041,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
 
         const child = childConversationId(target.conversationId, callId);
         const choice = { model: SOL, effort: "low" };
-        yield* recordDelegation(target, child, choice, CODER_TOOL.DELEGATE);
+        yield* recordDelegation(target, callId, choice, CODER_TOOL.DELEGATE);
         // The record's own stamp is the database's clock, which the test does not hold.
         const delegatedAt = new Date(1_800_000_000_000);
         yield* db

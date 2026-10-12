@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
-import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import {
   Clock,
@@ -58,6 +57,7 @@ import {
 } from "../server/hosted/coder-host/transcript";
 import {
   awaitingLinesOf,
+  type CodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
   fillCodingAgentTitle,
@@ -80,6 +80,7 @@ import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-
 import { noNetwork } from "./support/no-network";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
+import { titleModelAnswering } from "./support/title-model";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -152,26 +153,6 @@ const hostOverStore = (titleModel?: LanguageModel) =>
     };
     return coderHost(seams);
   });
-
-/** A title model answering from a script, each call the next line; one that throws is the provider down. */
-function titleModelAnswering(answers: readonly (string | Error)[]): MockLanguageModelV4 {
-  const queue = [...answers];
-  return new MockLanguageModelV4({
-    doGenerate: async () => {
-      const answer = queue.shift() ?? "";
-      if (answer instanceof Error) throw answer;
-      return {
-        content: [{ type: "text" as const, text: answer }],
-        finishReason: { unified: "stop" as const, raw: "stop" },
-        usage: {
-          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 1, text: 1, reasoning: 0 },
-        },
-        warnings: [],
-      };
-    },
-  });
-}
 
 function principal(
   id: string,
@@ -461,6 +442,18 @@ const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
     return yield* Fiber.join(fiber);
   });
 
+/** The agent's own page from the start, read to the end of the hold a starting agent's read is held for. */
+const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const reading = yield* Effect.forkChild(
+      transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+        Effect.provide(modelCatalogOf(CATALOG)),
+      ),
+    );
+    yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+    return yield* driven(reading, CODER.MESSAGES_POLL);
+  });
+
 it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it) => {
   it.effect(
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
@@ -728,6 +721,59 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
       yield* host.title(starting);
       assert.equal(Option.getOrThrow(yield* readCodingAgent(userId, agent.id)).title, null);
     }),
+  );
+
+  it.effect(
+    "a worker's title is generated from the task its delegation handed it, tidied as the agent's is, and written once on its child, which the agent's page then names by the call",
+    () =>
+      Effect.gen(function* () {
+        const model = titleModelAnswering(['"Count the API routes."', "Second title"]);
+        const host = yield* hostOverStore(model);
+        const { agent, target, admitted } = yield* openAgent(host);
+        const made = yield* host
+          .delegate(admitted, "call-3", {})
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.ok(Result.isSuccess(made));
+        yield* host.delegationTitle(admitted, "call-3", "Count the routes under app/api.");
+        const [asked] = model.doGenerateCalls;
+        assert.ok(asked !== undefined);
+        // The task is what is named; the agent's plan does not ride along.
+        assert.match(JSON.stringify(asked.prompt), /Count the routes under app\/api/u);
+        assert.doesNotMatch(JSON.stringify(asked.prompt), /Teammate invitations/u);
+
+        // A worker already titled is never asked for again.
+        yield* host.delegationTitle(admitted, "call-3", "Count the routes under app/api.");
+        assert.equal(model.doGenerateCalls.length, 1);
+
+        const page = yield* ownPage(target, agent);
+        assert.deepEqual(page.subagentTitles, [
+          { callId: "call-3", title: "Count the API routes" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a worker whose title call fails, or that a deployment with no title model delegates, stays untitled, and the agent's page names no title for it",
+    () =>
+      Effect.gen(function* () {
+        const failing = yield* hostOverStore(
+          titleModelAnswering([new Error("fixture: provider down")]),
+        );
+        const { agent, target, admitted } = yield* openAgent(failing);
+        const untitled = yield* hostOverStore();
+        for (const [host, callId] of [
+          [failing, "call-4"],
+          [untitled, "call-5"],
+        ] as const) {
+          const made = yield* host
+            .delegate(admitted, callId, {})
+            .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+          assert.ok(Result.isSuccess(made));
+          yield* host.delegationTitle(admitted, callId, "Count the routes.");
+        }
+        const page = yield* ownPage(target, agent);
+        assert.equal(page.subagentTitles, undefined);
+      }),
   );
 
   it.effect("a change of the agent's model and effort is what the next step is told", () =>

@@ -15,6 +15,7 @@ import {
 import { childConversationId } from "./brain-host/ids.js";
 import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
+import { childTitlesByCall } from "./child-titles.js";
 import { type PlanStoreEffect, readPlan } from "./plan-store.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 import {
@@ -33,8 +34,8 @@ import {
  * relay journals each as eve runs it, so the plan's work is that
  * conversation's turns, newest first a page at a time, each projected from
  * its row and its journal exactly as a call tells it live
- * (`voice/plan-work.ts`), a worker's session read from its child
- * conversation beside it. The code is every answered `show_code` call in
+ * (`voice/plan-work.ts`), a worker's session and its title read from its
+ * child conversation beside it. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
  * and no secret file, is read back. The plan is read under the account
@@ -53,7 +54,7 @@ const workerJournalsOf = Effect.fnUntraced(function* (userId: string, conversati
   return read.ok ? read.value.map((row) => row.message) : [];
 });
 
-/** One turn's journal and the sessions of the subagents it started or sent work to, or nothing where the turn wrote none or it does not read. */
+/** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one, or nothing where the turn wrote none or it does not read. */
 const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
   const read = yield* readMessageByClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
   const message = read.ok ? read.value[0]?.message : undefined;
@@ -62,17 +63,17 @@ const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnR
     callsSendingToEarlierTasks(message).length === 0
       ? []
       : yield* workerJournalsOf(userId, turn.conversationId);
+  const children = new Map<string, string>();
   const subagents = new Map<string, readonly SubagentJournal[]>();
   for (const [callId, sessionCallId] of workerSessionCallsOf(message, earlier)) {
-    const session = yield* listJournals(
-      userId,
-      childConversationId(turn.conversationId, sessionCallId),
-      HOSTED_TOOL_SET,
-      SUBAGENT_JOURNALS,
-    );
+    const child = childConversationId(turn.conversationId, sessionCallId);
+    children.set(callId, child);
+    const session = yield* listJournals(userId, child, HOSTED_TOOL_SET, SUBAGENT_JOURNALS);
     if (session.ok) subagents.set(callId, session.value);
   }
-  return { turn, message, subagents };
+  const parent = { userId, conversationId: turn.conversationId };
+  const titles = yield* childTitlesByCall(parent, children);
+  return { turn, message, subagents, titles };
 });
 
 /** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first. */
@@ -133,7 +134,9 @@ export function readPlanWork(
     const code = newest ? yield* allShownCode(userId, conversationId) : undefined;
     const oldest = page.turns[0];
     return Option.some({
-      turns: journaled.map((each) => planWorkOf(each.turn, each.message, each.subagents)),
+      turns: journaled.map((each) =>
+        planWorkOf(each.turn, each.message, each.subagents, each.titles),
+      ),
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
       ...(code === undefined ? undefined : { code }),
     });

@@ -374,21 +374,28 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * them. A call that started a subagent carries the subagent's own session,
  * read from the journals of its child conversation (`subagents`, by the
  * call's id) and drawn by the same walk, its calls running while the
- * subagent does, with when its newest task began and ended.
+ * subagent does, with when its newest task began and ended, and its title
+ * where one landed on that child (`titles`, by the call's id).
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
+  titles: ReadonlyMap<string, string> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
     const journals = part.type === PLAN_WORK_PART.TOOL ? subagents.get(part.id) : undefined;
     if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
     const messages = journals.map((each) => each.message);
+    const title = titles.get(part.id);
     return {
       ...part,
-      session: { ...newest(partsOf(messages, part.state)), ...sessionSpanOf(journals) },
+      session: {
+        ...newest(partsOf(messages, part.state)),
+        ...sessionSpanOf(journals),
+        ...(title === undefined ? undefined : { title }),
+      },
     };
   });
   const ended = turnState === PLAN_WORK_STATE.RUNNING ? null : turn.settledAt;

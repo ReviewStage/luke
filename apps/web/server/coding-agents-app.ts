@@ -37,6 +37,7 @@ import {
 } from "./hosted/brain-host/eve-sessions.js";
 import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
+import { childTitlesOf } from "./hosted/child-titles.js";
 import {
   type PublishedCache,
   PublishedKey,
@@ -130,7 +131,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * agent's transcript carries: the child conversation is a function of the
  * two (`brain-host/ids.ts`), and only a delegation recorded under the
  * account's agent answers, so a call of another account's agent reads as
- * none.
+ * none. Each worker's title, generated from its task as it starts, is
+ * carried on its own page and, for every worker titled so far, on the
+ * agent's.
  */
 
 const AGENTS_PATH = {
@@ -234,6 +237,7 @@ function transcriptResponse(
     status: page.status,
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
     ...(page.delegations === undefined ? undefined : { delegations: page.delegations }),
+    ...(page.subagentTitles === undefined ? undefined : { subagentTitles: page.subagentTitles }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
@@ -428,7 +432,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   return transcriptResponse(page, agent.title);
 });
 
-/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
+/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
 const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
   function* (
     seams: CodingAgentsAppSeams,
@@ -455,7 +459,9 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
         createdAt: read.delegation.createdAt,
       }),
     );
-    return transcriptResponse(page, null);
+    // The title is read after the page, since it lands beside the worker's start, which a held read may span.
+    const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
+    return transcriptResponse(page, titles.get(conversationId) ?? null);
   },
 );
 

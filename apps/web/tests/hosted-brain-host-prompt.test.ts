@@ -63,6 +63,7 @@ const seams: BrainHostSeams = {
   openAi: () => undefined,
   deploymentSecret: () => undefined,
   eveOrigin: () => undefined,
+  titleModel: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),
   now: () => NOW,

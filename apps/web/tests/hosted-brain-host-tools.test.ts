@@ -38,6 +38,7 @@ import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/br
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { childTitlesOf } from "../server/hosted/child-titles";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import {
@@ -68,6 +69,7 @@ import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
+import { titleModelAnswering } from "./support/title-model";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -134,6 +136,7 @@ const seams: BrainHostSeams = {
   openAi: () => undefined,
   deploymentSecret: () => undefined,
   eveOrigin: () => undefined,
+  titleModel: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),
   now: () => NOW,
@@ -421,6 +424,64 @@ test("a worker's session is recorded in its child conversation as a child turn, 
   assert.equal(childTurn?.origin, TURN_ORIGIN.CHILD);
   // The planning session still stands for its conversation, so its own calls still run.
   assert.ok(Result.isSuccess(await database.run(host.admit(auth, rootId))));
+});
+
+test("a worker is titled from the first task it receives on the child conversation of the call that started it, once; a title call that fails, or a deployment with no title model, leaves a worker untitled", async () => {
+  const target = await planConversation();
+  const model = titleModelAnswering(['"Queue comparison."', "Second title"]);
+  const titling = brainHost({ ...seams, titleModel: () => model });
+  const failing = brainHost({
+    ...seams,
+    titleModel: () => titleModelAnswering([new Error("fixture: provider down")]),
+  });
+  const untitled = brainHost(seams);
+  const rootId = sessionId();
+  const auth = seat(target);
+  const starting = await database.run(titling.admitStarting(auth, rootId));
+  if (Result.isFailure(starting)) return assert.fail(starting.failure);
+  assert.equal(await database.run(titling.sessionStarted(starting.success, rootId)), true);
+
+  const turn = { id: "turn_0", sequence: 0 };
+  /** A worker's session under the call named, its child conversation opened as its first turn starts. */
+  const workerOf = async (callId: string) => {
+    const child = {
+      id: `${rootId}-${callId}`,
+      auth,
+      turn,
+      parent: { callId, rootSessionId: rootId, sessionId: rootId, turn },
+    };
+    const started = stampedEveEvent(
+      { type: "turn.started", data: { turnId: "turn_0", sequence: 0 } },
+      NOW,
+    );
+    await database.run(
+      titling.relayChild(started, child, memoryRelayState()).pipe(Effect.provide(NO_GITHUB)),
+    );
+    return child;
+  };
+  const titlesOf = (callIds: readonly string[]) =>
+    database.run(
+      childTitlesOf(
+        target,
+        callIds.map((callId) => childConversationId(target.conversationId, callId)),
+      ),
+    );
+
+  const worker = await workerOf("call-worker-1");
+  await database.run(titling.titleChild(worker, "Compare the two queues' retry policies."));
+  const [asked] = model.doGenerateCalls;
+  assert.ok(asked !== undefined);
+  assert.match(JSON.stringify(asked.prompt), /Compare the two queues' retry policies/u);
+  // A later task the same worker receives asks for no second title.
+  await database.run(titling.titleChild(worker, "Now compare their dead-letter queues."));
+  assert.equal(model.doGenerateCalls.length, 1);
+
+  await database.run(failing.titleChild(await workerOf("call-worker-2"), "Read the queue docs."));
+  await database.run(untitled.titleChild(await workerOf("call-worker-3"), "Read the queue docs."));
+  assert.deepEqual(
+    [...(await titlesOf(["call-worker-1", "call-worker-2", "call-worker-3"])).values()],
+    ["Queue comparison"],
+  );
 });
 
 test("the plan's coding agents are listed with their status, what each published, and what each last did; one is read as a bounded tail; and an agent is read only on its own plan", async () => {

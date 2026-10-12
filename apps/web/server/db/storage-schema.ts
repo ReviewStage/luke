@@ -81,8 +81,10 @@ export const conversations = pgTable(
      * What the roster last called the observed session, and the name of the
      * workspace holding it: written on the open and refreshed on a wake where
      * either moved, so the Agents page can name a session Conductor no longer
-     * lists. Null on every other kind, on a row opened before migration 0043
-     * kept them, and where the roster reports no name.
+     * lists. On a child, its title alone: the few words generated from the
+     * task its subagent was handed, filled once where none stands. Null on
+     * every other kind, on a row opened before migration 0043 kept them, on a
+     * child no title was generated for, and where the roster reports no name.
      */
     title: text("title"),
     workspace: text("workspace"),

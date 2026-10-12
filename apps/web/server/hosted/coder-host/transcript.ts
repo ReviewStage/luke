@@ -7,6 +7,7 @@ import {
   type CodingAgentDelegationStart,
   type CodingAgentFailure,
   type CodingAgentStatus,
+  type CodingAgentSubagentTitle,
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
@@ -26,6 +27,7 @@ import {
   type CodingAgent,
   type CodingAgentDelegation,
   delegationStartsOf,
+  delegationTitlesOf,
   latestTurnsOf,
   readCodingAgentContext,
   readDelegation,
@@ -120,6 +122,8 @@ export interface TranscriptPage {
   readonly context?: CodingAgentContext;
   /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
   readonly delegations?: readonly CodingAgentDelegationStart[];
+  /** Every one of its workers titled so far, by the call that delegated it, on its own transcript; absent while none is and on a worker's. */
+  readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -243,7 +247,9 @@ const delegationsUnderWay = (
  * conversation and its workers', and its newest turn, priced at the catalog
  * as the instance holds it now; a catalog it cannot read prices nothing,
  * so the tokens are told alone. On the agent's own transcript, with what
- * its model's context holds, against the window the same catalog lists.
+ * its model's context holds, against the window the same catalog lists,
+ * and every title its workers have so far, which land beside their starts
+ * and so on no page of their own.
  */
 const withUsage = (
   target: ConversationTarget,
@@ -263,12 +269,14 @@ const withUsage = (
       own !== undefined && WAITING_STATUSES.has(page.status)
         ? yield* delegationsUnderWay(target, tools, turn)
         : [];
+    const subagentTitles = own === undefined ? [] : yield* delegationTitlesOf(target);
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
       ...(turnUsage === undefined ? undefined : { turnUsage }),
       ...(context === undefined ? undefined : { context }),
       ...(delegations.length === 0 ? undefined : { delegations }),
+      ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
     };
   });
 

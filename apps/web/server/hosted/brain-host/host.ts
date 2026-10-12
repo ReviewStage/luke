@@ -18,6 +18,7 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -69,7 +70,9 @@ import { carryStop } from "./stop-carrier.js";
  * a message row. A conversation is a plan's: its turns run under the
  * planning model's instructions, its saved document as the standing context,
  * and the planning tools (`planning.ts`), and every write runs under the
- * conversation the session was admitted for.
+ * conversation the session was admitted for. A worker is named from the
+ * task it is handed by the same small call that names a coding agent
+ * (`coder-host/title.ts`), on its child conversation.
  */
 
 /** The turn a resolver or a tool runs in, as eve names it and as the store keys it; plain data, so a tool may capture it. */
@@ -178,6 +181,13 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+  /**
+   * A subagent's title generated from a task it received and written on the
+   * child conversation of the call that started it, where none stands yet; a
+   * session with no parent, one the account does not own, a deployment with
+   * no title model, and a failed call each write nothing.
+   */
+  titleChild(session: SessionContext["session"], task: string): HostEffect<void>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -417,6 +427,22 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           turn: RELAY_TURN.CHILD,
           state,
         });
+      }),
+
+    titleChild: (session, task) =>
+      Effect.gen(function* () {
+        const parent = session.parent;
+        const model = seams.titleModel();
+        if (parent === undefined || model === undefined) return;
+        // Admitted on ownership alone, as the relay of the same session is.
+        const admitted = yield* admitConversation(session.auth, {
+          id: session.id,
+          standing: SESSION_STANDING.DELEGATED,
+        });
+        if (Result.isFailure(admitted)) return;
+        const { target } = admitted.success;
+        const childId = childConversationId(target.conversationId, parent.callId);
+        yield* titleSubagent(model, target, childId, task);
       }),
   };
 }

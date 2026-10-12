@@ -30,6 +30,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * standard one; a choice that names none runs on the model's whole window. An agent's title is generated once from its plan as it starts,
  * and the developer may rename it; a rename is never overwritten, and an
  * empty one clears the title so the tab falls back to the model's name.
+ * Each of its workers is given a title the same way, from the task it was
+ * handed, which no one renames.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -395,6 +397,14 @@ const codingAgentDelegationStartSchema = EffectSchema.Struct({
 
 export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema.Type;
 
+/** One worker's short title, generated from the task it was handed, by the call that started it. */
+const codingAgentSubagentTitleSchema = EffectSchema.Struct({
+  callId: codingAgentCallIdSchema,
+  title: EffectSchema.String,
+});
+
+export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Type;
+
 /**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
@@ -406,7 +416,7 @@ export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema
  * The page carries the agent's title too, since the title generated as the
  * agent starts lands a moment after the list that opened its tab was read,
  * and what its model's context holds once a step has ended; a worker's
- * page carries no context.
+ * page carries no context, and its `title` is the worker's own.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
@@ -421,6 +431,14 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * page, while none runs, and from a service older than it.
    */
   delegations: EffectSchema.optionalKey(EffectSchema.Array(codingAgentDelegationStartSchema)),
+  /**
+   * Every worker of the agent's whose title has landed, by the call that
+   * started it, whichever page carried the call: a title is generated
+   * beside the worker's start and lands a page or more after it. Absent on a
+   * worker's page, while no worker has a title, and from a service older
+   * than it.
+   */
+  subagentTitles: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentTitleSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
