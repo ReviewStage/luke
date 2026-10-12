@@ -19,7 +19,8 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { RetryRowLabel } from "../retry-button";
-import { BusyLabel, Spinner } from "../spinner";
+import { BusyLabel } from "../spinner";
+import { WorkingMark } from "../working-mark";
 import {
   TranscriptNote,
   TranscriptOpeningCall,
@@ -166,7 +167,13 @@ function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Elemen
       ) : null}
       {session === undefined || session.rows.length === 0 ? (
         <TranscriptNote>
-          {call.running ? <Spinner label="Starting" /> : "Nothing recorded."}
+          {call.running ? (
+            <span role="status" className="inline-flex">
+              <WorkingMark label="Starting" />
+            </span>
+          ) : (
+            "Nothing recorded."
+          )}
         </TranscriptNote>
       ) : (
         <WorkTurnRows rows={session.rows} />

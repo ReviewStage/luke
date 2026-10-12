@@ -430,9 +430,9 @@ function AgentMessage({
 
 /**
  * An agent's glyph wearing where it stands: the mark of the harness its
- * model runs in, or the Coding agents glyph where Luke knows no harness for
- * it, turning a ring while the agent may still write and giving way to an
- * alert once its turn failed (`state-glyph.tsx`).
+ * model runs in at its full size, or the Coding agents glyph where Luke
+ * knows no harness for it, giving way to the working mark while the agent
+ * may still write and to an alert once its turn failed (`state-glyph.tsx`).
  */
 export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
   const provider = providerOf(agent.model);

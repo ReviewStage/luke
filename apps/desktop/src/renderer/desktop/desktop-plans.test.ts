@@ -690,7 +690,11 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   press(page, "[data-subagent-row]");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
-  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(tabState(tabNamed(page, job)), "Working");
+  assert.ok(
+    tabNamed(page, job).querySelector("svg.working-mark"),
+    "the working mark in the worker's glyph's place",
+  );
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
   // As an agent's tab: the task a card at the top, and a working line at the end while the subagent runs.
@@ -789,7 +793,11 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
   assert.equal(columnChosen(page), "Opus 5.5", "the agent stays beside its worker");
-  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(tabState(tabNamed(page, job)), "Working");
+  assert.ok(
+    tabNamed(page, job).querySelector("svg.working-mark"),
+    "the working mark in the worker's glyph's place",
+  );
   assert.equal(tabState(tabNamed(page, job)), "Working", "a ring around it while it runs");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
@@ -1716,7 +1724,7 @@ function mountAgentTabs(agents: Partial<CodingAgentsControl>, chosen: MainTab[] 
   return container;
 }
 
-test("a plan's coding agents follow the plan's tab in the column's strip, named by title or else by model, wearing their harness's mark, a ring while working, and a semibold label for an end unseen, with the model and the state in its card, each with an × and no shortcut, the plan's tab with none", () => {
+test("a plan's coding agents follow the plan's tab in the column's strip, named by title or else by model, wearing their harness's mark, the working mark in its place while working, and a semibold label for an end unseen, with the model and the state in its card, each with an × and no shortcut, the plan's tab with none", () => {
   const running = TITLED_AGENT;
   const chosen: MainTab[] = [];
   const container = mountAgentTabs({}, chosen);
@@ -1733,8 +1741,12 @@ test("a plan's coding agents follow the plan's tab in the column's strip, named 
   // A tab never shown holds no transcript, so its card says its name, model, and that it works, and no step.
   assert.equal(hover(claude), "Sign-out button in account menuOpus 5.5 HighWorking…");
   assert.equal(tabState(claude), "Working");
-  assert.ok(claude.querySelector(".spinner-ring"), "a ring turns while it works");
-  assert.ok(claude.querySelector("svg.provider-mark"), "Claude Code's mark");
+  assert.ok(claude.querySelector("svg.working-mark"), "the working mark while it works");
+  assert.equal(
+    claude.querySelector(".provider-mark"),
+    null,
+    "in the place of Claude Code's mark, never shrunk beside it",
+  );
   assert.equal(tabUnread(claude), true, "an end no one saw sets the label in semibold");
   assert.equal(tabState(sol), undefined, "a finished agent's mark stands alone");
   assert.ok(sol.querySelector("img.provider-mark"), "Codex's mark");

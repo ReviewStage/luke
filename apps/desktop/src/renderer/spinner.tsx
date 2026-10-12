@@ -1,9 +1,10 @@
 /**
- * spinner.tsx -- the window's one spinner: a ring turning while something is read or under way, the same ring a working glyph wears.
+ * spinner.tsx -- the window's one spinner for a wait: a ring turning while something is read or a press is out.
  *
  * Every wait in the window is drawn with this one ring, so a region still
  * reading, a menu still listing, and a button whose press is out all read
- * as one object. The ring is an arc in the ink around it over a faint
+ * as one object. An agent at work is not a wait and wears the working mark
+ * instead (`working-mark.tsx`). The ring is an arc in the ink around it over a faint
  * track; reduced motion and a capture run hold it still on
  * `--loop-motion`, which still reads as a wait. A wait shows only once it
  * has stood for `SHOW_DELAY`, because a ring that flashes for a read that
@@ -36,7 +37,7 @@ function useWaitShown(): boolean {
   return AsyncResult.isSuccess(useAtomValue(wait));
 }
 
-/** The ring alone, decorative, shown at once: a working glyph's ring, or a mark that is itself the state. */
+/** The ring alone, decorative, shown at once: a mark that is itself the wait, a sign-in waiting on the browser or a send that is out. */
 export function SpinnerRing({ className }: { className?: string }): React.JSX.Element {
   return (
     <span className={className ? `spinner-ring ${className}` : "spinner-ring"} aria-hidden="true" />

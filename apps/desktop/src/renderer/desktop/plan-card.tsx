@@ -22,13 +22,13 @@ import { sinceText } from "../planning/plan-time";
 import { repositoryPageUrl } from "../planning/planning-model";
 import { WorkingTime } from "../planning/working-time";
 import { RepositoryPicture } from "../repository-picture";
-import { SpinnerRing } from "../spinner";
+import { WorkingMark } from "../working-mark";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
  *
- * The mark is a spinner while an agent works on the plan, still where
- * motion is reduced, else the pull request's glyph in GitHub's colours for
+ * The mark is the working mark while an agent works on the plan
+ * (`working-mark.tsx`), held mid-lap where motion is reduced, else the pull request's glyph in GitHub's colours for
  * where it stands, red where its checks failed, else nothing
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
  * how long ago it was updated at its head, then a line for each agent the
@@ -55,11 +55,11 @@ const PULL_REQUEST_GLYPH = {
   [PULL_REQUEST_STATE.CLOSED]: GitPullRequestClosedIcon,
 } as const;
 
-/** The spinner an agent at work is drawn with, held still where motion is reduced. */
+/** The mark an agent at work is drawn with, in the mark's own slot, so the row moves nothing as the work starts or ends. */
 function WorkingGlyph({ label }: { label: string }): React.JSX.Element {
   return (
     <span className="plan-mark-glyph" data-plan-mark="working" role="img" aria-label={label}>
-      <SpinnerRing />
+      <WorkingMark />
     </span>
   );
 }

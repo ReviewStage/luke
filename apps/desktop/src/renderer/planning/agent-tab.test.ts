@@ -303,7 +303,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, a spinner while the worker runs and no mark once it answered, leading with its harness's mark where the catalog names its model and the robot lit while it runs where it does not; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with its harness's mark where the catalog names its model and the muted robot where it does not; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -350,13 +350,16 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.ok(done.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'), "Clawd");
   assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
-  assert.ok(running.querySelector('[data-tool-state="input-available"] .spinner-ring'));
+  assert.ok(running.querySelector('[data-tool-state="input-available"] svg.working-mark'));
   assert.equal(
     running.querySelector("[data-subagent-harness]"),
     null,
     "Opus is not in the catalog",
   );
-  assert.ok(running.querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
+  assert.ok(
+    running.querySelector("svg.lucide-bot.text-muted-foreground"),
+    "the robot in the muted ink, since the working mark says it runs",
+  );
   for (const row of rows) {
     assert.equal(row.tagName, "BUTTON", "the whole row is the button");
     assert.equal(row.closest("details"), null, "nothing to expand");
@@ -712,13 +715,13 @@ test("each row says what the call did and where it stands, a finished call with 
   assert.doesNotMatch(markup, /data-tool-state="output-available"/u);
   assert.match(
     markup,
-    /data-tool-state="input-available"[^>]*aria-label="Running"><span class="spinner-ring/u,
+    /data-tool-state="input-available"[^>]*aria-label="Running"><span[^>]*><svg class="working-mark"/u,
   );
   assert.match(markup, /data-tool-state="output-error"[^>]*aria-label="Failed"><svg[^>]*lucide-x/u);
-  // Every svg drawn on a row is the one size, so nothing shifts as a mark changes.
+  // Every svg drawn on a row is the one size, the working mark centred in a seat of that size, so nothing shifts as a running call fails.
   const icons = markup.match(/<svg[^>]*class="[^"]*"/gu) ?? [];
   assert.ok(icons.length >= 8);
-  for (const icon of icons) assert.match(icon, /\bsize-4\b|lucide/u);
+  for (const icon of icons) assert.match(icon, /\bsize-4\b|lucide|working-mark/u);
   // No row opens on its own, and a closed row draws no body.
   assert.doesNotMatch(markup, /<details[^>]*data-call-id[^>]*\sopen/u);
   assert.doesNotMatch(markup, /data-tool-output/u);
