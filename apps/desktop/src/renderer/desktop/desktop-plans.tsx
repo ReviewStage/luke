@@ -10,7 +10,6 @@ import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
-import { tabKey } from "../planning/tab-strip-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -296,7 +295,7 @@ function PlanDocument({
           <FindScope
             className="desktop-plan-column"
             active={plans.shown && !sideFocused}
-            subject={[plan.id, tabKey(tab)]}
+            subject={{ plan: plan.id, tab }}
           >
             {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
             <section

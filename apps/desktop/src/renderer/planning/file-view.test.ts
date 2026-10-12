@@ -213,7 +213,7 @@ function mounted(
       },
     });
     // The view stands in the side panel's find, as it does in the window.
-    return createElement(FindScope, { active: true, subject: [PLAN, file.path] }, view);
+    return createElement(FindScope, { active: true, subject: { plan: PLAN, tab: { file: file.path } } }, view);
   }
   const draw = async (path: string, range?: OpenFile["range"], opened = 1) => {
     await act(async () => {

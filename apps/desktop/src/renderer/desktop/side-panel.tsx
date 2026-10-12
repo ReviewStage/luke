@@ -1131,7 +1131,7 @@ export function SidePanel({
             role="tabpanel"
             aria-label={label}
             active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD}
-            subject={[planId, tabKey(tab)]}
+            subject={{ plan: planId, tab }}
           >
             <TabContent
               tab={tab}

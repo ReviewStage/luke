@@ -13,7 +13,7 @@
  * over a code line's coloured tokens is, but never from one line or
  * paragraph into the next: text in another block is set apart by a line
  * break, which a query, typed in a one-line field, never holds. What is
- * `hidden` is not searched, nor the find bar itself, nor what a shadow root draws, which
+ * `hidden` is not searched, nor what wears `FIND_SKIP_ATTRIBUTE`, nor what a shadow root draws, which
  * a tree walker does not enter. A closed `<details>` is searched, since what
  * it folds is still the tab's to find, and opened when its match is brought
  * into view, as Chromium's own find opens one.
@@ -59,8 +59,12 @@ const INLINE_TAGS = new Set([
 /** The elements whose text is never read as words. */
 const UNREAD_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT"]);
 
-/** The attribute the find bar wears, whose own words stand inside the tab it searches and are none of the tab's. */
-export const FIND_BAR_ATTRIBUTE = "data-find-bar";
+/**
+ * The attribute worn by what is drawn among a tab's words and is none of
+ * them: the find bar itself, standing inside the tab it searches, and a
+ * code line's number in its gutter.
+ */
+export const FIND_SKIP_ATTRIBUTE = "data-find-skip";
 
 /** What sets the text of two blocks apart in the string a query is matched against. */
 const BLOCK_BREAK = "\n";
@@ -93,7 +97,7 @@ function unread(element: Element): boolean {
   return (
     UNREAD_TAGS.has(element.tagName) ||
     element.hasAttribute("hidden") ||
-    element.hasAttribute(FIND_BAR_ATTRIBUTE)
+    element.hasAttribute(FIND_SKIP_ATTRIBUTE)
   );
 }
 
@@ -211,11 +215,30 @@ export function findRanges(root: Element, query: string): Range[] {
 }
 
 /**
+ * The box a range is seen through: the nearest scroller around it up to
+ * `root`, or `root`, each element's answer kept in `seen` for the next
+ * range in it.
+ */
+function viewOf(range: Range, root: Element, seen: Map<Element, Element>): Element {
+  const start = range.startContainer.parentElement ?? root;
+  const known = seen.get(start);
+  if (known !== undefined) return known;
+  let element: Element | null = start;
+  while (element !== null && element !== root && !scrollsAlong(element, "y")) {
+    element = element.parentElement;
+  }
+  const view = element ?? root;
+  seen.set(start, view);
+  return view;
+}
+
+/**
  * The match a find should be at among `ranges`: the first at or after
  * `anchor`, the match it was at before the ranges were read again, so new
  * text arriving around it does not move it; or, with no anchor, the first
- * not scrolled above the top of `root`'s view. The first of all where none
- * follows, and -1 where there is none.
+ * not scrolled above the top of the scroller it is read in, so the find
+ * starts where the reader is. The first of all where none follows, and -1
+ * where there is none.
  */
 export function matchFrom(
   ranges: readonly Range[],
@@ -223,10 +246,11 @@ export function matchFrom(
   root: Element,
 ): number {
   if (ranges.length === 0) return -1;
-  const top = root.getBoundingClientRect().top;
+  const seen = new Map<Element, Element>();
   const after = ranges.findIndex((range) =>
     anchor === undefined
-      ? range.getBoundingClientRect().bottom >= top
+      ? range.getBoundingClientRect().bottom >=
+        viewOf(range, root, seen).getBoundingClientRect().top
       : range.compareBoundaryPoints(Range.START_TO_START, anchor) >= 0,
   );
   return Math.max(0, after);
@@ -274,7 +298,7 @@ export function selectedWords(root: Element): string | undefined {
   const element = within instanceof Element ? within : within.parentElement;
   // Words selected in the bar's own field are the query already.
   if (element === null || !root.contains(element)) return undefined;
-  if (element.closest(`[${FIND_BAR_ATTRIBUTE}]`) !== null) return undefined;
+  if (element.closest(`[${FIND_SKIP_ATTRIBUTE}]`) !== null) return undefined;
   const words = selection.toString();
   return words.length === 0 || words.includes("\n") ? undefined : words;
 }

@@ -10,6 +10,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
+import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
 import { Tooltip } from "../tooltip";
 import {
   type CodeFeedCall,
@@ -96,7 +97,9 @@ export function CodeLineRows({
             className="code-line"
             data-pointed={String(isPointed(pointed, line))}
           >
-            <span className="code-line-number">{line}</span>
+            <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+              {line}
+            </span>
             <code className="code-line-text">
               {tokens.map((token, at) => (
                 <span key={at} style={runColours(token)}>

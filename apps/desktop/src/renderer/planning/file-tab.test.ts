@@ -322,7 +322,7 @@ test("the lines a File tab draws in its file's place are the newest showing of t
   assert.equal(snippetOf(shown, { path: "src/gone.ts", range: undefined, opened: 1 }), undefined);
 });
 
-test("while a find bar is open over the tab the rest of the file is read a window after another and drawn whole, so a match past the lines drawn is found", async () => {
+test("while a find bar is open over the tab the rest of the file is read a window after another and drawn whole, so a match past the lines drawn is found, and never a line's number in the gutter", async () => {
   installHighlights();
   watchedRows();
   const asked: string[] = [];
@@ -335,7 +335,7 @@ test("while a find bar is open over the tab the rest of the file is read a windo
     useAppKeymap(true);
     return createElement(
       FindScope,
-      { active: true, subject: ["plan", "src/invite.ts"] },
+      { active: true, subject: { plan: "plan", tab: { file: "src/invite.ts" } } },
       createElement(FileTab, {
         file: { path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 },
         snippet: undefined,
@@ -367,7 +367,7 @@ test("while a find bar is open over the tab the rest of the file is read a windo
   assert.ok(input);
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
-    setValue?.call(input, "line 1150");
+    setValue?.call(input, "1150");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.equal(container.querySelector(".find-bar-tally")?.textContent, "1 of 1");

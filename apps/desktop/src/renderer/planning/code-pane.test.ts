@@ -173,7 +173,7 @@ test("a card numbers its lines from where they sit in the file and lights the li
   );
 
   const numbered = [
-    ...markup.matchAll(/data-pointed="(true|false)"><span class="code-line-number">(\d+)</gu),
+    ...markup.matchAll(/data-pointed="(true|false)"><span class="code-line-number"[^>]*>(\d+)</gu),
   ].map((match) => `${match[2]}${match[1] === "true" ? " lit" : ""}`);
   assert.deepEqual(numbered, ["8", "9", "10", "11 lit", "12 lit", "13", "14", "15"]);
 });

@@ -13,7 +13,7 @@ import {
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import {
-  FIND_BAR_ATTRIBUTE,
+  FIND_SKIP_ATTRIBUTE,
   type FindPainting,
   findRanges,
   matchFrom,
@@ -22,6 +22,7 @@ import {
   reveal,
   selectedWords,
 } from "./find-matches";
+import { type StripTab, sameTab } from "./planning/tab-strip-model";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -63,8 +64,11 @@ interface FindTally {
   readonly at: number;
 }
 
-/** What a scope shows, named part by part: the plan, then the tab. */
-type FindSubject = readonly string[];
+/** What a scope shows: the plan, and its tab. */
+export interface FindSubject {
+  readonly plan: string;
+  readonly tab: StripTab;
+}
 
 /** The bar standing open: what it was opened over, and how many times ⌘F has summoned it there. */
 interface OpenBar {
@@ -81,9 +85,9 @@ interface FindMatches {
 /** Whether a find bar stands open over the tab drawing under it. */
 const FindOpenContext = createContext(false);
 
-/** Whether two subjects name the same tab. */
+/** Whether two subjects name the same tab of the same plan. */
 function sameSubject(a: FindSubject, b: FindSubject): boolean {
-  return a.length === b.length && a.every((part, index) => part === b[index]);
+  return a.plan === b.plan && sameTab(a.tab, b.tab);
 }
 
 /** The words the bar says of the matches. */
@@ -197,7 +201,7 @@ function FindBar({
   }, [summons]);
   const line = tallyLine(query, tally);
   return (
-    <search className="find-bar" aria-label="Find" {...{ [FIND_BAR_ATTRIBUTE]: "" }}>
+    <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
       <label className="settings-search-well find-bar-well">
         <SearchIcon />
         <input
@@ -265,7 +269,8 @@ export function useFindOpen(): boolean {
  * is open, only while `active`, the column holding the window's keys with
  * a tab that has words to find; the bar stays open over a column that
  * loses them, so its matches stay tinted, as an unfocused editor's do.
- * `subject` names the tab shown, its plan first, and another closes the bar.
+ * `subject` names the tab shown and its plan: another closes the bar, which
+ * a return to the first does not open again.
  */
 export function FindScope({
   active,
@@ -281,6 +286,13 @@ export function FindScope({
   const [query, setQuery] = useState("");
   const [bar, setBar] = useState<OpenBar | undefined>(undefined);
   const back = useRef<HTMLElement | null>(null);
+  // Note that the bar is let go as the tab changes, rather than left to
+  // stand for a tab no longer shown, which a return would draw again.
+  const [shown, setShown] = useState(subject);
+  if (!sameSubject(shown, subject)) {
+    setShown(subject);
+    setBar(undefined);
+  }
   const open = bar !== undefined && sameSubject(bar.subject, subject);
   const { tally, step } = useFindMatches(root, open ? query : "");
 

@@ -7,11 +7,14 @@ import { afterEach, test, vi } from "vitest";
 import { installHighlights } from "#testing/find-highlights";
 import { Fold, FoldBody, FoldSummary } from "./ai-elements/fold";
 import { useAppKeymap } from "./app-commands";
-import { FindScope } from "./find-in-tab";
+import { FindScope, type FindSubject } from "./find-in-tab";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const roots: Root[] = [];
+
+/** The plan's document, the tab a find opens over unless a test names another. */
+const DOCUMENT: FindSubject = { plan: "plan", tab: "plan" };
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -43,7 +46,7 @@ function Tab({
   children,
 }: {
   active: boolean;
-  subject: readonly string[];
+  subject: FindSubject;
   children: ReactNode;
 }): ReactNode {
   useAppKeymap(true);
@@ -56,11 +59,8 @@ function mounted(content: ReactNode = words()) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (
-    drawn: ReactNode,
-    options: { active?: boolean; subject?: readonly string[] } = {},
-  ) => {
-    const subject = options.subject ?? ["plan", "document"];
+  const draw = (drawn: ReactNode, options: { active?: boolean; subject?: FindSubject } = {}) => {
+    const subject = options.subject ?? DOCUMENT;
     const active = options.active ?? true;
     act(() => root.render(createElement(Tab, { active, subject, children: drawn })));
   };
@@ -273,17 +273,55 @@ test("a tab whose column does not hold the window's keys leaves ⌘F to whatever
   assert.equal(tab.container.querySelector(".find-bar"), null);
 });
 
-test("choosing another tab closes the bar, and a tab of another plan is another tab", () => {
+test("choosing another tab closes the bar, which coming back to the first does not open again; a file named as a fixed tab is another tab, and so is a tab of another plan", () => {
   const painted = installHighlights();
   const tab = mounted();
   chord(FIND);
   typeInto(field(tab.container), "team");
 
-  tab.draw(words(), { subject: ["plan", "agent"] });
+  tab.draw(words(), { subject: { plan: "plan", tab: { agent: "agent-1" } } });
   assert.equal(tab.container.querySelector(".find-bar"), null);
   assert.deepEqual(painted.matches(), []);
+  tab.draw(words());
+  assert.equal(tab.container.querySelector(".find-bar"), null, "the bar stays closed on return");
+
+  tab.draw(words(), { subject: { plan: "plan", tab: "code" } });
+  chord(FIND);
+  tab.draw(words(), { subject: { plan: "plan", tab: { file: "code" } } });
+  assert.equal(tab.container.querySelector(".find-bar"), null);
 
   chord(FIND);
-  tab.draw(words(), { subject: ["another plan", "agent"] });
+  tab.draw(words(), { subject: { plan: "another plan", tab: { file: "code" } } });
   assert.equal(tab.container.querySelector(".find-bar"), null);
+});
+
+test("⌘F starts at the first match not scrolled above the view of the tab's scroller, wherever the tab's own top stands", () => {
+  const painted = installHighlights();
+  const lines = ["the team", "a Team", "one TEAM"].map((line) =>
+    createElement("p", { key: line }, line),
+  );
+  const tab = mounted(
+    createElement("div", { className: "scroller", style: { overflowY: "auto" } }, lines),
+  );
+  const scroller = tab.container.querySelector<HTMLElement>(".scroller");
+  assert.ok(scroller);
+  // The scroller shows its last line alone: the two above it are scrolled
+  // past its top, though they are still below the tab's.
+  Object.defineProperties(scroller, {
+    scrollHeight: { value: 300 },
+    clientHeight: { value: 100 },
+  });
+  scroller.getBoundingClientRect = () => DOMRect.fromRect({ y: 200, height: 100 });
+  const drawn: Element[] = [...scroller.querySelectorAll("p")];
+  const bottoms = [120, 160, 260];
+  Range.prototype.getBoundingClientRect = function (this: Range) {
+    const at = drawn.findIndex((line) => line === this.startContainer.parentElement);
+    return DOMRect.fromRect({ y: bottoms[at] ?? 0, height: 0 });
+  };
+
+  chord(FIND);
+  typeInto(field(tab.container), "team");
+
+  assert.equal(tally(tab.container), "3 of 3");
+  assert.equal(painted.current(), "TEAM");
 });
