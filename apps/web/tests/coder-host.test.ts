@@ -36,7 +36,7 @@ import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/br
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
-import type { CoderModelSelection } from "../server/hosted/coder-host/model";
+import type { CoderModelSelection, ProviderKeys } from "../server/hosted/coder-host/model";
 import {
   PLAN_EDIT,
   PLAN_EDIT_REFUSAL,
@@ -129,9 +129,9 @@ const WINDOWED_CATALOG: readonly OfferedModel[] = [
   },
 ];
 
-const KEYS = {
-  anthropic: Redacted.make("sk-ant-fixture"),
-  openAi: Redacted.make("sk-openai-fixture"),
+const KEYS: ProviderKeys = {
+  anthropic: { key: Redacted.make("sk-ant-fixture") },
+  openAi: { key: Redacted.make("sk-openai-fixture") },
 };
 
 /** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
@@ -146,7 +146,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         ownsConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
-      keys: () => KEYS,
+      keys: () => Effect.succeed(KEYS),
       titleModel: () => titleModel,
       scriptedModel: () => false,
       now: () => NOW,
@@ -1313,7 +1313,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             ownsConversation: () => Promise.resolve(false),
           },
           deploymentSecret: () => undefined,
-          keys: () => ({ anthropic: undefined, openAi: undefined }),
+          keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
           titleModel: () => undefined,
           scriptedModel: () => true,
           now: () => NOW,

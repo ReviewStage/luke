@@ -106,6 +106,8 @@ export const CODING_AGENT_FAILURE = {
   GITHUB: "github",
   /** The turn ran past its bound and the sweep settled it. */
   ABANDONED: "abandoned",
+  /** The account's own API key for the model's provider was refused, out of quota, or can no longer be read; it is replaced in Settings. */
+  PROVIDER_KEY: "provider_key",
   OTHER: "other",
 } as const;
 

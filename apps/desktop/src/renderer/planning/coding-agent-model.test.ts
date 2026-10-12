@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentMessage,
@@ -23,6 +24,7 @@ import {
   choiceOn,
   closesComposer,
   effortFor,
+  endLine,
   followsAgent,
   knownDeveloperRows,
   messageFailureNote,
@@ -530,4 +532,11 @@ test("the plan edits that have answered are counted, not the ones still out or t
   ];
   assert.equal(settledPlanEdits(messages), 2);
   assert.equal(settledPlanEdits([]), 0);
+});
+
+test("a turn failed on the account's own API key ends saying so and where to replace it", () => {
+  assert.equal(
+    endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
+    "Failed: your API key was refused or can't be read; check Settings › API keys",
+  );
 });

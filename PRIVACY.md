@@ -375,8 +375,12 @@ only when you press Send.
 - Anthropic and OpenAI, for a coding agent. When you start a coding agent on
   a plan, our service runs it in a Vercel Sandbox of its own, with a copy of
   the plan's GitHub repository checked out in it, and calls the model you
-  chose, or your account's default, directly on our own key: Anthropic's for
-  a Claude model, OpenAI's for a GPT model. Each call carries the plan's
+  chose, or your account's default, directly on your own key for that
+  provider if you added one in Settings, and otherwise on ours: Anthropic's
+  for a Claude model, OpenAI's for a GPT model. A call on your own key is
+  billed to you by that provider, and if our service can no longer read your
+  key the agent stops and asks you to replace it rather than switching to
+  ours. Each call carries the plan's
   text, the agent's conversation so far, and what it read of the repository,
   and the provider stores the request and its reply under its own retention
   policy. The agent's transcript, its words, reasoning summaries, and tool

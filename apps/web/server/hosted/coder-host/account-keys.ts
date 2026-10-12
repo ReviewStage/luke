@@ -1,0 +1,95 @@
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
+import { DateTime, Effect, type Redacted, Result } from "effect";
+import type { WebStoreRun } from "../../runtime.js";
+import type { PlanStoreEffect } from "../plan-store.js";
+import {
+  type KeyRing,
+  openProviderKey,
+  PROVIDER_KEY_UNREADABLE,
+  parseKeyRing,
+} from "../provider-key-seal.js";
+import {
+  listProviderKeyRows,
+  type ProviderKeyRow,
+  setProviderKeyStatus,
+} from "../provider-key-store.js";
+import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
+
+/**
+ * account-keys.ts -- the keys one account's coding-agent step runs on: its own where it saved one, Luke's where it did not.
+ *
+ * Read afresh for every step, so a key saved, replaced, or removed in
+ * Settings is the one the agent's next step runs on. A provider the account
+ * holds a row for runs on that row's key and never on Luke's: where the
+ * deployment's ring cannot open the row, or the deployment holds no ring at
+ * all, the provider answers unreadable and its steps are refused, so a key
+ * the account meant to pay for is never quietly replaced by Luke's. Each
+ * opened key carries where its status is reported, through the runner the
+ * edge hands in, since the model's middleware that reports it is a promise
+ * with no fiber to compose into.
+ */
+
+/** What the read is handed: Luke's own keys, the deployment's ring as its environment holds it, and the edge's runner for a report. */
+export interface AccountKeysSeams {
+  readonly luke: LukeKeys;
+  readonly ring: Redacted.Redacted | undefined;
+  readonly run: WebStoreRun;
+}
+
+/** The provider's key: the account's own opened, unreadable, or Luke's where the account holds none. */
+function keyOf(
+  userId: string,
+  provider: ProviderKeyProvider,
+  row: ProviderKeyRow | undefined,
+  ring: KeyRing | undefined,
+  seams: AccountKeysSeams,
+): ProviderKey | typeof PROVIDER_KEY_UNREADABLE | undefined {
+  if (row === undefined) {
+    const luke =
+      provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? seams.luke.anthropic : seams.luke.openAi;
+    return luke === undefined ? undefined : { key: luke };
+  }
+  if (ring === undefined) return PROVIDER_KEY_UNREADABLE;
+  const opened = openProviderKey(ring, { userId, provider }, row);
+  if (Result.isFailure(opened)) return PROVIDER_KEY_UNREADABLE;
+  return {
+    key: opened.success,
+    account: {
+      status: row.status,
+      report: (status) =>
+        seams.run(
+          Effect.flatMap(DateTime.nowAsDate, (now) =>
+            setProviderKeyStatus(userId, provider, row.sealedKey, status, now),
+          ),
+        ),
+    },
+  };
+}
+
+/** The keys the account's step runs on, read from its rows now. */
+export function accountProviderKeys(
+  userId: string,
+  seams: AccountKeysSeams,
+): PlanStoreEffect<ProviderKeys> {
+  return Effect.map(listProviderKeyRows(userId), (rows) => {
+    const parsed = seams.ring === undefined ? undefined : parseKeyRing(seams.ring);
+    const ring = parsed !== undefined && Result.isSuccess(parsed) ? parsed.success : undefined;
+    const rowOf = (provider: ProviderKeyProvider) => rows.find((row) => row.provider === provider);
+    return {
+      anthropic: keyOf(
+        userId,
+        PROVIDER_KEY_PROVIDER.ANTHROPIC,
+        rowOf(PROVIDER_KEY_PROVIDER.ANTHROPIC),
+        ring,
+        seams,
+      ),
+      openAi: keyOf(
+        userId,
+        PROVIDER_KEY_PROVIDER.OPENAI,
+        rowOf(PROVIDER_KEY_PROVIDER.OPENAI),
+        ring,
+        seams,
+      ),
+    };
+  });
+}

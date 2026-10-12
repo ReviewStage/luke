@@ -98,6 +98,14 @@ const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])
     ],
   ],
   [
+    CODING_AGENT_FAILURE.PROVIDER_KEY,
+    [
+      CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE,
+      CODER_REFUSAL.ACCOUNT_KEY_REFUSED,
+      CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA,
+    ],
+  ],
+  [
     CODING_AGENT_FAILURE.SANDBOX,
     [
       REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,

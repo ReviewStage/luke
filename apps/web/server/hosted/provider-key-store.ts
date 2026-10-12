@@ -2,6 +2,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeyProvider,
+  type ProviderKeyStatus,
 } from "@sidecar/hosted/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
@@ -21,7 +22,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * and a row read here is opened by its caller with the ring the
  * environment holds. A save replaces the provider's row whole, as a new
  * key added now and verified now, since a key is saved only once its
- * provider accepted it.
+ * provider accepted it. A status is written against the sealed key a step
+ * ran on, so a step on a key since replaced marks nothing of its successor.
  */
 
 const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
@@ -121,6 +123,26 @@ const deleteRow = SqlSchema.void({
       ),
 });
 
+const updateStatus = SqlSchema.void({
+  Request: Schema.Struct({
+    ...KeySchema.fields,
+    sealedKey: Schema.String,
+    status: Schema.Literals(Object.values(PROVIDER_KEY_STATUS)),
+    now: Schema.Date,
+  }),
+  execute: (write) =>
+    db
+      .update(accountProviderKey)
+      .set({ status: write.status, statusAt: write.now })
+      .where(
+        and(
+          eq(accountProviderKey.userId, write.userId),
+          eq(accountProviderKey.provider, write.provider),
+          eq(accountProviderKey.sealedKey, write.sealedKey),
+        ),
+      ),
+});
+
 /** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -168,6 +190,17 @@ export function removeProviderKey(
   provider: ProviderKeyProvider,
 ): PlanStoreEffect<void> {
   return deleteRow({ userId, provider });
+}
+
+/** Writes how the provider last answered the key a step ran on, where the row still holds that key. */
+export function setProviderKeyStatus(
+  userId: string,
+  provider: ProviderKeyProvider,
+  sealedKey: string,
+  status: ProviderKeyStatus,
+  now: Date,
+): PlanStoreEffect<void> {
+  return updateStatus({ userId, provider, sealedKey, status, now });
 }
 
 /** Every stored key of every account, sealed, for the rewrap alone. */

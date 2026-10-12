@@ -246,7 +246,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   );
 
   /** The model a step runs on for the choice: the fixture's own under the scripted model, else the provider's at the window the choice names of the ones the catalog lists, or the fallback where it lists none. */
-  const selectedModel = (choice: ModelChoice, scripted: ScriptedCoderModel | undefined) =>
+  const selectedModel = (
+    userId: string,
+    choice: ModelChoice,
+    scripted: ScriptedCoderModel | undefined,
+  ) =>
     Effect.gen(function* () {
       if (scripted !== undefined) {
         return Result.succeed({
@@ -261,7 +265,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         choice.model,
         choice.contextWindow ?? CONTEXT_WINDOW.LONG,
       );
-      return coderModel(choice, seams.keys(), window);
+      return coderModel(choice, yield* seams.keys(userId), window);
     });
 
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
@@ -334,6 +338,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (Result.isFailure(found)) return Result.fail(found.failure);
         const agent = found.success;
         return yield* selectedModel(
+          admitted.target.userId,
           { model: agent.model, effort: agent.effort, contextWindow: agent.contextWindow },
           scripted,
         );
@@ -375,7 +380,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const delegation = yield* readDelegation(admitted.target, childId);
         if (Option.isNone(delegation)) return Result.fail(CODER_REFUSAL.NO_DELEGATION);
         const { model, effort } = delegation.value;
-        return yield* selectedModel({ model, effort }, scripted);
+        return yield* selectedModel(admitted.target.userId, { model, effort }, scripted);
       }),
 
     prompt: (admitted, agent) =>
