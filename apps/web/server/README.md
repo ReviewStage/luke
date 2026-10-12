@@ -921,7 +921,10 @@ reads either list the route ensures the personal workspace and runs
 `/user/installations` on the account's own GitHub token: an installation no
 row names yet becomes a workspace, created through `workspaceSeams(auth.api)`
 with the account as its owner and the login as its name and slug, and one a
-row names has its login and kind refreshed. A sync never adds or removes a
+row names has its login and kind refreshed. GitHub gives a reinstall a new
+installation id, so a new installation on an account a row already names by
+`account_id` moves that row to it and sets it active, and the workspace comes
+back with its members and plans. A sync never adds or removes a
 member, since it would put back a member an admin removed; that is what
 `available` is for. A GitHub the account cannot read (no GitHub sign-in, an
 App not configured, GitHub down) leaves the installations unsynced and

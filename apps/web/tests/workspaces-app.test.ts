@@ -14,7 +14,9 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { member, organization, user } from "../server/db/auth-schema";
 import { githubInstallation } from "../server/db/github-installation-schema";
+import { GITHUB_INSTALLATION_STATUS } from "../server/db/github-installation-vocabulary";
 import { db } from "../server/db/query";
+import { setInstallationStatus } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import type { WorkspaceSeams } from "../server/hosted/workspace-seams";
 import { workspacesApp } from "../server/workspaces-app";
@@ -38,6 +40,8 @@ const WORKSPACES = "/api/workspaces";
 
 const ACME = { id: 31_001, login: "acme", accountType: "Organization", repositories: [] } as const;
 const OCTO = { id: 31_002, login: "octo-dev", repositories: [] } as const;
+/** An installation on an account a reinstall finds again by GitHub's id for it. */
+const ACME_ACCOUNT = { ...ACME, id: 31_101, accountId: 72_001 } as const;
 
 interface Answer {
   readonly status: number;
@@ -218,6 +222,48 @@ it.effect(
             .from(member)
             .where(eq(member.organizationId, acme)),
           [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
+        );
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a reinstall on the same GitHub account brings back the workspace the removed installation left, its members with it",
+  () =>
+    Effect.gen(function* () {
+      const { api, seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const first = answerOf(yield* ask(seams, githubReaching([ACME_ACCOUNT]), ada));
+        const acme = first.workspaces[1]?.id ?? assert.fail("no workspace for the installation");
+        yield* Effect.promise(() =>
+          api.addMember({ body: { userId: grace, organizationId: acme, role: "member" } }),
+        );
+        yield* setInstallationStatus(ACME_ACCOUNT.id, GITHUB_INSTALLATION_STATUS.DELETED);
+        const made = yield* organizationIds();
+        const reinstalled = { ...ACME_ACCOUNT, id: ACME_ACCOUNT.id + 1 };
+
+        const adas = answerOf(yield* ask(seams, githubReaching([reinstalled]), ada));
+        const graces = answerOf(yield* ask(seams, githubReaching([reinstalled]), grace));
+
+        assert.deepEqual(adas.workspaces.map(({ id, role }) => ({ id, role })).slice(1), [
+          { id: acme, role: WORKSPACE_ROLE.OWNER },
+        ]);
+        assert.deepEqual(graces.workspaces.map(({ id, role }) => ({ id, role })).slice(1), [
+          { id: acme, role: WORKSPACE_ROLE.MEMBER },
+        ]);
+        // Grace's personal workspace, made by her first read, is the one organization the reinstall reads add.
+        assert.equal((yield* organizationIds()).length, made.length + 1);
+        assert.deepEqual(
+          yield* db
+            .select({
+              installationId: githubInstallation.installationId,
+              status: githubInstallation.status,
+            })
+            .from(githubInstallation)
+            .where(eq(githubInstallation.organizationId, acme)),
+          [{ installationId: reinstalled.id, status: GITHUB_INSTALLATION_STATUS.ACTIVE }],
         );
       }).pipe(Effect.provide(database));
     }),

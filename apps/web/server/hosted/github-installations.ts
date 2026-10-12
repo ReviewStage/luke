@@ -26,7 +26,9 @@ import { createOrAdoptOrganization, memberOfWorkspace } from "./workspace-store.
  * own ids. A sync reads the installations the account's own GitHub token
  * reaches: one nobody made a workspace for yet becomes one, created through
  * the plugin's server-only write so the account that reached it first is its
- * owner, and one that has a workspace has its login and kind refreshed. A
+ * owner, one that has a workspace has its login and kind refreshed, and a
+ * new installation on an account an earlier one stood for takes over that
+ * workspace, since GitHub gives a reinstall a new id. A
  * sync never adds or removes a member, since it would put back a member an
  * admin removed; a workspace of an installation the account reaches but is
  * not in is offered to it instead. The installation webhook keeps each
@@ -52,6 +54,37 @@ const findInstallation = SqlSchema.findOneOption({
       .select({ organizationId: githubInstallation.organizationId })
       .from(githubInstallation)
       .where(eq(githubInstallation.installationId, installationId)),
+});
+
+const findInstallationOfAccount = SqlSchema.findOneOption({
+  Request: Schema.Number,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: (accountId) =>
+    db
+      .select({ organizationId: githubInstallation.organizationId })
+      .from(githubInstallation)
+      .where(eq(githubInstallation.accountId, accountId)),
+});
+
+const moveInstallation = SqlSchema.void({
+  Request: Schema.Struct({
+    installationId: Schema.Number,
+    accountId: Schema.Number,
+    accountLogin: Schema.String,
+    accountType: Schema.Literals(Object.values(GITHUB_ACCOUNT_TYPE)),
+    now: Schema.Date,
+  }),
+  execute: (row) =>
+    db
+      .update(githubInstallation)
+      .set({
+        installationId: row.installationId,
+        accountLogin: row.accountLogin,
+        accountType: row.accountType,
+        status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+        updatedAt: row.now,
+      })
+      .where(eq(githubInstallation.accountId, row.accountId)),
 });
 
 const refreshInstallationAccount = SqlSchema.void({
@@ -135,9 +168,12 @@ const findAvailable = SqlSchema.findAll({
 
 /**
  * The workspace one reached installation stands for: the one standing, its
- * login and kind refreshed, or one made now with the account as its owner.
- * Where another account's sync made it first, the plugin refuses the slug
- * and the workspace under it is adopted without the account joining it.
+ * login and kind refreshed; the one of an earlier installation on the same
+ * GitHub account, which an uninstall and a reinstall leave behind, moved to
+ * this installation and shown again with its members and its plans; or one
+ * made now with the account as its owner. Where another account's sync made
+ * it first, the plugin refuses the slug and the workspace under it is
+ * adopted without the account joining it.
  */
 function syncInstallation(
   userId: string,
@@ -150,6 +186,8 @@ function syncInstallation(
     if (Option.isSome(standing)) {
       return yield* refreshInstallationAccount({ ...reached, now });
     }
+    const earlier = yield* findInstallationOfAccount(reached.accountId);
+    if (Option.isSome(earlier)) return yield* moveInstallation({ ...reached, now });
     const organizationId = yield* createOrAdoptOrganization(
       { name: reached.accountLogin, slug: reached.accountLogin, userId, metadata: {} },
       seams,
