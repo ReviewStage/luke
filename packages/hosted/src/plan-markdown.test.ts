@@ -55,7 +55,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
     },
     {
       ...EMPTY_PLAN_FIELDS,
-      rules: [{ statement: "An accepted invite is never reused.", examples: null }],
+      alternatives: "- A shareable link: lost, because it cannot be revoked per person.",
     },
   );
 
@@ -73,43 +73,23 @@ test("a draft of the fixed template copies every section in order, its unanswere
   );
   const sections = copied.split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(sections, [
+    "## Context",
     "## Goal",
-    "## Scope",
-    "## Rules",
-    "## Implementation",
-    "## Decisions",
-    "## Verification",
-    "## Left to the agent",
+    "## Approach",
+    "## Interfaces",
+    "## Alternatives",
+    "## Hard parts",
+    "## Not doing",
+    "## Testing",
     "## Open questions",
     "## Assumptions",
   ]);
-  assert.ok(copied.includes("### Rule 1: An accepted invite is never reused.\n"));
-  assert.ok(copied.includes("## Decisions\n\n_Unanswered_\n"));
-});
-
-test("a body saved with a list marker behind a rule's number copies without it, and code keeps its own", () => {
-  const fenced = ["```md", "### Rule 1: - kept as written", "```"].join("\n");
-  const body = [
-    "## Rules",
-    "",
-    "### Rule 1: - Links expire in a week.",
-    "",
-    "_No examples yet_",
-    "",
-    "### Rule 2: 1. Only admins withdraw.",
-    "",
-    "## Implementation",
-    "",
-    "### Contracts",
-    "",
-    fenced,
-  ].join("\n");
-
-  const copied = planMarkdown({ body, assumptions: [] });
-
-  assert.ok(copied.includes("\n### Rule 1: Links expire in a week.\n"));
-  assert.ok(copied.includes("\n### Rule 2: Only admins withdraw.\n"));
-  assert.ok(copied.includes(fenced));
+  assert.ok(
+    copied.includes(
+      "## Alternatives\n\n- A shareable link: lost, because it cannot be revoked per person.\n",
+    ),
+  );
+  assert.ok(copied.includes("## Approach\n\n_Unanswered_\n"));
 });
 
 test("an assumption spanning lines stays one list item", () => {

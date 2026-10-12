@@ -115,20 +115,20 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         const { userId, planId } = yield* openPlan;
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")],
+          [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")],
           ON_CALL,
         );
         yield* TestClock.adjust(Duration.minutes(5));
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.OUTCOME, "Members invite by email.")],
+          [added(PLAN_FIELD.GOAL, "Members invite by email.")],
           ON_CALL,
         );
         const joined = yield* revisionsOf(userId, planId);
         yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.DECISIONS, "Invites expire.")],
+          [added(PLAN_FIELD.APPROACH, "Invites expire.")],
           ON_CALL,
         );
 
@@ -158,16 +158,16 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         const agentId = yield* startAgent(userId, planId);
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")],
+          [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")],
           ON_CALL,
         );
-        yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.DECISIONS, "Invites expire.")], {
+        yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.APPROACH, "Invites expire.")], {
           actor: PLAN_ACTOR.AGENT,
           agentId,
         });
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.OUTCOME, "Members invite by email.")],
+          [added(PLAN_FIELD.GOAL, "Members invite by email.")],
           ON_CALL,
         );
 
@@ -186,7 +186,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         [
           {
             kind: NOTE_KIND.REPLACE,
-            field: PLAN_FIELD.PROBLEM,
+            field: PLAN_FIELD.CONTEXT,
             find: "a phrase it never held",
             text: "anything",
           },
@@ -204,7 +204,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
       const { userId, planId } = yield* openPlan;
       yield* saveNotes(
         { userId, planId },
-        [added(PLAN_FIELD.PROBLEM, "- Only admins invite.")],
+        [added(PLAN_FIELD.CONTEXT, "- Only admins invite.")],
         ON_CALL,
       );
       const written = yield* listRevisions(userId, planId);
@@ -214,7 +214,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         [
           {
             kind: NOTE_KIND.REPLACE,
-            field: PLAN_FIELD.PROBLEM,
+            field: PLAN_FIELD.CONTEXT,
             find: "Only admins invite.",
             text: "Only admins invite.",
           },
@@ -246,7 +246,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         yield* TestClock.adjust(Duration.hours(1));
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.DECISIONS, "Invites expire.")],
+          [added(PLAN_FIELD.APPROACH, "Invites expire.")],
           ON_CALL,
         );
 
@@ -283,13 +283,13 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         yield* TestClock.adjust(Duration.minutes(3));
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")],
+          [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")],
           ON_CALL,
         );
         const byLuke = yield* lastEditOf(userId, planId);
         yield* TestClock.adjust(Duration.minutes(3));
         const agentId = yield* startAgent(userId, planId);
-        yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.DECISIONS, "Invites expire.")], {
+        yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.APPROACH, "Invites expire.")], {
           actor: PLAN_ACTOR.AGENT,
           agentId,
         });
@@ -342,8 +342,8 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         yield* saveNotes(
           { userId, planId },
           [
-            added(PLAN_FIELD.PROBLEM, "Only admins can invite."),
-            added(PLAN_FIELD.DECISIONS, "Invites expire."),
+            added(PLAN_FIELD.CONTEXT, "Only admins can invite."),
+            added(PLAN_FIELD.APPROACH, "Invites expire."),
           ],
           ON_CALL,
         );
@@ -351,7 +351,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         const agentId = yield* startAgent(userId, planId);
         yield* saveNotes(
           { userId, planId },
-          [added(PLAN_FIELD.DECISIONS, "Links are single use.")],
+          [added(PLAN_FIELD.APPROACH, "Links are single use.")],
           {
             actor: PLAN_ACTOR.AGENT,
             agentId,
@@ -360,20 +360,20 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         yield* TestClock.adjust(Duration.minutes(3));
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.OUTCOME, base: null, value: "An invited teammate can sign in." },
+          { field: PLAN_FIELD.GOAL, base: null, value: "An invited teammate can sign in." },
         );
 
         const stored = Option.getOrThrow(yield* readPlan(userId, planId));
         const byField = new Map(stored.plan.fieldEdits?.map(({ field, ...edit }) => [field, edit]));
         assert.deepEqual(Object.fromEntries(byField), {
-          [PLAN_FIELD.PROBLEM]: { actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
-          [PLAN_FIELD.DECISIONS]: {
+          [PLAN_FIELD.CONTEXT]: { actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
+          [PLAN_FIELD.APPROACH]: {
             actor: PLAN_ACTOR.AGENT,
             label: AGENT_MODEL,
             at: start + Duration.toMillis(Duration.minutes(3)),
             duringCall: false,
           },
-          [PLAN_FIELD.OUTCOME]: {
+          [PLAN_FIELD.GOAL]: {
             actor: PLAN_ACTOR.DEVELOPER,
             at: start + Duration.toMillis(Duration.minutes(6)),
             duringCall: false,
@@ -435,11 +435,11 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        yield* apart(userId, planId, [[PLAN_FIELD.PROBLEM, "Only admins can invite."]]);
+        yield* apart(userId, planId, [[PLAN_FIELD.CONTEXT, "Only admins can invite."]]);
         const first = yield* contentOf(userId, planId);
         yield* apart(userId, planId, [
-          [PLAN_FIELD.OUTCOME, "Members invite by email."],
-          [PLAN_FIELD.DECISIONS, "Invites expire."],
+          [PLAN_FIELD.GOAL, "Members invite by email."],
+          [PLAN_FIELD.APPROACH, "Invites expire."],
         ]);
 
         const restored = yield* restoreRevision({ userId, planId }, 1);
@@ -459,15 +459,15 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
       yield* apart(userId, planId, [
-        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
-        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+        [PLAN_FIELD.CONTEXT, "Only admins can invite."],
+        [PLAN_FIELD.GOAL, "Members invite by email."],
       ]);
 
       yield* restoreRevision({ userId, planId }, 1);
       yield* restoreRevision({ userId, planId }, 2);
       yield* saveNotes(
         { userId, planId },
-        [added(PLAN_FIELD.DECISIONS, "Invites expire.")],
+        [added(PLAN_FIELD.APPROACH, "Invites expire.")],
         ON_CALL,
       );
 
@@ -492,8 +492,8 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
       yield* apart(userId, planId, [
-        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
-        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+        [PLAN_FIELD.CONTEXT, "Only admins can invite."],
+        [PLAN_FIELD.GOAL, "Members invite by email."],
       ]);
 
       const restored = yield* restoreRevision({ userId, planId }, 2);
@@ -511,8 +511,8 @@ it.layer(testSqlClient)("a plan's history", (it) => {
       const { userId, planId } = yield* openPlan;
       const intruder = yield* openPlan;
       yield* apart(userId, planId, [
-        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
-        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+        [PLAN_FIELD.CONTEXT, "Only admins can invite."],
+        [PLAN_FIELD.GOAL, "Members invite by email."],
       ]);
       const before = yield* contentOf(userId, planId);
 
@@ -536,7 +536,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           planId,
           Array.from(
             { length: saves },
-            (_, at) => [PLAN_FIELD.DECISIONS, `Decision ${at + 1}.`] as const,
+            (_, at) => [PLAN_FIELD.APPROACH, `Decision ${at + 1}.`] as const,
           ),
         );
 

@@ -43,52 +43,36 @@ import {
  */
 
 /**
- * The reference journey's plan partway through its conversation: the goal,
- * two rules with their examples, the change map, and a decision settled, an
- * example still without its outcome, and everything else unanswered, as the
- * fixed template shows a draft.
+ * The reference journey's plan partway through its conversation: the
+ * context, the goal, an approach with the pending-membership design settled,
+ * its interfaces, one alternative weighed, one hard part, and an open
+ * question, with everything else unanswered, as the template shows a draft.
  */
 const FIXTURE_FIELDS: PlanFields = {
   ...EMPTY_PLAN_FIELDS,
-  goal: {
-    problem:
-      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
-      "members wait on an admin to bring a teammate in.",
-    outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
-  },
-  rules: [
-    {
-      statement: "Any member may invite by email.",
-      examples: [
-        {
-          given: "A member invites dana@example.com",
-          when: "Dana opens the link",
-          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-          then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        },
-      ],
-    },
-    {
-      statement: "A withdrawn or accepted invite link never grants access again.",
-      examples: [
-        {
-          given: "An invite Dana already accepted",
-          when: "anyone opens its link again",
-          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        },
-      ],
-    },
-  ],
-  implementation: {
-    ...EMPTY_PLAN_FIELDS.implementation,
-    changeMap:
-      "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
-      "- `src/members/invite.ts`: new, sending and accepting an invite.",
-  },
-  decisions:
-    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
-    "invites and members alike. Rejected: a separate `invitations` table.",
+  context:
+    "Only an admin can add someone to a workspace, by creating their account by hand, so " +
+    "members wait on an admin to bring a teammate in.",
+  goal:
+    "- A member invites a teammate by email.\n" +
+    "- The teammate joins the workspace by opening the link.",
+  approach:
+    "- Model an invite as a `memberships` row with `state = pending` " +
+    "(`src/db/schema/memberships.ts`), so removal covers invites and members alike.\n" +
+    "- `src/members/invite.ts` (new) sends an invite and accepts one, following " +
+    "`src/members/remove.ts`.",
+  interfaces:
+    "`src/members/invite.ts`\n\n" +
+    "```ts\n" +
+    "export function inviteMember(workspaceId: string, email: string): Promise<Membership>;\n" +
+    "export function acceptInvite(token: string): Promise<Membership>;\n" +
+    "```",
+  alternatives:
+    "- A separate `invitations` table: lost because removing a member would then have to " +
+    "clear two tables.",
+  hardParts:
+    "- A withdrawn or accepted invite link is opened again: the page reads " +
+    '"This invite is no longer valid" and grants nothing.',
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
 };
 
@@ -297,7 +281,7 @@ const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
     shownAt: Date.parse("2026-10-07T16:21:00Z"),
     code: {
       ...fixtureExcerpt(4, 5),
-      note: "An invite link lands here: acceptInvite finds the invite by its token, so this is where the new rules have to hold.",
+      note: "An invite link lands here: acceptInvite finds the invite by its token, so this is where a used link has to be refused.",
     },
   },
   {

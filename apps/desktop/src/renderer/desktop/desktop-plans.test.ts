@@ -1819,7 +1819,7 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
 /** An archived plan, its sections written so the document offers its editors where it may. */
 const ARCHIVED_FIELDS: PlanFields = {
   ...EMPTY_PLAN_FIELDS,
-  goal: { problem: "- Only an admin can add a member.", outcome: null },
+  context: "- Only an admin can add a member.",
 };
 const ARCHIVED_PLAN: Plan = {
   ...PLAN,

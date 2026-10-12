@@ -555,12 +555,12 @@ it.effect(
           },
         },
       });
-      const edit = { field: PLAN_FIELD.PROBLEM, base: null, value: " - Mine. " };
+      const edit = { field: PLAN_FIELD.CONTEXT, base: null, value: " - Mine. " };
 
       const first = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
       const second = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
       const blank = yield* Effect.provide(
-        client().edit(PLAN_ID, { field: PLAN_FIELD.PROBLEM, base: null, value: "  " }),
+        client().edit(PLAN_ID, { field: PLAN_FIELD.CONTEXT, base: null, value: "  " }),
         api.layer,
       );
 
@@ -570,8 +570,8 @@ it.effect(
       assert.deepEqual(
         api.requests().map((request) => JSON.parse(request.body ?? "{}")),
         [
-          { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
-          { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
+          { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
+          { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
         ],
       );
     }),
@@ -587,7 +587,7 @@ it.effect("an edit of a plan the service does not find reads as not found", () =
     });
 
     const edited = yield* Effect.provide(
-      client().edit(PLAN_ID, { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." }),
+      client().edit(PLAN_ID, { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." }),
       api.layer,
     );
 
@@ -605,7 +605,7 @@ it.effect("an edit of an archived plan reads as archived, which the window says 
     });
 
     const edited = yield* Effect.provide(
-      client().edit(PLAN_ID, { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." }),
+      client().edit(PLAN_ID, { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." }),
       api.layer,
     );
 

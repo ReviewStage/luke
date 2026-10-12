@@ -236,7 +236,7 @@ it.effect(
         kind: ACT_KIND.PLANNING_EDIT,
         payload: {
           planId: PLAN_ID,
-          edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+          edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
         },
       } as const;
 
@@ -245,7 +245,7 @@ it.effect(
 
       assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, [`edit:${PLAN_ID}:${PLAN_FIELD.DECISIONS}`]);
+      assert.deepEqual(f.asked, [`edit:${PLAN_ID}:${PLAN_FIELD.APPROACH}`]);
     }),
 );
 

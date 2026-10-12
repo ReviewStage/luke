@@ -497,7 +497,7 @@ it.effect(
       const yours = { actor: PLAN_ACTOR.DEVELOPER, at: 5, duringCall: false } as const;
       const invites: Plan = {
         ...plan(INVITES, "Teammate invitations", "# Teammate invitations", 10),
-        fieldEdits: [{ field: PLAN_FIELD.PROBLEM, ...yours }],
+        fieldEdits: [{ field: PLAN_FIELD.CONTEXT, ...yours }],
       };
       const { call, last, planning } = yield* subject(fakeService([invites]));
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
@@ -505,12 +505,12 @@ it.effect(
 
       const named = [
         {
-          field: PLAN_FIELD.DECISIONS,
+          field: PLAN_FIELD.APPROACH,
           label: "Command K board",
           ...yours,
           actor: PLAN_ACTOR.AGENT,
         },
-        { field: PLAN_FIELD.PROBLEM, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
+        { field: PLAN_FIELD.CONTEXT, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
       ];
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
@@ -536,7 +536,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
       });
 
       assert.deepEqual(answer, { saved: true });
@@ -560,7 +560,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
+        edit: { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
       });
 
       assert.deepEqual(answer, { conflict: { current: "- Luke's words." } });
@@ -579,7 +579,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
       });
       const edited = last()?.document;
 

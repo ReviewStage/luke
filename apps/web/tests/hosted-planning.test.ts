@@ -601,10 +601,10 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         yield* saveNotes(
           binding,
           [
-            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "Invites expire." },
+            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "Invites expire." },
             {
               kind: NOTE_KIND.REPLACE,
-              field: PLAN_FIELD.DECISIONS,
+              field: PLAN_FIELD.APPROACH,
               find: "expire.",
               text: "expire after 7 days.",
             },
@@ -619,7 +619,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.notEqual(at, -1);
         assert.match(
           lines[at + 1] ?? "",
-          /^- anthropic\/claude-opus-5\.5, .*: add decisions: "Invites expire\."; replace decisions: "expire\." → "expire after 7 days\."$/u,
+          /^- anthropic\/claude-opus-5\.5, .*: add approach: "Invites expire\."; replace approach: "expire\." → "expire after 7 days\."$/u,
         );
         assert.match(lines[at + 2] ?? "", /add openQuestions: "Who may withdraw\?"$/u);
       }),
@@ -635,26 +635,26 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.doesNotMatch(yield* host.standingContext(standing), /fields the developer wrote/u);
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire after 7 days." },
+          { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
         );
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.VERIFICATION, base: null, value: "An expired link says so." },
+          { field: PLAN_FIELD.TESTING, base: null, value: "An expired link says so." },
         );
 
         const written = (yield* host.standingContext(standing)).split("\n");
         yield* saveNotes({ userId, planId }, [
-          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "- Owners can resend." },
+          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "- Owners can resend." },
         ]);
         const rewritten = (yield* host.standingContext(standing)).split("\n");
 
         const at = written.indexOf("[fields the developer wrote]");
         assert.notEqual(at, -1);
-        assert.match(written[at + 1] ?? "", /^- Decisions, \d{4}-\d{2}-\d{2}T/u);
-        assert.match(written[at + 2] ?? "", /^- Verification, \d{4}-\d{2}-\d{2}T/u);
+        assert.match(written[at + 1] ?? "", /^- Approach, \d{4}-\d{2}-\d{2}T/u);
+        assert.match(written[at + 2] ?? "", /^- Testing, \d{4}-\d{2}-\d{2}T/u);
         const after = rewritten.indexOf("[fields the developer wrote]");
-        assert.match(rewritten[after + 1] ?? "", /^- Verification, /u);
-        assert.ok(!rewritten.some((line) => line.startsWith("- Decisions, ")));
+        assert.match(rewritten[after + 1] ?? "", /^- Testing, /u);
+        assert.ok(!rewritten.some((line) => line.startsWith("- Approach, ")));
       }),
   );
 

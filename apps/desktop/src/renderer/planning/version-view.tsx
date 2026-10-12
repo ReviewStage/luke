@@ -1,4 +1,5 @@
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { MarkdownMessage } from "../markdown-message";
 import {
   ConfirmDialog,
   DIALOG_TONE,
@@ -8,7 +9,6 @@ import {
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
-import { PlanUnitWords } from "./plan-rule";
 import { momentText } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
@@ -75,7 +75,7 @@ function VersionBody({ diff }: { diff: VersionDiff }): React.JSX.Element {
     <>
       <div className="plan-body">
         {diff.units.map((unit, at) => (
-          <PlanUnitWords
+          <MarkdownMessage
             // A unit's heading may stand twice, struck and written again, so its place keys it.
             // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
             key={at}

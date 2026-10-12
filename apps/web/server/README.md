@@ -883,7 +883,7 @@ included; an account that must sign in with GitHub again is
 Nothing in the group writes a document. The one writer is a planning call's
 notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
 the fixed template (`packages/hosted/src/plan-template.ts`): a point added
-under a field, an example added to a rule, a phrase corrected, or a line
+under a field, a phrase corrected, or a line
 struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
 the fields the plan holds, passing over a note that names a phrase the plan
 does not hold, formats the body, and saves it under a binding of account and

@@ -1478,8 +1478,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
               field: "openQuestions",
               text: "Who may withdraw an invite? Going on as: the member who sent it.",
             },
-            { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
-            { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+            { kind: "add", field: "approach", text: "- Invites expire after 7 days." },
+            { kind: "replace", field: "context", find: "an admin", text: "an owner" },
           ],
         });
 
@@ -1488,13 +1488,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(answer, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 2,
-          missed: ["replace problem"],
+          missed: ["replace context"],
         });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         assert.deepEqual(stored.fields.openQuestions, [
           "Who may withdraw an invite? Going on as: the member who sent it.",
         ]);
-        assert.equal(stored.fields.decisions, "- Invites expire after 7 days.");
+        assert.equal(stored.fields.approach, "- Invites expire after 7 days.");
         assert.ok(stored.plan.document.body.includes("- Who may withdraw an invite?"));
         // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
         const at = yield* Clock.currentTimeMillis;
@@ -1515,8 +1515,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const outside = unparsedWire({ notes: [{ kind: "add", field: "title", text: "x" }] });
         const two = unparsedWire({
           notes: [
-            { kind: "add", field: "decisions", text: "One." },
-            { kind: "add", field: "decisions", text: "Two." },
+            { kind: "add", field: "approach", text: "One." },
+            { kind: "add", field: "approach", text: "Two." },
           ],
         });
 
@@ -1529,7 +1529,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           reason: PLAN_EDIT_REFUSAL.TOO_MANY,
         });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
-        assert.equal(stored.fields.decisions, null);
+        assert.equal(stored.fields.approach, null);
 
         // An agent handed a task never saw the plan, so it is refused by name.
         const onTask = yield* openAgent(host, "anthropic/claude-opus-5.5", "high", {

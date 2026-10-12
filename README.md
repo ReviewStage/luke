@@ -45,19 +45,21 @@ Luke asks for microphone access the first time you start a call.
 
 | Section | Contents |
 | --- | --- |
-| Goal | The current problem and the result you want |
-| Scope | What's in, what's out, and the constraints |
-| Rules | One sentence per rule, with Given/When/Then examples |
-| Implementation | Files that change, new types and signatures, code to follow |
-| Decisions | What was chosen, why, and the alternatives turned down |
-| Verification | How to check the result end to end |
-| Left to the agent | Choices the agent may make on its own |
+| Context | What happens today, who it affects, and why now |
+| Goal | What's true when it ships, each outcome checkable |
+| Approach | The design: the pieces, where they live, and the code they follow |
+| Interfaces | Every changed type, schema, route, or signature, as code |
+| Alternatives | Other approaches and why they lost (when there were any) |
+| Hard parts | Each tricky case and exactly what the change does in it |
+| Not doing | What's out of scope, and why |
+| Plan of attack | The order the work lands in (when order matters) |
+| Testing | "When …, then …" cases for every goal and hard part, and the end-to-end check |
 | Open questions | Anything not yet decided |
 | Assumptions | Defaults Luke chose that you didn't state |
 
-The format draws on GitHub's [Spec Kit](https://github.com/github/spec-kit),
-OpenAI's [ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans),
-and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/).
+The plan reads like the design doc two engineers would write after talking a
+task through, and holds each section to the bar a coding agent needs to build
+from it.
 
 ## Code access
 
