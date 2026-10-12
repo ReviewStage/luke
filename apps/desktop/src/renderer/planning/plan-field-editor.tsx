@@ -3,7 +3,7 @@ import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
-import { PencilIcon, PlusIcon } from "@sidecar/panel";
+import { PlusIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -97,7 +97,14 @@ export interface FieldEditing {
   readonly open: (target: EditTarget, host: EditorHost, at?: ClickPoint) => void;
   readonly typeText: (text: string) => void;
   readonly typeRule: (rule: RuleDraft) => void;
-  readonly close: () => void;
+  /** SPIKE: `select` hands the keyboard back to the block the editor stood in, as Esc and ⌘↩ do. */
+  readonly close: (select?: boolean) => void;
+  /** SPIKE: the block to take the keyboard back once the editor has gone, until it has. */
+  readonly selecting: EditorHost | undefined;
+  readonly selected: () => void;
+  /** SPIKE: the block the keyboard last selected, which is the document's one Tab stop. */
+  readonly cursor: EditorHost | undefined;
+  readonly select: (host: EditorHost) => void;
   readonly keepMine: () => void;
   readonly takeLukes: () => void;
   readonly retry: () => void;
@@ -117,6 +124,8 @@ export function useFieldEditing(
   const [editor, setEditor] = useState<FieldEditor | undefined>(undefined);
   const [host, setHost] = useState<EditorHost | undefined>(undefined);
   const [at, setAt] = useState<ClickPoint | undefined>(undefined);
+  const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
+  const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
   // Note that these are refs, because a save's answer and the pause's end
   // read them as they land, which no render stands between.
@@ -194,17 +203,24 @@ export function useFieldEditing(
       setEditor(editorOpened(target, content));
       setHost(where);
       setAt(point);
+      setSelecting(undefined);
+      setCursor(where);
     },
     typeText: (text) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.TEXT, text })),
     typeRule: (rule) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.RULE, rule })),
     // The save starts with the close, not a render later, since the close may
     // be focus leaving for another plan that takes the document with it.
-    close: () => {
+    close: (select = false) => {
       if (latest.current === undefined) return;
+      if (select) setSelecting(host);
       latest.current = editorCloseAsked(latest.current);
       setEditor(latest.current);
       send();
     },
+    selecting,
+    selected: () => setSelecting(undefined),
+    cursor,
+    select: setCursor,
     keepMine: () => changed(editorKeptMine),
     takeLukes: () => setEditor((now) => (now === undefined ? now : editorTookLukes(now))),
     retry: () => {
@@ -258,9 +274,7 @@ function EditorNote({
       </div>
     );
   }
-  if (editor.sending !== undefined) {
-    return <p className="plan-field-note plan-field-saving">Saving…</p>;
-  }
+  // SPIKE: a save under way says nothing; only one that failed or met Luke's words does.
   return null;
 }
 
@@ -293,7 +307,10 @@ const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
 /** SPIKE: what the in-place editor reports through. */
 interface DraftDoors {
   readonly onDraft: (value: FieldValue) => void;
+  /** Esc or ⌘↩: the words saved, and the block they stood in selected. */
   readonly onFinish: () => void;
+  /** Focus leaving for somewhere else: the words saved, and nothing selected. */
+  readonly onLeave: () => void;
 }
 
 /**
@@ -327,6 +344,10 @@ function useCoalescedDrafts(editing: FieldEditing): DraftDoors {
       restartPause(stamp.current);
     },
     onFinish: () => {
+      flush();
+      door.current.close(true);
+    },
+    onLeave: () => {
       flush();
       door.current.close();
     },
@@ -398,7 +419,7 @@ export function PlanFieldEditor({
 }): React.JSX.Element {
   const label = targetLabel(editor.target, ruleCount);
   const value = useRef(inPlaceValue(editor)).current;
-  const { onDraft, onFinish } = useCoalescedDrafts(editing);
+  const { onDraft, onFinish, onLeave } = useCoalescedDrafts(editing);
   const module = useAtomValue(fieldEditorAtom);
   const rule = value.kind === FIELD_KIND.RULE;
   if (!AsyncResult.isSuccess(module)) {
@@ -420,7 +441,7 @@ export function PlanFieldEditor({
       className="plan-field-editor spike-seamless ph-no-capture"
       aria-label={`Editing ${label}`}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) onFinish();
+        if (!event.currentTarget.contains(event.relatedTarget)) onLeave();
       }}
     >
       {heading === undefined || rule ? null : (
@@ -448,19 +469,30 @@ function editsOnClick(target: EventTarget): boolean {
   return !(target instanceof Element && target.closest("a") !== null);
 }
 
+/** SPIKE: the keyboard moved to the block before or after this one in the document. */
+function stepBlock(from: HTMLElement, by: 1 | -1): void {
+  const blocks = [...document.querySelectorAll<HTMLElement>(".plan-unit-editable")];
+  blocks[blocks.indexOf(from) + by]?.focus();
+}
+
 /**
  * A unit the developer can edit, drawn as the document draws it, which opens
  * its editor on a click into its words that selects nothing, the caret where
- * the click landed. SPIKE: nothing on the words marks them editable. The
- * pencil stays only as the keyboard's way in, shown when it has the
- * keyboard's focus and never under the pointer; the rules' heading keeps its
- * plus on hover, which adds a rule rather than editing one.
+ * the click landed. SPIKE: nothing on the words marks them editable, and
+ * there is no pencil. The keyboard moves between blocks as Notion's does: the
+ * document is one Tab stop, the block selected last or `entry`, the arrows
+ * move between blocks, Return edits one with the caret at the end, and Esc
+ * in its editor saves and selects it again. A block is a labelled group
+ * rather than a button, so a screen reader still reads the words inside it.
+ * The rules' heading keeps its plus under the pointer, which adds a rule
+ * rather than editing one; Return on it does the same.
  */
 export function EditableUnit({
   target,
   host,
   label,
   adds,
+  entry,
   editing,
   children,
 }: {
@@ -468,34 +500,69 @@ export function EditableUnit({
   host: EditorHost;
   label: string;
   adds: boolean;
+  /** Whether this block is where Tab enters the document. */
+  entry: boolean;
   editing: FieldEditing;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const block = useRef<HTMLDivElement>(null);
+  // The block an editor closed from by the keyboard takes the keyboard back, once.
+  useEffect(() => {
+    if (editing.editor !== undefined || editing.selecting !== host) return;
+    block.current?.focus();
+    editing.selected();
+  });
+  // Note that a code block is taken out of the Tab order, because Chrome makes
+  // a scrolling `<pre>` a Tab stop of its own, which would put stops inside the
+  // document's one; the arrows and Return own the keyboard here instead.
+  useEffect(() => {
+    for (const code of block.current?.querySelectorAll("pre") ?? []) code.tabIndex = -1;
+  });
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the button beside the words is the keyboard's way into the same editor.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the button beside the words is the keyboard's way into the same editor.
+    // biome-ignore lint/a11y/useSemanticElements: a block holds a field's words, not a form's controls, so it is no `<fieldset>`.
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a block is selected by the keyboard and edited with Return, as a document editor's blocks are.
     <div
+      ref={block}
       className="plan-unit-editable"
+      role="group"
+      tabIndex={entry ? 0 : -1}
+      aria-label={adds ? "Rules" : label}
+      aria-keyshortcuts="Enter"
       onPointerEnter={prefetchFieldEditor}
+      onFocus={() => {
+        prefetchFieldEditor();
+        editing.select(host);
+      }}
       onClick={(event) => {
         if (editsOnClick(event.target))
           editing.open(target, host, { x: event.clientX, y: event.clientY });
       }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          editing.open(target, host);
+        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          stepBlock(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+        }
+      }}
     >
       {children}
-      <button
-        type="button"
-        className="icon-button plan-unit-edit"
-        data-adds={adds ? "" : undefined}
-        aria-label={adds ? "Add rule" : `Edit ${label}`}
-        onFocus={prefetchFieldEditor}
-        onClick={(event) => {
-          event.stopPropagation();
-          editing.open(target, host);
-        }}
-      >
-        {adds ? <PlusIcon /> : <PencilIcon />}
-      </button>
+      {adds ? (
+        <button
+          type="button"
+          className="icon-button plan-unit-edit"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={(event) => {
+            event.stopPropagation();
+            editing.open(target, host);
+          }}
+        >
+          <PlusIcon />
+        </button>
+      ) : null}
     </div>
   );
 }

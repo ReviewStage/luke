@@ -91,17 +91,29 @@ kind):
 
 ## Hover, the keyboard, and the "just changed" tint
 
-- **Hover shows only who last edited the section.** The hover wash and the
-  pencil are gone; a field's words take the text cursor, and a click into
-  them edits them. Hovering a section shows its "Edited by … · 2h ago" line,
-  as it already did, now at the column's edge.
-- **The keyboard still has a way in.** The pencil stays in the DOM as the
-  keyboard's button. It is never shown under the pointer, only when Tab gives
-  it focus, and Return opens the field with the caret at the end. It stays a
-  separate button because putting `role="button"` on the words themselves
-  would hide the plan's text from screen readers, whose button children are
-  presentational. The rules' "+" still shows on hover, because adding a rule
-  is not a click into existing words.
+- **Hover shows only who last edited the section.** There is no hover wash
+  and no pencil. A field's words take the text cursor, and a click into them
+  edits them. Hovering a section shows its "Edited by … · 2h ago" line at the
+  column's edge.
+- **The keyboard moves between blocks, as in Notion.**
+  - The document is **one Tab stop**: Tab enters at the block you last
+    selected (the first block before that), and Tab again leaves the
+    document for the rest of the window.
+  - Inside it, **↑ and ↓** move between blocks.
+  - **Return** edits the selected block with the caret at the end. On the
+    Rules heading it adds a rule.
+  - **Esc** (or ⌘↩) saves, stops editing, and leaves the block selected.
+  - A selected block wears a soft tint of the focus colour in the hover
+    wash's old box.
+  - Each block is a labelled group (`role="group"`, `aria-label` the field's
+    name, `aria-keyshortcuts="Enter"`), not a button, so a screen reader still
+    reads the words inside it.
+  - Code blocks are taken out of the Tab order inside a block, because
+    Chrome makes a scrolling `<pre>` a Tab stop of its own.
+  - The rules' "+" still shows under the pointer, because adding a rule is
+    not a click into existing words.
+- **No "Saving…".** A save under way says nothing. A save that failed, or
+  met Luke's words, still says so under the field.
 - **The tint is the hover wash's size.** The highlight a section wears as
   Luke's or an agent's edit lands now takes the box the hover wash had
   (2 px above and below, 6 px either side) instead of 2 px all round.
@@ -110,9 +122,13 @@ kind):
   alike, because you watched it being typed (`ChaseAim.lit` in
   `plan-reveal.ts`, with a test). Luke's and agents' edits light as before.
 
-| Hover: only "Edited by…" | Keyboard: Tab brings up the pencil | Luke's edit: the tint at the hover wash's size |
+The suite checks the keyboard path end to end: Tab enters at Problem, ↓ and
+↑ move to Outcome and back, Tab leaves, Shift-Tab returns to Problem, Return
+edits, Esc saves and selects Problem again, and "Saving…" never appears.
+
+| Hover: only "Edited by…" | Keyboard: a selected block | Luke's edit: the tint at the hover wash's size |
 | --- | --- | --- |
-| ![Hover](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/hover-byline.png) | ![Keyboard](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/keyboard-pencil.png) | ![Tint](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/agent-edit-tint.png) |
+| ![Hover](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/hover-byline.png) | ![Selected](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/keyboard-selected.png) | ![Tint](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/agent-edit-tint.png) |
 
 ## Should a rule just be a numbered list?
 
@@ -317,8 +333,8 @@ plans matters.
   PR keeps a test that the editor's host carries the class.
 - **Accessibility.** The editor is `role="textbox"`, multiline, and labelled
   with the field's name, which is how the AX tree reads today's textarea.
-  The pencil stays as the keyboard's way in, shown only with the keyboard's
-  focus. VoiceOver needs the Mac pass.
+  Each block is a labelled group the arrows move between, and Return edits
+  it. VoiceOver needs the Mac pass.
 - **IME.** ProseMirror owns composition. A real macOS IME (kana, pinyin,
   Hangul, press-and-hold accents) must be checked on a Mac.
 

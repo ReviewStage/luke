@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "../use-reduced-motion";
 import {
   EDITOR_PLACE,
   EditableUnit,
+  type EditorHost,
   type FieldEditing,
   type PlanEditDoor,
   PlanFieldEditor,
@@ -311,6 +312,12 @@ function draftedOnly(target: EditTarget, words: string, ruleCount: number): bool
   return "rule" in target && target.rule >= ruleCount && !words.startsWith("## ");
 }
 
+/** SPIKE: whether a unit is drawn as a block the developer can select and edit. */
+function editableView(view: UnitView, ruleCount: number): boolean {
+  const target = editTargetOfUnit(view.words, ruleCount);
+  return target !== undefined && !draftedOnly(target, view.words, ruleCount);
+}
+
 /**
  * One unit of the body: drawn as the chase has it, tinted where its field
  * changed since the last look, the editor where it is the one the editor
@@ -325,12 +332,15 @@ function BodyUnit({
   editing,
   ruleCount,
   marks,
+  entry,
 }: {
   view: UnitView;
   editable: boolean;
   editing: FieldEditing;
   ruleCount: number;
   marks: FieldMarks;
+  /** SPIKE: the block where Tab enters the document. */
+  entry: EditorHost | undefined;
 }): React.JSX.Element | null {
   const target = editTargetOfUnit(view.words, ruleCount);
   const changed = target !== undefined && marks.changed.has(target.field);
@@ -372,6 +382,7 @@ function BodyUnit({
       host={view.id}
       label={targetLabel(target, ruleCount)}
       adds={adds}
+      entry={entry === view.id}
       editing={editing}
     >
       {drawn}
@@ -421,12 +432,15 @@ function PlanAssumptions({
   editable,
   editing,
   marks,
+  entry,
 }: {
   assumptions: readonly PlanAssumption[];
   fresh: ReadonlySet<number>;
   editable: boolean;
   editing: FieldEditing;
   marks: FieldMarks;
+  /** SPIKE: the block where Tab enters the document. */
+  entry: EditorHost | undefined;
 }): React.JSX.Element {
   const list =
     assumptions.length === 0 ? (
@@ -457,6 +471,7 @@ function PlanAssumptions({
         host={EDITOR_PLACE.ASSUMPTIONS}
         label={PLAN_FIELD_HEADING.assumptions}
         adds={false}
+        entry={entry === EDITOR_PLACE.ASSUMPTIONS}
         editing={editing}
       >
         {list}
@@ -551,6 +566,9 @@ export function PlanBody({
 
   const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
+  // SPIKE: Tab enters the document at the block selected last, or its first block.
+  const first = editable ? views.find((view) => editableView(view, ruleCount))?.id : undefined;
+  const entry = editing.cursor ?? first ?? (editable ? EDITOR_PLACE.ASSUMPTIONS : undefined);
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
@@ -564,6 +582,7 @@ export function PlanBody({
             editing={editing}
             ruleCount={ruleCount}
             marks={marks}
+            entry={entry}
           />
         ))}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
@@ -583,6 +602,7 @@ export function PlanBody({
         editable={editable}
         editing={editing}
         marks={marks}
+        entry={entry}
       />
     </div>
   );

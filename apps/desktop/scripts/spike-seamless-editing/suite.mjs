@@ -392,6 +392,65 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${mode}-${name}.png
   results.layoutShiftPx = shifts;
 }
 
+// N. The keyboard, as Notion's: one Tab stop into the document, the arrows between blocks, Return to edit, Esc back to the block.
+{
+  const page = await open();
+  const label = () =>
+    page.evaluate(
+      () =>
+        document.activeElement?.closest(".plan-unit-editable")?.getAttribute("aria-label") ??
+        document.activeElement?.tagName ??
+        null,
+    );
+  await page.evaluate(() => document.body.focus());
+  let entered = null;
+  for (let i = 0; i < 20 && entered === null; i += 1) {
+    await page.keyboard.press("Tab");
+    entered = await page.evaluate(() =>
+      document.activeElement?.classList.contains("plan-unit-editable")
+        ? document.activeElement.getAttribute("aria-label")
+        : null,
+    );
+  }
+  await page.keyboard.press("ArrowDown");
+  const down = await label();
+  await page.keyboard.press("ArrowUp");
+  const up = await label();
+  await page.keyboard.press("Tab");
+  const leftDocument = await page.evaluate(
+    () => !document.activeElement?.classList.contains("plan-unit-editable"),
+  );
+  await page.keyboard.down("Shift");
+  await page.keyboard.press("Tab");
+  await page.keyboard.up("Shift");
+  const back = await label();
+  await page.keyboard.press("Enter");
+  await sleep(300);
+  const editing = await page.evaluate(
+    () => !!document.querySelector(".plan-field-editor .ProseMirror-focused"),
+  );
+  await page.keyboard.type("!");
+  await page.keyboard.press("Escape");
+  let sawSaving = false;
+  for (let i = 0; i < 30; i += 1) {
+    sawSaving ||= await page.evaluate(() => document.body.innerText.includes("Saving"));
+    await sleep(50);
+  }
+  const afterEsc = await label();
+  results.keyboard = {
+    entered,
+    down,
+    up,
+    leftDocument,
+    back,
+    editing,
+    afterEsc,
+    sawSaving,
+    saved: (await stored(page)).fields.goal.problem?.endsWith("!") ?? false,
+  };
+  await page.close();
+}
+
 // K. Session replay: is every editable node inside a blocked subtree?
 {
   const page = await open();
