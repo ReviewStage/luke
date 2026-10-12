@@ -39,6 +39,7 @@ import {
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { installHighlights } from "#testing/find-highlights";
 import {
   codingAgentsControl,
@@ -51,7 +52,13 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
-import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
+import {
+  DOCUMENT_REGION,
+  PLAN_MARK,
+  PLANS_PAGE,
+  type PlanMark,
+  RENAME_FAILED_NOTE,
+} from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
@@ -119,6 +126,7 @@ function Page({
   shownCode,
   plan = PLAN,
   holds,
+  onRenamePlan,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
@@ -127,6 +135,7 @@ function Page({
   plan?: Plan;
   /** What the open plan holds; every fixed kind where absent. */
   holds?: PlanHolds | undefined;
+  onRenamePlan?: PlansControl["onRenamePlan"];
 }) {
   const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
   const mainTabs = useMainTabs(false, plan.id, agents?.agentIds, agents?.draft?.id);
@@ -155,6 +164,7 @@ function Page({
       },
       ...(work === undefined ? undefined : { work }),
       ...(agents === undefined ? undefined : { agents }),
+      ...(onRenamePlan === undefined ? undefined : { onRenamePlan }),
       shownCode,
     }),
   });
@@ -1919,6 +1929,40 @@ function menuLabels(): string[] {
     (item) => item.textContent ?? "",
   );
 }
+
+test("a plan that is one document renamed at its title renames the plan, and a refusal is said beside the toolbar as the name field's is", async () => {
+  const renamed: [string, string][] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(Page, {
+        staged: undefined,
+        plan: DOCUMENT_PLAN,
+        onRenamePlan: (planId, name) => {
+          renamed.push([planId, name]);
+          return Promise.resolve(false);
+        },
+      }),
+    ),
+  );
+  const text = container.querySelector<HTMLElement>('[aria-label="Plan name"]');
+  assert.ok(text, "the title's words");
+
+  act(() => {
+    text.focus();
+    text.textContent = "Teammate invites";
+  });
+  act(() => {
+    text.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(renamed, [[DOCUMENT_PLAN.id, "Teammate invites"]]);
+  assert.equal(container.querySelector(".desktop-toolbar-note")?.textContent, RENAME_FAILED_NOTE);
+});
 
 test("an archived plan reads but takes nothing: no editor, rename, repository, call, Start, new agent, or message, and its banner and its composer's note offer Unarchive", () => {
   const unarchives: Unarchives = { marked: [], composer: 0 };

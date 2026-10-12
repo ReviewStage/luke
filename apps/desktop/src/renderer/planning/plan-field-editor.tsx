@@ -183,6 +183,8 @@ export function useFieldEditing(
   // biome-ignore lint/correctness/useExhaustiveDependencies: the plan changing is what closes it.
   useEffect(() => {
     setEditor(undefined);
+    setSelecting(undefined);
+    setCursor(undefined);
     return () => {
       heldWords.current?.();
       const held = latest.current;

@@ -1,5 +1,5 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
@@ -180,7 +180,10 @@ function caretAtEnd(element: HTMLElement): void {
  * in it; Return or ↓ saves it and goes into the text at its start; Esc saves
  * it and selects it as a block, from which Return comes back into it. It is
  * saved by renaming the plan, and a title left empty or unchanged renames
- * nothing, as a rename anywhere else does.
+ * nothing, as a rename anywhere else does. Its words are the name's own but
+ * while it is typed in, so a refused rename that puts the old name back puts
+ * it back here too; a name past the bound is cut to it, as the name field's
+ * own `maxLength` cuts a paste.
  */
 export function EditableTitle({
   name,
@@ -200,12 +203,19 @@ export function EditableTitle({
   useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
     if (text.current !== null) caretAtEnd(text.current);
   });
+  // Whether the words as they stand were saved by a key, so the blur that follows renames nothing again.
+  const saved = useRef(false);
+  useLayoutEffect(() => {
+    const element = text.current;
+    if (element !== null && element !== document.activeElement) element.textContent = name;
+  }, [name]);
   const save = () => {
     const element = text.current;
-    if (element === null) return;
-    const typed = (element.textContent ?? "").trim();
+    if (element === null || saved.current) return;
+    saved.current = true;
+    const typed = (element.textContent ?? "").trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+    element.textContent = typed === "" ? name : typed;
     if (typed !== "" && typed !== name) onRename(typed);
-    else element.textContent = name;
   };
   return (
     // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
@@ -242,6 +252,12 @@ export function EditableTitle({
           aria-label="Plan name"
           tabIndex={-1}
           spellCheck
+          onFocus={() => {
+            saved.current = false;
+          }}
+          onInput={() => {
+            saved.current = false;
+          }}
           onBlur={save}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -255,9 +271,7 @@ export function EditableTitle({
             save();
             openText(editing);
           }}
-        >
-          {name}
-        </div>
+        />
       </div>
     </div>
   );

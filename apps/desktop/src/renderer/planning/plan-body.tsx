@@ -599,8 +599,16 @@ export function PlanBody({
 
   const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
-  // The document's one Tab stop: the block selected last, or its title, or its first section.
-  const entry = editing.cursor ?? (onRename === undefined ? views[0]?.id : EDITOR_PLACE.TITLE);
+  // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
+  const standing =
+    editing.cursor === EDITOR_PLACE.TITLE
+      ? onRename !== undefined
+      : views.some((view) => view.id === editing.cursor);
+  const entry = standing
+    ? editing.cursor
+    : onRename === undefined
+      ? views[0]?.id
+      : EDITOR_PLACE.TITLE;
   const sections = views.map((view, section) =>
     textEditable ? (
       <DocumentBlock

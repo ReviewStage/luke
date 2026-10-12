@@ -199,3 +199,18 @@ test("a change Luke made to a block the developer changed after the save went ou
   );
   assert.ok(handedOver().includes("Model an invite as one `memberships` row, pending."));
 });
+
+test("Luke's block put in place of another, first, middle, or last, and longer or shorter than it, is laid in whole", () => {
+  const replacements = [
+    ["## Problem", "## The problem, as Luke put it\n\nA paragraph he added under it."],
+    ["* one\n* two", "* one"],
+    ["<div>block html</div>", "Closing words,\nover two lines."],
+  ] as const;
+  for (const [was, now] of replacements) {
+    const { handedOver, took } = opened(DOCUMENT);
+    const merged = DOCUMENT.replace(was, now);
+
+    assert.equal(took(DOCUMENT, merged), merged, was);
+    assert.equal(handedOver(), merged, was);
+  }
+});

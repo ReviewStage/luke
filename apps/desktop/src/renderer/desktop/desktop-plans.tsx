@@ -324,9 +324,8 @@ function PlanDocument({
                   ? {}
                   : {
                       onEdit: (request) => plans.edit(plan.id, request),
-                      onRename: (name) => {
-                        plans.onRenamePlan(plan.id, name).catch(() => undefined);
-                      },
+                      // The title renames as the chip's field does, so a refusal is said beside it.
+                      onRename: (name) => rename.end({ name, byKey: true }),
                     })}
                 looks={looks}
               />

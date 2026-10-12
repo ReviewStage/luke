@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
-import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -148,6 +148,25 @@ test("the document is one Tab stop, at its title; the arrows move between blocks
   assert.deepEqual(open().placement, { section: 1 });
 });
 
+test("the Tab stop on a section that goes, with Luke's change or with another plan opened, falls back to the title", () => {
+  const { container, render } = mount();
+  const stops = () =>
+    [...container.querySelectorAll<HTMLElement>('[role="group"]')]
+      .filter((found) => found.tabIndex === 0)
+      .map((found) => found.getAttribute("aria-label"));
+  act(() => block(container, "Goal").focus());
+  press(block(container, "Goal"), "ArrowDown");
+  assert.deepEqual(stops(), ["Approach"]);
+
+  const withoutApproach = BODY.slice(0, BODY.indexOf("## Approach"));
+  render({ ...DOCUMENT_PLAN, document: { ...DOCUMENT_PLAN.document, body: withoutApproach } });
+  assert.deepEqual(stops(), ["Title"]);
+
+  act(() => block(container, "Goal").focus());
+  render({ ...DOCUMENT_PLAN, id: "0b9c7d4e-1f2a-4b3c-8d5e-6f7a8b9c0d1e" });
+  assert.deepEqual(stops(), ["Title"]);
+});
+
 test("the text saves as the document's base and value, and Esc selects the section the caret stood in", async () => {
   const { container, sent } = mount();
   act(() => block(container, "Goal").click());
@@ -247,6 +266,43 @@ test("the title renames the plan on Return and goes into the text at its start; 
   assert.deepEqual(again.renamed, []);
   assert.equal(emptied.textContent, DOCUMENT_NAME);
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Title");
+});
+
+test("the title renamed by Esc renames once, not again as the focus leaves it; a name past the bound is cut to it", () => {
+  const { container, renamed } = mount();
+  const text = title(container);
+
+  act(() => {
+    text.focus();
+    text.textContent = "Teammate invites";
+  });
+  press(text, "Escape");
+  act(() => text.dispatchEvent(new FocusEvent("blur")));
+  assert.deepEqual(renamed, ["Teammate invites"]);
+
+  const long = "Invites ".repeat(40);
+  act(() => {
+    text.focus();
+    text.textContent = long;
+  });
+  press(text, "Escape");
+  assert.deepEqual(renamed, ["Teammate invites", long.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim()]);
+  assert.equal(text.textContent, long.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim());
+});
+
+test("a rename refused, which puts the plan's old name back, puts the title's words back too", () => {
+  const { container, render } = mount();
+  const text = title(container);
+  act(() => {
+    text.focus();
+    text.textContent = "Teammate invites";
+  });
+  press(text, "Escape");
+
+  render({ ...DOCUMENT_PLAN, name: "Teammate invites" });
+  render(DOCUMENT_PLAN);
+
+  assert.equal(text.textContent, DOCUMENT_NAME);
 });
 
 test("↑ on the text's first line saves it and goes into the title", async () => {
