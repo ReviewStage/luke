@@ -4,6 +4,10 @@ import {
   parseKeyRing,
   rewrapProviderKey,
 } from "@sidecar/database/models/provider-key-seal";
+import {
+  listEveryProviderKeyRow,
+  rewrapProviderKeyRow,
+} from "@sidecar/database/models/provider-key-store";
 import { Effect, type Redacted, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -13,7 +17,6 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "./http.js";
-import { listEveryProviderKeyRow, rewrapProviderKeyRow } from "./provider-key-store.js";
 
 /**
  * provider-key-rewrap.ts -- every stored provider key moved onto the ring's current key-encryption key.

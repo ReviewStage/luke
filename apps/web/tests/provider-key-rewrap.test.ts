@@ -8,6 +8,7 @@ import {
   parseKeyRing,
   sealProviderKey,
 } from "@sidecar/database/models/provider-key-seal";
+import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -19,7 +20,6 @@ import {
   type ProviderKeyRewrapOptions,
   rewrapProviderKeys,
 } from "../server/hosted/provider-key-rewrap";
-import { listProviderKeyRows, saveProviderKey } from "../server/hosted/provider-key-store";
 
 /**
  * The rotation's rewrap over a real dialect: every stored key wrapped under

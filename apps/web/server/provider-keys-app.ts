@@ -5,6 +5,11 @@ import {
   sealProviderKey,
 } from "@sidecar/database/models/provider-key-seal";
 import {
+  listProviderKeyRows,
+  removeProviderKey,
+  saveProviderKey,
+} from "@sidecar/database/models/provider-key-store";
+import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
   PROVIDER_KEY_REJECTION,
@@ -43,11 +48,6 @@ import {
   providerKeyHint,
 } from "./hosted/provider-key-check.js";
 import { handleProviderKeyRewrap } from "./hosted/provider-key-rewrap.js";
-import {
-  listProviderKeyRows,
-  removeProviderKey,
-  saveProviderKey,
-} from "./hosted/provider-key-store.js";
 import { makeRateBrake, type RateBrake } from "./hosted/rate-brake.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 

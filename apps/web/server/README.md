@@ -721,7 +721,7 @@ key, with the account and provider bound as additional data on both seals
 and the version on the wrap, so a sealed key copied onto another row does
 not open. The row holds the version, the wrapped data key, the sealed key,
 the hint, and the status; it is replaced whole by a save, deleted by a
-removal, and cascades with the account. `server/hosted/provider-key-store.ts`
+removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
