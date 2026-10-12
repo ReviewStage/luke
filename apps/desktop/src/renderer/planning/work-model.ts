@@ -117,7 +117,7 @@ const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.OTHER]: CALL_KIND.OTHER,
 } as const satisfies Record<PlanWorkTool, CallKind>;
 
-/** How the fold reads a block: a worker on a row of its own, every other call grouped. */
+/** How the fold reads a block: a worker on a row of its own, every other call grouped, a coding agent's start counted apart. */
 const WORK_READING: RowReading<WorkBlock> = {
   key: (block, index) =>
     block.kind === WORK_BLOCK.CALL || block.kind === WORK_BLOCK.WORKER
@@ -130,7 +130,7 @@ const WORK_READING: RowReading<WorkBlock> = {
       case WORK_BLOCK.REASONING:
         return ROW_PART.NOTE;
       case WORK_BLOCK.CALL:
-        return ROW_PART.CALL;
+        return block.call.kind === CALL_KIND.START_AGENT ? ROW_PART.CODING_AGENT : ROW_PART.CALL;
       case WORK_BLOCK.WORKER:
         return ROW_PART.SUBAGENT;
     }

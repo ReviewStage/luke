@@ -192,6 +192,43 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   assert.deepEqual(scanned(later?.rows ?? []), [
     [TURN_ROW.GROUP, ["Read the styling setup.", undefined, undefined], true],
   ]);
+
+test("a finished turn's fold names the coding agents it started apart from its tool calls and its subagents", () => {
+  const summaryOf = (parts: readonly PlanWorkPart[]) => {
+    const [fold] = rowsOf([turn(PLAN_WORK_STATE.DONE, parts)]);
+    assert.ok(fold?.kind === TURN_ROW.FOLDED);
+    return fold.summary;
+  };
+
+  assert.equal(
+    summaryOf([
+      call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"),
+      call("w", PLAN_WORK_TOOL.WORKER, "Read the styling setup."),
+      call("s", PLAN_WORK_TOOL.START_AGENT, "Investigate a Tailwind migration."),
+      call("c", PLAN_WORK_TOOL.WORKER_CANCEL, undefined),
+      words("Started Opus 5.5 on the investigation."),
+    ]),
+    "2 tool calls, 1 subagent, 1 coding agent",
+  );
+  assert.equal(
+    summaryOf([
+      call("s1", PLAN_WORK_TOOL.START_AGENT, "Fix the invite emails."),
+      call("s2", PLAN_WORK_TOOL.START_AGENT, "Add the admin check."),
+      words("Started two agents."),
+    ]),
+    "2 coding agents",
+  );
+});
+
+test("a coding agent's start runs together with the calls beside it while the turn moves, as any call does", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.RUNNING, [
+      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
+      call("s", PLAN_WORK_TOOL.START_AGENT, "Fix the invite emails.", PLAN_WORK_STATE.RUNNING),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [[TURN_ROW.GROUP, [undefined, "Fix the invite emails."], true]]);
 });
 
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
