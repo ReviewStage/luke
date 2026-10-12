@@ -136,9 +136,9 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
-    list: (planId) =>
+    list: (planId, includeArchived) =>
       Effect.sync(() => {
-        asked.push(`list:${planId}`);
+        asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
         return { agents: [AGENT] };
       }),
     start: (planId, request) =>
@@ -180,6 +180,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
+      }),
+    archive: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`archive:${agentId}:${String(request.archived)}`);
+        return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
       }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
@@ -289,6 +294,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agents: [AGENT],
     });
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: PLAN_ID, includeArchived: true }),
+      { agents: [AGENT] },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
         planId: PLAN_ID,
         idempotencyKey: "press-1",
@@ -347,6 +356,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
+      { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
@@ -393,6 +406,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       "default",
       "default:openai/gpt-6.1-sol:xhigh",
       `list:${PLAN_ID}`,
+      `list:${PLAN_ID}:archived`,
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
@@ -400,6 +414,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
       `stop:${AGENT_ID}`,
+      `archive:${AGENT_ID}:true`,
       `pull-request:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,

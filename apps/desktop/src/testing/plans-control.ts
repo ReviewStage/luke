@@ -64,6 +64,7 @@ export function codingAgentsControl(
 ): CodingAgentsControl {
   return {
     agents: [],
+    archived: [],
     agentIds: [],
     keywords: [],
     draft: undefined,
@@ -84,6 +85,7 @@ export function codingAgentsControl(
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onRename: () => Promise.resolve(false),
+    onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     onStatus: ignore,
     onTitle: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),

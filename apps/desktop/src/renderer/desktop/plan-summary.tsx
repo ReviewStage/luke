@@ -1,11 +1,15 @@
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
+import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
+import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, inboxEntries } from "./main-tabs";
 import { ADD_SECTION, panelEntries, planWorkers } from "./side-panel";
 import type { AddEntry } from "./strip-tabs";
@@ -23,7 +27,9 @@ import type { AddEntry } from "./strip-tabs";
  * file tree's own: its type's coloured icon, height, and type size. A row
  * opens what it names exactly as its "+" row does: a kind, a subagent, or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
- * column.
+ * column. An agent's row offers Archive agent on a right-click, and the
+ * agents archived are folded under Archived at the foot of Coding agents
+ * (`agent-archive.tsx`).
  *
  * It is always drawn, expanded or collapsed, and never hidden. Expanded and
  * where the column has room to keep the document at its measure beside it,
@@ -97,6 +103,9 @@ const NOTHING_YET_LINE = "Board, code, agents, and files appear here as you plan
 
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
+
+/** What a row of the card opens over the window, drawn outside the card, so a press in it is no press outside: an agent's menu, and its Archive's question. */
+const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"]';
 
 /**
  * Whether the summary stands pinned where it fits, rather than collapsed to
@@ -270,18 +279,34 @@ function summarySections(plans: PlansControl): SummarySection[] {
     ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX)),
     ...agentEntries(mainTabs, agents, true),
   ];
+  // Coding agents stands while only archived agents are left, so their fold has a heading.
+  const archived = (agents.archived?.length ?? 0) > 0;
   return SECTION_ORDER.flatMap((heading) => {
     const own = entries.filter((entry) => (entry.row.section ?? TABS_SECTION) === heading);
-    return own.length === 0 ? [] : [{ heading, entries: own }];
+    const kept = own.length > 0 || (heading === AGENTS_SECTION && archived);
+    return kept ? [{ heading, entries: own }] : [];
   });
 }
 
 /** A row of the column or the card: its glyph, its label, and what tells it apart, a file's folder, as its "+" row says it, faded at its end where it is cut short, then a failed agent's mark. */
-function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) {
+function SummaryRow({
+  entry,
+  onPick,
+  onContextMenu,
+}: {
+  entry: AddEntry;
+  onPick: () => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   const [words, clipped] = useClipped();
   return (
     <li>
-      <button type="button" className="plan-summary-row" onClick={onPick}>
+      <button
+        type="button"
+        className="plan-summary-row"
+        onClick={onPick}
+        onContextMenu={onContextMenu}
+      >
         <span className="plan-summary-glyph">{entry.row.icon}</span>
         <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
           {entry.row.label}
@@ -292,6 +317,45 @@ function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) 
         {entry.endMark}
       </button>
     </li>
+  );
+}
+
+/** An agent's row, whose right-click offers Archive agent, asking first while the agent still works. */
+function AgentSummaryRow({
+  entry,
+  agent,
+  agents,
+  shown,
+  onPick,
+}: {
+  entry: AddEntry;
+  agent: CodingAgentSummary;
+  agents: CodingAgentsControl;
+  shown: boolean;
+  onPick: () => void;
+}) {
+  const archive = useAgentArchive(agent, agents, shown);
+  const menu = useActionMenu(shown);
+  return (
+    <>
+      <SummaryRow
+        entry={entry}
+        onPick={onPick}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          menu.show(atPointer(event), event.currentTarget);
+        }}
+      />
+      {menu.open === undefined ? null : (
+        <ActionMenu
+          label="Agent actions"
+          menu={menu.open}
+          groups={[[archive.action]]}
+          onClose={menu.close}
+        />
+      )}
+      {archive.dialog}
+    </>
   );
 }
 
@@ -309,12 +373,17 @@ function RailRow({ entry }: { entry: AddEntry }) {
   );
 }
 
-/** The summary's headings and rows, as the column and the card list them; `onPicked` hears a row chosen before it opens. */
+/** The summary's headings and rows, as the column and the card list them, an agent's row with its menu and the archived agents' fold under Coding agents; `onPicked` hears a row chosen before it opens. */
 function SummaryList({
   sections,
+  agents,
+  shown,
   onPicked,
 }: {
   sections: readonly SummarySection[];
+  agents: CodingAgentsControl;
+  /** Whether the summary is on screen, which a row's menu and its question stand on. */
+  shown: boolean;
   onPicked?: () => void;
 }): React.JSX.Element {
   if (sections.length === 0) return <p className="plan-summary-empty">{NOTHING_YET_LINE}</p>;
@@ -328,17 +397,26 @@ function SummaryList({
             aria-label={heading}
             data-tree={String(heading === ADD_SECTION.FILES)}
           >
-            {entries.map((entry) => (
-              <SummaryRow
-                key={entry.row.id}
-                entry={entry}
-                onPick={() => {
-                  onPicked?.();
-                  entry.onPick();
-                }}
-              />
-            ))}
+            {entries.map((entry) => {
+              const onPick = () => {
+                onPicked?.();
+                entry.onPick();
+              };
+              return entry.agent === undefined ? (
+                <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+              ) : (
+                <AgentSummaryRow
+                  key={entry.row.id}
+                  entry={entry}
+                  agent={entry.agent}
+                  agents={agents}
+                  shown={shown}
+                  onPick={onPick}
+                />
+              );
+            })}
           </ul>
+          {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
         </div>
       ))}
     </>
@@ -359,11 +437,13 @@ function SummaryCard({
   id,
   from,
   sections,
+  agents,
   onDismiss,
 }: {
   id: string;
   from: CardFrom;
   sections: readonly SummarySection[];
+  agents: CodingAgentsControl;
   onDismiss: () => void;
 }): React.JSX.Element {
   const card = useRef<HTMLDivElement>(null);
@@ -382,7 +462,7 @@ function SummaryCard({
     const press = (event: PointerEvent) => {
       const { target } = event;
       if (!(target instanceof Element) || card.current?.contains(target)) return;
-      if (target.closest(OPENER) === null) onDismiss();
+      if (target.closest(OPENER) === null && target.closest(OPENED_FROM_CARD) === null) onDismiss();
     };
     // Note that the window's own Escape mutes a call or steps back a layer
     // (app.tsx), so the card keeps the press, as a menu does, before it is
@@ -419,7 +499,7 @@ function SummaryCard({
           <ChevronsRightIcon />
         </button>
       </Tooltip>
-      <SummaryList sections={sections} onPicked={onDismiss} />
+      <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
     </div>
   );
 }
@@ -482,7 +562,7 @@ export function PlanSummary({
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
         <SummaryChevron layout={layout} cardId={cardId} />
         {layout.mode === SUMMARY_MODE.COLUMN ? (
-          <SummaryList sections={sections} />
+          <SummaryList sections={sections} agents={plans.agents} shown={plans.shown} />
         ) : kinds.length === 0 ? null : (
           <ul className="plan-summary-rows" aria-label={TABS_SECTION}>
             {kinds.map((entry) => (
@@ -496,6 +576,7 @@ export function PlanSummary({
           id={cardId}
           from={layout.card}
           sections={sections}
+          agents={plans.agents}
           onDismiss={layout.onDismiss}
         />
       )}

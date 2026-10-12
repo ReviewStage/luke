@@ -70,6 +70,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_RENAME: "codingAgents.rename",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
+  /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
+  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */

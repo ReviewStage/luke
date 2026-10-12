@@ -10,12 +10,15 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import {
   type AgentRun,
+  ARCHIVE_NOT_READY,
+  archiveWords,
   choiceRequest,
   MODEL_CHANGE_FAILED,
   RENAME_FAILED,
@@ -70,12 +73,22 @@ const NO_KEYWORDS: readonly string[] = [];
  * unavailable and says why, and `onUnarchive` stands, which every place
  * that would have taken words offers instead. An agent already running
  * finishes the turn it is on, so its Stop stays.
+ *
+ * An agent may be archived on its own, which the service does only once a
+ * turn it still runs is stopped. The list is read with the archived agents
+ * among the rest and split here: `agents` holds those standing, which is
+ * every tab, row, and menu of the plan, and `archived` the rest, which the
+ * summary keeps folded away with an Unarchive on each. The agent the
+ * service answers moves between the two at once, and a toast offers Undo,
+ * as an archived plan's does.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
 export interface CodingAgentsControl {
-  /** The open plan's agents in the order started, or nothing before the first read lands. */
+  /** The open plan's agents in the order started, an archived one left out, or nothing before the first read lands. */
   agents: readonly CodingAgentSummary[] | undefined;
+  /** The open plan's archived agents in the order started, or nothing before the first read lands. */
+  archived: readonly CodingAgentSummary[] | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
@@ -136,6 +149,13 @@ export interface CodingAgentsControl {
   onChoose: ChoiceWriter;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
+  /**
+   * Archives one agent, a turn it still runs stopped first, or brings it
+   * back, taking the agent as the service answers it and offering Undo in a
+   * toast; a refusal is answered rather than said, for the caller to say in
+   * its dialog or a toast of its own.
+   */
+  onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
@@ -235,14 +255,19 @@ export function useCodingAgents(input: {
   latest.current = input;
 
   // The list is this plan's: another plan's, or none, is nothing to draw.
-  const agents = list.planId === planId ? list.agents : undefined;
+  const held = list.planId === planId ? list.agents : undefined;
+  const agents = useMemo(() => held?.filter((agent) => agent.archivedAt === undefined), [held]);
+  const archivedAgents = useMemo(
+    () => held?.filter((agent) => agent.archivedAt !== undefined),
+    [held],
+  );
   const listFailed = list.planId === planId && list.failed;
 
   // Read when the plan opens, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
     if (planId === undefined) return;
     let live = true;
-    latest.current.acts.act(ACT_KIND.CODING_AGENTS_LIST, { planId }).then(
+    latest.current.acts.act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true }).then(
       (answer) => {
         if (!live) return;
         setList((was) =>
@@ -503,6 +528,41 @@ export function useCodingAgents(input: {
     [act, failed],
   );
 
+  // Note that the archive is read through a ref from its toast's Undo,
+  // because the press lands renders after the toast was raised.
+  const onArchive = async (agentId: string, archived: boolean): Promise<ActionResult> => {
+    const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
+      agentId,
+      archived,
+    }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    const words = archiveWords(archived);
+    if ("failure" in answer) {
+      const notReady = answer.failure === CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY;
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: notReady ? ARCHIVE_NOT_READY : words.refused,
+      };
+    }
+    setList((was) =>
+      was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+    );
+    toast({
+      words: words.done,
+      tone: TOAST_TONE.DONE,
+      action: {
+        label: UNDO_LABEL,
+        onPress: () => archiveNow.current(agentId, !archived).then(sayRefusal),
+      },
+    });
+    readAgain();
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  };
+  const archiveNow = useRef(onArchive);
+  archiveNow.current = onArchive;
+  const sayRefusal = (result: ActionResult) => {
+    if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
+  };
+
   const onTitle = useCallback((agentId: string, title: string | null) => {
     setList((was) =>
       was.agents === undefined ||
@@ -548,6 +608,7 @@ export function useCodingAgents(input: {
 
   return {
     agents,
+    archived: archivedAgents,
     agentIds: agents?.map((agent) => agent.id),
     draft,
     onNewDraft,
@@ -573,6 +634,7 @@ export function useCodingAgents(input: {
     onMessage,
     onChoose,
     onRename,
+    onArchive,
     onStatus,
     onTitle,
     readTranscript,
