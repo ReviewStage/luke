@@ -2528,8 +2528,8 @@ body,
 .version-row {
   display: flex;
   width: 100%;
-  flex-direction: column;
-  gap: var(--space-2);
+  align-items: flex-start;
+  gap: var(--space-8);
   padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
@@ -2543,6 +2543,49 @@ body,
 
 .version-row[aria-current="true"] {
   background: var(--raised-strong);
+}
+
+/* Who wrote the version, beside its two lines, as the rest of the window
+   draws them: Luke's face in his colour as the Transcript wears it, a
+   person's picture, an agent's harness. */
+.version-row-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.version-row-mark svg {
+  width: 16px;
+  height: 16px;
+}
+
+.version-row-mark .sidebar-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+}
+
+.version-row-luke .luke-face {
+  width: 18px;
+  height: 18px;
+  color: var(--voice-luke);
+}
+
+.version-row-earlier svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-tertiary);
+}
+
+.version-row-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .version-row-head {
@@ -2562,20 +2605,8 @@ body,
   white-space: nowrap;
 }
 
-/* "During a call", on a version's row. */
-.version-tag {
-  flex: none;
-  padding: 0 var(--space-6);
-  border-radius: 5px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
-}
-
-.version-row[aria-current="true"] .version-tag {
-  background: var(--raised);
+.version-row-author[data-author="luke"] {
+  color: var(--voice-luke);
 }
 
 .version-row-time {

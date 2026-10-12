@@ -1,17 +1,28 @@
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
-import { BackIcon } from "@sidecar/panel";
+import { BackIcon, TerminalIcon, WingFace } from "@sidecar/panel";
+import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
+import { PersonAvatar } from "../person-avatar";
 import { centreWithin } from "../planning/code-pane";
-import { revisionAuthor, revisionSummary } from "../planning/plan-history-model";
+import {
+  authorName,
+  type HistoryReader,
+  REVISION_AUTHOR,
+  type RevisionAuthor,
+  revisionAuthorOf,
+  revisionSummary,
+} from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { documentTitleOf } from "../planning/plan-title";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { VersionSkeleton, VersionView } from "../planning/version-view";
+import { HarnessMark } from "../provider-marks";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
@@ -26,9 +37,10 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * own edge, never folding, as Settings' page list does. At its head stand
  * back and forward and the Back row, which Escape presses too, then the
  * plan's name under the view's own, then the versions, newest first: who
- * wrote each (Luke, You, or a coding agent by its title), whether on a call,
- * what it did, and how long ago, in the sidebar's few letters with the
- * moment itself on hover. The newest is the plan as it stands and the one
+ * wrote each, drawn as the rest of the window draws them (Luke's face as
+ * the Transcript wears it, the reader's account picture as You, a coding
+ * agent's harness and title), what it did, and how long ago, in the
+ * sidebar's few letters with the moment itself on hover. The newest is the plan as it stands and the one
  * drawn when the view opens, wearing no tag of its own: its Restore says it
  * is already current. Opened from a section's "Edited by", the view draws
  * the version that made the section's last change instead, its row brought
@@ -57,15 +69,51 @@ const LOG_SKELETON = [
   { author: "40%", summary: "56%" },
 ] as const;
 
-/** One revision's row: who, whether on a call, what it did, and when; lit while its version is drawn. */
+/** Who wrote a revision, as the rest of the window draws them: Luke's face as the Transcript draws it, a person's picture, an agent's harness, or the history glyph. */
+function RevisionMark({ author }: { author: RevisionAuthor }): React.JSX.Element {
+  switch (author.kind) {
+    case REVISION_AUTHOR.LUKE:
+      return (
+        <span className="version-row-mark version-row-luke" aria-hidden="true">
+          <WingFace />
+        </span>
+      );
+    case REVISION_AUTHOR.PERSON:
+      return (
+        <span className="version-row-mark" aria-hidden="true">
+          <PersonAvatar name={author.name ?? authorName(author)} pictureUrl={author.pictureUrl} />
+        </span>
+      );
+    case REVISION_AUTHOR.AGENT:
+      return (
+        <span className="version-row-mark" aria-hidden="true">
+          {author.provider === undefined ? (
+            <TerminalIcon />
+          ) : (
+            <HarnessMark provider={author.provider} />
+          )}
+        </span>
+      );
+    case REVISION_AUTHOR.EARLIER:
+      return (
+        <span className="version-row-mark version-row-earlier" aria-hidden="true">
+          <HistoryIcon />
+        </span>
+      );
+  }
+}
+
+/** One revision's row: who wrote it, what it did, and when; lit while its version is drawn. */
 function RevisionRow({
   line,
+  author,
   selected,
   now,
   rowRef,
   onSelect,
 }: {
   line: PlanRevisionLine;
+  author: RevisionAuthor;
   selected: boolean;
   now: number;
   rowRef: (row: HTMLButtonElement | null) => void;
@@ -81,21 +129,32 @@ function RevisionRow({
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
       >
-        <span className="version-row-head">
-          <span className="version-row-author">{revisionAuthor(lastEdit)}</span>
-          {lastEdit.duringCall ? <span className="version-tag">During a call</span> : null}
-          <time
-            className="version-row-time"
-            dateTime={new Date(lastEdit.at).toISOString()}
-            title={momentText(lastEdit.at)}
-          >
-            {sinceText(lastEdit.at, now)}
-          </time>
+        <RevisionMark author={author} />
+        <span className="version-row-text">
+          <span className="version-row-head">
+            <span className="version-row-author" data-author={author.kind}>
+              {authorName(author)}
+            </span>
+            <time
+              className="version-row-time"
+              dateTime={new Date(lastEdit.at).toISOString()}
+              title={momentText(lastEdit.at)}
+            >
+              {sinceText(lastEdit.at, now)}
+            </time>
+          </span>
+          <span className="version-row-summary">{revisionSummary(line)}</span>
         </span>
-        <span className="version-row-summary">{revisionSummary(line)}</span>
       </button>
     </li>
   );
+}
+
+/** The reader as their account names them, or nobody while no account is signed in. */
+function readerOf(account: AccountSnapshot): HistoryReader {
+  return account.status === ACCOUNT_STATUS.SIGNED_IN
+    ? { name: account.name ?? account.email, pictureUrl: account.pictureUrl }
+    : { name: undefined, pictureUrl: undefined };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -266,11 +325,14 @@ export function DesktopVersionHistory({
   sidebar,
   history,
   plans,
+  account,
   onExit,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   plans: PlansControl;
+  /** Who is reading, whose revisions are drawn as theirs. */
+  account: AccountSnapshot;
   onExit: () => void;
 }): React.JSX.Element {
   const now = useMinute();
@@ -283,6 +345,8 @@ export function DesktopVersionHistory({
   useVersionKeys(revisions, versions.selected, versions.onSelect, rows);
   useOpenedRowShown(versions.selected, rows, log);
   const edge = useSidebarEdge(sidebar);
+  const reader = readerOf(account);
+  const agents = plans.agents.agents ?? [];
   // The plan is named as its document is drawn, or as the list names it while its read is on its way.
   const { region } = plans;
   const name =
@@ -314,6 +378,7 @@ export function DesktopVersionHistory({
               <RevisionRow
                 key={line.seq}
                 line={line}
+                author={revisionAuthorOf(line, reader, agents)}
                 selected={line.seq === versions.selected}
                 now={now}
                 rowRef={(row) => {

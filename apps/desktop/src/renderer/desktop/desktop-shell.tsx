@@ -229,6 +229,7 @@ export function DesktopShell({
           sidebar={sidebar}
           history={history}
           plans={plans}
+          account={account}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
         />
         <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />

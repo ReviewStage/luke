@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TEXT } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
-  revisionAuthor,
+  authorName,
+  REVISION_AUTHOR,
+  revisionAuthorOf,
   revisionOfSave,
   revisionSummary,
   VERSION_CHANGE,
@@ -14,6 +17,7 @@ import {
 } from "./plan-history-model";
 
 const HOUR = 3_600_000;
+const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const NOW = Date.UTC(2026, 9, 11, 18, 0);
 
 function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
@@ -43,16 +47,50 @@ function marked(diff: ReturnType<typeof versionDiff>, kind: string): string[] {
   );
 }
 
+test("a revision is drawn under its writer: the reader by their account's picture, and an agent by the harness of the agent the line names", () => {
+  const reader = { name: "Dean", pictureUrl: "https://avatars.githubusercontent.com/u/1" };
+  const agents = [{ id: AGENT_ID, model: "openai/gpt-6-astra" }];
+  const agentEdit = { actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false };
+
+  assert.deepEqual(
+    revisionAuthorOf({ lastEdit: { ...agentEdit, actor: PLAN_ACTOR.DEVELOPER } }, reader, agents),
+    { kind: REVISION_AUTHOR.PERSON, you: true, ...reader },
+  );
+  assert.deepEqual(revisionAuthorOf({ lastEdit: agentEdit, agentId: AGENT_ID }, reader, agents), {
+    kind: REVISION_AUTHOR.AGENT,
+    title: "Invite emails",
+    provider: MODEL_PROVIDER.OPENAI,
+  });
+  // An agent the plan no longer lists, or a line from a service that names none, wears no harness.
+  assert.deepEqual(revisionAuthorOf({ lastEdit: agentEdit }, reader, agents), {
+    kind: REVISION_AUTHOR.AGENT,
+    title: "Invite emails",
+    provider: undefined,
+  });
+});
+
 test("a revision names its writer as the developer knows them, and says what it did", () => {
-  assert.equal(revisionAuthor(line().lastEdit), "Luke");
-  assert.equal(revisionAuthor({ actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false }), "You");
+  const reader = { name: "Dean", pictureUrl: "https://avatars.githubusercontent.com/u/1" };
+  const agents = [{ id: AGENT_ID, model: "openai/gpt-6-astra" }];
+  const named = (edit: Partial<PlanLastEdit>, agentId?: string) =>
+    authorName(
+      revisionAuthorOf(
+        { lastEdit: { ...line().lastEdit, ...edit }, ...(agentId ? { agentId } : undefined) },
+        reader,
+        agents,
+      ),
+    );
+  assert.equal(named({}), "Luke");
+  assert.equal(named({ actor: PLAN_ACTOR.DEVELOPER }), "You");
   assert.equal(
-    revisionAuthor({ actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false }),
+    named({ actor: PLAN_ACTOR.AGENT, label: "Invite emails" }, AGENT_ID),
     "Invite emails",
   );
+  assert.equal(named({ actor: PLAN_ACTOR.EARLIER }), "Earlier");
+  // Someone other than the reader, as a shared plan will hold, is named rather than called You.
   assert.equal(
-    revisionAuthor({ actor: PLAN_ACTOR.EARLIER, at: NOW, duringCall: false }),
-    "Earlier",
+    authorName({ kind: REVISION_AUTHOR.PERSON, you: false, name: "Ana", pictureUrl: undefined }),
+    "Ana",
   );
 
   assert.equal(revisionSummary(line()), "14 changes");

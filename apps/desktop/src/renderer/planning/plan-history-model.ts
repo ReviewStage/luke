@@ -1,21 +1,20 @@
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
-import {
-  PLAN_ACTOR,
-  type PlanDocument,
-  type PlanLastEdit,
-  type PlanRevisionLine,
-} from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
+import { providerOf } from "./coding-agent-model";
 import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
  *
- * A revision is named the way the "Edited by" line names its writer: Luke
- * for the notetaker, You for the developer, a coding agent by its title, and
- * Earlier for the plan as it stood before its history began. Its line says
+ * A revision is drawn under its writer the way the rest of the window draws
+ * them: Luke for the notetaker, the reader by their account's picture as
+ * You, a coding agent by its harness and title, and Earlier for the plan as
+ * it stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
  * brought back. A version is drawn whole, a unit to each section of its
  * body (`planSections`, as the open plan cuts it in `plan-reveal.ts`), each
@@ -78,16 +77,83 @@ export function versionMoment(at: number): string {
   return DAY_AND_TIME.format(at);
 }
 
-/** Who wrote a revision, as the version history names them. */
-export function revisionAuthor(edit: PlanLastEdit): string {
-  switch (edit.actor) {
+/** The kinds of writer a revision is drawn under. */
+export const REVISION_AUTHOR = {
+  PERSON: "person",
+  LUKE: "luke",
+  AGENT: "agent",
+  EARLIER: "earlier",
+} as const;
+
+/**
+ * Who wrote a revision, as its row draws them: a person by their name and
+ * picture, Luke, a coding agent by its title and the harness its model runs
+ * in, or nobody for the plan before its history began. Note that a person
+ * carries whether they are the one reading, because a plan shared with
+ * others will hold revisions of people who are not, and only the reader is
+ * called You.
+ */
+export type RevisionAuthor =
+  | {
+      readonly kind: typeof REVISION_AUTHOR.PERSON;
+      readonly you: boolean;
+      readonly name: string | undefined;
+      readonly pictureUrl: string | undefined;
+    }
+  | { readonly kind: typeof REVISION_AUTHOR.LUKE }
+  | {
+      readonly kind: typeof REVISION_AUTHOR.AGENT;
+      readonly title: string;
+      readonly provider: ModelProvider | undefined;
+    }
+  | { readonly kind: typeof REVISION_AUTHOR.EARLIER };
+
+/** The one reading the history, as their account names them: none while no account is signed in. */
+export interface HistoryReader {
+  readonly name: string | undefined;
+  readonly pictureUrl: string | undefined;
+}
+
+/**
+ * Who wrote a revision: the developer as the reader, since a plan has one
+ * person today; Luke; a coding agent by the title its row has now, wearing
+ * the harness of the agent the line names among the plan's `agents`, or no
+ * harness where the agent is not among them; or nobody.
+ */
+export function revisionAuthorOf(
+  line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
+  reader: HistoryReader,
+  agents: readonly Pick<CodingAgentSummary, "id" | "model">[],
+): RevisionAuthor {
+  const { lastEdit } = line;
+  switch (lastEdit.actor) {
     case PLAN_ACTOR.DEVELOPER:
-      return "You";
+      return { kind: REVISION_AUTHOR.PERSON, you: true, ...reader };
     case PLAN_ACTOR.NOTETAKER:
-      return "Luke";
-    case PLAN_ACTOR.AGENT:
-      return edit.label ?? "A coding agent";
+      return { kind: REVISION_AUTHOR.LUKE };
+    case PLAN_ACTOR.AGENT: {
+      const agent = agents.find((each) => each.id === line.agentId);
+      return {
+        kind: REVISION_AUTHOR.AGENT,
+        title: lastEdit.label ?? "A coding agent",
+        provider: agent === undefined ? undefined : providerOf(agent.model),
+      };
+    }
     case PLAN_ACTOR.EARLIER:
+      return { kind: REVISION_AUTHOR.EARLIER };
+  }
+}
+
+/** A revision's writer as their row names them: You for the reader, another person by name, Luke, an agent by its title, or Earlier. */
+export function authorName(author: RevisionAuthor): string {
+  switch (author.kind) {
+    case REVISION_AUTHOR.PERSON:
+      return author.you ? "You" : (author.name ?? "Someone");
+    case REVISION_AUTHOR.LUKE:
+      return "Luke";
+    case REVISION_AUTHOR.AGENT:
+      return author.title;
+    case REVISION_AUTHOR.EARLIER:
       return "Earlier";
   }
 }

@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+} from "@sidecar/credentials/snapshot";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -18,7 +24,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
-import { plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
 import { DesktopVersionHistory } from "./desktop-version-history";
@@ -28,6 +34,27 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const HOUR = 3_600_000;
+
+/** The developer reading the history, as their account names them. */
+const READER: AccountSnapshot = {
+  status: ACCOUNT_STATUS.SIGNED_IN,
+  email: "dean@luke.test",
+  name: "Dean",
+  pictureUrl: "https://avatars.githubusercontent.com/u/1",
+  provider: ACCOUNT_PROVIDER.GITHUB,
+};
+
+/** The plan's coding agent that wrote its second version, on a model Claude Code runs. */
+const INVITE_AGENT: CodingAgentSummary = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: PLAN_ID,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Invite emails",
+  createdAt: 0,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+};
 
 /** The instant the test clock stands at, which the rows count back from. */
 const NOW = 0;
@@ -76,6 +103,7 @@ function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS, on
         at: now - 5 * HOUR,
         duringCall: false,
       },
+      agentId: INVITE_AGENT.id,
       startedAt: now - 5 * HOUR,
       changes: 1,
     },
@@ -190,11 +218,13 @@ function mount(
         plan: planOf(service.current, service.fields, archivedNow),
       },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
+      agents: codingAgentsControl({ agents: [INVITE_AGENT] }),
     });
     return createElement(DesktopVersionHistory, {
       sidebar,
       history: navigationHistory(),
       plans,
+      account: READER,
       onExit: () => setOpen(false),
     });
   }
@@ -209,11 +239,11 @@ function mount(
   );
 }
 
-/** Each row of the version history as its words read. */
+/** Each row of the version history as its words read, its writer's mark left to the eye. */
 function rows(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".version-row")].map((row) =>
     [...row.querySelectorAll("span, time")]
-      .filter((part) => part.children.length === 0)
+      .filter((part) => part.children.length === 0 && part.closest('[aria-hidden="true"]') === null)
       .map((part) => part.textContent)
       .join(" · "),
   );
@@ -301,7 +331,7 @@ function hint(): string | null | undefined {
 }
 
 it.effect(
-  "the version history lists each version newest first: who wrote it, whether on a call, what it did, and when, under the plan's name",
+  "the version history lists each version newest first: who wrote it, what it did, and when, under the plan's name",
   () =>
     Effect.gen(function* () {
       const page = yield* mount(fakeService(), yield* registryOnTestClock);
@@ -309,12 +339,43 @@ it.effect(
       assert.equal(page.querySelector(".version-log-title")?.textContent, "Version history");
       assert.equal(page.querySelector(".version-log-plan")?.textContent, "Teammate invitations");
       assert.deepEqual(rows(page), [
-        "Luke · During a call · 2h · 2 changes",
+        "Luke · 2h · 2 changes",
         "Invite emails · 5h · 1 change",
         "Luke · 1d · 4 changes",
       ]);
       assert.ok(page.querySelector("nav.version-log.ph-no-capture"));
       assert.ok(page.querySelector("section.version-page.ph-no-capture"));
+    }),
+);
+
+it.effect(
+  "each version is drawn under its writer as the rest of the window draws them: Luke's face, the agent's harness, and the reader's own picture as You",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const oldest = service.lines[2];
+      assert.ok(oldest);
+      service.lines[2] = {
+        ...oldest,
+        lastEdit: { ...oldest.lastEdit, actor: PLAN_ACTOR.DEVELOPER },
+      };
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      const drawn = [...page.querySelectorAll(".version-row")].map((row) => ({
+        author: row.querySelector(".version-row-author")?.textContent,
+        luke: row.querySelector(".version-row-mark .luke-face") !== null,
+        harness: row.querySelector(".version-row-mark .provider-mark")?.tagName.toLowerCase(),
+        picture: row.querySelector(".version-row-mark img")?.getAttribute("src"),
+      }));
+      assert.deepEqual(drawn, [
+        { author: "Luke", luke: true, harness: undefined, picture: undefined },
+        { author: "Invite emails", luke: false, harness: "svg", picture: undefined },
+        { author: "You", luke: false, harness: undefined, picture: READER.pictureUrl },
+      ]);
+      assert.equal(
+        page.querySelector(".version-log")?.textContent?.includes("During a call"),
+        false,
+      );
     }),
 );
 
@@ -376,7 +437,7 @@ it.effect(
       assert.deepEqual(marked(page, "ins"), ["Any member"]);
       assert.equal(page.querySelector("[aria-label='Compare']"), null, "no other comparison");
 
-      yield* press(page, "LukeDuring a call2h2 changes");
+      yield* press(page, "Luke2h2 changes");
       assert.equal(chosen(page), "Luke");
       assert.deepEqual(marked(page, "del"), []);
       assert.deepEqual(marked(page, ".version-added"), [
