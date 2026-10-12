@@ -546,7 +546,13 @@ test("Rename on a sidebar plan turns its row into a field with the name selected
   assert.deepEqual(escapes, [], "Escape in the field leaves the window's own Escape alone");
 });
 
-test("the plan's tab renames the open plan in place on a press and from the ⋯ menu, and a press elsewhere keeps what was typed", async () => {
+/** Renames the open plan from its tab's right-click, as the developer would. */
+function renameFromTab(tab: HTMLElement): void {
+  rightClick(tab, 40, 12);
+  choose("Rename");
+}
+
+test("a press on the plan's tab only chooses it, while its right-click and the ⋯ menu rename the plan in place, and a press elsewhere keeps what was typed", async () => {
   const { plans, asked } = openTab();
   const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
@@ -555,6 +561,15 @@ test("the plan's tab renames the open plan in place on a press and from the ⋯ 
 
   assert.equal(title().textContent, "Teammate invitations");
   act(() => title().click());
+  assert.equal(nameField(), null, "a press opens no field");
+  assert.equal(title().getAttribute("aria-selected"), "true");
+
+  rightClick(title(), 40, 12);
+  assert.deepEqual(labels(), ["Rename"]);
+  act(() => title().click());
+  assert.deepEqual(labels(), [], "a press on the tab closes its menu");
+  rightClick(title(), 40, 12);
+  choose("Rename");
   const field = type("Team invites");
   await act(async () => leave(field));
 
@@ -578,12 +593,12 @@ test("a rename the service refused says so quietly beside the name until the nex
     assert.fail("the plan's tab stands");
   const note = () => container.querySelector('.desktop-toolbar [role="alert"]')?.textContent;
 
-  act(() => title().click());
+  renameFromTab(title());
   type("Team invites");
   await act(async () => key("Enter"));
   assert.equal(note(), "The plan could not be renamed. Try again.");
 
-  act(() => title().click());
+  renameFromTab(title());
   assert.equal(note(), undefined);
   assert.deepEqual(asked.renamed, [[PLAN.id, "Team invites"]]);
 });
@@ -600,7 +615,7 @@ test("the refusal of a rename a newer edit replaced leaves no note beside the ne
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
   const rename = (name: string) => {
-    act(() => title().click());
+    renameFromTab(title());
     type(name);
     key("Enter");
   };

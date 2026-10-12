@@ -1866,8 +1866,14 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
     "a turn still running can be stopped",
   );
 
-  // The plan's tab renames nothing.
-  act(() => container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]')?.click());
+  // The plan's tab renames nothing: it hangs no menu to offer Rename.
+  const planTab = container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]');
+  assert.ok(planTab, "the plan's tab stands");
+  act(() => {
+    planTab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 40 }));
+  });
+  assert.equal(document.querySelector('[role="menu"]'), null);
+  act(() => planTab.click());
   assert.equal(container.querySelector(".desktop-toolbar input"), null);
 
   // The ⋯ menu offers what reads the plan, its history among it, Unarchive, and Permanently delete.

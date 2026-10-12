@@ -104,10 +104,10 @@ import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState, StateGlyph } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, MenuItem, type OpenMenu } from "./action-menu";
+import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
-import { Tab, TabStrip } from "./tab-strip";
+import { MenuTab, TabStrip } from "./tab-strip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
@@ -536,10 +536,8 @@ interface PanelTabLook {
 }
 
 /**
- * One tab of the panel's strip, whatever its kind, with its menu on a
- * right-click or the keyboard's menu keys (`tabActionGroups`), hung where
- * the pointer is or under the tab; closing the menu hands focus back to the
- * tab.
+ * One tab of the panel's strip, whatever its kind, with its menu
+ * (`tabActionGroups`).
  */
 function PanelTab({
   look,
@@ -552,33 +550,14 @@ function PanelTab({
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
 }): React.JSX.Element {
-  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
-  const opener = useRef<HTMLElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setMenu(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
   return (
-    <>
-      <Tab
-        {...look}
-        editor={editor}
-        tabRef={tabRef}
-        onClose={doors.onClose}
-        onMenu={(placement, element) => {
-          opener.current = element;
-          setMenu({ placement, opener: element });
-        }}
-      />
-      {menu === undefined ? null : (
-        <ActionMenu
-          label={`${look.label} actions`}
-          menu={menu}
-          groups={tabActionGroups(doors)}
-          onClose={close}
-        />
-      )}
-    </>
+    <MenuTab
+      {...look}
+      editor={editor}
+      tabRef={tabRef}
+      onClose={doors.onClose}
+      groups={tabActionGroups(doors)}
+    />
   );
 }
 
