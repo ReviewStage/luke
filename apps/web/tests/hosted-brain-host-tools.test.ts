@@ -20,6 +20,7 @@ import {
   type StoredUIMessage,
   sessionKey,
   TURN_ORIGIN,
+  TURN_REST_REASON,
   type WireRecord,
 } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
@@ -62,6 +63,7 @@ import {
 } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { REST_TOOL } from "../server/hosted/rest";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { listJournals, sentLineStands } from "../server/hosted/store/message-reads";
 import { stampedEveEvent } from "./support/eve-events";
@@ -329,6 +331,16 @@ test("a planning turn is offered end_call, which is accepted on a plan's convers
   assert.deepEqual(await call(END_CALL_TOOL.name, {}), { status: ACTION_RESULT_STATUS.ACCEPTED });
   // SAFETY: a model may emit any JSON as a call's input; a string stands for one that is no object.
   const unreadable = await call(END_CALL_TOOL.name, "bye" as unknown as WireRecord);
+  assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
+});
+
+test("a planning turn is offered rest, which is accepted for a known reason and refused for one that does not read", async () => {
+  const call = await callerOn(brainHost(seams), await planConversation());
+
+  assert.deepEqual(await call(REST_TOOL.name, { reason: TURN_REST_REASON.PLAN_COMPLETE }), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+  });
+  const unreadable = await call(REST_TOOL.name, { reason: "tired" });
   assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
 });
 

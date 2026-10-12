@@ -18,7 +18,13 @@ import { TestClock } from "effect/testing";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
+import {
+  ASK_ORIGIN,
+  TURN_END,
+  TURN_EVENT_KIND,
+  TURN_REST_REASON,
+  TURN_SLOW_STEP,
+} from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
@@ -33,7 +39,7 @@ import {
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { childConversationId } from "../server/hosted/brain-host/ids";
-import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
+import { PLANNING_EXPLORE_ASK, planningContinueAsk } from "../server/hosted/brain-host/planning";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
@@ -65,6 +71,7 @@ import { stampedEveEvent } from "./support/eve-events";
 import {
   FIRST_EVE_TURN,
   parkedTurn,
+  restingTurn,
   resumedTurn,
   STARTING_WORKER_CALL,
   spokenTurn,
@@ -346,6 +353,96 @@ it.live(
 
       const recovery = yield* Effect.promise(() => database.run(f.brain.recoverRuns(voiceSession)));
       assert.deepEqual([recovery.revision, recovery.runs], [0, []]);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "continuing work submits a fresh spoken ask each time in the plan's conversation, carrying the lines unheard and the questions held, and a re-attach takes none of them up",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const voiceSession = `voice_${randomUUID()}`;
+      const first = {
+        submissionId: randomUUID(),
+        sessionId: voiceSession,
+        heard: "Developer: invites should expire.",
+        questionsHeld: 1,
+        revision: 1,
+      };
+
+      const continued = yield* Effect.promise(() => database.run(f.brain.continueWork(first)));
+      assert.equal(continued.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.deepEqual(
+        f.eve.opened.map((message) => [message.conversationId, message.turn, message.message]),
+        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN, planningContinueAsk(first)]],
+      );
+      const again = yield* Effect.promise(() =>
+        database.run(f.brain.continueWork({ ...first, submissionId: randomUUID(), heard: "" })),
+      );
+      assert.equal(again.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.notDeepEqual(again, continued);
+
+      const recovery = yield* Effect.promise(() => database.run(f.brain.recoverRuns(voiceSession)));
+      assert.deepEqual(recovery.runs, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a continue turn's rest reaches the service under the run's id with its reason, ahead of the turn's quiet end",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const continued = yield* Effect.promise(() =>
+        database.run(
+          f.brain.continueWork({
+            submissionId: randomUUID(),
+            sessionId: `voice_${randomUUID()}`,
+            heard: "",
+            questionsHeld: 0,
+            revision: 1,
+          }),
+        ),
+      );
+      assert.equal(continued.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (continued.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, continued.runId)),
+        target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      yield* Effect.promise(() =>
+        play(restingTurn(FIRST_EVE_TURN, NOW, TURN_REST_REASON.NOTHING_NEW), standing),
+      );
+      yield* f.arrived(3);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+
+      assert.deepEqual(
+        f.events.filter(
+          (event) =>
+            event.kind !== LIVE_BRAIN_RUN_EVENT.ACTIVITY &&
+            event.kind !== LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+        ),
+        [
+          {
+            kind: LIVE_BRAIN_RUN_EVENT.RESTED,
+            runId: continued.runId,
+            reason: TURN_REST_REASON.NOTHING_NEW,
+          },
+          { kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: continued.runId },
+          {
+            kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+            runId: continued.runId,
+            end: LIVE_BRAIN_RUN_END.COMPLETED,
+          },
+        ],
+      );
+      assert.deepEqual(f.reports, []);
       yield* Effect.promise(() => f.stop());
     }),
 );

@@ -83,6 +83,7 @@ import {
   type RepositorySandboxDoor,
   RUN_IN_REPOSITORY_TOOL,
 } from "../server/hosted/repository-shell";
+import { REST_TOOL } from "../server/hosted/rest";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
@@ -535,7 +536,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the plan's coding agents, and the end of the call, and no write to the plan",
+    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the plan's coding agents, the end of the call, and the rest, and no write to the plan",
     () =>
       Effect.gen(function* () {
         const { host } = yield* savedPlanWithConversation();
@@ -557,9 +558,23 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             MESSAGE_CODING_AGENT_TOOL.name,
             START_CODING_AGENT_TOOL.name,
             END_CALL_TOOL.name,
+            REST_TOOL.name,
           ],
         );
       }),
+  );
+
+  it.effect("the rest alone is declared to end the turn", () =>
+    Effect.gen(function* () {
+      const { host } = yield* savedPlanWithConversation();
+
+      const ending = host.toolDeclarations().filter((declared) => declared.endsTurn === true);
+
+      assert.deepEqual(
+        ending.map((declared) => declared.name),
+        [REST_TOOL.name],
+      );
+    }),
   );
 
   it.effect(

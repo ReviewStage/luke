@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
+import { TURN_REST_REASON } from "../server/core";
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
@@ -40,6 +41,7 @@ import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { REST_TOOL } from "../server/hosted/rest";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -215,6 +217,7 @@ const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>
   [READ_CODING_AGENT_TOOL.name, { agentId: AGENT_ID }],
   [MESSAGE_CODING_AGENT_TOOL.name, { agentId: AGENT_ID, text: "Also add tests." }],
   [START_CODING_AGENT_TOOL.name, { task: "Fix the invite email." }],
+  [REST_TOOL.name, { reason: TURN_REST_REASON.NOTHING_NEW }],
 ]);
 
 /** A part as a reader of the tab takes it in: its kind, and its words or its call's kind, subject, state, and output. */

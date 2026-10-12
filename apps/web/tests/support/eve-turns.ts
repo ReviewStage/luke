@@ -1,10 +1,12 @@
 import type { MessageStreamEvent } from "eve/client";
+import type { TurnRestReason } from "../../server/core";
 import { EVE_DELEGATION_TOOL } from "../../server/hosted/brain-host/planning";
 import { END_CALL_TOOL } from "../../server/hosted/end-call";
 import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
 } from "../../server/hosted/repository-shell";
+import { REST_TOOL } from "../../server/hosted/rest";
 import { stampedEveEvent } from "./eve-events";
 
 /**
@@ -136,6 +138,53 @@ export function goodbyeTurn(turnId: string, now: number): readonly MessageStream
     stamped({
       type: "step.completed",
       data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+/** One continue turn that finds nothing worth doing: its one step calls rest alone, which ends the turn with no words. */
+export function restingTurn(
+  turnId: string,
+  now: number,
+  reason: TurnRestReason,
+): readonly MessageStreamEvent[] {
+  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, now);
+  const sequence = 0;
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: "Keep working." } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          { kind: "tool-call", callId: "call-rest", toolName: REST_TOOL.name, input: { reason } },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-rest",
+          toolName: REST_TOOL.name,
+          output: { status: "accepted" },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
     }),
     stamped({ type: "turn.completed", data: { turnId, sequence } }),
   ];

@@ -46,6 +46,8 @@ export const BRAIN_RUN_EVENT = {
   CODE_SHOWN: "code_shown",
   /** A planning run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
   CALL_ENDING: "call_ending",
+  /** A planning run said it has nothing worth doing until the developer speaks again, and why; told once per run, as the call is journaled. */
+  RESTED: "rested",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -208,6 +210,12 @@ export type BrainRunEventBody =
       };
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.RESTED;
+      readonly runId: string;
+      /** Why it rested, in the hosted turn stream's own vocabulary. */
+      readonly reason: string;
+    }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.REPLY_SENTENCE;

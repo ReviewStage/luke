@@ -48,6 +48,7 @@ import {
   RUN_IN_REPOSITORY_TOOL,
   runInRepository,
 } from "../repository-shell.js";
+import { REST_TOOL, runRest } from "../rest.js";
 import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 
 /**
@@ -182,6 +183,12 @@ On a request for a new agent, start it when the developer clearly asks for one (
 
 Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
 
+### Between the developer's words
+
+Luke keeps you working while the developer talks and thinks. When a message says to keep working, it hands you what was said since your last turn, if anything, and how many of your questions Luke still holds. Pick the most useful thing still open and do it: check an assumption against the code, hand a comparison or a wider search to the worker, prepare concrete options for the next decision the developer will face, or queue what the latest answers unblocked. When Luke holds two or more of your questions, research rather than queue, so the developer is not buried in questions. Never queue a question twice, and return only what changes the plan; Luke says nothing of a turn that found nothing new.
+
+When nothing worth doing remains, call rest, alone, with the honest reason: the plan is complete, what is left turns on answers Luke is waiting for, or more reading would turn up nothing new. A developer's ask that joined the turn comes first: answer it, and never rest on it.
+
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
@@ -197,6 +204,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
 - start_coding_agent starts a new coding agent on this plan, on the plan itself or on a task, as the developer's Start button would.
 - end_call ends the voice call once the developer has clearly said they are done with it ("bye", "that's all", "thanks, I'm done", "let's stop here"). Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, or because the plan looks complete.
+- rest ends your turn and stops you working until the developer speaks again, as above.
 
 ## Return the result
 
@@ -220,6 +228,35 @@ export const PLANNING_EXPLORE_ASK =
   "plan's name or saved document points to. Hand anything broader to the worker. " +
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
+
+/**
+ * The message a turn the voice service opened between the developer's words
+ * carries: keep working, with what was said since the model last heard the
+ * call and how many of its questions Luke still holds. Note that the lines
+ * may overlap what a spoken ask already handed over, as transcripts do, and
+ * that an empty hearing is said as such rather than left out, so the model
+ * never reads a missing section as one lost.
+ */
+const PLANNING_CONTINUE_ASK =
+  "Keep working on the plan while the developer talks and thinks, as your instructions say " +
+  "for the time between the developer's words. Call rest when nothing worth doing remains.";
+
+const CONTINUE_HEARD_MARKER = "[heard since your last turn]";
+const CONTINUE_QUESTIONS_HELD_MARKER = "[questions Luke still holds]";
+
+/** What a continue turn is handed: the call's lines the model has not heard, role-labelled, and the questions Luke holds. */
+export function planningContinueAsk(work: {
+  readonly heard: string;
+  readonly questionsHeld: number;
+}): string {
+  const heard = work.heard.trim().length > 0 ? work.heard.trim() : "Nothing new.";
+  return [
+    PLANNING_CONTINUE_ASK,
+    `${CONTINUE_QUESTIONS_HELD_MARKER} ${work.questionsHeld}`,
+    CONTINUE_HEARD_MARKER,
+    heard,
+  ].join("\n");
+}
 
 /** Each field a note may be taken under, and what it holds, one line apiece for the notetaker. */
 const SCRIBE_FIELDS = Object.values(PLAN_FIELD)
@@ -357,6 +394,8 @@ export interface HostedToolDeclaration {
   readonly description: string;
   /** The wire schema's JSON, as eve takes a plain JSON Schema input. */
   readonly inputSchema: ToolDefinition["inputSchema"];
+  /** Whether a step that calls it alone ends the turn, as eve's `endsTurn` has it. */
+  readonly endsTurn?: true;
 }
 
 /** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
@@ -374,6 +413,8 @@ interface PlanningTool {
   readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   /** A wider schema its stored rows are read back under, where rows journaled before a newer input was asked for still stand. */
   readonly storedInputSchema?: Schema.Codec<unknown, UnparsedWireValue>;
+  /** Whether a step that calls it alone ends the turn; see `HostedToolDeclaration`. */
+  readonly endsTurn?: true;
   readonly run: (
     call: PlanningCall,
     input: UnparsedWireValue,
@@ -396,7 +437,9 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * hands back the board as the Mac draws it (`board-look.ts`); the four
  * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
- * carried as `queue_question` is by its journaled call (`end-call.ts`).
+ * carried as `queue_question` is by its journaled call (`end-call.ts`), and
+ * `rest` ends the turn and stops the voice service setting the model working
+ * until the developer speaks again (`rest.ts`), carried the same way.
  * Every read's result goes back to the model as data, a look's as an image.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
@@ -452,6 +495,11 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...END_CALL_TOOL,
     run: (_call, input) => Effect.succeed(runEndCall(input)),
+  },
+  {
+    ...REST_TOOL,
+    endsTurn: true,
+    run: (_call, input) => Effect.succeed(runRest(input)),
   },
 ];
 
@@ -528,6 +576,7 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
     name: tool.name,
     description: tool.description,
     inputSchema: emitJsonSchema(tool.inputSchema),
+    ...(tool.endsTurn ? { endsTurn: tool.endsTurn } : undefined),
   }));
 }
 

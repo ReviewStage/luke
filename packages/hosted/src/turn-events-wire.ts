@@ -22,6 +22,8 @@ export const TURN_EVENT_KIND = {
   CODE_SHOWN: "code_shown",
   /** A planning turn asked to end the call, the developer having said they are done; told once per turn, as the call is journaled. */
   CALL_ENDING: "call_ending",
+  /** A planning turn said it has nothing worth doing until the developer speaks again, and why; told once per turn, as the call is journaled. */
+  RESTED: "rested",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -40,6 +42,15 @@ export const TURN_SLOW_STEP = {
 } as const;
 
 export type TurnSlowStep = (typeof TURN_SLOW_STEP)[keyof typeof TURN_SLOW_STEP];
+
+/** Why a planning turn rested: the plan is done, it waits on the developer's answer, or nothing more is worth doing now. */
+export const TURN_REST_REASON = {
+  PLAN_COMPLETE: "plan_complete",
+  WAITING_ON_DEVELOPER: "waiting_on_developer",
+  NOTHING_NEW: "nothing_new",
+} as const;
+
+export type TurnRestReason = (typeof TURN_REST_REASON)[keyof typeof TURN_REST_REASON];
 
 /** How a turn ended, as a client tells a reply from a refusal. */
 export const TURN_END = {
@@ -74,6 +85,7 @@ export type TurnEventBody =
       readonly code: ShownCode;
     }
   | { readonly kind: typeof TURN_EVENT_KIND.CALL_ENDING }
+  | { readonly kind: typeof TURN_EVENT_KIND.RESTED; readonly reason: TurnRestReason }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

@@ -1,3 +1,4 @@
+import type { TurnRestReason } from "@sidecar/hosted";
 import type { PlanShownCode } from "@sidecar/hosted/planning-view";
 import type { Effect } from "effect";
 
@@ -18,6 +19,8 @@ export const LIVE_BRAIN_RUN_EVENT = {
   QUESTION_QUEUED: "question_queued",
   CODE_SHOWN: "code_shown",
   CALL_ENDING: "call_ending",
+  /** The planning model has nothing worth doing until the developer speaks again; the service sets it working no more till then. */
+  RESTED: "rested",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -80,6 +83,11 @@ export type LiveBrainRunEvent =
   // The developer said they are done and the planning model asked to end
   // the call; the service decides whether this run may still end it.
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.RESTED;
+      readonly runId: string;
+      readonly reason: TurnRestReason;
+    }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;
@@ -116,6 +124,24 @@ export interface LiveBrainAsk {
   sessionId: string;
   /** The ask's task revision in that session's order of delegations: a higher one supersedes a lower. */
   revision: number;
+}
+
+/**
+ * A turn the service opens between the developer's words, so the backend is
+ * never idle while the plan has work left: no delegation is behind it, and
+ * it carries what the backend has not yet heard of the call.
+ */
+export interface LiveBrainContinue {
+  /** The service's own id for this run, fresh each time, so no two continue runs are one ask. */
+  readonly submissionId: string;
+  /** The voice session it runs for. */
+  readonly sessionId: string;
+  /** The call's lines since the backend last heard it, role-labelled, oldest first; empty when nothing new was said. */
+  readonly heard: string;
+  /** How many questions the backend queued that the developer has not answered since. */
+  readonly questionsHeld: number;
+  /** The session's revision as the run starts: the developer's next delegation supersedes it. */
+  readonly revision: number;
 }
 
 export const LIVE_BRAIN_SUBMISSION = {
@@ -184,6 +210,13 @@ export interface LiveBrain {
    * the brain opened of its own, which the developer's first ask supersedes.
    */
   explore(sessionId: string): Effect.Effect<LiveBrainSubmission>;
+  /**
+   * Sets the backend working again between the developer's words, with what
+   * it has not heard of the call. Like an exploring run, it answers no
+   * delegation, and the developer's next ask supersedes it; unlike one, it
+   * may run any number of times in a session, each under its own id.
+   */
+  continueWork(work: LiveBrainContinue): Effect.Effect<LiveBrainSubmission>;
   /**
    * Asks the backend to cancel one run, answering only once the backend has
    * said whether it took the cancel, so nothing is told of a cancel that did

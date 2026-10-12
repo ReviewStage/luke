@@ -31,6 +31,7 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainContinue,
   type LiveBrainRecoveredRun,
   type LiveBrainRecovery,
   type LiveBrainRunEvent,
@@ -189,6 +190,10 @@ class FakeBrain implements LiveBrain {
   };
   /** The run each fresh session's exploring is taken as, by the session; none refuses it, as a backend out of reach would. */
   exploring: ((sessionId: string) => string) | undefined;
+  /** Every time the backend was set working between the developer's words, in order. */
+  readonly continues: LiveBrainContinue[] = [];
+  /** The run each continue is taken as; none refuses it, as a backend out of reach would. */
+  continuing: ((work: LiveBrainContinue) => string) | undefined;
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -210,6 +215,15 @@ class FakeBrain implements LiveBrain {
         ? { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" }
         : { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: this.exploring(sessionId) },
     );
+  }
+
+  continueWork(work: LiveBrainContinue): Effect.Effect<LiveBrainSubmission> {
+    return Effect.sync(() => {
+      this.continues.push(work);
+      return this.continuing === undefined
+        ? { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" }
+        : { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: this.continuing(work) };
+    });
   }
 
   cancelRun(runId: string): Effect.Effect<LiveBrainCancel> {
