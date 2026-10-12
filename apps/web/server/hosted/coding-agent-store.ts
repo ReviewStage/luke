@@ -1,5 +1,5 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -598,6 +598,47 @@ export function readDelegation(
     parentConversationId: parent.conversationId,
     childConversationId,
   });
+}
+
+const findDelegationStarts = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    childConversationIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({ childConversationId: Schema.String, createdAt: InstantColumnSchema }),
+  execute: ({ userId, parentConversationId, childConversationIds }) =>
+    db
+      .select({
+        childConversationId: codingAgentDelegation.childConversationId,
+        createdAt: conversations.createdAt,
+      })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          inArray(codingAgentDelegation.childConversationId, [...childConversationIds]),
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/** When each of these children of the account's conversation was delegated, by child, for those a delegation was recorded under; none asked, none read. */
+export function delegationStartsOf(
+  parent: ConversationTarget,
+  childConversationIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, Date>> {
+  if (childConversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findDelegationStarts({
+      userId: parent.userId,
+      parentConversationId: parent.conversationId,
+      childConversationIds,
+    }),
+    (rows) => new Map(rows.map((row) => [row.childConversationId, row.createdAt])),
+  );
 }
 
 /** The turn statuses under which an agent is still at work, which is when a Stop has something to stop. */

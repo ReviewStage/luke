@@ -55,7 +55,7 @@ import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { WorkingLine } from "./working-time";
+import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
  * agent-tab.tsx -- one coding agent's tab in the side panel: its transcript live, and the message box under it wearing what it runs on and what it published.
@@ -76,8 +76,10 @@ import { WorkingLine } from "./working-time";
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
  * counting how long the run has gone where the service said when it began
- * (`working-time.tsx`), gone the moment it ends so a finished turn ends on
- * its own last line; a
+ * (`working-time.tsx`), as a running worker's row counts beside its
+ * spinner, gone the moment it ends, so a finished turn ends on its own
+ * last line and then one quiet line saying how long it worked and when it
+ * ended; a
  * turn that was stopped or failed ends on one quiet line saying so, with
  * why where the service said. The list
  * keeps to its newest line while it is scrolled there. A link in the
@@ -126,10 +128,12 @@ const WORKER_LEAD: TranscriptLead = {
   grouped: false,
 };
 
-/** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, and the press that opens the worker's tab. */
+/** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
 export interface DelegationDoors {
   models: readonly CatalogModel[] | undefined;
   own?: ModelChoice | undefined;
+  /** When each running worker began, by the call that started it, which its row counts from; none while the tab is off screen, so nothing counts unseen. */
+  starts?: ReadonlyMap<string, number> | undefined;
   /** Opens the worker's tab, by the call that started it, with the task and where the worker stands as the row knows it; none where the row stands in a tab that opens no tab. */
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
 }
@@ -196,6 +200,7 @@ function DelegationRow({
         view.choice === undefined ? undefined : { choice: view.choice, models: doors?.models ?? [] }
       }
       state={part.state}
+      startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
       onOpen={
         onOpen === undefined
@@ -260,7 +265,8 @@ function PlanCard({
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
- * agent's own turns, with a copy of its words under it where it has any.
+ * agent's own turns, with a copy of its words under it where it has any,
+ * ending once it has finished on how long it worked and when it ended.
  */
 function AgentMessage({
   message,
@@ -291,6 +297,7 @@ function AgentMessage({
       </Message>
     );
   }
+  const { createdAt, finishedAt } = message;
   return (
     <Message from={message.role}>
       <MessageContent>
@@ -298,6 +305,9 @@ function AgentMessage({
           {(part) => <AgentPartView part={part} components={components} delegation={delegation} />}
         </TranscriptRows>
       </MessageContent>
+      {moving || createdAt === undefined || finishedAt === undefined ? null : (
+        <WorkedFor startedAt={createdAt} endedAt={finishedAt} />
+      )}
       {words === "" ? null : <CopyMessageAction words={words} />}
     </Message>
   );
@@ -429,6 +439,7 @@ export function AgentTabView({
   published,
   doors,
   startedAt,
+  delegationStarts,
   onStop,
   onOpenSubagent,
   openGitHub,
@@ -444,6 +455,8 @@ export function AgentTabView({
   doors: PublishedDoors;
   /** When the agent's run began, as the working line counts from it; none while the tab is off screen, so nothing counts unseen. */
   startedAt: number | undefined;
+  /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
+  delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
@@ -457,6 +470,7 @@ export function AgentTabView({
         delegation={{
           models,
           own: { model: agent.model, effort: agent.effort },
+          starts: delegationStarts,
           onOpen: onOpenSubagent,
         }}
         reading={transcript.reading}
@@ -549,6 +563,7 @@ export function AgentTab({
       published={published}
       doors={{ openGitHub, copy: copyWithToast }}
       startedAt={shown ? agent.runStartedAt : undefined}
+      delegationStarts={shown ? transcript.delegations : undefined}
       onStop={() => control.onStop(agent.id)}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
@@ -560,10 +575,11 @@ export function AgentTab({
  * One of an agent's workers in a tab of the panel's own: its transcript,
  * read under the agent and the call that started it and followed while
  * the worker runs, drawn as the agent's is with the task it was handed in
- * the plan's place, a working line at its end while it runs, and no head
- * and no composer, since the tab's own label names the task and nothing is
- * sent to a worker. Where the worker stands is what its pages say, which
- * the panel keeps for the tab's glyph (`onStatus`).
+ * the plan's place, a working line at its end while it runs, counting
+ * from the start its pages say, and no head and no composer, since the
+ * tab's own label names the task and nothing is sent to a worker. Where
+ * the worker stands is what its pages say, which the panel keeps for the
+ * tab's glyph (`onStatus`).
  */
 export function AgentSubagentTab({
   agentId,
@@ -603,6 +619,7 @@ export function AgentSubagentTab({
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(status)}
+        startedAt={shown ? transcript.runStartedAt : undefined}
         ended={endLine(status, transcript.failure)}
         onRetry={transcript.onRetry}
         openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}

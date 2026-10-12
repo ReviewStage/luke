@@ -233,6 +233,7 @@ function transcriptResponse(
     cursor: cursorToWire(page.cursor),
     status: page.status,
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
+    ...(page.delegations === undefined ? undefined : { delegations: page.delegations }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),

@@ -20,6 +20,7 @@ import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
+import { eq } from "drizzle-orm";
 import {
   Cause,
   Clock,
@@ -49,10 +50,15 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   sessionKey,
+  TOOL_CALL_SETTLEMENT,
   TURN_ORIGIN,
+  UI_PART_STATE,
+  UI_PART_TYPE,
   userMessage,
   userMetadataOf,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
@@ -1586,6 +1592,135 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.equal(running?.turnId, nextTurn);
         assert.equal(running?.runStartedAt, agent.createdAt + 126_000);
         assert.equal(yield* paged(), agent.createdAt + 126_000);
+      }),
+  );
+
+  it.effect(
+    "a turn's row on the transcript says when the turn began writing, and when it answered once it has, so a finished turn says how long it worked",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask, target, writer } = yield* startedAgent(fakeEve(), undefined);
+        const journalOf = () =>
+          Effect.map(ask(request(AGENT_MESSAGES, owner, { id: agent.id })), (answered) =>
+            readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              answered,
+            ).messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT),
+          );
+        const turnId = randomUUID();
+        const event = { conversationId: sessionKey(target.conversationId), turnId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: 0,
+        });
+        yield* TestClock.adjust(Duration.seconds(5));
+        const began = yield* Clock.currentTimeMillis;
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.STEP_STARTED,
+          sequence: 2,
+          step: 1,
+        });
+        const writing = yield* journalOf();
+        assert.equal(writing?.createdAt, began);
+        assert.equal(writing?.finishedAt, undefined);
+
+        yield* TestClock.adjust(Duration.seconds(78));
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          sequence: 3,
+          message: {
+            id: turnId,
+            role: MESSAGE_ROLE.ASSISTANT,
+            metadata: { author: MESSAGE_AUTHOR.BRAIN },
+            parts: [{ type: UI_PART_TYPE.TEXT, text: "Done.", state: UI_PART_STATE.DONE }],
+          },
+        });
+        const answered = yield* journalOf();
+        assert.equal(answered?.createdAt, began);
+        assert.equal(answered?.finishedAt, began + 78_000);
+      }),
+  );
+
+  it.effect(
+    "the agent's page names each delegation its turn still waits on with when its worker began, from the record's own start, and names none once the call answers",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask, target, writer } = yield* startedAgent(fakeEve(), undefined);
+        const delegations = () =>
+          Effect.map(
+            ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .delegations,
+          );
+        const turnId = randomUUID();
+        const callId = "call-worker-1";
+        const event = { conversationId: sessionKey(target.conversationId), turnId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: 0,
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.STEP_STARTED,
+          sequence: 2,
+          step: 1,
+        });
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+          sequence: 3,
+          callId,
+          name: CODER_TOOL.DELEGATE,
+          input: unparsedWire({ task: "Count the routes." }),
+        });
+        // Requested ahead of its record, the call names no start until the record lands.
+        assert.equal(yield* delegations(), undefined);
+
+        const child = childConversationId(target.conversationId, callId);
+        const choice = { model: SOL, effort: "low" };
+        yield* recordDelegation(target, child, choice, CODER_TOOL.DELEGATE);
+        // The record's own stamp is the database's clock, which the test does not hold.
+        const delegatedAt = new Date(1_800_000_000_000);
+        yield* db
+          .update(conversations)
+          .set({ createdAt: delegatedAt })
+          .where(eq(conversations.id, child));
+        assert.deepEqual(yield* delegations(), [{ callId, startedAt: delegatedAt.getTime() }]);
+
+        yield* writer.consume(target, {
+          ...event,
+          kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+          sequence: 4,
+          callId,
+          name: CODER_TOOL.DELEGATE,
+          settlement: {
+            state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
+            output: unparsedWire({ ...choice, result: "Twelve routes." }),
+          },
+        });
+        assert.equal(yield* delegations(), undefined);
       }),
   );
 

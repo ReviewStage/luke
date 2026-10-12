@@ -284,13 +284,20 @@ const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
  * tool calls with their input and output, step boundaries) and the stored
  * metadata beside them. The parts are carried as the JSON they are rather
  * than declared part by part, because the SDK's vocabulary is the contract
- * and the components that draw them read it directly.
+ * and the components that draw them read it directly. Beside them, when the
+ * row was written and when it closed, which for one of the agent's turns is
+ * when the turn began writing and when it answered or ended, so a tab says
+ * how long a finished turn worked.
  */
 export const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
+  /** Epoch milliseconds the row was first written; absent from a service older than it. */
+  createdAt: EffectSchema.optionalKey(countedNumber),
+  /** Epoch milliseconds the row closed: a turn's answer, or its end; absent while it is still written, and from a service older than it. */
+  finishedAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type CodingAgentMessage = typeof codingAgentMessageSchema.Type;
@@ -359,6 +366,14 @@ export const codingAgentContextSchema = EffectSchema.Struct({
 
 export type CodingAgentContext = typeof codingAgentContextSchema.Type;
 
+/** One delegation under way: the call that started it, and when its worker began, in epoch milliseconds. */
+const codingAgentDelegationStartSchema = EffectSchema.Struct({
+  callId: codingAgentCallIdSchema,
+  startedAt: countedNumber,
+});
+
+export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema.Type;
+
 /**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
@@ -378,6 +393,13 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
   /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The delegations the agent's newest turn still waits on, each by the
+   * call that started it with when its worker began, so a running
+   * subagent's row counts how long it has worked; absent on a worker's
+   * page, while none runs, and from a service older than it.
+   */
+  delegations: EffectSchema.optionalKey(EffectSchema.Array(codingAgentDelegationStartSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),

@@ -16,7 +16,7 @@ import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
-import { turns } from "../server/db/storage-schema";
+import { messages, turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";
@@ -409,6 +409,37 @@ test("the worker reads as running while its turn is parked on it, and as done on
   );
 });
 
+test("a turn says when it ended once it has, and no end while it runs", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls" } },
+      ]),
+    ],
+    standing,
+  );
+  await askedAt(standing, NOW - 78_000);
+  const running = await worked(target, standing);
+  assert.equal(running.startedAt, NOW - 78_000);
+  assert.equal(running.endedAt, undefined);
+
+  const answer = callingStep(FIRST_EVE_TURN, 0, [
+    {
+      toolName: RUN_IN_REPOSITORY_TOOL.name,
+      input: { command: "ls" },
+      output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: "src", stderr: "" },
+    },
+  ]).at(-1);
+  assert.ok(answer);
+  await play([answer, ...answeringStep(FIRST_EVE_TURN, 1, "One folder.")], standing);
+  const done = await worked(target, standing);
+  assert.equal(done.state, PLAN_WORK_STATE.DONE);
+  assert.equal(done.endedAt, NOW);
+});
+
 test("a call the turn ended without answering says it may have run rather than that it failed, and the turn reads as failed", async () => {
   const target = await conversation();
   const standing = standingFor(target);
@@ -472,7 +503,7 @@ test("a worker's call carries the worker's own session, read from its child conv
       listJournals(child.userId, child.conversationId, HOSTED_TOOL_SET, 10),
     );
     assert.ok(read.ok);
-    return read.value.map((row) => row.message);
+    return read.value;
   };
   const projected = async () => {
     const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
@@ -511,6 +542,69 @@ test("a worker's call carries the worker's own session, read from its child conv
   );
   const findings = await projected();
   assert.deepEqual(findings?.at(-1), [PLAN_WORK_PART.TEXT, "Both libraries let an admin revoke."]);
+});
+
+test("a worker's session says when its task began, which a running worker counts from, and when it answered once it has", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, worker.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  // The journal's stamps are the writer's clock, which this database leaves real, so the test sets them.
+  const stamp = (set: { createdAt?: Date; finishedAt?: Date }) =>
+    database.run(
+      db.update(messages).set(set).where(eq(messages.conversationId, child.conversationId)),
+    );
+  const session = async () => {
+    const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
+    const [turn] = await database.run(database.store.turns.named(target.userId, [turnId]));
+    assert.ok(turn);
+    const journal = await database.run(
+      database.store.messages.byClientId(
+        target.userId,
+        turn.conversationId,
+        HOSTED_TOOL_SET,
+        turnId,
+      ),
+    );
+    const journals = await database.run(
+      listJournals(child.userId, child.conversationId, HOSTED_TOOL_SET, 10),
+    );
+    assert.ok(journal.ok && journals.ok);
+    const [drawn] = planWorkOf(
+      turn,
+      journal.value[0]?.message,
+      new Map([[worker.id, journals.value]]),
+    ).parts;
+    assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+    return drawn.session;
+  };
+
+  await stamp({ createdAt: new Date(NOW - 42_000) });
+  const running = await session();
+  assert.equal(running?.startedAt, NOW - 42_000);
+  assert.equal(running?.endedAt, undefined);
+
+  await play(answeringStep(FIRST_EVE_TURN, 1, "Vendor holds two libraries."), childStanding);
+  await stamp({ finishedAt: new Date(NOW) });
+  const answered = await session();
+  assert.equal(answered?.startedAt, NOW - 42_000);
+  assert.equal(answered?.endedAt, NOW);
 });
 
 /** Lines a `show_code` call answered with, as its journal keeps them. */

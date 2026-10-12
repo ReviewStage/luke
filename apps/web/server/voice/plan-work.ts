@@ -31,7 +31,7 @@ import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.j
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { SHOW_CODE_TOOL } from "../hosted/show-code.js";
-import type { StoredTurnRecord } from "../hosted/store/message-reads.js";
+import type { StoredMessageRecord, StoredTurnRecord } from "../hosted/store/message-reads.js";
 
 /**
  * plan-work.ts -- one planning turn as the Work tab draws it, projected from the turn's row and its journal.
@@ -350,28 +350,52 @@ export function workerSessionCallsOf(
   );
 }
 
+/** One of a subagent's turn journals as its session is read: the message, when it opened, and when it closed. */
+export type SubagentJournal = Pick<StoredMessageRecord, "message" | "createdAt" | "finishedAt">;
+
+/**
+ * When a subagent's newest task began and ended, read off that task's
+ * journal: opened as the task began writing, and closed as it answered or
+ * ended; nothing before it opened, and no end while it is still written.
+ */
+function sessionSpanOf(journals: readonly SubagentJournal[]) {
+  const task = journals.at(-1);
+  if (task === undefined) return undefined;
+  return {
+    startedAt: task.createdAt.getTime(),
+    ...(task.finishedAt === undefined ? undefined : { endedAt: task.finishedAt.getTime() }),
+  };
+}
+
 /**
  * One planning turn's work, from its row and its journal (absent before the
- * turn wrote any): its state, when it started, and the newest of its words,
- * reasoning, and calls in the order the model wrote them. A call that started
- * a subagent carries the subagent's own session, read from the journals of
- * its child conversation (`subagents`, by the call's id) and drawn by the same
- * walk, its calls running while the subagent does.
+ * turn wrote any): its state, when it started and, once it ended, when, and
+ * the newest of its words, reasoning, and calls in the order the model wrote
+ * them. A call that started a subagent carries the subagent's own session,
+ * read from the journals of its child conversation (`subagents`, by the
+ * call's id) and drawn by the same walk, its calls running while the
+ * subagent does, with when its newest task began and ended.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
-  subagents: ReadonlyMap<string, readonly StoredUIMessage[]> = new Map(),
+  subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
     const journals = part.type === PLAN_WORK_PART.TOOL ? subagents.get(part.id) : undefined;
     if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
-    return { ...part, session: newest(partsOf(journals, part.state)) };
+    const messages = journals.map((each) => each.message);
+    return {
+      ...part,
+      session: { ...newest(partsOf(messages, part.state)), ...sessionSpanOf(journals) },
+    };
   });
+  const ended = turnState === PLAN_WORK_STATE.RUNNING ? null : turn.settledAt;
   return {
     turnId: turn.id,
     startedAt: (turn.startedAt ?? turn.queuedAt).getTime(),
+    ...(ended === null ? undefined : { endedAt: ended.getTime() }),
     state: turnState,
     ...newest(parts),
   };

@@ -21,6 +21,9 @@
         "startedAt": {
           "type": "number"
         },
+        "endedAt": {
+          "type": "number"
+        },
         "state": {
           "type": "string",
           "enum": [
@@ -253,6 +256,12 @@
                             }
                           ]
                         }
+                      },
+                      "startedAt": {
+                        "type": "number"
+                      },
+                      "endedAt": {
+                        "type": "number"
                       }
                     },
                     "required": [

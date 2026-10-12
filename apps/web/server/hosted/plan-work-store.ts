@@ -4,11 +4,12 @@ import {
   type PlanWorkAnswer,
 } from "@sidecar/hosted/planning-view";
 import { Effect, Option } from "effect";
-import { isStoredToolPart, type StoredUIMessage, storedToolName } from "../core.js";
+import { isStoredToolPart, storedToolName } from "../core.js";
 import {
   callsSendingToEarlierTasks,
   planWorkOf,
   SUBAGENT_JOURNALS,
+  type SubagentJournal,
   workerSessionCallsOf,
 } from "../voice/plan-work.js";
 import { childConversationId } from "./brain-host/ids.js";
@@ -61,7 +62,7 @@ const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnR
     callsSendingToEarlierTasks(message).length === 0
       ? []
       : yield* workerJournalsOf(userId, turn.conversationId);
-  const subagents = new Map<string, readonly StoredUIMessage[]>();
+  const subagents = new Map<string, readonly SubagentJournal[]>();
   for (const [callId, sessionCallId] of workerSessionCallsOf(message, earlier)) {
     const session = yield* listJournals(
       userId,
@@ -69,11 +70,7 @@ const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnR
       HOSTED_TOOL_SET,
       SUBAGENT_JOURNALS,
     );
-    if (session.ok)
-      subagents.set(
-        callId,
-        session.value.map((row) => row.message),
-      );
+    if (session.ok) subagents.set(callId, session.value);
   }
   return { turn, message, subagents };
 });

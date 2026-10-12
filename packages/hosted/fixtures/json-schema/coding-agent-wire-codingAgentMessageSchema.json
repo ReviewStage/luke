@@ -22,6 +22,14 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true
+    },
+    "createdAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "finishedAt": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [

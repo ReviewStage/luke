@@ -27,6 +27,14 @@
           "metadata": {
             "type": "object",
             "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "finishedAt": {
+            "type": "number",
+            "minimum": 0
           }
         },
         "required": [
@@ -53,6 +61,28 @@
     "runStartedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "delegations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "startedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "callId",
+          "startedAt"
+        ],
+        "additionalProperties": false
+      }
     },
     "title": {
       "anyOf": [

@@ -1040,7 +1040,7 @@ function TabContent({
     return worker === undefined ? (
       <p className="side-panel-empty">Reading the subagent…</p>
     ) : (
-      <SubagentTab key={tab.subagent} worker={worker} />
+      <SubagentTab key={tab.subagent} worker={worker} shown={shown} />
     );
   }
   switch (tab) {

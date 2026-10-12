@@ -3,16 +3,22 @@ import { Clock, Duration, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { ReactNode } from "react";
 import { Shimmer } from "../ai-elements/shimmer";
+import { cn } from "../ai-elements/utils";
 import { rendererRuntime } from "../renderer-runtime";
+import { momentText } from "./plan-time";
 
 /**
- * working-time.tsx -- how long an agent has been working: the compact duration a working line counts in, and the clock it counts on once a second.
+ * working-time.tsx -- how long an agent has been working: the compact duration a working line counts in, the clock it counts on once a second, and the line a finished turn ends on.
  *
  * The count is the line's, never a row of its own: a transcript's
- * shimmering "Working…" says it after the word, and the Work tab's running
- * turn says it after its state. The clock is one atom every count reads,
- * run only while some count stands on screen, so a run that ended, a tab
- * that closed, or a line that knows no start leaves nothing ticking.
+ * shimmering "Working…" says it after the word, the Work tab's running
+ * turn says it after its state, and a running subagent's row says it
+ * beside its spinner. The clock is one atom every count reads, run only
+ * while some count stands on screen, so a run that ended, a tab that
+ * closed, or a line that knows no start leaves nothing ticking. Once a
+ * turn has finished, the count gives way to one quiet line at its end
+ * saying how long it worked and when it ended, as Codex and Cursor end a
+ * turn: "Worked for 1m 18s · 3:42 PM", the full date and time on hover.
  */
 
 /** How often a count moves: the finest unit it says. */
@@ -25,6 +31,9 @@ const HOUR_MINUTES = 60;
 /** What a transcript's last line says while its agent works. */
 const WORKING_LINE = "Working…";
 
+/** What separates how long a finished turn worked from when it ended. */
+const WORKED_SEPARATOR = " · ";
+
 /** How long a run has gone, as devtools count it: "42s" under a minute, "1m 12s" under an hour, and "1h 3m" past it. */
 export function workingTime(elapsedMs: number): string {
   const seconds = Math.floor(Math.max(0, elapsedMs) / SECOND_MS);
@@ -32,6 +41,15 @@ export function workingTime(elapsedMs: number): string {
   const minutes = Math.floor(seconds / MINUTE_SECONDS);
   if (minutes < HOUR_MINUTES) return `${minutes}m ${seconds % MINUTE_SECONDS}s`;
   return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
+}
+
+/** What a finished turn's last line says: how long it worked, and the time of day it ended in the developer's own locale and zone. */
+export function workedForText(startedAt: number, endedAt: number, locale?: string): string {
+  const ended = new Date(endedAt).toLocaleTimeString(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Worked for ${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 
 /** The time now, and again each second: what a count is read against. */
@@ -48,13 +66,41 @@ const workingNowAtom = rendererRuntime.atom(workingClock);
  * moving each second. Note that it is a timer to a reader rather than a
  * live region, because a count announced each second drowns everything else.
  */
-export function WorkingTime({ startedAt }: { startedAt: number }): ReactNode {
+export function WorkingTime({
+  startedAt,
+  className = "ml-1.5",
+}: {
+  startedAt: number;
+  /** Where it stands off the word before it: a word's breadth after a working word, unless said otherwise. */
+  className?: string;
+}): ReactNode {
   const now = AsyncResult.value(useAtomValue(workingNowAtom));
   if (Option.isNone(now)) return null;
   return (
-    <span className="ml-1.5 text-muted-foreground tabular-nums" role="timer" aria-live="off">
+    <span
+      className={cn("text-muted-foreground tabular-nums", className)}
+      role="timer"
+      aria-live="off"
+    >
       {workingTime(now.value - startedAt)}
     </span>
+  );
+}
+
+/** The quiet line a finished turn ends on: how long it worked and when it ended, the full date and time on hover. */
+export function WorkedFor({
+  startedAt,
+  endedAt,
+}: {
+  startedAt: number;
+  endedAt: number;
+}): ReactNode {
+  return (
+    <p className="m-0 text-[11.5px] text-muted-foreground tabular-nums" data-worked="">
+      <time dateTime={new Date(endedAt).toISOString()} title={momentText(endedAt)}>
+        {workedForText(startedAt, endedAt)}
+      </time>
+    </p>
   );
 }
 

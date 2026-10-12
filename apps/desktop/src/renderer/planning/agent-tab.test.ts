@@ -178,6 +178,7 @@ function tabMarkup(
       agent: { ...AGENT, status },
       models: undefined,
       startedAt: undefined,
+      delegationStarts: undefined,
       readModels: ignore,
       transcript: {
         messages: [PLAN, TURN],
@@ -185,6 +186,8 @@ function tabMarkup(
         usage: undefined,
         turnUsage,
         context: undefined,
+        runStartedAt: undefined,
+        delegations: new Map(),
         reading: false,
         failed: false,
         onRetry: ignore,
