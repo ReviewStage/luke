@@ -213,7 +213,7 @@ test("a file shortened since its snippet opens on the window holding its last li
   );
 });
 
-test("the heading's GitHub button names the branch the file was read on and opens it there, its lit lines marked, and stands only over a file read", async () => {
+test("the heading's GitHub button names the branch the file was read on and opens it there, its lit lines marked where it still has them, and stands only over a file read", async () => {
   watchedRows();
   const tab = mounted(numberedFile(1_200));
   const github = () => tab.container.querySelector<HTMLButtonElement>(".file-tab-github");
@@ -231,6 +231,16 @@ test("the heading's GitHub button names the branch the file was read on and open
     "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L600-L604",
     "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L7",
     "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts",
+  ]);
+  const shortened = mounted(numberedFile(20));
+  await shortened.draw({ path: "src/invite.ts", range: { startLine: 21, endLine: 22 }, opened: 1 });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => shortened.container.querySelector<HTMLButtonElement>(".file-tab-github")?.click());
+  assert.deepEqual(shortened.opened, [
+    "https://github.com/acme/relay/blob/release/2026/src/invite.ts",
   ]);
   const refused = mounted(() => ({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }));
   await refused.draw({ path: "src/moved.ts", range: undefined, opened: 1 });

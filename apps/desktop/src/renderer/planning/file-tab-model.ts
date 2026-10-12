@@ -88,10 +88,14 @@ export function snippetOf(
   return (opened ?? ofFile.at(-1))?.code;
 }
 
-/** The file's page on GitHub at the branch its lines were read on, its lit lines marked where it has them. */
+/**
+ * The file's page on GitHub at the branch its lines were read on, its lit
+ * lines marked where it still has them: a file shortened past them, which
+ * the tab lights nothing of, opens at its top.
+ */
 export function fileUrl(held: FileLines, file: OpenFile): string {
   const page = `https://github.com/${held.repository}/blob/${githubPath(held.branch)}/${githubPath(file.path)}`;
-  if (file.range === undefined) return page;
+  if (file.range === undefined || file.range.startLine > held.lineCount) return page;
   const { startLine, endLine } = file.range;
   return startLine === endLine ? `${page}#L${startLine}` : `${page}#L${startLine}-L${endLine}`;
 }
