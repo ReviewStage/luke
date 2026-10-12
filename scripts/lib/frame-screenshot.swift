@@ -67,16 +67,28 @@ func aerialURL() -> URL {
 }
 
 /// The aerial's first frame, read from the cache or else from Apple's servers into it.
+///
+/// Note that we write the cache beside itself and move it into place, because
+/// a write cut short must not leave a file that every later run trusts, and
+/// we read an unreadable cache as a miss for the same reason.
 func wallpaper(cache: URL) async throws -> CGImage {
-    if FileManager.default.fileExists(atPath: cache.path) { return try loadImage(cache) }
+    if let cached = try? loadImage(cache) { return cached }
     let generator = AVAssetImageGenerator(asset: AVURLAsset(url: aerialURL()))
     generator.appliesPreferredTrackTransform = true
     generator.requestedTimeToleranceBefore = .zero
     generator.requestedTimeToleranceAfter = .zero
     let frame = try await generator.image(at: .zero).image
-    try FileManager.default.createDirectory(
-        at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try writePNG(frame, to: cache)
+    let files = FileManager.default
+    try files.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let partial = cache.deletingLastPathComponent()
+        .appendingPathComponent(".\(cache.lastPathComponent).\(ProcessInfo.processInfo.processIdentifier)")
+    defer { try? files.removeItem(at: partial) }
+    try writePNG(frame, to: partial)
+    if files.fileExists(atPath: cache.path) {
+        _ = try files.replaceItemAt(cache, withItemAt: partial)
+    } else {
+        try files.moveItem(at: partial, to: cache)
+    }
     return frame
 }
 
