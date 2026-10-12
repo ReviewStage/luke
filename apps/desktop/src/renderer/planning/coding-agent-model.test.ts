@@ -39,6 +39,7 @@ import {
   showsPublishedRow,
   startFailureNote,
   unreadSentLines,
+  unsearchedModels,
 } from "./coding-agent-model";
 
 function message(id: string, text: string): CodingAgentMessage {
@@ -224,7 +225,7 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
   );
 });
 
-test("the menus list the models by provider, Anthropic first, and newest first within each, the catalog's order kept between one version's models", () => {
+test("the menus list the models by provider, Anthropic first, by lead family within each and the rest after, newest first within a family, the catalog's order kept between one version's models", () => {
   const model = (
     id: string,
     provider: typeof MODEL_PROVIDER.ANTHROPIC | typeof MODEL_PROVIDER.OPENAI,
@@ -250,14 +251,64 @@ test("the menus list the models by provider, Anthropic first, and newest first w
     [
       "anthropic/claude-opus-5.5-fast",
       "anthropic/claude-opus-5.5",
+      "anthropic/claude-opus-4.5",
       "anthropic/claude-fable-5.1",
       "anthropic/claude-fable-5",
-      "anthropic/claude-opus-4.5",
       "openai/gpt-6-astra",
       "openai/gpt-5.6-luna",
       "openai/gpt-5.1-codex-max",
     ],
   );
+});
+
+test("before a search the menus list the newest of each lead family by its version's numbers, and the chosen model however old; a catalog with no lead family lists everything", () => {
+  const model = (id: string) => ({
+    id,
+    name: id,
+    provider: id.startsWith("openai/") ? MODEL_PROVIDER.OPENAI : MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+  });
+  const models = [
+    model("anthropic/claude-opus-5"),
+    model("anthropic/claude-opus-5.5"),
+    model("anthropic/claude-opus-5.1"),
+    model("anthropic/claude-opus-5.5-fast"),
+    model("anthropic/claude-sonnet-4.5"),
+    model("anthropic/claude-haiku-5"),
+    model("openai/gpt-6-astra"),
+    model("openai/gpt-6.1-astra"),
+    model("openai/gpt-6-astra-mini"),
+    model("openai/gpt-5.6-luna"),
+    model("openai/gpt-5.10-sol"),
+    model("openai/gpt-5.9-sol"),
+  ];
+  const listed = (chosen?: string) =>
+    orderedModels(models)
+      .map((each) => each.id)
+      .filter((id) => unsearchedModels(models, chosen).has(id));
+
+  assert.deepEqual(listed(), [
+    "anthropic/claude-opus-5.5",
+    "anthropic/claude-sonnet-4.5",
+    "anthropic/claude-haiku-5",
+    "openai/gpt-6.1-astra",
+    "openai/gpt-5.10-sol",
+    "openai/gpt-5.6-luna",
+  ]);
+  assert.deepEqual(listed("anthropic/claude-opus-5"), [
+    "anthropic/claude-opus-5.5",
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-4.5",
+    "anthropic/claude-haiku-5",
+    "openai/gpt-6.1-astra",
+    "openai/gpt-5.10-sol",
+    "openai/gpt-5.6-luna",
+  ]);
+  const unled = [model("openai/gpt-6-astra-mini"), model("openai/gpt-5.1-codex-max")];
+  assert.deepEqual([...unsearchedModels(unled, undefined)].sort(), [
+    "openai/gpt-5.1-codex-max",
+    "openai/gpt-6-astra-mini",
+  ]);
 });
 
 const PULL_REQUEST: CodingAgentPullRequest = {

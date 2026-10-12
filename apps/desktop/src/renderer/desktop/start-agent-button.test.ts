@@ -451,6 +451,36 @@ test("an Extra high carried to a model listing low, medium, and high lands on Hi
   assert.deepEqual(writes, [{ model: "anthropic/claude-sonnet-5.5", effort: "high" }]);
 });
 
+test("the menu lists the newest of each family until a search, keeps an older default on screen, and finds older versions and models of no family only by search", async () => {
+  const model = (id: string, name: string, provider: CatalogModel["provider"]) => ({
+    id,
+    name,
+    provider,
+    efforts: ["high"],
+  });
+  const models: readonly CatalogModel[] = [
+    ...MODELS,
+    model("anthropic/claude-opus-5", "Claude Opus 5", MODEL_PROVIDER.ANTHROPIC),
+    model("anthropic/claude-opus-5.1", "Claude Opus 5.1", MODEL_PROVIDER.ANTHROPIC),
+    model("openai/gpt-6-sol", "GPT-6 Sol", MODEL_PROVIDER.OPENAI),
+    model("openai/gpt-5.1-codex-max", "GPT-5.1 Codex Max", MODEL_PROVIDER.OPENAI),
+  ];
+  const latest = await openMenu(mount({ ...standing().control, models }));
+  assert.deepEqual(rowsOf(latest), ["Opus 5.5High", "Fable 5", "GPT-6.1 Sol"]);
+
+  const { control } = standing({ model: "anthropic/claude-opus-5", effort: "high" });
+  const menu = await openMenu(mount({ ...control, models }));
+  assert.deepEqual(rowsOf(menu), ["Opus 5.5", "Opus 5High", "Fable 5", "GPT-6.1 Sol"]);
+  const search = menu.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
+  assert.ok(search);
+  type(search, "opus");
+  assert.deepEqual(rowsOf(menu), ["Opus 5.5", "Opus 5.1", "Opus 5High"]);
+  type(search, "codex");
+  assert.deepEqual(rowsOf(menu), ["GPT-5.1 Codex Max"]);
+  type(search, "");
+  assert.deepEqual(rowsOf(menu), ["Opus 5.5", "Opus 5High", "Fable 5", "GPT-6.1 Sol"]);
+});
+
 test("a change the service refused gives way to the default it still holds, on the checked row and the hover line alike", async () => {
   const { control } = standing();
   let refuse = false;

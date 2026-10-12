@@ -36,6 +36,13 @@ const MODELS: readonly CatalogModel[] = [
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "xhigh"],
   },
+  // An older Sonnet, which the menu lists only once a search reaches it.
+  {
+    id: "anthropic/claude-sonnet-5",
+    name: "Claude Sonnet 5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
   {
     id: "anthropic/claude-opus-5.5-fast",
     name: "Claude Opus 5.5 (Fast)",
@@ -179,7 +186,7 @@ test("the page reads the default and the models as it opens, and draws the model
   ]);
 });
 
-test("the model menu opens on its search, lists every model under its harness's mark newest first, and a pick keeps the effort the model lists, else its first", async () => {
+test("the model menu opens on its search, lists the newest of each family under its harness's mark, and a pick keeps the effort the model lists, else its first", async () => {
   const page = await mount();
 
   open(page);
@@ -212,14 +219,18 @@ test("the model menu opens on its search, lists every model under its harness's 
   ]);
 });
 
-test("the search filters the models by name, by the catalog's own name, and by provider", async () => {
+test("the search filters every model, older versions included, by name, by the catalog's own name, and by provider", async () => {
   const page = await mount();
   open(page);
 
   type(searchField(), "sonnet");
-  assert.deepEqual(options(page), ["Sonnet 5.5"]);
+  assert.deepEqual(options(page), ["Sonnet 5.5", "Sonnet 5"]);
   type(searchField(), "claude");
-  assert.deepEqual(options(page), ["Opus 5.5", "Sonnet 5.5"], "by the catalog's own name");
+  assert.deepEqual(
+    options(page),
+    ["Opus 5.5", "Sonnet 5.5", "Sonnet 5"],
+    "by the catalog's own name",
+  );
   type(searchField(), "openai");
   assert.deepEqual(options(page), ["GPT-6.1 Sol"]);
   type(searchField(), "llama");
