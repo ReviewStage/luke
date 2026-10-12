@@ -6,6 +6,19 @@ import {
   type InboxReplyKind,
 } from "@sidecar/hosted/inbox-wire";
 import { Fragment, useState } from "react";
+import { ConversationEmptyState } from "../ai-elements/conversation";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
+import {
+  PROMPT_INPUT_STATUS,
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "../ai-elements/prompt-input";
+import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { AgentGlyph } from "./agent-tab";
 import { agentTabLabel } from "./coding-agent-model";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, settledWords } from "./inbox-model";
@@ -18,28 +31,33 @@ import type { PlanInboxControl } from "./use-plan-inbox";
 /**
  * inbox-board.tsx -- the plan's Inbox tab: everything its coding agents need of the developer, one card each, answered in place and handed back to the agent that posted it.
  *
- * A card names the agent that posted it and when, its title, the context
- * the agent wrote in Markdown, and the control its kind asks for: the
- * options of a choice, one perhaps recommended, with room for a note or an
- * answer of the developer's own; Approve and Decline for an approval; a box
- * for an open question; Done and Can't do this for a task the developer does
- * by hand. A card whose agent need not hear back says so, since answering
- * it messages nobody. What waits stands first; what is settled, answered or
- * taken back by its agent, folds under it. The agent's name opens its tab.
- * Every card shows words an agent wrote, so the board is out of the session
- * recording (`ph-no-capture`).
+ * The tab is drawn from the transcript's own pieces, so an item reads as
+ * one more card of the agent's: each open item is a card the shape of the
+ * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
+ * and when, its title, the context the agent wrote in Markdown, and the
+ * agent composer's box (`ai-elements/prompt-input.tsx`) for the answer.
+ * A choice's options stand above the box, one perhaps recommended; an
+ * approval and a task are answered by two presses in the box's footer, the
+ * one that holds back and the one that goes ahead, as a confirm's are; a
+ * question and a choice by the box's own Send. A card whose agent need not
+ * hear back says so, since answering it messages nobody. What waits stands
+ * first; what is settled, answered or taken back by its agent, folds under
+ * one line as a finished turn's steps fold, each a closed card saying what
+ * came of it. The tab's own label names it and counts what waits, so no
+ * head repeats either. The agent's name opens its tab. Every card shows
+ * words an agent wrote, so the board is out of the session recording
+ * (`ph-no-capture`).
  */
 
 /** What an empty inbox says. */
-const NOTHING_WAITS =
-  "Nothing waits on you. When a coding agent needs a decision or something done by hand, it lands here instead of in its transcript.";
+const NOTHING_WAITS = "Nothing is waiting on you.";
 
-/** What a card's note box asks for, by the item's kind. */
+/** What a card's box asks for, by the item's kind. */
 const NOTE_PLACEHOLDER = {
   [INBOX_KIND.CHOICE]: "Add a note, or answer in your own words",
-  [INBOX_KIND.APPROVAL]: "Add a note for the agent (optional)",
+  [INBOX_KIND.APPROVAL]: "Add a note for the agent",
   [INBOX_KIND.QUESTION]: "Your answer",
-  [INBOX_KIND.TASK]: "Add a note for the agent (optional)",
+  [INBOX_KIND.TASK]: "Add a note for the agent",
 } as const;
 
 /** The two presses each kind answered by a press offers: the one that holds back, then the one that goes ahead. */
@@ -54,7 +72,10 @@ const PRESSES = {
   ],
 } as const;
 
-/** Who posted the item and when, the name opening the agent's tab. */
+/** What the box's Send is called. */
+const SEND = "Send to agent";
+
+/** Who posted the item and when: the agent's mark, its name opening its tab, and how long ago. */
 function Poster({
   item,
   agent,
@@ -69,19 +90,27 @@ function Poster({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   return (
-    <div className="inbox-asker">
+    <div className="flex items-center gap-2 px-3 pt-2 text-muted-foreground">
       {agent === undefined ? null : <AgentGlyph agent={agent} />}
-      <button type="button" className="inbox-agent" onClick={() => onOpenAgent(item.agentId)}>
+      <button
+        type="button"
+        className="plan-edit-link font-medium"
+        onClick={() => onOpenAgent(item.agentId)}
+      >
         {agent === undefined ? "Coding agent" : agentTabLabel(agent, models)}
       </button>
-      <time className="inbox-time" title={momentText(item.postedAt)}>
+      <time
+        className="tab-card-time"
+        dateTime={new Date(item.postedAt).toISOString()}
+        title={momentText(item.postedAt)}
+      >
         {sinceText(item.postedAt, now)}
       </time>
     </div>
   );
 }
 
-/** A choice's options, each pressed to pick it, the agent's recommendation marked. */
+/** A choice's options, each pressed to pick it, the agent's recommendation said after its label. */
 function ChoiceOptions({
   item,
   draft,
@@ -94,7 +123,7 @@ function ChoiceOptions({
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   return (
-    <div className="inbox-options">
+    <div className="flex flex-col gap-1">
       {(item.options ?? []).map((option) => {
         const picked = draft.choice === option.label;
         return (
@@ -106,14 +135,14 @@ function ChoiceOptions({
             disabled={disabled}
             onClick={() => onDraft({ ...draft, choice: picked ? undefined : option.label })}
           >
-            <span className="inbox-option-label">
-              {option.label}
+            <span>
+              <span className="font-medium">{option.label}</span>
               {item.recommended === option.label ? (
-                <span className="inbox-recommended">Recommended</span>
+                <span className="text-muted-foreground"> · Recommended</span>
               ) : null}
             </span>
             {option.detail === undefined ? null : (
-              <span className="inbox-option-detail">{option.detail}</span>
+              <span className="text-muted-foreground">{option.detail}</span>
             )}
           </button>
         );
@@ -122,7 +151,7 @@ function ChoiceOptions({
   );
 }
 
-/** The presses that send a card: its kind's two where it is answered by a press, Send for the rest. */
+/** The presses that send a card, in the box's footer: its kind's two where it is answered by a press, Send for the rest. */
 function SendPresses({
   item,
   draft,
@@ -137,7 +166,7 @@ function SendPresses({
   if (item.kind === INBOX_KIND.APPROVAL || item.kind === INBOX_KIND.TASK) {
     const [back, ahead] = PRESSES[item.kind];
     return (
-      <div className="inbox-presses">
+      <div className="flex shrink-0 gap-(--control-gap)">
         <button
           type="button"
           className="toolbar-button"
@@ -152,27 +181,25 @@ function SendPresses({
           disabled={sending}
           onClick={() => onAnswer(ahead.reply)}
         >
-          {ahead.label}
+          <BusyLabel busy={sending} label="Sending">
+            {ahead.label}
+          </BusyLabel>
         </button>
       </div>
     );
   }
-  const ready = inboxReply(item, draft) !== undefined;
   return (
-    <div className="inbox-presses">
-      <button
-        type="button"
-        className="primary-button"
-        disabled={sending || !ready}
-        onClick={() => onAnswer()}
-      >
-        {sending ? "Sending…" : "Send to agent"}
-      </button>
-    </div>
+    <Tooltip label={SEND}>
+      <PromptInputSubmit
+        aria-label={SEND}
+        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
+        disabled={sending || inboxReply(item, draft) === undefined}
+      />
+    </Tooltip>
   );
 }
 
-/** One item waiting on the developer, answered in place. Note that the card is keyed by the item's revision, so a change of the agent's starts it afresh. */
+/** One item waiting on the developer, answered in place. */
 function OpenCard({
   item,
   agent,
@@ -193,75 +220,88 @@ function OpenCard({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const pressed = item.kind === INBOX_KIND.APPROVAL || item.kind === INBOX_KIND.TASK;
   return (
-    <article className="inbox-card" data-item-id={item.id}>
+    <article
+      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
+      data-item-id={item.id}
+    >
       <Poster item={item} agent={agent} models={models} now={now} onOpenAgent={onOpenAgent} />
-      <h3 className="inbox-title">{cardTitle(item.title)}</h3>
-      {item.details === undefined || item.details.trim() === "" ? null : (
-        <div className="inbox-details">
-          <TranscriptWords text={item.details} />
-        </div>
-      )}
-      {item.kind === INBOX_KIND.CHOICE ? (
-        <ChoiceOptions item={item} draft={draft} disabled={sending} onDraft={setDraft} />
-      ) : null}
-      <textarea
-        className="plan-field-input inbox-note"
-        aria-label={NOTE_PLACEHOLDER[item.kind]}
-        placeholder={NOTE_PLACEHOLDER[item.kind]}
-        value={draft.note}
-        disabled={sending}
-        onChange={(event) => setDraft({ ...draft, note: event.target.value })}
-      />
-      <div className="inbox-foot">
-        {note === undefined ? (
-          item.needsReply ? null : (
-            <p className="inbox-quiet">The agent isn't messaged; it reads this when it checks.</p>
-          )
-        ) : (
-          <p className="inbox-failure" role="alert">
+      <div className="flex flex-col gap-2 px-3 pt-1 pb-3 text-[13px] leading-normal">
+        <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
+          {cardTitle(item.title)}
+        </h3>
+        {item.details === undefined || item.details.trim() === "" ? null : (
+          <div data-inbox-details="">
+            <TranscriptWords text={item.details} />
+          </div>
+        )}
+        {item.kind === INBOX_KIND.CHOICE ? (
+          <ChoiceOptions item={item} draft={draft} disabled={sending} onDraft={setDraft} />
+        ) : null}
+        <PromptInput
+          // A press answers an approval or a task, so its box's Enter sends nothing.
+          onSubmit={() => (pressed ? undefined : onAnswer(item, draft))}
+        >
+          <PromptInputTextarea
+            aria-label={NOTE_PLACEHOLDER[item.kind]}
+            placeholder={NOTE_PLACEHOLDER[item.kind]}
+            value={draft.note}
+            disabled={sending}
+            onChange={(event) => setDraft({ ...draft, note: event.currentTarget.value })}
+          />
+          <PromptInputFooter>
+            <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
+              {item.needsReply ? null : (
+                <span data-inbox-quiet="">Answering doesn't message the agent.</span>
+              )}
+            </PromptInputTools>
+            <SendPresses
+              item={item}
+              draft={draft}
+              sending={sending}
+              onAnswer={(press) => onAnswer(item, draft, press)}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+        {note === undefined ? null : (
+          <p className="agent-note" role="alert">
             {note}
           </p>
         )}
-        <SendPresses
-          item={item}
-          draft={draft}
-          sending={sending}
-          onAnswer={(press) => onAnswer(item, draft, press)}
-        />
       </div>
     </article>
   );
 }
 
-/** One item settled: what the developer answered, or why its agent took it back. */
+/** One item settled, as a closed card: what came of it before its title, and the note and the item's context inside. */
 function SettledCard({
   item,
   agent,
-  models,
-  now,
-  onOpenAgent,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
-  models: CodingAgentsControl["models"];
-  now: number;
-  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const words = settledWords(item);
   return (
-    <article className="inbox-card inbox-card-settled" data-item-id={item.id}>
-      <Poster item={item} agent={agent} models={models} now={now} onOpenAgent={onOpenAgent} />
-      <h3 className="inbox-title">{cardTitle(item.title)}</h3>
-      <p className="inbox-answer">
-        <strong>{words.lead}</strong>
-        {words.note === undefined ? null : ` · ${words.note}`}
-      </p>
-    </article>
+    <Plan data-item-id={item.id} aria-label={cardTitle(item.title)}>
+      <PlanHeader>
+        {agent === undefined ? null : <AgentGlyph agent={agent} />}
+        <PlanTitle label={words.lead}>{cardTitle(item.title)}</PlanTitle>
+      </PlanHeader>
+      <PlanContent className="flex flex-col gap-2">
+        {words.note === undefined ? null : <p className="m-0">{words.note}</p>}
+        {item.details === undefined ? null : (
+          <div className="text-muted-foreground">
+            <TranscriptWords text={item.details} />
+          </div>
+        )}
+      </PlanContent>
+    </Plan>
   );
 }
 
-/** The board: what waits on the developer, then what is settled. */
+/** The board: what waits on the developer, then what is settled under one fold. */
 export function InboxBoard({
   control,
   agents,
@@ -274,28 +314,33 @@ export function InboxBoard({
   const now = useMinute();
   const { open, settled } = control.board;
   const agentOf = (item: InboxItem) => agents.agents?.find((agent) => agent.id === item.agentId);
-  const empty = open.length === 0 && settled.length === 0;
+  if (open.length === 0 && settled.length === 0) {
+    return (
+      <ConversationEmptyState>
+        {control.failed ? (
+          <>
+            <p className="m-0" role="alert">
+              The inbox could not be read.
+            </p>
+            <button type="button" className="toolbar-button" onClick={control.onRetry}>
+              Try again
+            </button>
+          </>
+        ) : control.reading ? (
+          <Spinner label="Loading inbox" size={SPINNER_SIZE.REGION} />
+        ) : (
+          <p className="m-0">{NOTHING_WAITS}</p>
+        )}
+      </ConversationEmptyState>
+    );
+  }
   return (
-    <div className="inbox-board ph-no-capture">
-      <header className="inbox-head">
-        <h2 className="inbox-heading">Inbox</h2>
-        <p className="inbox-count">
-          {open.length === 0 ? "Nothing waiting" : `${open.length} waiting on you`}
-        </p>
-      </header>
-      {control.failed ? (
-        <p className="side-panel-empty" role="alert">
-          The inbox could not be read.{" "}
-          <button type="button" className="toolbar-button" onClick={control.onRetry}>
-            Try again
-          </button>
-        </p>
-      ) : control.reading ? (
-        <p className="side-panel-empty">Reading the inbox…</p>
-      ) : empty ? (
-        <p className="side-panel-empty">{NOTHING_WAITS}</p>
+    <div className="inbox-board ph-no-capture min-h-0 flex-1 space-y-3 overflow-y-auto pt-(--section-gap) pb-5">
+      {open.length === 0 ? (
+        <p className="m-0 text-[12.5px] text-muted-foreground">{NOTHING_WAITS}</p>
       ) : null}
       {open.map((item) => (
+        // Note that the card is keyed by the item's revision inside, so a change of the agent's starts it afresh.
         <Fragment key={item.id}>
           <OpenCard
             key={item.revision}
@@ -311,20 +356,26 @@ export function InboxBoard({
         </Fragment>
       ))}
       {settled.length === 0 ? null : (
-        <details className="inbox-settled">
-          <summary>Settled · {settled.length}</summary>
-          {settled.map((item) => (
-            <SettledCard
-              key={item.id}
-              item={item}
-              agent={agentOf(item)}
-              models={agents.models}
-              now={now}
-              onOpenAgent={onOpenAgent}
-            />
-          ))}
-        </details>
+        <Fold className="text-[12.5px]" data-inbox-settled="">
+          <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+            <FoldChevron />
+            <span>Settled · {settled.length}</span>
+          </FoldSummary>
+          <FoldBody className="flex flex-col gap-2 pt-1">
+            {settled.map((item) => (
+              <SettledCard key={item.id} item={item} agent={agentOf(item)} />
+            ))}
+          </FoldBody>
+        </Fold>
       )}
+      {control.failed ? (
+        <p className="agent-note" role="alert">
+          The inbox could not be read.{" "}
+          <button type="button" className="toolbar-button" onClick={control.onRetry}>
+            Try again
+          </button>
+        </p>
+      ) : null}
     </div>
   );
 }

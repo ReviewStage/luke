@@ -138,14 +138,15 @@ function press(control: Element | null | undefined): void {
 }
 
 function card(page: HTMLElement, id: string): HTMLElement {
-  const found = page.querySelector<HTMLElement>(`.inbox-card[data-item-id="${id}"]`);
+  const found = page.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
   assert.ok(found, `no card for ${id}`);
   return found;
 }
 
+/** The button a reader hears by these words: its own, or its label where it is a glyph. */
 function buttonNamed(scope: HTMLElement, words: string): HTMLButtonElement {
   const button = [...scope.querySelectorAll("button")].find(
-    (each) => each.textContent?.trim() === words,
+    (each) => each.textContent?.trim() === words || each.getAttribute("aria-label") === words,
   );
   assert.ok(button, `no ${words} button`);
   return button;
@@ -201,7 +202,7 @@ it.effect(
 
       assert.ok(page.querySelector(".inbox-board.ph-no-capture"), "the recording leaves it out");
       assert.deepEqual(
-        [...page.querySelectorAll(".inbox-card .inbox-title")].map((title) => title.textContent),
+        [...page.querySelectorAll("article [data-inbox-title]")].map((title) => title.textContent),
         [
           "Which queue sends the invitation emails?",
           "Require a review on main",
@@ -209,17 +210,17 @@ it.effect(
         ],
       );
       assert.deepEqual(reads, [INBOX_CURSOR_START, "2000.2", "3000.3"], "each read past the last");
-      assert.equal(page.querySelector(".inbox-count")?.textContent, "3 waiting on you");
+      assert.equal(page.querySelectorAll("article[data-item-id]").length, 3);
       assert.deepEqual(
         [...card(page, QUEUE.id).querySelectorAll(".inbox-option")].map((each) => each.textContent),
-        ["Postgres outboxRecommendedNo new service.", "Redis"],
+        ["Postgres outbox · RecommendedNo new service.", "Redis"],
       );
       assert.equal(
-        card(page, QUEUE.id).querySelector(".inbox-details")?.textContent,
+        card(page, QUEUE.id).querySelector("[data-inbox-details]")?.textContent,
         "The repo already runs Postgres.",
       );
-      assert.ok(card(page, SETTINGS.id).querySelector(".inbox-quiet"));
-      assert.equal(card(page, QUEUE.id).querySelector(".inbox-quiet"), null);
+      assert.ok(card(page, SETTINGS.id).querySelector("[data-inbox-quiet]"));
+      assert.equal(card(page, QUEUE.id).querySelector("[data-inbox-quiet]"), null);
       assert.ok(buttonNamed(card(page, later.id), "Approve"));
     }),
 );
@@ -252,12 +253,17 @@ it.effect(
         },
       );
       assert.ok((answer?.clientKey ?? "").length > 0);
-      assert.equal(page.querySelector(".inbox-count")?.textContent, "Nothing waiting");
-      assert.equal(page.querySelector(".inbox-settled summary")?.textContent, "Settled · 1");
+      assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
+      const settledFold = page.querySelector<HTMLElement>("[data-inbox-settled] > summary");
+      assert.equal(settledFold?.textContent, "Settled · 1");
+      press(settledFold);
+      const settled = card(page, QUEUE.id);
       assert.equal(
-        page.querySelector(".inbox-answer")?.textContent,
-        "Chose Redis · Keep it simple.",
+        settled.querySelector("summary")?.textContent,
+        "Chose Redis · Which queue sends the invitation emails?",
       );
+      press(settled.querySelector("summary"));
+      assert.ok(settled.textContent?.includes("Keep it simple."), "the note inside");
     }),
 );
 
@@ -279,7 +285,7 @@ it.effect(
       press(buttonNamed(card(page, SETTINGS.id), "Done"));
       yield* settle;
       assert.equal(
-        card(page, SETTINGS.id).querySelector(".inbox-failure")?.textContent,
+        card(page, SETTINGS.id).querySelector(".agent-note")?.textContent,
         "Luke didn't hear back. Retry sends it again, once.",
       );
       press(buttonNamed(card(page, SETTINGS.id), "Done"));
@@ -287,19 +293,19 @@ it.effect(
       assert.equal(sent.length, 2);
       assert.equal(sent[0]?.clientKey, sent[1]?.clientKey);
       assert.equal(
-        card(page, SETTINGS.id).querySelector(".inbox-failure")?.textContent,
+        card(page, SETTINGS.id).querySelector(".agent-note")?.textContent,
         INBOX_CHANGED_NOTE,
       );
       assert.equal(
-        card(page, SETTINGS.id).querySelector(".inbox-title")?.textContent,
+        card(page, SETTINGS.id).querySelector("[data-inbox-title]")?.textContent,
         "Require two reviews on main",
       );
-      assert.equal(page.querySelector(".inbox-count")?.textContent, "1 waiting on you");
+      assert.equal(page.querySelectorAll("article[data-item-id]").length, 1);
     }),
 );
 
 it.effect(
-  "an inbox that could not be read says so and reads again on Try again; an empty one says where items will land",
+  "an inbox that could not be read says so and reads again on Try again; an empty one says nothing waits",
   () =>
     Effect.gen(function* () {
       const { agents } = service(
@@ -312,8 +318,6 @@ it.effect(
       assert.ok(failed?.textContent?.startsWith("The inbox could not be read."));
       press(buttonNamed(page, "Try again"));
       yield* settle;
-      assert.ok(
-        page.querySelector(".side-panel-empty")?.textContent?.startsWith("Nothing waits on you."),
-      );
+      assert.equal(page.textContent, "Nothing is waiting on you.");
     }),
 );

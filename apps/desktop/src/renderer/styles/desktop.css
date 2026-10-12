@@ -1414,8 +1414,10 @@ body,
 
 /* An agent's or the draft's tab in the plan's column: its transcript and
    its composer, each keeping to the document's measure in the middle of
-   the column, as they keep to it in a wide side panel. */
-.desktop-agent {
+   the column, as they keep to it in a wide side panel. The plan's Inbox
+   tab is laid out the same way, its cards at that measure. */
+.desktop-agent,
+.desktop-inbox {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   position: relative;
   display: flex;
@@ -1425,21 +1427,7 @@ body,
 }
 
 .desktop-agent [role="log"],
-.desktop-agent .agent-composer {
-  padding-inline: max(var(--content-inset), var(--reading-room));
-}
-
-/* The plan's Inbox tab: its board scrolls in the column, its cards keeping
-   to the document's measure in the middle, as an agent's transcript does. */
-.desktop-inbox {
-  --reading-room: calc((100% - var(--reading-width)) / 2);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
+.desktop-agent .agent-composer,
 .desktop-inbox .inbox-board {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
