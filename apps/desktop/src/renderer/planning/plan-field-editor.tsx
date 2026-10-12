@@ -3,18 +3,18 @@ import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
-import { PencilIcon, PlusIcon, RemoveIcon } from "@sidecar/panel";
+import { PencilIcon, PlusIcon } from "@sidecar/panel";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { rendererRuntime } from "../renderer-runtime";
+import { type FieldValue, PM_FIELD_KIND } from "../spike/field-value";
+import { PmFieldEditor } from "../spike/pm-field";
 import {
   CONFLICT_NOTE,
   EDIT_DRAFT,
-  EDITOR_BOUNDS,
   type EditTarget,
-  type ExampleDraft,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
@@ -76,11 +76,23 @@ export const EDITOR_PLACE = {
 /** Where an editor stands in the document: in place of a unit, by its id, or a place of its own. */
 export type EditorHost = number | (typeof EDITOR_PLACE)[keyof typeof EDITOR_PLACE];
 
+/** Where a click that opened an editor landed, which is where its caret goes. */
+export interface ClickPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** SPIKE: the in-place editor a field opens in, the minimal ProseMirror one unless the demo swaps it. */
+export type SeamlessEditor = typeof PmFieldEditor;
+export const SeamlessEditorContext = createContext<SeamlessEditor>(PmFieldEditor);
+
 /** The document's one field editor, where it stands, and its doors. */
 export interface FieldEditing {
   readonly editor: FieldEditor | undefined;
   readonly host: EditorHost | undefined;
-  readonly open: (target: EditTarget, host: EditorHost) => void;
+  /** SPIKE: where the click that opened the editor landed. */
+  readonly at: ClickPoint | undefined;
+  readonly open: (target: EditTarget, host: EditorHost, at?: ClickPoint) => void;
   readonly typeText: (text: string) => void;
   readonly typeRule: (rule: RuleDraft) => void;
   readonly close: () => void;
@@ -102,6 +114,7 @@ export function useFieldEditing(
 ): FieldEditing {
   const [editor, setEditor] = useState<FieldEditor | undefined>(undefined);
   const [host, setHost] = useState<EditorHost | undefined>(undefined);
+  const [at, setAt] = useState<ClickPoint | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
   // Note that these are refs, because a save's answer and the pause's end
   // read them as they land, which no render stands between.
@@ -134,8 +147,12 @@ export function useFieldEditing(
   };
 
   /** The words changed: the editor holds them, and the pause before their save starts over. */
+  // SPIKE: the ref moves with the words, so a close in the same tick as the
+  // in-place editor's last draft saves that draft rather than the one before.
   const changed = (next: (now: FieldEditor) => FieldEditor) => {
-    setEditor((now) => (now === undefined ? now : next(now)));
+    if (latest.current === undefined) return;
+    latest.current = next(latest.current);
+    setEditor(latest.current);
     stamp.current += 1;
     restartPause(stamp.current);
   };
@@ -156,7 +173,6 @@ export function useFieldEditing(
   // words not yet saved are sent through the door of the plan they were
   // typed in. Note that the cleanup is what sends them, because it still
   // holds that plan's door and runs before the document can go.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the plan changing is what closes it.
   useEffect(() => {
     setEditor(undefined);
     return () => {
@@ -169,11 +185,13 @@ export function useFieldEditing(
   return {
     editor,
     host,
-    open: (target, where) => {
+    at,
+    open: (target, where, point) => {
       if (content === undefined) return;
       if (editor !== undefined && !editorCloses(editorCloseAsked(editor))) return;
       setEditor(editorOpened(target, content));
       setHost(where);
+      setAt(point);
     },
     typeText: (text) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.TEXT, text })),
     typeRule: (rule) => changed((now) => editorTyped(now, { kind: EDIT_DRAFT.RULE, rule })),
@@ -244,113 +262,65 @@ function EditorNote({
   return null;
 }
 
-/** What a box holds before anything is typed, by the field it edits. */
-function placeholderOf(target: EditTarget): string {
-  switch (target.field) {
-    case PLAN_FIELD.OPEN_QUESTIONS:
-      return "One question a line";
-    case PLAN_FIELD.ASSUMPTIONS:
-      return "One assumption a line";
-    default:
-      return "Unanswered";
+/** SPIKE: the field's words as the in-place editor opens on them, read from the draft the model opened. */
+function seamlessValue(editor: FieldEditor): FieldValue {
+  const { draft, target } = editor;
+  if (draft.kind === EDIT_DRAFT.RULE) return { kind: PM_FIELD_KIND.RULE, rule: draft.rule };
+  if (target.field === PLAN_FIELD.OPEN_QUESTIONS || target.field === PLAN_FIELD.ASSUMPTIONS) {
+    const items = draft.text.split("\n").filter((line) => line !== "");
+    return { kind: PM_FIELD_KIND.ITEMS, items };
   }
+  return { kind: PM_FIELD_KIND.TEXT, markdown: draft.text === "" ? null : draft.text };
 }
 
-/** The clauses of an example, in the order the template writes them, each with its label. */
-const EXAMPLE_CLAUSES = [
-  { key: "given", label: "Given" },
-  { key: "when", label: "When" },
-  { key: "then", label: "Then" },
-] as const satisfies readonly { key: keyof ExampleDraft; label: string }[];
+/** SPIKE: how long the typing pauses before the document hears the field's words. */
+const DRAFT_COALESCE_MS = 150;
 
-/** An example with no clause written yet. */
-const EMPTY_EXAMPLE: ExampleDraft = {
-  given: "",
-  when: "",
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: "", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-};
-
-/** A rule's inputs: its statement, each example's clauses, and the buttons that add and strike. */
-function RuleFields({
-  rule,
-  label,
-  standing,
-  editing,
-}: {
-  rule: RuleDraft;
-  label: string;
-  standing: boolean;
-  editing: FieldEditing;
-}): React.JSX.Element {
-  const withExamples = (examples: readonly ExampleDraft[]) =>
-    editing.typeRule({ ...rule, examples });
-  return (
-    <div className="plan-rule-fields">
-      <input
-        className="plan-field-input plan-rule-statement"
-        value={rule.statement}
-        aria-label={`${label} statement`}
-        placeholder="One sentence that holds in every case"
-        maxLength={EDITOR_BOUNDS.RULE_CHARS}
-        // biome-ignore lint/a11y/noAutofocus: the developer asked for this rule's editor, so typing goes there.
-        autoFocus
-        onChange={(event) => editing.typeRule({ ...rule, statement: event.target.value })}
-      />
-      {rule.examples.map((example, index) => (
-        // An example has no id of its own: its place among the rule's examples is its identity while the editor stands.
-        // oxlint-disable-next-line react/no-array-index-key -- the draft's order is its identity.
-        <div className="plan-rule-example" key={index}>
-          {EXAMPLE_CLAUSES.map(({ key, label: clause }) => (
-            <input
-              key={key}
-              className="plan-field-input"
-              value={example[key]}
-              aria-label={`Example ${index + 1} ${clause}`}
-              placeholder={clause}
-              maxLength={EDITOR_BOUNDS.EXAMPLE_PART_CHARS}
-              onChange={(event) =>
-                withExamples(
-                  rule.examples.map((held, at) =>
-                    at === index ? { ...held, [key]: event.target.value } : held,
-                  ),
-                )
-              }
-            />
-          ))}
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={`Remove example ${index + 1}`}
-            onClick={() => withExamples(rule.examples.filter((_, at) => at !== index))}
-          >
-            <RemoveIcon />
-          </button>
-        </div>
-      ))}
-      <div className="plan-rule-actions">
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={() => withExamples([...rule.examples, EMPTY_EXAMPLE])}
-        >
-          Add example
-        </button>
-        {standing ? (
-          <button type="button" className="toolbar-button" onClick={editing.strikeRule}>
-            Delete rule
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
+/**
+ * SPIKE: the in-place editor's drafts, coalesced to one per pause in the
+ * typing. Note that we hold them back, because each draft re-renders the
+ * whole document around the editor, and the editor, not React, holds the
+ * words meanwhile; a finish, or the editor going, hands over the last first.
+ */
+function useCoalescedDrafts(editing: FieldEditing): {
+  onDraft: (value: FieldValue) => void;
+  onFinish: () => void;
+} {
+  const pending = useRef<FieldValue | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const door = useRef(editing);
+  door.current = editing;
+  const flush = () => {
+    clearTimeout(timer.current);
+    const next = pending.current;
+    pending.current = undefined;
+    if (next === undefined) return;
+    if (next.kind === PM_FIELD_KIND.RULE) door.current.typeRule(next.rule);
+    else if (next.kind === PM_FIELD_KIND.ITEMS) door.current.typeText(next.items.join("\n"));
+    else door.current.typeText(next.markdown ?? "");
+  };
+  useEffect(() => flush, []);
+  return {
+    onDraft: (value) => {
+      pending.current = value;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(flush, DRAFT_COALESCE_MS);
+    },
+    onFinish: () => {
+      flush();
+      door.current.close();
+    },
+  };
 }
 
 /**
- * One field in its editor: the unit's heading drawn as it stands (a rule's
- * by its number, since its statement is being typed), the inputs, and what
- * stands under them. Focus leaving the editor closes it, unless it moved to
- * another of the editor's own inputs or buttons.
+ * SPIKE: one field in its in-place editor. The heading stays drawn above it
+ * as the document draws it, since the formatter owns every heading; a rule
+ * keeps its number in the gutter, the way the read view draws it. The editor
+ * wears the read view's own classes, so nothing moves as it opens, and the
+ * caret lands where the click did. What the developer types reaches the same
+ * model the text boxes fed (`plan-field-editor-model.ts`), which still
+ * decides every save, the conflict, and the retry.
  */
 export function PlanFieldEditor({
   heading,
@@ -363,39 +333,46 @@ export function PlanFieldEditor({
   ruleCount: number;
   editing: FieldEditing;
 }): React.JSX.Element {
+  const Editor = useContext(SeamlessEditorContext);
   const label = targetLabel(editor.target, ruleCount);
-  const { draft } = editor;
-  const standing = "rule" in editor.target && editor.target.rule < ruleCount;
+  const value = useRef(seamlessValue(editor)).current;
+  const { onDraft, onFinish } = useCoalescedDrafts(editing);
+  const fields =
+    value.kind === PM_FIELD_KIND.RULE ? (
+      <div className="plan-unit plan-rule">
+        <span className="plan-rule-number">
+          {"rule" in editor.target ? `${editor.target.rule + 1}.` : ""}
+        </span>
+        <Editor
+          value={value}
+          at={editing.at}
+          label={label}
+          className="markdown plan-rule-body"
+          onDraft={onDraft}
+          onFinish={onFinish}
+        />
+      </div>
+    ) : (
+      <Editor
+        value={value}
+        at={editing.at}
+        label={label}
+        className={
+          value.kind === PM_FIELD_KIND.ITEMS ? "markdown spike-items" : "markdown plan-unit"
+        }
+        onDraft={onDraft}
+        onFinish={onFinish}
+      />
+    );
   return (
     <section
-      className="plan-field-editor ph-no-capture"
+      className="plan-field-editor spike-seamless ph-no-capture"
       aria-label={`Editing ${label}`}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) editing.close();
-      }}
-      onKeyDown={(event) => {
-        const finished = event.key === "Escape" || (event.key === "Enter" && event.metaKey);
-        if (!finished) return;
-        event.preventDefault();
-        event.stopPropagation();
-        editing.close();
-      }}
     >
-      {heading === undefined ? null : <MarkdownMessage words={heading} className="plan-unit" />}
-      {draft.kind === EDIT_DRAFT.RULE ? (
-        <RuleFields rule={draft.rule} label={label} standing={standing} editing={editing} />
-      ) : (
-        <textarea
-          className="plan-field-input"
-          value={draft.text}
-          aria-label={label}
-          placeholder={placeholderOf(editor.target)}
-          // biome-ignore lint/a11y/noAutofocus: the developer asked for this field's editor, so typing goes there.
-          autoFocus
-          spellCheck
-          onChange={(event) => editing.typeText(event.target.value)}
-        />
+      {heading === undefined || value.kind === PM_FIELD_KIND.RULE ? null : (
+        <MarkdownMessage words={heading} className="plan-unit" />
       )}
+      {fields}
       <EditorNote editor={editor} editing={editing} />
     </section>
   );
@@ -434,7 +411,8 @@ export function EditableUnit({
     <div
       className="plan-unit-editable"
       onClick={(event) => {
-        if (editsOnClick(event.target)) editing.open(target, host);
+        if (editsOnClick(event.target))
+          editing.open(target, host, { x: event.clientX, y: event.clientY });
       }}
     >
       {children}
