@@ -42,6 +42,8 @@ export const BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  QUESTION_WITHDRAWN: "question_withdrawn",
   /** A planning run put code of the plan's repository on the developer's screen, with its lines; told once the call has read them, before the run ends. */
   CODE_SHOWN: "code_shown",
   /** A planning run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
@@ -186,6 +188,11 @@ export type BrainRunEventBody =
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
+      readonly runId: string;
+      readonly question: string;
     }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.CODE_SHOWN;

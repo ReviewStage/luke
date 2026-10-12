@@ -28,7 +28,7 @@ import {
 } from "../hosted/coding-agent-tools.js";
 import { END_CALL_TOOL } from "../hosted/end-call.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
-import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { SHOW_CODE_TOOL } from "../hosted/show-code.js";
 import type { StoredMessageRecord, StoredTurnRecord } from "../hosted/store/message-reads.js";
@@ -60,6 +60,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [DRAW_ON_BOARD_TOOL_NAME, PLAN_WORK_TOOL.DRAW_ON_BOARD],
   [LOOK_AT_BOARD_TOOL_NAME, PLAN_WORK_TOOL.LOOK_AT_BOARD],
   [QUEUE_QUESTION_TOOL.name, PLAN_WORK_TOOL.QUEUE_QUESTION],
+  [WITHDRAW_QUESTION_TOOL.name, PLAN_WORK_TOOL.WITHDRAW_QUESTION],
   [EVE_DELEGATION_TOOL.WORKER, PLAN_WORK_TOOL.WORKER],
   [EVE_DELEGATION_TOOL.TASK_WAIT, PLAN_WORK_TOOL.WORKER_WAIT],
   [EVE_DELEGATION_TOOL.TASK_CANCEL, PLAN_WORK_TOOL.WORKER_CANCEL],
@@ -75,6 +76,7 @@ const isSearchInput = Schema.is(SEARCH_WEB_TOOL.inputSchema);
 const isPageInput = Schema.is(READ_WEB_PAGE_TOOL.inputSchema);
 const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
+const isWithdrawalInput = Schema.is(WITHDRAW_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
@@ -131,6 +133,7 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   if (tool === PLAN_WORK_TOOL.SEARCH_WEB && isSearchInput(input)) return input.query;
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;
   if (tool === PLAN_WORK_TOOL.QUEUE_QUESTION && isQuestionInput(input)) return input.question;
+  if (tool === PLAN_WORK_TOOL.WITHDRAW_QUESTION && isWithdrawalInput(input)) return input.question;
   if (tool === PLAN_WORK_TOOL.WORKER && isWorkerInput(input)) return input.message;
   if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
   if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
