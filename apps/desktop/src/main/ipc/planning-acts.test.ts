@@ -285,7 +285,7 @@ it.effect(
 );
 
 it.effect(
-  "the History tab's reads and its restore reach the host from a panel, and never from the voice window",
+  "the version history's reads and its restore reach the host from a panel, and never from the voice window",
   () =>
     Effect.gen(function* () {
       const f = fixture();

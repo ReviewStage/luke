@@ -256,8 +256,8 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. The
 feedback form is left out whole, since a screenshot you attach to it is a
 picture of your screen and could carry another app's words, and so are a
-plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's History
-tab and an earlier version of it you are viewing, each coding agent's tab,
+plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's version
+history and the earlier version of it you are viewing, each coding agent's tab,
 and the editor you edit a field of a plan in, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does

@@ -1267,8 +1267,8 @@ body,
   flex-direction: column;
 }
 
-/* The "Edited by" line opens the History tab, so it is a press drawn as the
-   muted line it was, underlined only under the pointer or the keyboard. */
+/* The "Edited by" line opens the version history, so it is a press drawn as
+   the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
   padding: 0;
   border-radius: 4px;
@@ -1284,48 +1284,7 @@ body,
   text-underline-offset: 0.2em;
 }
 
-/* A version drawn in the document's place (version-view.tsx): the bar over
-   it, whose version and its two presses share the first row and whose
-   comparison stands on its own under them, then the version, read-only. */
-.version-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.version-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-8) var(--space-12);
-  padding: var(--space-8) var(--page-inset);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--desktop-well);
-}
-
-.version-bar-title {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.version-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--control-gap);
-}
-
-.version-compare {
-  grid-column: 1 / -1;
-  justify-self: start;
-}
-
+/* A line over a version: what it is compared with, or why it is not drawn. */
 .version-note {
   margin-top: 0;
   margin-bottom: var(--space-16);
@@ -2040,11 +1999,15 @@ body,
 
 /* Settings ------------------------------------------------------------------- */
 
-.desktop-settings {
+.desktop-settings,
+.desktop-version-history {
   display: contents;
 }
 
-.settings-pages {
+/* Settings' page list and a plan's version history alike: the column where
+   the plans' sidebar stands, the way back at its head. */
+.settings-pages,
+.version-log {
   position: relative;
   display: flex;
   min-height: 0;
@@ -2054,12 +2017,14 @@ body,
   background: var(--desktop-sidebar);
 }
 
-.settings-pages-back {
+.settings-pages-back,
+.version-log-back {
   width: auto;
   margin-bottom: var(--space-12);
 }
 
-.settings-pages-title {
+.settings-pages-title,
+.version-log-title {
   margin: 0 var(--row-inset) var(--space-12);
   font-size: 20px;
   font-weight: 720;
@@ -2158,7 +2123,8 @@ body,
   list-style: none;
 }
 
-.settings-page {
+.settings-page,
+.version-page {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -2209,6 +2175,131 @@ body,
 .settings-page-scroll .settings-index,
 .settings-page-scroll .settings-header {
   display: none;
+}
+
+/* Version history ------------------------------------------------------------ */
+
+/* The plan the versions are of, under the view's own title, which gives up
+   its gap below to this line. */
+.version-log-title:has(+ .version-log-plan) {
+  margin-bottom: var(--space-2);
+}
+
+.version-log-plan {
+  margin: 0 var(--row-inset) var(--space-12);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The versions, newest first, one row each, the row whose version is drawn
+   lit as a chosen sidebar row is (desktop-version-history.tsx). */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.version-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.version-row:hover {
+  background: var(--raised);
+}
+
+.version-row[aria-current="true"] {
+  background: var(--raised-strong);
+}
+
+.version-row-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.version-row-author {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Current" and "During a call", on a row and over the version drawn. */
+.version-tag {
+  flex: none;
+  padding: 0 var(--space-6);
+  border-radius: 5px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.version-row[aria-current="true"] .version-tag {
+  background: var(--raised);
+}
+
+.version-row-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.version-row-summary {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-earlier {
+  margin-top: var(--space-8);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.version-earlier:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+/* The version's moment and its Current tag share the toolbar's title row. */
+.version-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+/* No call bar stands below a version, so it needs no room under its last line. */
+.version-page .desktop-document .plan-document-scroll {
+  padding-bottom: var(--page-inset);
 }
 
 /* Onboarding ----------------------------------------------------------------- */

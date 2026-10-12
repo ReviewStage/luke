@@ -1,19 +1,20 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a plan's page, the new-plan page, or Settings, and the history
- * is the one a browser keeps: the places behind, the one standing, and the
- * places ahead, which a new visit clears. It is written by watching where the
- * window is rather than by each door that moves it, so a plan opened from the
- * sidebar, by a key, by starting it, or by the host itself is one more place
- * visited all the same, and a move through the history is the window arriving
- * where the history already stands. It lives as long as the window does, the
- * way a browser tab's does.
+ * A place is a plan's page, a plan's version history, the new-plan page, or
+ * Settings, and the history is the one a browser keeps: the places behind,
+ * the one standing, and the places ahead, which a new visit clears. It is
+ * written by watching where the window is rather than by each door that
+ * moves it, so a plan opened from the sidebar, by a key, by starting it, or
+ * by the host itself is one more place visited all the same, and a move
+ * through the history is the window arriving where the history already
+ * stands. It lives as long as the window does, the way a browser tab's does.
  *
  * Settings is one step however many of its pages are turned: entering it is
  * a visit, and choosing another of its pages turns the page that visit holds
  * in place, so Back from any page of it returns to wherever it was opened
- * from, and Forward brings it back on the page last open.
+ * from, and Forward brings it back on the page last open. A plan's version
+ * history is one step the same way, whichever version is chosen in it.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -33,13 +34,15 @@ const MOUSE_BUTTON = {
 /** Which kind of place the window is on. */
 const PLACE_KIND = {
   PLAN: "plan",
+  VERSION_HISTORY: "version-history",
   NEW_PLAN: "new-plan",
   SETTINGS: "settings",
 } as const;
 
-/** A place the window can stand on: a plan by its id, so a rename leaves it the same place. */
+/** A place the window can stand on: a plan, or its version history, by its id, so a rename leaves it the same place. */
 type Place =
   | { readonly kind: typeof PLACE_KIND.PLAN; readonly planId: string }
+  | { readonly kind: typeof PLACE_KIND.VERSION_HISTORY; readonly planId: string }
   | { readonly kind: typeof PLACE_KIND.NEW_PLAN }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
@@ -50,12 +53,10 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the new-plan page, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the new-plan page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
-  if (one.kind === PLACE_KIND.PLAN && other.kind === PLACE_KIND.PLAN) {
-    return one.planId === other.planId;
-  }
+  if ("planId" in one && "planId" in other) return one.planId === other.planId;
   return true;
 }
 
@@ -149,9 +150,11 @@ function useHistory(input: {
 /**
  * The window's history: Plans on the plan it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or Settings on its page. A plan the account's list once held and holds no
- * more is passed over, unless the list itself could not be read, and so is
- * an archived plan, which the developer put out of the way. Note that a
+ * or on that plan's version history, or Settings on its page. A plan the
+ * account's list once held and holds no more is passed over, unless the list
+ * itself could not be read, and so is an archived plan, which the developer
+ * put out of the way, unless it is the plan the window is bound for, as it is
+ * from its own version history or from Settings opened over it. Note that a
  * plan no list has held yet is still a place, because the list may not have
  * landed or may not yet carry a plan just started; a plan that cannot be read
  * is a place too, and says so when it is gone back to. Going to a place
@@ -166,23 +169,25 @@ export function useWindowHistory(input: {
   onSettingsViewChange: (view: SettingsView) => void;
   plans: Pick<
     PlansControl,
-    "boundFor" | "plans" | "archived" | "listFailed" | "onSelect" | "onLeavePlan"
+    "boundFor" | "plans" | "archived" | "listFailed" | "onSelect" | "onLeavePlan" | "history"
   >;
 }): NavigationHistory {
   const { known, tab, settingsView, plans } = input;
   const { boundFor } = plans;
+  const historyOpen = plans.history.open;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
-    return boundFor === undefined
-      ? { kind: PLACE_KIND.NEW_PLAN }
+    if (boundFor === undefined) return { kind: PLACE_KIND.NEW_PLAN };
+    return historyOpen
+      ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor]);
+  }, [known, tab, settingsView, boundFor, historyOpen]);
   const reachable = (to: Place) => {
-    if (to.kind !== PLACE_KIND.PLAN) return true;
+    if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
     return (
       plans.listFailed ||
@@ -197,6 +202,11 @@ export function useWindowHistory(input: {
       return;
     }
     if (tab !== PANEL_TAB.PLANS) input.onTabChange(PANEL_TAB.PLANS);
+    if (to.kind === PLACE_KIND.VERSION_HISTORY) {
+      if (!historyOpen || boundFor !== to.planId) plans.history.onOpen(to.planId);
+      return;
+    }
+    if (historyOpen) plans.history.onClose();
     if (to.kind === PLACE_KIND.PLAN && boundFor !== to.planId) plans.onSelect(to.planId);
     if (to.kind === PLACE_KIND.NEW_PLAN && boundFor !== undefined) plans.onLeavePlan();
   };

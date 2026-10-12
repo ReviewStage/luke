@@ -44,6 +44,7 @@ import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
+import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   type PlanHolds,
@@ -124,6 +125,7 @@ function Page({
   useAppKeymap(true);
   useMenuCommands(true);
   const page = createElement(DesktopPlans, {
+    looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: plan.id,
@@ -394,6 +396,7 @@ test("the Code tab draws every code Luke showed on the plan, and says so where h
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
       createElement(DesktopPlans, {
+        looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
           activePlanId: PLAN.id,
@@ -432,6 +435,7 @@ test("a tab with something new on it carries a dot, and the tab shown carries no
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
@@ -455,6 +459,7 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   act(() =>
     root.render(
       createElement(DesktopPlans, {
+        looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
           activePlanId: PLAN.id,
@@ -797,6 +802,7 @@ test("a tab's label cut short is marked to fade at its end, while a label shown 
 test("the Work tab with no turn says what will appear there", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
@@ -882,6 +888,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
 test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
@@ -1323,7 +1330,10 @@ test("Shift-Command-C copies the open plan as its toolbar button does", () => {
 test("with no plan open the plan's chords are left to the rest of the window", () => {
   function Home() {
     useAppKeymap(true);
-    return createElement(DesktopPlans, { plans: plansControl({ page: PLANS_PAGE.NEW }) });
+    return createElement(DesktopPlans, {
+      looks: NO_LOOKS,
+      plans: plansControl({ page: PLANS_PAGE.NEW }),
+    });
   }
   const container = document.createElement("div");
   document.body.append(container);
@@ -1337,7 +1347,7 @@ test("with no plan open the plan's chords are left to the rest of the window", (
 
 test("with no plan open the work column is the new-plan page, with nothing to go back to", () => {
   const markup = renderToStaticMarkup(
-    createElement(DesktopPlans, { plans: plansControl({ page: PLANS_PAGE.NEW }) }),
+    createElement(DesktopPlans, { looks: NO_LOOKS, plans: plansControl({ page: PLANS_PAGE.NEW }) }),
   );
 
   assert.match(markup, /<h1 [^>]*>What are we planning\?<\/h1>/u);
@@ -1385,6 +1395,7 @@ test("the menu bar's Exit Full Screen steps out of full screen, and does nothing
 function Opening({ region }: { region: PlansControl["region"] }) {
   const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id));
   return createElement(DesktopPlans, {
+    looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,
@@ -1485,6 +1496,7 @@ test("the plan's tab names the plan, has no × to close it, and its hint says th
     act(() =>
       root.render(
         createElement(DesktopPlans, {
+          looks: NO_LOOKS,
           plans: plansControl({
             page: PLANS_PAGE.DOCUMENT,
             activePlanId: PLAN.id,
@@ -1548,6 +1560,7 @@ function mountAgentTabs(
   act(() =>
     root.render(
       createElement(DesktopPlans, {
+        looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
           activePlanId: PLAN.id,
@@ -1666,7 +1679,6 @@ test("closing the chosen tab chooses the tab viewed before it, and closing the l
     ["Code", "⌥⌘2", true],
     ["Transcript", "⌥⌘3", true],
     ["Work", "⌥⌘4", true],
-    ["History", "⌥⌘5", true],
   ]);
 
   const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
@@ -1684,7 +1696,7 @@ test("the open panel on a plan that has used no tab says what will stand there, 
   assert.deepEqual(panelTabs(page), []);
   assert.equal(
     page.querySelector(".side-panel-content")?.textContent,
-    "Luke's board, code, transcript, and work, and the plan's history, appear here as you plan.",
+    "Luke's board, code, transcript, and work appear here as you plan.",
   );
   assert.equal(page.querySelector(".side-panel-no-tabs"), null);
 
@@ -1767,7 +1779,6 @@ test("the + drops the searchable menu over every kind, each with its shortcut wh
     ["Code", "⌥⌘2", true],
     ["Transcript", "⌥⌘3", true],
     ["Work", "⌥⌘4", true],
-    ["History", "⌥⌘5", true],
     ["New coding agent", "", true],
   ]);
   assert.equal(
@@ -1814,7 +1825,7 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   typeSearch("");
   assert.deepEqual(
     addRows().map(([label]) => label),
-    ["Board", "Code", "Transcript", "Work", "History", "New coding agent"],
+    ["Board", "Code", "Transcript", "Work", "New coding agent"],
   );
 
   key(focused(), "Escape");
@@ -2390,6 +2401,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
     workerCallIds(work?.turns),
   );
   const page = createElement(DesktopPlans, {
+    looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,
@@ -2464,7 +2476,7 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
     ["Coding agents", ["New coding agent", "Opus 5.5", "GPT 5.6 Sol"]],
     ["Subagents", [job]],
   ]);
-  assert.deepEqual(addRows().slice(SIDE_PANEL_TABS.length), [
+  assert.deepEqual(addRows().slice(4), [
     ["New coding agent", "", true],
     ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],
@@ -2606,6 +2618,7 @@ function DraftPage({ repository }: { repository: string | null }) {
   );
   panelRef.current = sidePanel;
   const page = createElement(DesktopPlans, {
+    looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,

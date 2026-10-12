@@ -6,12 +6,11 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
-import { agoText } from "./plan-body";
 import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
 import { planUnits } from "./plan-reveal";
 
 /**
- * plan-history-model.ts -- the History tab's words for each revision, and a version of the plan drawn against another with its changes marked.
+ * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
  *
  * A revision is named the way the "Edited by" line names its writer: Luke
  * for the notetaker, You for the developer, a coding agent by its title, and
@@ -24,14 +23,6 @@ import { planUnits } from "./plan-reveal";
  * in and struck out where they changed, word by word (`plan-diff.ts`). The
  * assumptions are compared as a list. Everything here is pure.
  */
-
-/** What a version is drawn against: the version before it, which shows what it changed, or the plan as it stands, which shows what restoring it would change. */
-export const VERSION_COMPARE = {
-  PREVIOUS: "previous",
-  CURRENT: "current",
-} as const;
-
-export type VersionCompare = (typeof VERSION_COMPARE)[keyof typeof VERSION_COMPARE];
 
 /** How a unit or an assumption of a version stands against the plan it is compared with. */
 export const VERSION_CHANGE = {
@@ -72,12 +63,12 @@ const DAY_AND_TIME = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-/** The moment a version was saved, as the History tab names it. */
+/** The moment a version was saved, as the version history names it. */
 export function versionMoment(at: number): string {
   return DAY_AND_TIME.format(at);
 }
 
-/** Who wrote a revision, as the History tab names them. */
+/** Who wrote a revision, as the version history names them. */
 export function revisionAuthor(edit: PlanLastEdit): string {
   switch (edit.actor) {
     case PLAN_ACTOR.DEVELOPER:
@@ -98,11 +89,6 @@ export function revisionSummary(line: PlanRevisionLine): string {
   }
   if (line.lastEdit.actor === PLAN_ACTOR.EARLIER) return "The plan before its history began";
   return line.changes === 1 ? "1 change" : `${line.changes} changes`;
-}
-
-/** The bar over a version: "Viewing version from 2h ago · Luke". */
-export function versionHeading(line: PlanRevisionLine, now: number): string {
-  return `Viewing version from ${agoText(line.lastEdit.at, now)} · ${revisionAuthor(line.lastEdit)}`;
 }
 
 /** A rule's heading, whose number moves when a rule before it comes or goes. */

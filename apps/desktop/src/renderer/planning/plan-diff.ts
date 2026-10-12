@@ -11,7 +11,7 @@ import { diffArrays } from "diff";
  * jsdiff's (`diffArrays`, over this file's words); what is here is how its
  * changes are cut for a hand. The notetaker changes one place at a time
  * (`notesInProgress` in `@sidecar/hosted/plan-template`), so the words
- * compared are always final or still growing at their end. The History tab's
+ * compared are always final or still growing at their end. The version history's
  * version view reads the same comparison over the same words whole
  * (`wordChanges`), since a reader compares words rather than letters.
  * Everything here is pure.

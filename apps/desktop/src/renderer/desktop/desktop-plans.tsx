@@ -8,10 +8,8 @@ import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
-import { usePlanLooks } from "../planning/use-plan-looks";
+import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
-import { VersionView } from "../planning/version-view";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
@@ -156,16 +154,17 @@ function ArchivedBanner({
  */
 function PlanDocument({
   plans,
+  looks,
   captions,
 }: {
   plans: PlansControl;
+  looks: PlanLooks;
   captions: React.ReactNode;
 }): React.JSX.Element {
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const rename = usePlanRename(planId, plans.onRenamePlan);
-  const looks = usePlanLooks(region.kind === DOCUMENT_REGION.READY ? region.plan : undefined);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
   // a plan opened from the list is drawn reading before its read lands, and
@@ -257,24 +256,13 @@ function PlanDocument({
         </Toolbar>
         <ArchivedBanner plans={plans} plan={plan} />
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
-          {/* A version chosen in the History tab is drawn in the document's
-              place, the way a version history shows it in the page itself. */}
-          {plans.history.viewing === undefined ? (
-            <PlanBody
-              plan={plan}
-              live={plans.live}
-              onShowHistory={() => sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY)}
-              onEdit={(request) => plans.edit(plan.id, request)}
-              looks={looks}
-            />
-          ) : (
-            <VersionView
-              history={plans.history}
-              viewing={plans.history.viewing}
-              current={plan.document}
-              shown={plans.shown}
-            />
-          )}
+          <PlanBody
+            plan={plan}
+            live={plans.live}
+            onShowHistory={() => plans.history.onOpen(plan.id)}
+            onEdit={(request) => plans.edit(plan.id, request)}
+            looks={looks}
+          />
         </section>
         <div className="desktop-call-bar">
           {captions}
@@ -298,7 +286,6 @@ function PlanDocument({
           transcript={plans.transcript}
           work={plans.work}
           agents={plans.agents}
-          history={plans.history}
           shown={plans.shown}
         />
       ) : null}
@@ -308,15 +295,18 @@ function PlanDocument({
 
 export function DesktopPlans({
   plans,
+  looks,
   captions,
 }: {
   plans: PlansControl;
+  /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
+  looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
 }): React.JSX.Element {
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
-      return <PlanDocument plans={plans} captions={captions} />;
+      return <PlanDocument plans={plans} looks={looks} captions={captions} />;
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (

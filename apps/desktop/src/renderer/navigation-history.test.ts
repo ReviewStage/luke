@@ -7,7 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { captionStripProps } from "#testing/captions";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, versionHistoryControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { runAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
@@ -42,8 +42,9 @@ const EXPORTS: PlanSummary = {
 };
 const EVERY_PLAN = [INVITATIONS, BILLING, EXPORTS];
 
-/** What the window shows for a place: a Settings page's title, the new-plan page, or the open plan's name. */
+/** What the window shows for a place: a Settings page's title, the new-plan page, a plan's version history, or the open plan's name. */
 const NEW_PLAN_PAGE = "new plan";
+const VERSION_HISTORY = "version history";
 
 /** The menu bar's one listener, as the bridge hands it to the window. */
 let menuListener: ((command: AppCommand) => void) | undefined;
@@ -52,7 +53,9 @@ let menuListener: ((command: AppCommand) => void) | undefined;
  * The window as `App` stands it: its tab, its settings page, and a host
  * that opens and leaves plans at once, under the window's history, its
  * keymap, the menu bar, the mouse's buttons, and its Escape past the nearer
- * layers, which runs Settings' exit.
+ * layers, which runs Settings' exit or the version history's. The version
+ * history stands while the plan it was opened on is the open one, as the
+ * plans' own control holds it.
  */
 function Window({
   start,
@@ -69,13 +72,16 @@ function Window({
   const [tab, setTab] = useState(start);
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [open, setOpen] = useState(restored);
+  const [historyFor, setHistoryFor] = useState<string | undefined>(undefined);
   const sidebar = useSidebarCollapse(false);
   useAppKeymap(true);
   useMenuCommands(true);
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) {
-        runAppCommand(APP_COMMAND.EXIT_SETTINGS);
+        if (!runAppCommand(APP_COMMAND.EXIT_SETTINGS)) {
+          runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+        }
       }
     };
     window.addEventListener("keydown", handleKey);
@@ -93,6 +99,14 @@ function Window({
     onSelect: setOpen,
     onLeavePlan: () => setOpen(undefined),
     onNewPlan: () => setOpen(undefined),
+    history: versionHistoryControl({
+      open: historyFor !== undefined && historyFor === shown,
+      onOpen: (planId) => {
+        setOpen(planId);
+        setHistoryFor(planId);
+      },
+      onClose: () => setHistoryFor(undefined),
+    }),
   });
   const onTabChange = (next: PanelTab) => {
     setTab(next);
@@ -148,6 +162,7 @@ function show(
 function where(): string {
   const page = document.body.querySelector(".settings-page")?.getAttribute("aria-label");
   if (page) return page;
+  if (document.body.querySelector("nav.version-log")) return VERSION_HISTORY;
   if (document.body.querySelector("button[aria-label='Start plan']")) return NEW_PLAN_PAGE;
   const current = document.body.querySelector(
     ".sidebar-plan[aria-current='page'] .sidebar-plan-name",
@@ -166,6 +181,22 @@ function openPlan(plan: PlanSummary): void {
   click(
     [...document.body.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
       (row) => row.querySelector(".sidebar-plan-name")?.textContent === plan.name,
+    ),
+  );
+}
+
+/** Opens a plan's version history from its row's right-click menu. */
+function openVersionHistory(plan: PlanSummary): void {
+  const row = [...document.body.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
+    (each) => each.querySelector(".sidebar-plan-name")?.textContent === plan.name,
+  );
+  assert.ok(row, `${plan.name} is listed`);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 0, clientY: 0 }));
+  });
+  click(
+    [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (item) => item.textContent === "Version history",
     ),
   );
 }
@@ -414,6 +445,55 @@ test("with nothing behind it, leaving Settings opens the plans, which Back then 
   assert.equal(where(), NEW_PLAN_PAGE);
   command("[");
   assert.equal(where(), "General");
+});
+
+test("a plan's version history is one step: Back, Escape, and Command-[ return to the plan, and Forward brings it back", () => {
+  show();
+  openPlan(INVITATIONS);
+  openVersionHistory(INVITATIONS);
+  assert.equal(where(), VERSION_HISTORY);
+  assert.equal(document.body.querySelector(".version-log-plan")?.textContent, INVITATIONS.name);
+  assert.equal(
+    document.body.querySelector(".title-bar-controls[data-edge='end']"),
+    null,
+    "no panel toggle, as in Settings",
+  );
+
+  click(document.body.querySelector<HTMLButtonElement>("button.version-log-back"));
+  assert.equal(where(), INVITATIONS.name);
+  command("]");
+  assert.equal(where(), VERSION_HISTORY);
+  pressEscape();
+  assert.equal(where(), INVITATIONS.name);
+  command("]");
+  assert.equal(command("["), true);
+  assert.equal(where(), INVITATIONS.name);
+  command("[");
+  assert.equal(where(), NEW_PLAN_PAGE, "one step for the version history, one for the plan");
+});
+
+test("a version history opened from another plan's row opens over that plan, and Back returns to the plan it was opened from", () => {
+  show();
+  openPlan(INVITATIONS);
+  openVersionHistory(BILLING);
+  assert.equal(where(), VERSION_HISTORY);
+  assert.equal(document.body.querySelector(".version-log-plan")?.textContent, BILLING.name);
+
+  pressEscape();
+  assert.equal(where(), INVITATIONS.name);
+});
+
+test("an archived plan's version history goes back to the archived plan it was opened on", () => {
+  show([INVITATIONS, EXPORTS], PANEL_TAB.PLANS, undefined, [BILLING]);
+  openPlan(INVITATIONS);
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-archived-row"));
+  openPlan(BILLING);
+  openVersionHistory(BILLING);
+
+  pressEscape();
+  // The sidebar comes back with its archived plans folded, as it opens.
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-archived-row"));
+  assert.equal(where(), BILLING.name);
 });
 
 test("the mouse's back and forward buttons and the menu bar's Go move as the chords do", () => {

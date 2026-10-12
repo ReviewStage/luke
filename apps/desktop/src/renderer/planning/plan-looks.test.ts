@@ -16,9 +16,17 @@ import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach } from "vitest";
+import { captionStripProps } from "#testing/captions";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { navigationHistory } from "#testing/navigation-history";
+import { plansControl, versionHistoryControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { settingsPanelProps } from "#testing/settings-panel-props";
+import { DesktopShell } from "../desktop/desktop-shell";
+import { useSidebarCollapse } from "../desktop/sidebar-collapse";
+import { PANEL_TAB } from "../panel-tabs";
 import { PlanBody } from "./plan-body";
+import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
 import { PLAN_LOOK, usePlanLooks } from "./use-plan-looks";
 
 /**
@@ -99,7 +107,7 @@ afterEach(() => {
 /** The plan's region as the window draws it: the document, under the looks the region keeps. */
 function Region({ plan, version }: { plan: Plan; version: boolean }): React.JSX.Element | null {
   const looks = usePlanLooks(plan);
-  // A version chosen in the History tab is drawn in the document's place.
+  // The plan's version history stands in the document's place.
   if (version) return null;
   return createElement(PlanBody, {
     plan,
@@ -263,7 +271,7 @@ it.effect("a plan held open for the look is seen: the next visit shows nothing c
 );
 
 it.effect(
-  "a version drawn in the document's place is still a stay on the plan, and counts toward the look",
+  "the plan's version history standing in the document's place is still a stay on the plan, and counts toward the look",
   () =>
     Effect.gen(function* () {
       lookedAt(LOOKED_AT);
@@ -277,6 +285,69 @@ it.effect(
       first.leave();
 
       assert.deepEqual(changed(open(plan, yield* registryOnTestClock).container), []);
+    }),
+);
+
+/** The window as the shell draws it over the open plan, with the plan's version history standing or not. */
+function Window({ plan, versions }: { plan: Plan; versions: boolean }): React.JSX.Element {
+  const sidebar = useSidebarCollapse(false);
+  const ignore = () => undefined;
+  return createElement(DesktopShell, {
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
+    identity: {
+      speakers: { listening: false, lukeSpeaking: false },
+      voiceActive: { developer: false, luke: false },
+      fixtureSpeaking: false,
+      voiceOpening: false,
+    },
+    tab: PANEL_TAB.PLANS,
+    onTabChange: ignore,
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: plan.id,
+      region: { kind: DOCUMENT_REGION.READY, plan },
+      history: versionHistoryControl({ open: versions }),
+    }),
+    history: navigationHistory(),
+    sidebar,
+    captions: captionStripProps(),
+    settings: settingsPanelProps(),
+  });
+}
+
+it.effect(
+  "the plan's version history is a stay on the plan: back from it is the same visit, still lit, and the time spent there counts toward the look",
+  () =>
+    Effect.gen(function* () {
+      lookedAt(LOOKED_AT);
+      const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const draw = (versions: boolean) =>
+        act(() => root.render(onRegistry(registry, createElement(Window, { plan, versions }))));
+      draw(false);
+      yield* landed;
+      assert.deepEqual(changed(container), ["Problem"]);
+
+      draw(true);
+      yield* landed;
+      yield* TestClock.adjust(PLAN_LOOK);
+      yield* landed;
+      draw(false);
+      yield* landed;
+      assert.deepEqual(changed(container), ["Problem"]);
+      act(() => root.unmount());
+      roots.splice(roots.indexOf(root), 1);
+
+      assert.deepEqual(changed(open(plan, registry).container), []);
     }),
 );
 

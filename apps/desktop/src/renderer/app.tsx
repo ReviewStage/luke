@@ -316,12 +316,13 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings back to wherever it was opened from, then a side panel
-      // filling the window back beside its plan, then an open plan back to
-      // the new-plan page. A menu and the settings search answer their own
-      // Escapes and keep them — the search clearing, then letting go of the
-      // caret — so neither is a layer here.
+      // time: Settings, or a plan's version history, back to wherever it was
+      // opened from, then a side panel filling the window back beside its
+      // plan, then an open plan back to the new-plan page. A menu and the
+      // settings search answer their own Escapes and keep them — the search
+      // clearing, then letting go of the caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();

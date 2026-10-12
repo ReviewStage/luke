@@ -26,8 +26,8 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * second line: the feedback dialog, whose screenshots are pictures of the
  * person's screen, the Settings tab's Memory page, a plan's whiteboard,
  * a plan's transcript, a plan's Work tab, the code on screen, a plan's
- * History tab, the version of a plan drawn from it, each coding agent's
- * tab, and the editor a field of a plan is edited in, whose masked value
+ * version history's list, the version of the plan drawn beside it, each
+ * coding agent's tab, and the editor a field of a plan is edited in, whose masked value
  * would still record the rhythm of the typing. The whiteboard is the one
  * surface that draws its words on a canvas, which the text masking cannot
  * reach, so its block is its only

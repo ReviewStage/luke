@@ -102,9 +102,11 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * posts when an agent ends is held back while the developer is looking at
  * that agent, and the agents main says ended unseen wear a dot until their
  * tab is shown (`main/agent-notices.ts`). The open plan's history is the
- * tab's as well (`use-plan-history.ts`): read while its tab is on screen,
- * a version chosen there drawn in the document's place, and restored through
- * the service, answered with the window's toast.
+ * tab's as well (`use-plan-history.ts`): its version history, opened from
+ * the plan's menu or its "Edited by" line, takes the whole window in the
+ * plan's place (`desktop-version-history.tsx`) until it is left or another
+ * plan opens, and a version restored through the service is answered with
+ * the window's toast. The side panel stands as it was behind it.
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -163,8 +165,8 @@ export interface PlansControl {
   };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
-  /** The open plan's history: its versions, the one drawn in the document's place, and its restore. */
-  history: PlanHistoryControl;
+  /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
+  history: VersionHistoryControl;
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
@@ -225,11 +227,20 @@ export interface PlansControl {
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
    * Steps back one layer, answering whether there was one to step back from:
-   * a side panel filling the window back beside the document, a version
-   * drawn in the document's place back to the plan as it stands, else an
-   * open plan back to the new-plan page.
+   * a side panel filling the window back beside the document, else an open
+   * plan back to the new-plan page.
    */
   back: () => boolean;
+}
+
+/** The open plan's history as the window opens and draws it, over what is read of it. */
+export interface VersionHistoryControl extends PlanHistoryControl {
+  /** Whether the plan's version history takes the window in its place. */
+  open: boolean;
+  /** Opens a plan's version history on the plan as it stands, opening the plan first where it is not the open one. */
+  onOpen: (planId: string) => void;
+  /** Leaves the version history for the plan, its side panel as it was. */
+  onClose: () => void;
 }
 
 /**
@@ -264,17 +275,12 @@ const DELETE_REFUSED: ActionResult = {
   reason: DELETE_REFUSED_NOTE,
 };
 
-/**
- * What the open plan holds of each fixed tab's kind, each unknown until its
- * read lands: the transcript's calls are those heard on it too, and its
- * history any revision, which a plan with a last edit has.
- */
+/** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
-  view: Pick<PlanningView, "board" | "shownCode" | "work" | "document">,
+  view: Pick<PlanningView, "board" | "shownCode" | "work">,
   transcript: TranscriptRegion,
 ): PlanHolds {
   const { board, shownCode, work } = view;
-  const plan = view.document.plan;
   return {
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
@@ -288,7 +294,6 @@ function planHolds(
           ? false
           : undefined,
     [SIDE_PANEL_TAB.WORK]: work === undefined ? undefined : work.length > 0,
-    [SIDE_PANEL_TAB.HISTORY]: plan === undefined ? undefined : plan.lastEdit !== undefined,
   };
 }
 
@@ -318,6 +323,8 @@ export function usePlansTab(input: {
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
+  /** The plan whose version history stands in the window, which it does only while that plan is the one bound for. */
+  const [historyFor, setHistoryFor] = useState<string | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -389,10 +396,11 @@ export function usePlansTab(input: {
   );
   panelRef.current = sidePanel;
   // Main hears which agent's tab is on screen, and none while the tab is
-  // away or the panel shows something else; a fixture's staged agents are
-  // no one's to announce.
+  // away, the version history stands in the plan's place, or the panel
+  // shows something else; a fixture's staged agents are no one's to announce.
   const shownAgent =
     shown &&
+    historyFor === undefined &&
     fixture === undefined &&
     sidePanel.open &&
     sidePanel.tab !== undefined &&
@@ -447,6 +455,9 @@ export function usePlansTab(input: {
   // back. A fixture's plans are opened nowhere, so nothing is asked of them.
   const openPlanId = planning.activePlanId;
   const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
+  // The version history is the plan's, so another plan, or none, leaves it.
+  if (historyFor !== undefined && historyFor !== boundFor) setHistoryFor(undefined);
+  const historyOpen = historyFor !== undefined && historyFor === boundFor;
   const select = useCallback(
     (planId: string) => {
       const ask = { planId, over: openPlanId };
@@ -735,7 +746,7 @@ export function usePlansTab(input: {
       fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.plan.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
-    shown: shown && sidePanel.open && sidePanel.tab === SIDE_PANEL_TAB.HISTORY,
+    shown: shown && historyOpen,
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) =>
       toast(
@@ -785,23 +796,20 @@ export function usePlansTab(input: {
     setNewPlanPreset(preset);
   };
 
+  // A plan's version history opens over the plan, so another plan opens first.
+  const openHistory = (planId: string) => {
+    if (planId !== boundFor) select(planId);
+    setHistoryFor(planId);
+  };
+
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
-  const viewingVersion = history.viewing !== undefined;
   const back = useCallback((): boolean => {
     if (page !== PLANS_PAGE.DOCUMENT) return false;
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    else if (viewingVersion) history.onBack();
     else leavePlan();
     return true;
-  }, [
-    leavePlan,
-    page,
-    sidePanel.fullScreen,
-    sidePanel.onToggleFullScreen,
-    viewingVersion,
-    history.onBack,
-  ]);
+  }, [leavePlan, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
   return {
     page,
@@ -857,10 +865,17 @@ export function usePlansTab(input: {
       onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
     },
     agents,
-    history,
+    history: {
+      ...history,
+      open: historyOpen,
+      onOpen: openHistory,
+      onClose: () => setHistoryFor(undefined),
+    },
     onSelect: select,
+    // The agent's tab is in the side panel, so a version history over it gives way.
     onShowAgent: (planId, agentId) => {
       if (planId !== planning.activePlanId) select(planId);
+      setHistoryFor(undefined);
       sidePanel.onChoose({ agent: agentId });
     },
     repositories: {

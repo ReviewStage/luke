@@ -24,7 +24,6 @@ import {
 import {
   BotIcon,
   FileCodeIcon,
-  HistoryIcon,
   ListXIcon,
   PinIcon,
   PinOffIcon,
@@ -43,7 +42,6 @@ import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { FileTab } from "../planning/file-tab";
 import { snippetOf } from "../planning/file-tab-model";
-import { HistoryTab } from "../planning/history-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -59,7 +57,6 @@ import {
 } from "../planning/transcript-copy";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
-import type { PlanHistoryControl } from "../planning/use-plan-history";
 import {
   type DrawnTabs,
   drawsSubagent,
@@ -133,8 +130,7 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
 
 /** What the panel says on a plan that has used none of its tabs, each of which adds itself once it holds something. */
-const NOTHING_YET_LINE =
-  "Luke's board, code, transcript, and work, and the plan's history, appear here as you plan.";
+const NOTHING_YET_LINE = "Luke's board, code, transcript, and work appear here as you plan.";
 
 /** What the toast says once a tab's transcript, concise or full, is on the clipboard. */
 const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
@@ -168,7 +164,6 @@ const TAB_ICON = {
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
   [SIDE_PANEL_TAB.WORK]: <WorkIcon />,
-  [SIDE_PANEL_TAB.HISTORY]: <HistoryIcon />,
 } as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
 
 /** The shortcut that shows each fixed tab; an agent's tab has none. */
@@ -177,7 +172,6 @@ const TAB_COMMAND = {
   [SIDE_PANEL_TAB.CODE]: APP_COMMAND.SHOW_CODE,
   [SIDE_PANEL_TAB.TRANSCRIPT]: APP_COMMAND.SHOW_TRANSCRIPT,
   [SIDE_PANEL_TAB.WORK]: APP_COMMAND.SHOW_WORK,
-  [SIDE_PANEL_TAB.HISTORY]: APP_COMMAND.SHOW_HISTORY,
 } as const satisfies Record<FixedSidePanelTab, AppCommand>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
@@ -935,7 +929,6 @@ function TabContent({
   work,
   workRows,
   agents,
-  history,
   standings,
   shown,
   onOpenSubagent,
@@ -956,7 +949,6 @@ function TabContent({
   /** The plan's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
-  history: PlanHistoryControl;
   standings: WorkerStandings;
   /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
@@ -1069,8 +1061,6 @@ function TabContent({
           shown={shown}
         />
       );
-    case SIDE_PANEL_TAB.HISTORY:
-      return <HistoryTab history={history} />;
   }
 }
 
@@ -1114,10 +1104,6 @@ export function SidePanelToggle({
   useAppCommand(
     APP_COMMAND.SHOW_WORK,
     offer(() => panel.onChoose(SIDE_PANEL_TAB.WORK)),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_HISTORY,
-    offer(() => panel.onChoose(SIDE_PANEL_TAB.HISTORY)),
   );
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
@@ -1309,7 +1295,6 @@ export function SidePanel({
   transcript,
   work,
   agents,
-  history,
   shown,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
@@ -1324,8 +1309,6 @@ export function SidePanel({
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
-  /** The plan's history, which the History tab lists and chooses a version from. */
-  history: PlanHistoryControl;
   /** Whether the plan's page is on screen, which an agent's tab follows its transcript under. */
   shown: boolean;
 }): React.JSX.Element {
@@ -1449,7 +1432,6 @@ export function SidePanel({
               work={work}
               workRows={workRows}
               agents={agents}
-              history={history}
               standings={standings}
               shown={shown && leaving === PANEL_LEAVING.NONE}
               onOpenSubagent={openSubagent}

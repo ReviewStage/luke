@@ -11,6 +11,7 @@ import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
+import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
@@ -112,7 +113,7 @@ function mount(element: ReactElement): HTMLElement {
 }
 
 function mountToolbar(plans: PlansControl): HTMLButtonElement {
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   return more;
@@ -214,6 +215,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -243,6 +245,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -273,6 +276,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   // Copy formats the document drawn, which is the open plan's alone.
   assert.deepEqual(labels(), [
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -288,6 +292,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -318,7 +323,13 @@ test("Pin and Archive mark the plan from either door, and each offers its way ba
   const offered = labels();
   choose("Unarchive");
 
-  assert.deepEqual(offered, ["Rename", "Unarchive", "Change repository…", "Permanently delete"]);
+  assert.deepEqual(offered, [
+    "Rename",
+    "Version history",
+    "Unarchive",
+    "Change repository…",
+    "Permanently delete",
+  ]);
   assert.deepEqual(asked.marked, [
     [PLAN.id, PLAN_MARK.PIN],
     [PLAN.id, PLAN_MARK.ARCHIVE],
@@ -452,10 +463,10 @@ test("an archived plan's page says so quietly over its document, and Unarchive b
   const archived = { ...PLAN, archivedAt: 9 };
   const open = { ...plans, region: { kind: DOCUMENT_REGION.READY, plan: archived } as const };
 
-  const listed = mount(createElement(DesktopPlans, { plans }));
+  const listed = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   assert.equal(listed.querySelector(".desktop-archived-banner"), null);
   unmountAll();
-  const banner = mount(createElement(DesktopPlans, { plans: open })).querySelector(
+  const banner = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans: open })).querySelector(
     ".desktop-archived-banner",
   );
   const unarchive = banner?.querySelector("button");
@@ -531,7 +542,7 @@ test("Rename on a sidebar plan turns its row into a field with the name selected
 
 test("the plan's tab renames the open plan in place on a press and from the ⋯ menu, and a press elsewhere keeps what was typed", async () => {
   const { plans, asked } = openTab();
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -555,7 +566,7 @@ test("the plan's tab renames the open plan in place on a press and from the ⋯ 
 
 test("a rename the service refused says so quietly beside the name until the next edit", async () => {
   const { plans, asked } = openTab({}, undefined, () => Promise.resolve(false));
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -578,7 +589,7 @@ test("the refusal of a rename a newer edit replaced leaves no note beside the ne
       settles.push(resolve);
     });
   const { plans } = openTab({}, undefined, pending);
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -894,7 +905,7 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
       region: { kind },
       onLeavePlan: () => left.push(kind),
     });
-    const container = mount(createElement(DesktopPlans, { plans }));
+    const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
     const close = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Close plan",
     );
@@ -909,7 +920,7 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
 function mountToolbarWithKeys(plans: PlansControl): HTMLButtonElement {
   function Toolbar() {
     useAppKeymap(true);
-    return createElement(DesktopPlans, { plans });
+    return createElement(DesktopPlans, { looks: NO_LOOKS, plans });
   }
   const container = mount(createElement(Toolbar));
   const more = container.querySelector('[aria-label="Plan actions"]');
@@ -962,7 +973,7 @@ test("Command-Shift-A archives the open plan, and an archived plan leaves the ch
 
 test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
   const { plans } = openTab({ [PLAN.id]: "acme/relay" });
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
 
@@ -970,11 +981,14 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   choose("Change repository…");
   // The tab counts the ask; the toolbar's chip opens on it.
   act(() => {
-    roots.at(-1)?.render(
-      createElement(DesktopPlans, {
-        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
-      }),
-    );
+    roots
+      .at(-1)
+      ?.render(
+        createElement(DesktopPlans, {
+          looks: NO_LOOKS,
+          plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+        }),
+      );
   });
 
   const picker = container.querySelector(".desktop-toolbar-actions .plan-compose-menu");
@@ -993,7 +1007,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
 
 test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
   const { plans } = openTab();
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
@@ -1001,11 +1015,14 @@ test("Change repository… on a plan that still has its chip hands focus back to
   openMenu(more);
   choose("Change repository…");
   act(() => {
-    roots.at(-1)?.render(
-      createElement(DesktopPlans, {
-        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
-      }),
-    );
+    roots
+      .at(-1)
+      ?.render(
+        createElement(DesktopPlans, {
+          looks: NO_LOOKS,
+          plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+        }),
+      );
   });
   const search = container.querySelector('input[aria-label="Search repositories"]');
   assert.ok(search, "the picker opened");
