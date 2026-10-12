@@ -79,7 +79,8 @@ export const HOSTED_SERVICE_PATH = {
    * The repositories the signed-in account reaches through the Luke GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
-   * `github-repositories-wire.ts` declares the answer.
+   * `github-repositories-wire.ts` declares the answer, and the
+   * `GITHUB_REPOSITORIES_QUERY` that names a workspace to list for.
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
   /**

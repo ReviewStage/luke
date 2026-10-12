@@ -60,6 +60,16 @@ const findInstallation = SqlSchema.findOneOption({
       .where(eq(githubInstallation.installationId, installationId)),
 });
 
+const findInstallationOfWorkspace = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ installationId: Schema.Number }),
+  execute: (organizationId) =>
+    db
+      .select({ installationId: githubInstallation.installationId })
+      .from(githubInstallation)
+      .where(eq(githubInstallation.organizationId, organizationId)),
+});
+
 const findInstallationOfAccount = SqlSchema.findOneOption({
   Request: Schema.Number,
   Result: Schema.Struct({ organizationId: Schema.String }),
@@ -271,4 +281,14 @@ export function listAvailableWorkspaces(
 ): Effect.Effect<readonly AvailableWorkspace[], StoreFailure, SqlClient.SqlClient> {
   if (installationIds.length === 0) return Effect.succeed([]);
   return findAvailable({ userId, installationIds });
+}
+
+/** GitHub's id for the installation the workspace stands for, whatever its status; none for a workspace of no installation, a personal one. */
+export function installationOfWorkspace(
+  organizationId: string,
+): Effect.Effect<Option.Option<number>, StoreFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findInstallationOfWorkspace(organizationId),
+    Option.map((row) => row.installationId),
+  );
 }
