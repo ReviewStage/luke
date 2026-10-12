@@ -811,9 +811,12 @@ coding-agent chain beside the account's default model. A template past
 20,000 characters is said and never sent, and words left unsaved as the
 page goes that fail to save are said in a toast with a Retry. Reset to
 default asks first, waits for any save already out, and writes null, and
-stands only while the account holds its own. The box is a
-plain Markdown textarea under `ph-no-capture` for now
-(`plan-template-editor.tsx`); the plan's document editor replaces it.
+stands only while the account holds its own. The template is written in
+the plan's own document editor (`plan-template-editor.tsx`), under
+`ph-no-capture`, with no title and no merged answer to take; Esc leaves it
+as focus leaving does. It is built once on the text it opens with and again
+only for words it did not write, as a reset's, and should its bundle fail to
+load, the template is a plain Markdown textarea instead.
 
 Luke is the developer's teammate: someone to bounce ideas off who is also
 responsible for turning them into a concrete plan. So the template is the
