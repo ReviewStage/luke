@@ -1811,6 +1811,36 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
   assert.equal(container.querySelector(".archived-composer"), null);
 });
 
+test("a section editor still open when the plan is archived elsewhere is let go", () => {
+  installScrollIntoView();
+  const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
+  press(container, ".plan-unit-edit");
+  assert.ok(container.querySelector(".plan-field-editor"), "a section editor is open");
+
+  render(true);
+
+  assert.equal(container.querySelector(".plan-field-editor"), null);
+});
+
+test("an agent's rename still open when the plan is archived elsewhere is let go", () => {
+  installScrollIntoView();
+  const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
+  const tab = tabNamed(container, TITLED_AGENT.title ?? "");
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }));
+  });
+  const rename = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  assert.ok(rename, "the agent's menu offers Rename");
+  act(() => rename.click());
+  assert.ok(container.querySelector('input[aria-label="Agent name"]'), "the agent's name is open");
+
+  render(true);
+
+  assert.equal(container.querySelector('input[aria-label="Agent name"]'), null);
+});
+
 test("closing the chosen tab chooses the tab viewed before it, and closing the last leaves the panel open offering every kind", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');

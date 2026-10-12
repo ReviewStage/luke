@@ -165,7 +165,8 @@ export function VersionView({
   /** Whether the version may be restored: not while the plan is archived. */
   restorable?: boolean;
 }): React.JSX.Element {
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: shown }, async () => {
+  // An archive landing while the question stands takes the question down with the button.
+  const restore = useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
     const result = await history.onRestore();
     if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
     return result;

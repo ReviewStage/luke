@@ -602,7 +602,8 @@ function AgentPanelTab({
     <PanelTab
       look={look}
       doors={agents.onUnarchive === undefined ? { ...doors, onRename: rename.begin } : doors}
-      editor={editor}
+      // A rename still open when the plan is archived elsewhere is let go unsaved.
+      editor={agents.onUnarchive === undefined ? editor : undefined}
       tabRef={tab}
     />
   );

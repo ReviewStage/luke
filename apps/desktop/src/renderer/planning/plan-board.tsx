@@ -159,9 +159,10 @@ function BoardCanvas({
   }, [board]);
 
   useEffect(() => {
-    const scene = looking ? handle.current?.scene() : undefined;
+    // A view-only board saves nothing, a look's image included.
+    const scene = looking && !viewOnly ? handle.current?.scene() : undefined;
     if (scene !== undefined) save({ planId, ...scene, module, withImage: true });
-  }, [looking, module, planId, save]);
+  }, [looking, viewOnly, module, planId, save]);
 
   return <div ref={host} className="plan-board-canvas" />;
 }

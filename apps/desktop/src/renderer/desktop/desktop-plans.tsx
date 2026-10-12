@@ -258,7 +258,10 @@ function PlanDocument({
         </Toolbar>
         {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
+          {/* Keyed by the archive, so an editor still open when the plan is
+              archived elsewhere is let go rather than left taking words. */}
           <PlanBody
+            key={String(archived)}
             plan={plan}
             live={plans.live}
             onShowHistory={() => plans.history.onOpen(plan.id)}
