@@ -544,7 +544,7 @@ test("a turn failed on the account's own API key ends saying so and where to rep
   );
 });
 
-test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was", () => {
+test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const plan: CodingAgentMessage = {
     id: "m-plan",
     role: MESSAGE_ROLE.USER,
@@ -578,6 +578,8 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([plan, calling], false), WORKING_PHASE.WORKING);
   // A line after a closed turn awaits a turn of its own; one sent into an open turn steers it.
   assert.equal(agentWorkingPhase([plan, closed, line], false), WORKING_PHASE.STARTING);
+  // A turn closing ahead of its row's settling ends as it worked, not as a start.
+  assert.equal(agentWorkingPhase([plan, closed], false), WORKING_PHASE.WORKING);
   assert.equal(agentWorkingPhase([plan, calling, line], false), WORKING_PHASE.WORKING);
   assert.equal(agentWorkingPhase([plan, opened, line], false), WORKING_PHASE.THINKING);
 });

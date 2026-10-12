@@ -880,21 +880,28 @@ export const WORKING_PHASE_WORDS = {
  * is what its working line says in place of a bare "Working…" between a
  * send and the turn's first row, as Codex and Cursor word a cloud agent's
  * start. It is starting while its session has not run a turn, or while
- * its newest turn's journal is closed or absent, so the line the developer
- * sent awaits a turn of its own; thinking while that journal is open and
- * holds nothing drawn past its step boundaries, which is the model at its
- * first step, since a step's reasoning lands only as the step ends and its
- * words a finished sentence at a time; and working once anything is drawn.
+ * no turn has written a journal, or the newest journal is closed and a
+ * line the developer sent after it awaits a turn of its own; thinking
+ * while that journal is open and holds nothing drawn past its step
+ * boundaries, which is the model at its first step, since a step's
+ * reasoning lands only as the step ends and its words a finished sentence
+ * at a time; and working once anything is drawn.
  * Note that a line sent while a turn runs steers that turn, so the open
- * journal before it is what the agent is doing, not the line.
+ * journal before it is what the agent is doing, not the line; and that a
+ * closed journal with no line after it stays working, because the page
+ * that closes a journal can still say the agent runs until its turn row
+ * settles a look later.
  */
 export function agentWorkingPhase(
   lines: readonly CodingAgentMessage[],
   sessionStarting: boolean,
 ): WorkingPhase {
-  const journal = lines.findLast((line) => line.role === MESSAGE_ROLE.ASSISTANT);
-  if (sessionStarting || journal === undefined || journal.finishedAt !== undefined) {
-    return WORKING_PHASE.STARTING;
+  const at = lines.findLastIndex((line) => line.role === MESSAGE_ROLE.ASSISTANT);
+  const journal = lines[at];
+  if (sessionStarting || journal === undefined) return WORKING_PHASE.STARTING;
+  // A closed journal with nothing after it is a turn ending, its row settling a look behind it.
+  if (journal.finishedAt !== undefined) {
+    return at === lines.length - 1 ? WORKING_PHASE.WORKING : WORKING_PHASE.STARTING;
   }
   return drawnParts(journal).length === 0 ? WORKING_PHASE.THINKING : WORKING_PHASE.WORKING;
 }
