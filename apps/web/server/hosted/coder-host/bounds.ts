@@ -44,6 +44,12 @@ export const CODER = {
   MESSAGES_HOLD: Duration.seconds(20),
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
+  /**
+   * How long a title call may take before its agent or worker goes untitled
+   * (`title.ts`), which is also how long after a delegation a read of an
+   * ended agent, or of the worker, waits for the worker's title to land.
+   */
+  TITLE_TIMEOUT: Duration.seconds(20),
   /** How long one instance keeps what an agent published before asking GitHub again; a tab asks beside every page of a held read. */
   PUBLISHED_TTL: Duration.seconds(30),
   /**

@@ -84,6 +84,27 @@
         "additionalProperties": false
       }
     },
+    "subagentTitles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "callId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "callId",
+          "title"
+        ],
+        "additionalProperties": false
+      }
+    },
     "title": {
       "anyOf": [
         {

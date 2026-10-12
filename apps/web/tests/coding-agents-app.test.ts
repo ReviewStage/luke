@@ -72,6 +72,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { childConversationId, sentLineId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
+import { fillChildTitle } from "../server/hosted/child-titles";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
@@ -87,6 +88,7 @@ import {
   recordCodingAgentStep,
   updateCodingAgentBranch,
 } from "../server/hosted/coding-agent-store";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   CODING_AGENT_DEFAULT_CHOICE,
@@ -258,6 +260,19 @@ function fakeEve(
   return { eve, opened, sent, cancelled };
 }
 
+/** The deployment's environment with no key of its own, which a test gives the one it reads. */
+const NO_KEYS: HostedEnvironmentValues = {
+  openAiKey: undefined,
+  anthropicKey: undefined,
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+};
+
 /**
  * The group over the test's own database, GitHub, and eve, stood once and
  * answering every request of the test, so what it keeps between two
@@ -268,12 +283,17 @@ const standing = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
   eve: ReturnType<typeof fakeEve>,
+  titles: boolean,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      Layer.succeed(HostedEnvironment, {
+        ...NO_KEYS,
+        anthropicKey: titles ? Redacted.make("sk-ant-fixture") : undefined,
+      }),
       github.layer,
       modelCatalogOf(CATALOG),
     );
@@ -368,6 +388,8 @@ const openPlan = (
     readonly eve?: ReturnType<typeof fakeEve>;
     /** What the repository answers on its own paths, for a test of what an agent published. */
     readonly github?: RepositoryScript;
+    /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
+    readonly titles?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -384,7 +406,7 @@ const openPlan = (
     ]);
     const github = githubReaching([INSTALLATION], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
-    const ask = yield* standing(bearers, github, eve);
+    const ask = yield* standing(bearers, github, eve, options.titles ?? false);
     return { owner, other, plan, eve, github, ask };
   });
 
@@ -806,7 +828,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(early.pollUnsafe(), undefined);
         yield* recordDelegation(
           parent,
-          child.conversationId,
+          callId,
           { model: "openai/gpt-6.1-sol", effort: "low" },
           CODER_TOOL.DELEGATE,
         );
@@ -863,6 +885,139 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
         assert.deepEqual(starting.messages, []);
         assert.equal(starting.status, CODING_AGENT_STATUS.STARTING);
+      }),
+  );
+
+  it.effect(
+    "an ended agent's read with nothing new, and its ended worker's, waits for the worker's title still due and answers with it the moment it lands",
+    () =>
+      Effect.gen(function* () {
+        const ended = yield* endedAgentWithWorker({ titles: true }, 0);
+        const agentRead = yield* Effect.forkChild(ended.agentRead);
+        const workerRead = yield* Effect.forkChild(ended.workerRead);
+        yield* TestClock.adjust(Duration.seconds(3));
+        assert.equal(agentRead.pollUnsafe(), undefined);
+        assert.equal(workerRead.pollUnsafe(), undefined);
+
+        yield* fillChildTitle(ended.parent, ended.child, "Count the routes");
+        const own = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(agentRead, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+        );
+        assert.deepEqual(own.messages, []);
+        assert.equal(own.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.deepEqual(own.subagentTitles, [{ callId: ended.callId, title: "Count the routes" }]);
+        const worker = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(workerRead, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+        );
+        assert.deepEqual(worker.messages, []);
+        assert.equal(worker.title, "Count the routes");
+      }),
+  );
+
+  it.effect(
+    "an ended agent's read waits for no title on a deployment with no title model, nor for a worker delegated longer ago than a title call may take: each answers at once, untitled",
+    () =>
+      Effect.gen(function* () {
+        const untitled = yield* endedAgentWithWorker({ titles: false }, 0);
+        const stale = yield* endedAgentWithWorker(
+          { titles: true },
+          Duration.toMillis(CODER.TITLE_TIMEOUT) + 1_000,
+        );
+        for (const ended of [untitled, stale]) {
+          // Asked unforked: a read held on the test's clock would never answer.
+          const own = readAnswer(
+            codingAgentMessagesAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ended.agentRead,
+          );
+          assert.equal(own.subagentTitles, undefined);
+          const worker = readAnswer(
+            codingAgentMessagesAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ended.workerRead,
+          );
+          assert.equal(worker.title, null);
+        }
+      }),
+  );
+
+  it.effect(
+    "a worker's title is carried on its own page, and every titled worker on the agent's page by the call that delegated it, an untitled one named nowhere",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const parent = { userId: owner, conversationId: stored.value.conversationId };
+        const choice = { model: "openai/gpt-6.1-sol", effort: "low" };
+        const titled = {
+          userId: owner,
+          conversationId: childConversationId(parent.conversationId, "call-t1"),
+        };
+        yield* recordDelegation(parent, "call-t1", choice, CODER_TOOL.DELEGATE);
+        yield* recordDelegation(parent, "call-t2", choice, CODER_TOOL.DELEGATE);
+        assert.equal(
+          yield* fillChildTitle(parent, titled.conversationId, "Count the routes"),
+          true,
+        );
+        // A title is filled once: a second lands nowhere.
+        assert.equal(yield* fillChildTitle(parent, titled.conversationId, "Later title"), false);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(titled, {
+          turnId,
+          origin: TURN_ORIGIN.CHILD,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(titled, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(titled.conversationId),
+          turnId,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.CHILD,
+          trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+          at: 0,
+        });
+        yield* writer.consume(titled, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(titled.conversationId),
+          turnId,
+          sequence: 2,
+          message: userMessage(
+            randomUUID(),
+            "Count the routes.",
+            userMetadataOf(BRAIN_TURN_TRIGGER.CHILD_TASK, undefined),
+          ),
+        });
+
+        const worker = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-t1" })),
+        );
+        assert.equal(worker.title, "Count the routes");
+        assert.equal(worker.subagentTitles, undefined);
+
+        // The agent has no turn of its own yet, so its read is held to the hold's end.
+        const reading = yield* Effect.forkChild(
+          ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        const own = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(reading, CODER.MESSAGES_POLL),
+        );
+        assert.deepEqual(own.subagentTitles, [{ callId: "call-t1", title: "Count the routes" }]);
       }),
   );
 
@@ -1964,7 +2119,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
 
         const child = childConversationId(target.conversationId, callId);
         const choice = { model: SOL, effort: "low" };
-        yield* recordDelegation(target, child, choice, CODER_TOOL.DELEGATE);
+        yield* recordDelegation(target, callId, choice, CODER_TOOL.DELEGATE);
         // The record's own stamp is the database's clock, which the test does not hold.
         const delegatedAt = new Date(1_800_000_000_000);
         yield* db
@@ -2369,6 +2524,58 @@ const agentEnded = (target: Target, turnId: string) =>
       responseIds: [],
       at: 1,
     });
+  });
+
+/**
+ * An agent that ended with one worker that ended too, untitled, delegated
+ * `delegatedAgoMs` before the test's clock stands, on a deployment that
+ * generates titles where `titles` says; each transcript read through once,
+ * with the next read of each past its cursor, which finds nothing new.
+ */
+const endedAgentWithWorker = (options: { readonly titles: boolean }, delegatedAgoMs: number) =>
+  Effect.gen(function* () {
+    const { owner, plan, ask } = yield* openPlan(options);
+    const agent = readAnswer(
+      codingAgentAnswerSchema,
+      HOSTED_HTTP_STATUS.CREATED,
+      yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+    ).agent;
+    const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+    const parent = { userId: owner, conversationId: stored.conversationId };
+    const callId = "call-late";
+    const child = childConversationId(parent.conversationId, callId);
+    const choice = { model: "openai/gpt-6.1-sol", effort: "low" };
+    yield* recordDelegation(parent, callId, choice, CODER_TOOL.DELEGATE);
+    // The record's own stamp is the database's clock, which the test does not hold.
+    const now = yield* Clock.currentTimeMillis;
+    yield* db
+      .update(conversations)
+      .set({ createdAt: new Date(now - delegatedAgoMs) })
+      .where(eq(conversations.id, child));
+    const line = (text: string) =>
+      userMessage(randomUUID(), text, userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined));
+    const worker = { userId: owner, conversationId: child };
+    yield* agentEnded(worker, yield* agentWroteMessages(worker, [line("Count the routes.")]));
+    yield* agentEnded(parent, yield* agentWroteMessages(parent, [line("Build it.")]));
+    /** The read past the page a first read answered at once, since it carried a message. */
+    const readPast = (path: string, call?: string) =>
+      Effect.gen(function* () {
+        const at = { id: agent.id, ...(call === undefined ? undefined : { call }) };
+        const first = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(path, owner, at)),
+        );
+        assert.equal(first.messages.length, 1);
+        return ask(request(path, owner, { ...at, after: first.cursor }));
+      });
+    return {
+      parent,
+      child,
+      callId,
+      agentRead: yield* readPast(AGENT_MESSAGES),
+      workerRead: yield* readPast(AGENT_SUBAGENT_MESSAGES, callId),
+    };
   });
 
 /** How many times the test's GitHub was asked for a path under the repository. */

@@ -37,6 +37,7 @@ import {
 } from "./hosted/brain-host/eve-sessions.js";
 import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
+import { childTitlesOf } from "./hosted/child-titles.js";
 import {
   type PublishedCache,
   PublishedKey,
@@ -50,7 +51,10 @@ import {
   cursorOfWire,
   cursorToWire,
   delegationPast,
+  NO_TITLE_AWAITED,
+  type TitleAwaited,
   type TranscriptPage,
+  titleMayLand,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import {
@@ -64,6 +68,7 @@ import {
   renameCodingAgent,
   updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -130,7 +135,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * agent's transcript carries: the child conversation is a function of the
  * two (`brain-host/ids.ts`), and only a delegation recorded under the
  * account's agent answers, so a call of another account's agent reads as
- * none.
+ * none. Each worker's title, generated from its task as it starts, is
+ * carried on its own page and, for every worker titled so far, on the
+ * agent's; a read of an ended agent, or worker, with nothing new waits for a
+ * title still due, since a short worker's lands after its agent ended and a
+ * reader stops at that read.
  */
 
 const AGENTS_PATH = {
@@ -174,7 +183,8 @@ export type CodingAgentsAppServices =
   | SqlClient.SqlClient
   | GitHubApp
   | HttpClient.HttpClient
-  | ModelCatalog;
+  | ModelCatalog
+  | HostedEnvironment;
 
 type AgentsServices = CodingAgentsAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -223,6 +233,22 @@ const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return after.success;
 });
 
+/**
+ * What a read of an ended agent, or of its worker, waits on for a worker's
+ * title: the worker named, or any of the agent's where none is; nothing on
+ * a deployment that generates no titles, which is one without Luke's
+ * Anthropic key, the title model's (`coder-host/model.ts`).
+ */
+const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  parent: ConversationTarget,
+  childConversationId?: string,
+): Effect.fn.Return<TitleAwaited, never, HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  return environment.anthropicKey === undefined
+    ? NO_TITLE_AWAITED
+    : titleMayLand(parent, childConversationId);
+});
+
 /** A page of a transcript as the wire answers it. */
 function transcriptResponse(
   page: TranscriptPage,
@@ -234,6 +260,7 @@ function transcriptResponse(
     status: page.status,
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
     ...(page.delegations === undefined ? undefined : { delegations: page.delegations }),
+    ...(page.subagentTitles === undefined ? undefined : { subagentTitles: page.subagentTitles }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
@@ -422,13 +449,14 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   }
   const after = yield* cursorOf(request);
   const { agent, target } = yield* ownedAgent(seams, request);
+  const titleAwaited = yield* titleAwaitedOf(target);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent),
+    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
   );
   return transcriptResponse(page, agent.title);
 });
 
-/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
+/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one, with the worker's title once one landed. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
 const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
   function* (
     seams: CodingAgentsAppSeams,
@@ -450,12 +478,20 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
         null,
       );
     }
+    const titleAwaited = yield* titleAwaitedOf(target, conversationId);
     const page = yield* hostedStoreOrUnavailable(
-      transcriptPast({ userId, conversationId }, CODER_TOOL_SET, cursorOfWire(after), {
-        createdAt: read.delegation.createdAt,
-      }),
+      transcriptPast(
+        { userId, conversationId },
+        CODER_TOOL_SET,
+        cursorOfWire(after),
+        { createdAt: read.delegation.createdAt },
+        undefined,
+        titleAwaited,
+      ),
     );
-    return transcriptResponse(page, null);
+    // The title is read after the page, since it lands beside the worker's start, which a held read may span.
+    const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));
+    return transcriptResponse(page, titles.get(conversationId) ?? null);
   },
 );
 

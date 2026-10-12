@@ -30,6 +30,7 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { fillChildTitle } from "../server/hosted/child-titles";
 import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
@@ -816,6 +817,42 @@ test("a plan's work read back carries each worker's own session from its child c
     type: PLAN_WORK_PART.TEXT,
     text: "Both libraries revoke.",
   });
+});
+
+test("a plan's work read back carries a worker's title from its child conversation, on the call that started it and on a later call steering the same task; an untitled worker carries none", async () => {
+  const target = await planConversation();
+  const first = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), first);
+  await askedAt(first, NOW - 1_000);
+  const later = standingFor(target);
+  await play(steeredTurn(FIRST_EVE_TURN, SEQUENCE, NOW), later);
+  await askedAt(later, NOW);
+  const [starter] = (await worked(target, first)).parts;
+  assert.ok(starter?.type === PLAN_WORK_PART.TOOL);
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, starter.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Both libraries revoke.")],
+    { ...standingFor(child), turn: RELAY_TURN.CHILD },
+  );
+  const sessionTitles = async () => {
+    const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+    assert.ok(Option.isSome(read));
+    return read.value.turns.map((turn) => {
+      const [drawn] = turn.parts;
+      return drawn?.type === PLAN_WORK_PART.TOOL ? drawn.session?.title : undefined;
+    });
+  };
+  assert.deepEqual(await sessionTitles(), [undefined, undefined]);
+
+  await database.run(fillChildTitle(target, child.conversationId, "Token revocation libraries"));
+  assert.deepEqual(await sessionTitles(), [
+    "Token revocation libraries",
+    "Token revocation libraries",
+  ]);
 });
 
 test("a worker sent more work in a later turn reads the session of the call that started its task, where eve records that work", async () => {

@@ -4,6 +4,7 @@ import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { openChildConversation } from "../brain-host/conversation.js";
+import { childConversationId } from "../brain-host/ids.js";
 import { writeDelegation } from "../coding-agent-store.js";
 import { MODEL_CHOICE_REFUSAL, type OfferedModel, validateModelChoice } from "../model-catalog.js";
 import type { ConversationTarget } from "../store/index.js";
@@ -67,20 +68,22 @@ export function delegationChoice(
 
 /**
  * Records a delegation ahead of the worker's session: the child conversation
- * the worker is recorded in, opened under the agent's, and the pair it runs
- * on written beside it, in one transaction.
+ * the call names, which the worker is recorded in, opened under the agent's,
+ * and the pair it runs on written beside it with the call's id, in one
+ * transaction.
  */
 export function recordDelegation(
   parent: ConversationTarget,
-  childConversationId: string,
+  callId: string,
   choice: ModelChoice,
   label: string,
 ): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const child = childConversationId(parent.conversationId, callId);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.andThen(
-        openChildConversation(parent, childConversationId, label),
-        writeDelegation(childConversationId, choice),
+        openChildConversation(parent, child, label),
+        writeDelegation(child, callId, choice),
       ),
     ),
   );

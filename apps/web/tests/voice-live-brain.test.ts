@@ -41,6 +41,7 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { fillChildTitle } from "../server/hosted/child-titles";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import {
@@ -1800,6 +1801,47 @@ it.effect(
       assert.deepEqual(drawn.session?.parts, [
         { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
       ]);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "a worker's title that lands on its child while its turn is followed reaches the worker's session on a later look",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      yield* parkedOnTask(target, f);
+      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+      const child = {
+        userId: target.userId,
+        conversationId: childConversationId(target.conversationId, worker.id),
+      };
+      yield* Effect.promise(() =>
+        database.run(openChildConversation(target, child.conversationId, "worker")),
+      );
+      yield* Effect.promise(() =>
+        play(
+          childTurn(FIRST_EVE_TURN, "Queue A lets an admin revoke."),
+          relayedInto(child, RELAY_TURN.CHILD),
+        ),
+      );
+      const titleNow = () => {
+        const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+        assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+        return drawn.session?.title;
+      };
+      yield* f.polls(2);
+      assert.equal(titleNow(), undefined);
+
+      yield* Effect.promise(() =>
+        database.run(fillChildTitle(target, child.conversationId, "Queue comparison")),
+      );
+      yield* f.polls(2);
+      assert.equal(titleNow(), "Queue comparison");
       yield* Effect.promise(() => f.stop());
     }),
 );

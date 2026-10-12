@@ -28,11 +28,22 @@ export const host: BrainHost = brainHost(seams);
 /**
  * Relays one event of a subagent's session into its child conversation, for
  * the subagent's own hook, which runs here rather than at an edge of its own.
+ * Each task the subagent receives wakes its title on a fiber of its own once
+ * relayed, so its turn is not held for it; the title always names the first
+ * task the subagent received, and only the first title that lands stands.
  */
 export function relayChildEvent(
   event: Parameters<BrainHost["relayChild"]>[0],
   session: Parameters<BrainHost["relayChild"]>[1],
   state: Parameters<BrainHost["relayChild"]>[2],
 ): Promise<void> {
-  return runWeb(host.relayChild(event, session, state));
+  return runWeb(
+    Effect.gen(function* () {
+      yield* host.relayChild(event, session, state);
+      // The fiber outlives this hook and ends on its own, as a coding agent's title's does.
+      if (event.type === "message.received") {
+        yield* Effect.forkDetach(host.titleChild(session));
+      }
+    }),
+  );
 }

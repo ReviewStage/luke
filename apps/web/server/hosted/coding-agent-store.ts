@@ -1,12 +1,13 @@
 import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
+  type CodingAgentSubagentTitle,
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -56,7 +57,9 @@ import {
  * worker's session (`coder-host/delegation.ts`) with the model and effort
  * the agent chose for it written beside it here, so the worker's steps read
  * the pair under the child and the tabs read the worker's transcript under
- * the agent's. Note that nothing here reaches the brain host's modules,
+ * the agent's; the worker's title stands on its child conversation
+ * (`child-titles.ts`) and is read back here by the call that delegated it,
+ * which is kept on the delegation for that. Note that nothing here reaches the brain host's modules,
  * because the routes bundle this module and the brain host's modules reach
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
@@ -672,13 +675,14 @@ export interface CodingAgentDelegation extends ModelChoice {
 const insertDelegation = SqlSchema.void({
   Request: Schema.Struct({
     childConversationId: Schema.String,
+    callId: Schema.String,
     model: Schema.String,
     effort: Schema.String,
   }),
-  execute: ({ childConversationId, model, effort }) =>
+  execute: ({ childConversationId, callId, model, effort }) =>
     db
       .insert(codingAgentDelegation)
-      .values({ childConversationId, model, effort })
+      .values({ childConversationId, callId, model, effort })
       .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
 });
 
@@ -712,12 +716,18 @@ const findDelegation = SqlSchema.findOneOption({
       ),
 });
 
-/** Writes the pair a worker runs on under its child conversation, which must already stand; a pair written twice under one child stands as first written, since the worker may already be reading it. */
+/** Writes the pair a worker runs on under its child conversation, which must already stand, with the call that delegated it; a pair written twice under one child stands as first written, since the worker may already be reading it. */
 export function writeDelegation(
   childConversationId: string,
+  callId: string,
   choice: ModelChoice,
 ): CodingAgentStoreEffect<void> {
-  return insertDelegation({ childConversationId, model: choice.model, effort: choice.effort });
+  return insertDelegation({
+    childConversationId,
+    callId,
+    model: choice.model,
+    effort: choice.effort,
+  });
 }
 
 /** The delegation recorded under this child of the account's conversation, or nothing where none stands: another account's, another agent's, or no delegation at all. */
@@ -770,6 +780,74 @@ export function delegationStartsOf(
       childConversationIds,
     }),
     (rows) => new Map(rows.map((row) => [row.childConversationId, row.createdAt])),
+  );
+}
+
+const findDelegationTitles = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, parentConversationId: Schema.String }),
+  Result: Schema.Struct({ callId: Schema.String, title: Schema.String }),
+  execute: ({ userId, parentConversationId }) =>
+    db
+      .select({ callId: codingAgentDelegation.callId, title: conversations.title })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNotNull(codingAgentDelegation.callId),
+          isNotNull(conversations.title),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(asc(conversations.createdAt)),
+});
+
+/** Every titled worker of the account's conversation by the call that delegated it, oldest first; one recorded before its call was kept reads as untitled. */
+export function delegationTitlesOf(
+  parent: ConversationTarget,
+): CodingAgentStoreEffect<readonly CodingAgentSubagentTitle[]> {
+  return findDelegationTitles({
+    userId: parent.userId,
+    parentConversationId: parent.conversationId,
+  });
+}
+
+const findUntitledDelegations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    since: Schema.Date,
+  }),
+  Result: Schema.Struct({ childConversationId: Schema.String }),
+  execute: ({ userId, parentConversationId, since }) =>
+    db
+      .select({ childConversationId: codingAgentDelegation.childConversationId })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNull(conversations.title),
+          gt(conversations.createdAt, since),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/** The children of the account's conversation delegated after `since` that have no title yet, which is where a title may still land. */
+export function untitledDelegationsSince(
+  parent: ConversationTarget,
+  since: Date,
+): CodingAgentStoreEffect<ReadonlySet<string>> {
+  return Effect.map(
+    findUntitledDelegations({
+      userId: parent.userId,
+      parentConversationId: parent.conversationId,
+      since,
+    }),
+    (rows) => new Set(rows.map((row) => row.childConversationId)),
   );
 }
 

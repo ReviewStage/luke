@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -206,7 +207,7 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's, and when its newest task began and ended. Note that it stands one level deep, because the wire shows no
+ * model's, when its newest task began and ended, and its title. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
@@ -217,6 +218,10 @@ const planWorkSessionSchema = EffectSchema.Struct({
   startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
   /** Epoch milliseconds it answered or ended that task; absent while it runs, and from a service older than it. */
   endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
+  /** Its short title, generated from the first task it was handed; absent until that lands, where none could be generated, and from a service older than it. */
+  title: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+  ),
 });
 
 const planWorkPartSchema = EffectSchema.Union([

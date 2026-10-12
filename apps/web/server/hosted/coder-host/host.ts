@@ -54,7 +54,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
-import { generateAgentTitle } from "./title.js";
+import { generateAgentTitle, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -73,7 +73,8 @@ import { CODER_TOOL } from "./tool-set.js";
  * into the turn that receives it, so nothing needs binding here. The
  * agent's title is the host's one model call of its own: generated from the
  * plan as the agent's first session starts, written where no title stands
- * yet, and never again, so a name the developer gives is the last word.
+ * yet, and never again, so a name the developer gives is the last word; each
+ * worker is named by the same call over the task its delegation handed it.
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
@@ -192,6 +193,8 @@ export interface CoderHost {
   >;
   /** The agent's title generated from its plan and written where none stands, for the first session of the conversation alone; a later session, a failed call, and a title already standing each leave the row as it is. */
   title(starting: AdmittedConversation): HostEffect<void>;
+  /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
+  delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
   /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
   editPlan(
     admitted: AdmittedConversation,
@@ -354,7 +357,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           choice = chosen.success;
         }
         const childId = childConversationId(admitted.target.conversationId, callId);
-        yield* recordDelegation(admitted.target, childId, choice, CODER_TOOL.DELEGATE);
+        yield* recordDelegation(admitted.target, callId, choice, CODER_TOOL.DELEGATE);
         // The pair answered is the pair recorded: a call replayed after the agent's row changed
         // finds the delegation it already made, which is the one the worker runs on.
         const recorded = yield* readDelegation(admitted.target, childId);
@@ -464,6 +467,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         });
         if (Option.isNone(title)) return;
         yield* fillCodingAgentTitle(starting.target.userId, agent.id, title.value);
+      }),
+
+    delegationTitle: (admitted, callId, task) =>
+      Effect.gen(function* () {
+        const model = seams.titleModel();
+        if (model === undefined) return;
+        // A call no delegation was recorded for opened no child, so the fill finds no row to write.
+        const childId = childConversationId(admitted.target.conversationId, callId);
+        yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
     relay: (event, admitted, session, state, prompt) =>
