@@ -327,6 +327,25 @@ test("a search finds a plan by its repository, so two plans of one name are told
   );
 });
 
+test("a search lists the rows its letters abbreviate, never those it is only scattered through", () => {
+  mountWindow(PANEL_TAB.PLANS);
+  const input = openPalette();
+  search(input, "tgsb");
+  pressFilter("Settings");
+  assert.ok(
+    rows().some((row) => row.startsWith("Toggle sidebar")),
+    "tgsb abbreviates Toggle sidebar",
+  );
+  search(input, "palette");
+  pressFilter("All");
+  const listed = rows();
+  assert.ok(listed.some((row) => row.startsWith("Command palette")));
+  assert.ok(
+    !listed.some((row) => row.startsWith("Permanently delete plan")),
+    "palette's letters only stand scattered through Permanently delete plan",
+  );
+});
+
 test("the open plan's coding agent is listed beside the plan's name and opens as its notification would, over whatever covers its tab", () => {
   const asked = mountWindow(PANEL_TAB.SETTINGS);
   openPalette();

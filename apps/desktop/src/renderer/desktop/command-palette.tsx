@@ -149,6 +149,20 @@ interface PaletteSection {
 const KEYWORD_SCORE = Number.MIN_VALUE;
 
 /**
+ * The least of cmdk's scores the palette counts as a match. An abbreviation
+ * of a row's words ("tgsb" for Toggle sidebar) scores above it, and letters
+ * scattered through unrelated words ("palette" in Permanently delete plan)
+ * a tenth of it.
+ */
+const LEAST_SCORE = 0.01;
+
+/** cmdk's own score of the words for the query, nothing under the least the palette counts. */
+function fuzzyScore(words: string, query: string): number {
+  const score = defaultFilter(words, query);
+  return score < LEAST_SCORE ? 0 : score;
+}
+
+/**
  * How well a row answers the query: cmdk's own score over its short words,
  * else the least score where every word of the query is in its keywords.
  * Note that the keywords are not scored by cmdk, because its scoring is
@@ -156,7 +170,7 @@ const KEYWORD_SCORE = Number.MIN_VALUE;
  * letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  const score = defaultFilter(row.terms.join(" "), query);
+  const score = fuzzyScore(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
 }
