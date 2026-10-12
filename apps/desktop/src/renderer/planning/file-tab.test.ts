@@ -340,7 +340,7 @@ test("while a find bar is open over the tab the rest of the file is read a windo
         file: { path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 },
         snippet: undefined,
         readFile,
-        openGitHub: () => undefined,
+        onRead: () => undefined,
       }),
     );
   }

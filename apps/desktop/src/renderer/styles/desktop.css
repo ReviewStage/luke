@@ -2363,6 +2363,13 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* Over a File tab the bar stands just under the file's own bar
+   (`planning.css`), whose controls it would otherwise cover: that bar's
+   buttons, its padding, and its hairline. */
+.find-scope:has(> .file-view) > .find-bar {
+  top: calc(var(--control-height) + 2 * var(--space-4) + 1px + var(--space-8));
+}
+
 /* The field keeps one width whatever is typed or tallied, so the buttons
    beside it never move. */
 .find-bar-well {
