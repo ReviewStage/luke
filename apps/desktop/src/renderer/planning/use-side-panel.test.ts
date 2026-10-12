@@ -429,6 +429,35 @@ test("a fixed tab dragged among a plan's few keeps its place on a plan that has 
   ]);
 });
 
+test("tabs of every kind moved on one plan stand in that order on that plan alone", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const panel = mountOn(usedPlan(PLAN).holds, [AGENT]);
+  act(() => panel.control().onMove({ agent: AGENT }, 0));
+  act(() => panel.control().onMove(SIDE_PANEL_TAB.TRANSCRIPT, 0));
+  assert.deepEqual(panel.control().order, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    { agent: AGENT },
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.WORK,
+  ]);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.WORK,
+  ]);
+
+  panel.standOn(usedPlan(PLAN).holds, OTHER_PLAN);
+  assert.deepEqual(panel.control().order, []);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.WORK,
+  ]);
+});
+
 test("a tab pinned to the sidebar is kept across a launch with its plan and name, newest first, outlives its tab's close, and goes with an unpin", () => {
   const first = mount([AGENT], [], undefined, [ROLES]);
   act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));

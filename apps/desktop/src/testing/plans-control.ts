@@ -106,6 +106,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       fullScreen: false,
       newTabAsked: false,
       tabs: SIDE_PANEL_TABS,
+      order: [],
       closedTabs: [],
       pins: [],
       subagents: [],
