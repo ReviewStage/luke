@@ -85,6 +85,48 @@
                   "type": {
                     "type": "string",
                     "enum": [
+                      "code"
+                    ]
+                  },
+                  "repo": {
+                    "type": "string",
+                    "maxLength": 140
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "startLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "sha": {
+                    "type": "string",
+                    "minLength": 40,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "type",
+                  "repo",
+                  "path",
+                  "startLine",
+                  "endLine",
+                  "sha"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
                       "image"
                     ]
                   },

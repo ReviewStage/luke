@@ -31,12 +31,7 @@ import {
   type InboxSandboxDoor,
 } from "../server/hosted/coder-host/inbox-image";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import {
-  answerInboxItem,
-  type InboxAgent,
-  planInboxItems,
-  readInboxAttachment,
-} from "../server/hosted/inbox-store";
+import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
 
@@ -146,7 +141,7 @@ const input = (value: WireBoundaryInput) => unparsedWire(value);
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
 /** A post run as the tool runs one, over the sandbox given. */
-const post = (agent: InboxAgent, value: ReturnType<typeof input>, sandbox = noSandbox) =>
+const post = (agent: PostingAgent, value: ReturnType<typeof input>, sandbox = noSandbox) =>
   postToInbox(agent, value, sandbox);
 
 /** The first bytes of each image type, as a file of it starts, followed by what a screenshot's would be. */
@@ -444,7 +439,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         const refused = (result: { readonly status: string; readonly reason?: string }) =>
           result.status === ACTION_RESULT_STATUS.REJECTED ? result.reason : undefined;
         const pointing = (block: Partial<typeof RETRY_LINES>) =>
-          postToInbox(agent, input({ ...RETRIES, blocks: [{ ...RETRY_LINES, ...block }] }));
+          post(agent, input({ ...RETRIES, blocks: [{ ...RETRY_LINES, ...block }] }));
         assert.equal(
           refused(yield* pointing({ repo: "acme/other" })),
           INBOX_REFUSAL.CODE_REPOSITORY,
@@ -563,7 +558,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   const CHECKOUT_SHOT = "/workspace/repository/shots/landing.png";
 
   /** The one image block of the agent's open item, as the plan's inbox reads it. */
-  const imageBlockOf = (agent: InboxAgent) =>
+  const imageBlockOf = (agent: PostingAgent) =>
     Effect.map(planInboxItems(agent.userId, agent.planId), (items) => {
       const block = items[0]?.blocks.find(
         (each): each is InboxImageBlock => each.type === INBOX_BLOCK.IMAGE,

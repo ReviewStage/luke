@@ -16,9 +16,14 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * that item, and reopens it where it was answered or closed, so an item is
  * kept current rather than posted twice. An item is a title, the blocks
  * of context under it, and the response it asks for. The blocks are a
- * closed set of shapes, Markdown, a link, and a reference to lines of the
- * agent's repository at a commit, each a tagged record, so a later block
- * type is one more member rather than a new column. The
+ * closed set of shapes, Markdown, a link, a reference to lines of the
+ * agent's repository at a commit, and an image, each a tagged record, so a
+ * later block type is one more member rather than a new column. An image
+ * is one the agent took in its sandbox, a screenshot of what it rendered:
+ * the agent posts it by the file's path there, the service reads the file
+ * and keeps it as an attachment of the item's, and the block the desktop
+ * reads names the attachment, which the desktop fetches under the account
+ * and never by an address the agent wrote. The
  * response is a closed set too, each answered its own way: a choice among
  * the agent's options, one or several, or in the developer's own words;
  * an approval or a decline of a step; words; a task the developer does by

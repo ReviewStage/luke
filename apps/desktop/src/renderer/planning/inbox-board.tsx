@@ -763,7 +763,7 @@ function OpenCard({
           onImage={onImage}
           onRetryImage={onRetryImage}
           openGitHub={openGitHub}
-        code={code}
+          code={code}
         />
         <ResponseControls item={item} draft={draft} disabled={sending} onDraft={setDraft} />
         {known ? (
