@@ -127,7 +127,11 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 
 ### Plan list
 
-- Every named plan the account owns, newest started first. Opening a plan
+- Every named plan of every workspace the account is in, newest started
+  first. A workspace is a team's shared set of plans: every account has a
+  personal one, and more are made, and their teams read, on the site's
+  Workspaces page (`/workspaces.html`, `apps/web/src/WorkspacesPage.tsx`),
+  which calls Better Auth's organization plugin on the browser's session. Opening a plan
   moves no row, so a new plan stands at the head and nothing else moves.
   The plans are grouped under their repositories' headers, the repository's
   name with its owner on hover (or `owner/name` where two share a name), the

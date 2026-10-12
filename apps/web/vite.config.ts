@@ -18,6 +18,7 @@ export default defineConfig({
         consent: resolveEntry("./consent.html"),
         "github-installed": resolveEntry("./github-installed.html"),
         admin: resolveEntry("./admin.html"),
+        workspaces: resolveEntry("./workspaces.html"),
       },
     },
   },
