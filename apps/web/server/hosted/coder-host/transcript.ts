@@ -157,16 +157,19 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
 
 /**
  * The agent's context as its row holds it, against the window the catalog
- * lists for the model the same read says it runs on now; nothing before its
- * first step. Note that the model is read here rather than taken from the
- * agent the request read, because a change of model during the hold is
- * what the step this page carries ran on.
+ * lists for the model and window the same read says it runs on now;
+ * nothing before its first step. Note that the choice is read here rather
+ * than taken from the agent the request read, because a change of model or
+ * window during the hold is what the step this page carries ran on.
  */
 const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly OfferedModel[]) =>
   Effect.map(readCodingAgentContext(target.userId, own.id), (held) =>
     Option.isNone(held)
       ? undefined
-      : codingAgentContextOf(held.value, contextWindowOf(offered, held.value.model)),
+      : codingAgentContextOf(
+          held.value,
+          contextWindowOf(offered, held.value.model, held.value.contextWindow),
+        ),
   );
 
 /**

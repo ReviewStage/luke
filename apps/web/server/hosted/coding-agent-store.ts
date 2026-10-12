@@ -1,3 +1,8 @@
+import {
+  CONTEXT_WINDOW,
+  type ContextWindow,
+  contextWindowSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -38,8 +43,9 @@ import {
  * relay's to write, and the newest turn is what the agent's status is read
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
- * rather than finding an agent nothing runs. The model and effort on the
- * row are read at every step, so a change to them is the next step's. The
+ * rather than finding an agent nothing runs. The model, effort, and context
+ * window on the row are read at every step, so a change to them is the next
+ * step's. The
  * branch is what stood checked out in the agent's sandbox as its last turn
  * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
  * read where the agent's pull request is looked up (`coder-host/published.ts`). A
@@ -76,6 +82,7 @@ export interface CodingAgent {
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
+  readonly contextWindow: ContextWindow;
   /** The plan text the agent was handed; null where it was handed a task instead. */
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
@@ -109,6 +116,8 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
+  /** The model's whole window, the long one, where the Start names none. */
+  readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
 };
 
@@ -119,6 +128,7 @@ const CODING_AGENT_COLUMNS = {
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
+  contextWindow: codingAgent.contextWindow,
   planSnapshot: codingAgent.planSnapshot,
   task: codingAgent.task,
   repository: codingAgent.repository,
@@ -133,6 +143,7 @@ const CodingAgentRowSchema = Schema.Struct({
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
+  contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
   task: Schema.NullOr(Schema.String),
   repository: Schema.String,
@@ -187,6 +198,7 @@ const insertAgent = SqlSchema.findOne({
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
+    contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
@@ -202,6 +214,7 @@ const insertAgent = SqlSchema.findOne({
         conversationId: write.conversationId,
         model: write.model,
         effort: write.effort,
+        contextWindow: write.contextWindow,
         planSnapshot: write.planSnapshot,
         task: write.task,
         repository: write.repository,
@@ -217,12 +230,13 @@ const updateAgentChoice = SqlSchema.findOneOption({
     agentId: Schema.String,
     model: Schema.String,
     effort: Schema.String,
+    contextWindow: contextWindowSchema,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, agentId, model, effort }) =>
+  execute: ({ userId, agentId, model, effort, contextWindow }) =>
     db
       .update(codingAgent)
-      .set({ model, effort })
+      .set({ model, effort, contextWindow })
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
       .returning(CODING_AGENT_COLUMNS),
 });
@@ -306,6 +320,7 @@ const findAgentContext = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({
     model: Schema.String,
+    contextWindow: contextWindowSchema,
     lastStep: Schema.NullOr(AgentStepColumnSchema),
     compactedAt: Schema.NullOr(InstantColumnSchema),
   }),
@@ -313,6 +328,7 @@ const findAgentContext = SqlSchema.findOneOption({
     db
       .select({
         model: codingAgent.model,
+        contextWindow: codingAgent.contextWindow,
         lastStep: codingAgent.lastStep,
         compactedAt: codingAgent.compactedAt,
       })
@@ -407,6 +423,7 @@ export function createCodingAgent(
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
+          contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
           planSnapshot: started.planSnapshot,
           task: started.task,
           repository: started.repository,
@@ -455,13 +472,19 @@ export function readCodingAgent(
   return findAgent({ userId, agentId });
 }
 
-/** The account's agent given another model and effort, which its next step runs on; nothing for an agent the account does not own. */
+/** The account's agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent the account does not own. */
 export function updateCodingAgentChoice(
   userId: string,
   agentId: string,
-  choice: { readonly model: string; readonly effort: string },
+  choice: ModelChoice,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentChoice({ userId, agentId, model: choice.model, effort: choice.effort });
+  return updateAgentChoice({
+    userId,
+    agentId,
+    model: choice.model,
+    effort: choice.effort,
+    contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+  });
 }
 
 /** The branch checked out in the account's agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent the account does not own. */
@@ -502,6 +525,7 @@ export function readCodingAgentOfConversation(
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
 export interface CodingAgentContextRow {
   readonly model: string;
+  readonly contextWindow: ContextWindow;
   readonly lastStep: StoredAgentStep | null;
   readonly compactedAt: Date | null;
 }

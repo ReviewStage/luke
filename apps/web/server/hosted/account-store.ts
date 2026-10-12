@@ -1,3 +1,4 @@
+import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
@@ -13,8 +14,8 @@ import { InstantColumnSchema } from "./store/database.js";
 /**
  * What the account group reads and writes of an account: the erasure, and
  * the cross-device snapshot behind `/api/account/preferences`, which is the
- * settings preferences and the coding agents' default model and effort
- * beside them. Every function here is an effect over the ambient `SqlClient`
+ * settings preferences and the coding agents' default model, effort, and
+ * context window beside them. Every function here is an effect over the ambient `SqlClient`
  * and names no database of its own; `account-seams.ts` beside it runs them
  * at the web edge and is the only file of the two that reaches the auth
  * session.
@@ -73,6 +74,7 @@ const PREFERENCE_COLUMNS = {
   voice: accountPreference.voice,
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
+  codingAgentContextWindow: accountPreference.codingAgentContextWindow,
   updatedAt: accountPreference.updatedAt,
 };
 
@@ -80,6 +82,7 @@ const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
+  codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -88,12 +91,18 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
 /**
  * The row as the group answers it. A coding-agent default stands only with
  * both halves written; one half alone is no choice the catalog could have
- * accepted, so it reads as the default beside a whole one.
+ * accepted, so it reads as the default beside a whole one. The context
+ * window is named only where it is the standard one, as the wire names it.
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
+  const standard = row.codingAgentContextWindow === CONTEXT_WINDOW.STANDARD;
   const codingAgent: ModelChoice =
     row.codingAgentModel !== null && row.codingAgentEffort !== null
-      ? { model: row.codingAgentModel, effort: row.codingAgentEffort }
+      ? {
+          model: row.codingAgentModel,
+          effort: row.codingAgentEffort,
+          ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
+        }
       : CODING_AGENT_DEFAULT_CHOICE;
   return {
     preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
@@ -126,7 +135,13 @@ export function readAccountPreferences(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  codingAgent: Schema.optionalKey(Schema.Struct({ model: Schema.String, effort: Schema.String })),
+  codingAgent: Schema.optionalKey(
+    Schema.Struct({
+      model: Schema.String,
+      effort: Schema.String,
+      contextWindow: Schema.optionalKey(contextWindowSchema),
+    }),
+  ),
   updatedAt: Schema.Date,
 });
 
@@ -141,6 +156,7 @@ function writtenColumns(write: PreferenceWrite) {
       : {
           codingAgentModel: write.codingAgent.model,
           codingAgentEffort: write.codingAgent.effort,
+          codingAgentContextWindow: write.codingAgent.contextWindow ?? null,
         }),
   };
 }

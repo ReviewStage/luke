@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   HTTP_STATUS,
@@ -45,6 +46,7 @@ function entry(
     readonly reasoning?: readonly JsonValue[] | null;
     /** The entry's prices as the catalog spells them, dollars per token as strings; an entry without lists none. */
     readonly pricing?: JsonValue;
+    readonly contextWindow?: number;
   } = {},
 ): JsonValue {
   const tags = options.tags ?? ["tool-use", "reasoning"];
@@ -57,7 +59,7 @@ function entry(
     object: "model",
     name,
     tags: [...tags],
-    context_window: 200_000,
+    context_window: options.contextWindow ?? 200_000,
     ...(reasoning === null ? undefined : { reasoning_options: [...reasoning] }),
     ...(options.pricing === undefined ? undefined : { pricing: options.pricing }),
   };
@@ -193,6 +195,142 @@ it.effect("the default choice is one the catalog as published accepts", () =>
     );
   }),
 );
+
+/** Prices tiered at a boundary as the catalog spells them: the first tier from none, the second from the boundary on. */
+function tiered(
+  boundary: number,
+  input: readonly [string, string],
+  output: readonly [string, string],
+): JsonValue {
+  return {
+    input: input[0],
+    output: output[0],
+    input_tiers: [
+      { cost: input[0], min: 0, max: boundary },
+      { cost: input[1], min: boundary },
+    ],
+    output_tiers: [
+      { cost: output[0], min: 0, max: boundary },
+      { cost: output[1], min: boundary },
+    ],
+  };
+}
+
+const WINDOWED_CATALOG: JsonValue = {
+  object: "list",
+  data: [
+    entry("openai/gpt-5.5", "GPT-5.5", {
+      contextWindow: 1_050_000,
+      pricing: tiered(272_000, ["0.000004", "0.000008"], ["0.00002", "0.00003"]),
+    }),
+    // The boundary spelled as the first token past it, and a first tier that names no `min`.
+    entry("anthropic/claude-haiku-5.5", "Claude Haiku 5.5", {
+      contextWindow: 1_000_000,
+      pricing: {
+        input: "0.0000001",
+        output: "0.0000005",
+        input_tiers: [
+          { cost: "0.0000001", max: 100_001 },
+          { cost: "0.0000005", min: 100_001 },
+        ],
+      },
+    }),
+    entry("anthropic/claude-opus-5.5", "Claude Opus 5.5", {
+      contextWindow: 1_000_000,
+      pricing: { input: "0.000004", output: "0.00002" },
+    }),
+    entry("anthropic/claude-sonnet-5", "Claude Sonnet 5", {
+      contextWindow: 200_000,
+      pricing: tiered(200_001, ["0.000003", "0.000006"], ["0.000015", "0.0000225"]),
+    }),
+    entry("openai/gpt-6-luna", "GPT-6 Luna", {
+      contextWindow: 1_050_000,
+      pricing: tiered(272_000, ["0.000001", "0.000001"], ["0.000005", "0.000005"]),
+    }),
+    entry("openai/gpt-6-sol", "GPT-6 Sol", {
+      contextWindow: 1_050_000,
+      pricing: {
+        input: "0.000002",
+        output: "0.00001",
+        input_tiers: [{ cost: "varies", min: 272_000 }],
+      },
+    }),
+  ],
+};
+
+it.effect(
+  "a model priced apart past a boundary inside its window offers the boundary and its whole window, at what the tokens past it cost; one priced the same throughout offers one",
+  () =>
+    Effect.gen(function* () {
+      const { layer } = gateway(() => jsonResponse(WINDOWED_CATALOG));
+      const offered = yield* readCatalog.pipe(Effect.provide(layer));
+      const windowsOf = (id: string) => offered.find((model) => model.id === id)?.contextWindows;
+      assert.deepEqual(windowsOf("openai/gpt-5.5"), {
+        standardTokens: 272_000,
+        longTokens: 1_050_000,
+        longInputPriceFactor: 2,
+        longOutputPriceFactor: 1.5,
+      });
+      assert.deepEqual(windowsOf("anthropic/claude-haiku-5.5"), {
+        standardTokens: 100_000,
+        longTokens: 1_000_000,
+        longInputPriceFactor: 5,
+      });
+      assert.equal(windowsOf("anthropic/claude-opus-5.5"), undefined);
+      // A tier at the first tier's own price is no boundary.
+      assert.equal(windowsOf("openai/gpt-6-luna"), undefined);
+      // A boundary at the window's own edge leaves nothing past it to choose.
+      assert.equal(windowsOf("anthropic/claude-sonnet-5"), undefined);
+      // A tier this module cannot read costs the model its long window, and not its price.
+      assert.equal(windowsOf("openai/gpt-6-sol"), undefined);
+      assert.deepEqual(offered.find((model) => model.id === "openai/gpt-6-sol")?.pricing, {
+        inputUsd: 0.000002,
+        outputUsd: 0.00001,
+      });
+    }),
+);
+
+it("the standard window is kept for a model that offers two, and dropped for a model with one, which runs on its whole window either way, as the long window always is", () => {
+  const offered: readonly OfferedModel[] = [
+    ...OFFERED,
+    {
+      id: "openai/gpt-5.5",
+      name: "GPT-5.5",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["low", "high"],
+      contextWindow: 1_050_000,
+      contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
+    },
+  ];
+  assert.deepEqual(
+    validateModelChoice(offered, {
+      model: "openai/gpt-5.5",
+      effort: "high",
+      contextWindow: CONTEXT_WINDOW.STANDARD,
+    }),
+    Result.succeed({
+      model: "openai/gpt-5.5",
+      effort: "high",
+      contextWindow: CONTEXT_WINDOW.STANDARD,
+    }),
+  );
+  assert.deepEqual(
+    validateModelChoice(offered, {
+      model: "openai/gpt-5.5",
+      effort: "high",
+      contextWindow: CONTEXT_WINDOW.LONG,
+    }),
+    Result.succeed({ model: "openai/gpt-5.5", effort: "high" }),
+  );
+  assert.deepEqual(
+    validateModelChoice(offered, {
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      contextWindow: CONTEXT_WINDOW.STANDARD,
+    }),
+    Result.succeed({ model: "anthropic/claude-opus-5.5", effort: "high" }),
+  );
+});
 
 it("a choice is accepted only for an offered model at an effort it lists", () => {
   assert.deepEqual(

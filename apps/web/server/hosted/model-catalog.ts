@@ -1,5 +1,7 @@
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import {
   type CatalogModel,
+  type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -16,7 +18,13 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
  * the Anthropic and OpenAI models tagged for both tool use and reasoning,
  * and for each the efforts its `reasoning_options` list under the `effort`
  * entry; a model that lists no effort can satisfy no Start, so it is left
- * out rather than offered. The read is cached per instance for
+ * out rather than offered. A model offers two context windows where its
+ * provider prices the tokens past a boundary inside its window apart, as
+ * OpenAI does past 272K and Anthropic past 100K or 200K for some models:
+ * the boundary is its standard window, which a choice opts into, and the
+ * whole window is the long one, which every choice runs on unless it names
+ * the other. A model priced the same across its whole window has that one
+ * window, since a smaller one would buy nothing the provider names. The read is cached per instance for
  * `MODEL_CATALOG_TTL`, a failed read for no time at all, so an outage at the
  * catalog is retried on the next request rather than remembered.
  *
@@ -46,6 +54,13 @@ const EFFORT_OPTION = "effort";
 
 const CATALOG_ID_SEPARATOR = "/";
 
+/**
+ * What a price tier's boundary is read to: the catalog spells one as the
+ * first token past it (`200001`) or as the boundary itself (`272000`), so it
+ * is read to the thousand at or below.
+ */
+const TIER_BOUNDARY_TOKENS = 1_000;
+
 /** Anthropic spells a version's point as a dash in its own ids; the catalog keeps the point. */
 const CATALOG_VERSION_POINT = ".";
 const ANTHROPIC_VERSION_POINT = "-";
@@ -74,9 +89,10 @@ export interface PricedTokens {
 /**
  * One model as the service offers it: the wire's model (`@sidecar/hosted/models-wire`),
  * which `/api/models` answers and a Start is checked against, and beside it
- * what the catalog lists and the wire does not carry: the context window a
- * coding agent's session is told, and the prices its usage is costed at;
- * each absent where the catalog says nothing.
+ * what the catalog lists and the wire does not carry: the model's whole
+ * context window, which a session on a model with one window is told, and
+ * the prices its usage is costed at; each absent where the catalog says
+ * nothing.
  */
 export interface OfferedModel extends CatalogModel {
   readonly contextWindow?: number;
@@ -136,6 +152,22 @@ const PricingSchema = Schema.Struct({
   input_cache_read: PriceSchema,
 });
 
+/** One price tier: the price per token from `min` tokens on, as the catalog spells it; a tier with no `min` starts at none. */
+const PriceTierSchema = Schema.Struct({
+  cost: Schema.FiniteFromString,
+  min: Schema.optionalKey(Schema.Number),
+});
+
+const PriceTiersSchema = Schema.optionalKey(Schema.NullOr(Schema.Array(PriceTierSchema)));
+
+const TieredPricingSchema = Schema.Struct({
+  input_tiers: PriceTiersSchema,
+  output_tiers: PriceTiersSchema,
+});
+
+/** The entry's price tiers, read apart from its prices, so a tier spelled in a way this module does not read costs the model its long window and not its price. */
+const readTiers = Schema.decodeUnknownOption(TieredPricingSchema);
+
 /**
  * The entry's prices are read on their own, after the entry: a price the
  * catalog spells in a way this module does not read costs that model its
@@ -188,6 +220,56 @@ function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
   };
 }
 
+type PriceTier = typeof PriceTierSchema.Type;
+
+/** The cost of the tier starting at `min`, starting at none where `min` is 0. */
+function tierCost(tiers: readonly PriceTier[], min: number): number | undefined {
+  return tiers.find((tier) => (tier.min ?? 0) === min)?.cost;
+}
+
+/** What the tier past the boundary costs as a multiple of the first tier; nothing where the catalog prices either not. */
+function priceFactor(tiers: readonly PriceTier[], boundary: number): number | undefined {
+  const standard = tierCost(tiers, 0);
+  const long = tierCost(tiers, boundary);
+  if (standard === undefined || long === undefined || standard <= 0) return undefined;
+  return long / standard;
+}
+
+/**
+ * The entry's two windows, where its input is priced apart past a boundary
+ * inside its window: the boundary as its standard window and the whole
+ * window as its long one, with what the tokens past the boundary cost
+ * beside the first tier's; nothing for a model priced the same across its
+ * whole window, a tier at the first tier's own price included, or one whose
+ * window the catalog does not say.
+ */
+function contextWindowsOf(
+  entry: CatalogEntry,
+  contextWindow: number | undefined,
+): ContextWindows | undefined {
+  if (contextWindow === undefined) return undefined;
+  const tiers = Option.getOrUndefined(readTiers(entry.pricing));
+  const input = tiers?.input_tiers ?? [];
+  const first = tierCost(input, 0);
+  // A tier at the first tier's price is no boundary: nothing past it costs more.
+  const boundaries = input
+    .filter((tier) => tier.cost !== first)
+    .map((tier) => tier.min ?? 0)
+    .filter((min) => min > 0);
+  if (boundaries.length === 0) return undefined;
+  const boundary = Math.min(...boundaries);
+  const standardTokens = Math.floor(boundary / TIER_BOUNDARY_TOKENS) * TIER_BOUNDARY_TOKENS;
+  if (standardTokens <= 0 || standardTokens >= contextWindow) return undefined;
+  const inputFactor = priceFactor(input, boundary);
+  const outputFactor = priceFactor(tiers?.output_tiers ?? [], boundary);
+  return {
+    standardTokens,
+    longTokens: contextWindow,
+    ...(inputFactor === undefined ? undefined : { longInputPriceFactor: inputFactor }),
+    ...(outputFactor === undefined ? undefined : { longOutputPriceFactor: outputFactor }),
+  };
+}
+
 /** The entry as an offered model, or nothing for one Luke does not offer. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const provider = providerOf(splitCatalogId(entry.id)?.provider ?? "");
@@ -198,12 +280,14 @@ function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
     (entry.reasoning_options ?? []).find((option) => option.type === EFFORT_OPTION)?.values ?? [];
   if (efforts.length === 0) return undefined;
   const contextWindow = entry.context_window ?? undefined;
+  const contextWindows = contextWindowsOf(entry, contextWindow);
   const pricing = pricingOf(entry);
   return {
     id: entry.id,
     name: entry.name,
     provider,
     efforts,
+    ...(contextWindows === undefined ? undefined : { contextWindows }),
     ...(contextWindow === undefined ? undefined : { contextWindow }),
     ...(pricing === undefined ? undefined : { pricing }),
   };
@@ -272,7 +356,13 @@ export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<Mod
 
 // ------------------------------------------------------------- the checks
 
-/** The choice as the catalog accepts it, or why it refuses: a model it does not offer, or an effort that model does not list. */
+/**
+ * The choice as the catalog accepts it, or why it refuses: a model it does
+ * not offer, or an effort that model does not list. The standard window is
+ * kept only for a model that offers two; a model with one runs every choice
+ * on its whole window, so it is accepted and dropped rather than refused,
+ * as the long window, which a choice runs on by naming none, always is.
+ */
 export function validateModelChoice(
   catalog: readonly OfferedModel[],
   choice: ModelChoice,
@@ -281,7 +371,13 @@ export function validateModelChoice(
   if (model === undefined) return Result.fail(MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL);
   if (!model.efforts.includes(choice.effort))
     return Result.fail(MODEL_CHOICE_REFUSAL.UNKNOWN_EFFORT);
-  return Result.succeed({ model: model.id, effort: choice.effort });
+  const standard =
+    choice.contextWindow === CONTEXT_WINDOW.STANDARD && model.contextWindows !== undefined;
+  return Result.succeed({
+    model: model.id,
+    effort: choice.effort,
+    ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
+  });
 }
 
 /** The choice checked against the instance's catalog: accepted, refused, or the catalog unavailable. */

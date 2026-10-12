@@ -31,6 +31,32 @@
                   "maxLength": 200
                 },
                 "minItems": 1
+              },
+              "contextWindows": {
+                "type": "object",
+                "properties": {
+                  "standardTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "longTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "longInputPriceFactor": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "longOutputPriceFactor": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "standardTokens",
+                  "longTokens"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [

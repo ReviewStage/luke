@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
@@ -122,6 +123,27 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
     }),
+  );
+
+  it.effect(
+    "a default on the standard context window reads back with it, and a default naming none reads as the model's whole window",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const standard = {
+          model: "openai/gpt-5.5",
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        };
+        assert.deepEqual(
+          (yield* writeAccountPreferences(userId, { codingAgent: standard })).codingAgent,
+          standard,
+        );
+        assert.deepEqual((yield* readAccountPreferences(userId))?.codingAgent, standard);
+
+        yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
+        assert.deepEqual((yield* readAccountPreferences(userId))?.codingAgent, SONNET_AT_MAX);
+      }),
   );
 
   it.effect("a half-written coding-agent default reads as the catalog's", () =>

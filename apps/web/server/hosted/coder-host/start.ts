@@ -25,8 +25,9 @@ import { readPlan } from "../plan-store.js";
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
  *
- * The model and effort are the ask's own where it names them, the account's
- * stored default otherwise, either checked against the catalog, which also
+ * The model, effort, and context window are the ask's own where it names a
+ * model, the account's stored default otherwise, either checked against the
+ * catalog, which also
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
  * the voice tool can say which choices there are. The plan must name a
@@ -111,6 +112,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
+      contextWindow: choice.contextWindow,
       ...brief,
       repository,
     }),

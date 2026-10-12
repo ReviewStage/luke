@@ -1,4 +1,4 @@
-import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -227,7 +227,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     catalog.read.pipe(Effect.orElseSucceed((): readonly OfferedModel[] => [])),
   );
 
-  /** The model a step runs on for the choice: the fixture's own under the scripted model, else the provider's at the window the catalog lists, or the fallback where it lists none. */
+  /** The model a step runs on for the choice: the fixture's own under the scripted model, else the provider's at the window the choice names of the ones the catalog lists, or the fallback where it lists none. */
   const selectedModel = (choice: ModelChoice, scripted: ScriptedCoderModel | undefined) =>
     Effect.gen(function* () {
       if (scripted !== undefined) {
@@ -238,7 +238,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         });
       }
       const offered = yield* catalogNow;
-      return coderModel(choice, seams.keys(), contextWindowOf(offered, choice.model));
+      const window = contextWindowOf(
+        offered,
+        choice.model,
+        choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+      );
+      return coderModel(choice, seams.keys(), window);
     });
 
   /** The instructions the agent's session runs under, composed as its session's start composes them. */
@@ -301,7 +306,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return Result.fail(found.failure);
         const agent = found.success;
-        return yield* selectedModel({ model: agent.model, effort: agent.effort }, scripted);
+        return yield* selectedModel(
+          { model: agent.model, effort: agent.effort, contextWindow: agent.contextWindow },
+          scripted,
+        );
       }),
 
     delegate: (admitted, callId, asked) =>
