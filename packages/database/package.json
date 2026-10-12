@@ -8,6 +8,7 @@
     "./core/migrator": "./src/core/migrator.js",
     "./core/query": "./src/core/query.js",
     "./core/sql-client": "./src/core/sql-client.js",
+    "./models/asks": "./src/models/asks.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
     "./models/columns": "./src/models/columns.js",
     "./models/content-addressed": "./src/models/content-addressed.js",

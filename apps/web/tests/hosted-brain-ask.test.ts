@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  ASK_DISPATCH_REFUSAL,
+  type AskRecord,
+  type AskRow,
+  newestSession,
+} from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   conversationOwnedBy,
@@ -36,12 +42,6 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
-import {
-  ASK_DISPATCH_REFUSAL,
-  type AskRecord,
-  type AskRow,
-  newestSession,
-} from "../server/hosted/store/asks";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**

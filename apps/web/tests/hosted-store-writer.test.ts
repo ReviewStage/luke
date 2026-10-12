@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
+import { askRecord } from "@sidecar/database/models/asks";
 import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
 import {
   STORE_WRITE_REFUSAL,
@@ -53,7 +54,6 @@ import {
   type WireBoundaryInput,
 } from "../server/core";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

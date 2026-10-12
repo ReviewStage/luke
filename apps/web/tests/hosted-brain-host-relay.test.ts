@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId, reasoningItemId } from "@sidecar/database/models/ids";
 import { awaitingLinesOf } from "@sidecar/database/models/message-reads";
 import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
@@ -35,7 +36,6 @@ import {
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

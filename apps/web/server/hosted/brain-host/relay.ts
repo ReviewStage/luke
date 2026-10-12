@@ -1,3 +1,4 @@
+import type { AskDeliveryBinding } from "@sidecar/database/models/asks";
 import {
   answerMessageId,
   hostTurnId,
@@ -39,7 +40,6 @@ import {
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";
-import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
   BRAIN_HOST_TURN,
