@@ -67,7 +67,7 @@ function seconds(value: string | undefined): number {
   return Number(value.slice(0, -1));
 }
 
-test("a glyph at work says Working and wears the working mark in its own place, failed says Failed with the alert in its place, and at rest it stands alone and says nothing", () => {
+test("a glyph at work says Working and wears the working mark in its own place, and failed or at rest it stands alone and says nothing, a failure being said at its row's end", () => {
   assert.deepEqual(glyphSeen(GLYPH_STATE.WORKING), {
     said: "Working",
     glyph: false,
@@ -75,10 +75,10 @@ test("a glyph at work says Working and wears the working mark in its own place, 
     alert: false,
   });
   assert.deepEqual(glyphSeen(GLYPH_STATE.FAILED), {
-    said: "Failed",
-    glyph: false,
+    said: undefined,
+    glyph: true,
     working: false,
-    alert: true,
+    alert: false,
   });
   assert.deepEqual(glyphSeen(GLYPH_STATE.REST), {
     said: undefined,

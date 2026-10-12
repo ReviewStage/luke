@@ -31,7 +31,7 @@ import {
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
-import { AgentGlyph } from "./agent-tab";
+import { AgentGlyph, agentEndMark } from "./agent-tab";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
 import { copiedLines } from "./code-pane-model";
 import { agentTabLabel, opensOnGitHub } from "./coding-agent-model";
@@ -139,7 +139,7 @@ function pressesOf(
   }
 }
 
-/** Who posted the item and when: the agent's mark, its name opening its tab, and how long ago. */
+/** Who posted the item and when: the agent's mark, its name opening its tab, a failure's mark where it failed, and how long ago. */
 function Poster({
   item,
   agent,
@@ -163,6 +163,7 @@ function Poster({
       >
         {agent === undefined ? "Coding agent" : agentTabLabel(agent, models)}
       </button>
+      {agent === undefined ? null : agentEndMark(agent, true)}
       <time
         className="tab-card-time"
         dateTime={new Date(item.postedAt).toISOString()}
@@ -677,6 +678,7 @@ function SettledCard({
       <PlanHeader>
         {agent === undefined ? null : <AgentGlyph agent={agent} />}
         <PlanTitle label={words.lead}>{cardTitle(item.title)}</PlanTitle>
+        {agent === undefined ? null : agentEndMark(agent, true)}
       </PlanHeader>
       <PlanContent className="flex flex-col gap-2">
         {words.note === undefined ? null : <p className="m-0 whitespace-pre-line">{words.note}</p>}

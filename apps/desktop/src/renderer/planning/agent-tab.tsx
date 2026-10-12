@@ -28,7 +28,7 @@ import { useCopyToast } from "../copy-feedback";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
-import { StateGlyph } from "../state-glyph";
+import { StateGlyph, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { HeldTranscript } from "./agent-tab-card";
@@ -437,7 +437,8 @@ function AgentMessage({
  * An agent's glyph wearing where it stands: the mark of the harness its
  * model runs in at its full size, or the Coding agents glyph where Luke
  * knows no harness for it, giving way to the working mark while the agent
- * may still write and to an alert once its turn failed (`state-glyph.tsx`).
+ * may still write (`state-glyph.tsx`). A failed agent keeps its mark, and
+ * its row or tab says the failure at its end (`agentEndMark`).
  */
 export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
   const provider = providerOf(agent.model);
@@ -447,6 +448,14 @@ export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" 
       state={agentGlyphState(agent.status)}
     />
   );
+}
+
+/** The mark at the end of an agent's row or tab: the failed mark once its turn failed, nothing otherwise (`stateEndMark`). */
+export function agentEndMark(
+  agent: Pick<CodingAgentSummary, "status">,
+  hinted: boolean,
+): React.JSX.Element | undefined {
+  return stateEndMark(agentGlyphState(agent.status), hinted);
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */

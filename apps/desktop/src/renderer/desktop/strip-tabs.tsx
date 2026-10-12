@@ -139,6 +139,8 @@ export interface TabLook {
   label: string;
   /** Words after the label, dimmed (`Tab`'s). */
   detail?: string | undefined;
+  /** A mark at the tab's end, in its ×'s place: a failed agent's (`Tab`'s). */
+  endMark?: React.JSX.Element | undefined;
   selected: boolean;
   unread?: boolean;
   tooltip?: string | undefined;
@@ -177,6 +179,8 @@ export function DoorsTab({
 /** One row of a "+" menu, and what picking it does. */
 export interface AddEntry {
   row: MenuRow;
+  /** The mark at the row's end where the row says where its work stands, as the summary and the palette draw it: a failure's (`state-glyph.tsx`). */
+  endMark?: React.JSX.Element | undefined;
   onPick: () => void;
 }
 

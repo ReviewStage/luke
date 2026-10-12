@@ -253,6 +253,13 @@ function tabState(tab: HTMLElement): string | undefined {
   return tab.querySelector('.tab-icon [role="img"]')?.getAttribute("aria-label") ?? undefined;
 }
 
+/** What the mark at a tab's end, after its label, says to a reader; nothing where it has none. */
+function tabEndState(tab: HTMLElement): string | undefined {
+  const end = tab.lastElementChild;
+  if (end === null || end.classList.contains("tab-label")) return undefined;
+  return end.querySelector('[role="img"]')?.getAttribute("aria-label") ?? undefined;
+}
+
 /** Whether a tab reads as unread: its pill marked for the semibold label, and its news said to a reader. */
 function tabUnread(tab: HTMLElement): boolean {
   const marked = tab.closest(".tab")?.getAttribute("data-unread") === "true";
@@ -1759,6 +1766,7 @@ test("a plan's coding agents follow the plan's tab in the column's strip, named 
   // A tab never shown holds no transcript, so its card says its name, model, and that it works, and no step.
   assert.equal(hover(claude), "Sign-out button in account menuOpus 5.5 HighWorking…");
   assert.equal(tabState(claude), "Working");
+  assert.equal(tabEndState(claude), undefined, "nothing at its end while it works");
   assert.ok(claude.querySelector("svg.working-mark"), "the working mark while it works");
   assert.equal(
     claude.querySelector(".provider-mark"),
@@ -1784,7 +1792,7 @@ test("a plan's coding agents follow the plan's tab in the column's strip, named 
   assert.deepEqual(chosen, [{ agent: running.id }, MAIN_TAB.PLAN]);
 });
 
-test("an agent whose turn failed wears an alert in its mark's place and says so in its card, and one stopped by hand wears its mark alone and says it stopped", () => {
+test("an agent whose turn failed keeps its harness's mark, wears an alert at its tab's end, and says so in its card, and one stopped by hand wears its mark alone and says it stopped", () => {
   const container = mountAgentTabs({
     agents: [
       { ...TITLED_AGENT, status: CODING_AGENT_STATUS.FAILED },
@@ -1794,9 +1802,10 @@ test("an agent whose turn failed wears an alert in its mark's place and says so 
   const failed = tabNamed(container, "Sign-out button in account menu");
   const stopped = tabNamed(container, "GPT 5.6 Sol");
 
-  assert.equal(tabState(failed), "Failed");
-  assert.ok(failed.querySelector("svg.lucide-circle-alert"), "the alert glyph");
-  assert.equal(failed.querySelector(".provider-mark"), null, "in the mark's place");
+  assert.ok(failed.querySelector(".tab-icon .provider-mark"), "Claude Code's mark leads it still");
+  assert.equal(tabState(failed), undefined, "nothing in the mark's place");
+  assert.equal(tabEndState(failed), "Failed");
+  assert.ok(failed.lastElementChild?.querySelector("svg.lucide-circle-alert"), "the alert glyph");
   // The card says how it ended before how long ago, which this page's clock leaves unread.
   hover(failed);
   assert.match(cardParts()[2] ?? "", /^Failed · /u);
@@ -1806,6 +1815,7 @@ test("an agent whose turn failed wears an alert in its mark's place and says so 
     );
   });
   assert.equal(tabState(stopped), undefined);
+  assert.equal(tabEndState(stopped), undefined, "nothing at a stopped agent's end");
   assert.ok(stopped.querySelector("img.provider-mark"));
   hover(stopped);
   assert.match(cardParts()[2] ?? "", /^Stopped · /u);

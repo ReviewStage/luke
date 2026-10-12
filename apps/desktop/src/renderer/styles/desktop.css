@@ -3554,6 +3554,34 @@ body,
   opacity: 1;
 }
 
+/* A tab's end mark, a failed agent's, stands in the ×'s place with room
+   kept for it, as the chosen tab keeps it, and trades places with the ×
+   under the pointer, as an editor's tab trades its unsaved dot. */
+.tab[data-marked="true"] {
+  --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
+}
+
+.tab-end-mark {
+  position: absolute;
+  top: 50%;
+  right: var(--tab-close-inset);
+  display: flex;
+  width: var(--tab-close);
+  height: var(--tab-close);
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  transition: opacity var(--duration-hover) ease;
+}
+
+.tab:hover .tab-end-mark {
+  opacity: 0;
+}
+
+.tab[data-marked="true"]:not(:hover) .tab-close {
+  opacity: 0;
+}
+
 /* Note that the × draws no ground under the pointer, because it is a glyph
    on a pill that is already raised: only the glyph itself brightens. */
 .tab-close:hover {
@@ -3892,6 +3920,14 @@ body,
 
 /* An action's chord, drawn as keys at the row's right end. */
 .command-palette-hint {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--space-16);
+}
+
+/* A failed agent's mark, at the row's right end as an action's chord is. */
+.command-palette-end {
   display: inline-flex;
   flex: 0 0 auto;
   margin-left: auto;

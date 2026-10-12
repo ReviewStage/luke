@@ -341,7 +341,10 @@ export function TabStrip({
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `detail`, while given, follows the label in the
  * muted secondary colour, parted from it by a space and no mark, as a
- * model's effort follows its name (`model-label.tsx`). `editor`, while given, is drawn in the label's
+ * model's effort follows its name (`model-label.tsx`). `endMark`, while
+ * given, stands at the tab's end in its ×'s place, with room kept for it,
+ * and gives way to the × under the pointer, as an editor's tab trades its
+ * unsaved dot for its ×. `editor`, while given, is drawn in the label's
  * place as a field of its own, outside the tab's role, so a reader reaches
  * it. A label cut short is said whole in the tab's hint, before what
  * `tooltip` adds and an unread tab's news; `card`, while given, hangs in the
@@ -356,6 +359,7 @@ export function Tab({
   icon,
   label,
   detail,
+  endMark,
   selected,
   unread = false,
   tooltip,
@@ -373,6 +377,8 @@ export function Tab({
   label: string;
   /** Words after the label, dimmed: a count, as the Inbox tab's. */
   detail?: string | undefined;
+  /** A mark at the tab's end, in its ×'s place until the pointer comes over it: a failed agent's (`state-glyph.tsx`). */
+  endMark?: React.JSX.Element | undefined;
   selected: boolean;
   /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
@@ -437,6 +443,7 @@ export function Tab({
           </>
         )}
       </span>
+      {endMark === undefined ? null : <span className="tab-end-mark">{endMark}</span>}
     </button>
   );
   return (
@@ -447,6 +454,7 @@ export function Tab({
       data-quiet={String(quiet)}
       data-anchored={String(anchored)}
       data-unread={String(unread)}
+      data-marked={String(endMark !== undefined)}
     >
       {editor === undefined ? (
         <Tooltip label={card === undefined ? hint : label} card={card}>

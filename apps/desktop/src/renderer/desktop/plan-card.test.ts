@@ -129,13 +129,20 @@ const drawnCard = (plan: PlanSummary) =>
       repository: container.querySelector(".plan-card-repository")?.textContent,
       agents: lines("Agents"),
       pullRequests: lines("Pull requests"),
-      // Each agent's glyph as a reader and an eye meet it: what it says, the harness mark it wears, and whether the working mark stands in its place.
-      agentGlyphs: [...container.querySelectorAll("[data-plan-card-agent] .plan-card-glyph")].map(
-        (glyph) => ({
-          said: glyph.querySelector('[role="img"]')?.getAttribute("aria-label"),
-          mark: glyph.querySelector(".provider-mark")?.tagName.toLowerCase(),
-          working: glyph.querySelector("svg.working-mark") !== null,
-        }),
+      // Each agent's glyph as a reader and an eye meet it: what it says, the harness mark it wears, whether the working mark stands in its place, and what the mark after its label says.
+      agentGlyphs: [...container.querySelectorAll("[data-plan-card-agent] .plan-card-line")].map(
+        (line) => {
+          const glyph = line.querySelector(".plan-card-glyph");
+          const end = line.lastElementChild;
+          return {
+            said: glyph?.querySelector('[role="img"]')?.getAttribute("aria-label"),
+            mark: glyph?.querySelector(".provider-mark")?.tagName.toLowerCase(),
+            working: glyph?.querySelector("svg.working-mark") !== null,
+            end: end?.classList.contains("plan-card-label")
+              ? undefined
+              : end?.getAttribute("aria-label"),
+          };
+        },
       ),
       buttons: () => [...container.querySelectorAll("button")],
       opened,
@@ -210,15 +217,15 @@ it.effect("a plan whose lists fit the card counts nothing more", () =>
 );
 
 it.effect(
-  "an agent's line leads with its harness's mark as its tab wears it: the working mark in its place while it works, the mark alone once done, an alert in its place where it failed, and no dot",
+  "an agent's line leads with its harness's mark as its tab wears it: the working mark in its place while it works, the mark alone once done, the mark kept and an alert at the line's end where it failed, and no dot",
   () =>
     Effect.gen(function* () {
       const card = yield* drawnCard(PLAN);
 
       assert.deepEqual(card.agentGlyphs, [
-        { said: "Working", mark: undefined, working: true },
-        { said: undefined, mark: "img", working: false },
-        { said: "Failed", mark: undefined, working: false },
+        { said: "Working", mark: undefined, working: true, end: undefined },
+        { said: undefined, mark: "img", working: false, end: undefined },
+        { said: undefined, mark: "svg", working: false, end: "Failed" },
       ]);
       card.unmount();
     }),

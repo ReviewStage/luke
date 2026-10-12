@@ -630,8 +630,8 @@ body,
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
    the working mark stands in the glyph's place, centred in the glyph's own
    footprint, so a tab or a row moves nothing as its work starts or ends.
-   Failed, the alert in the danger colour stands in the glyph's place at the
-   glyph's size. */
+   Failed, the glyph stands as at rest, and the failed mark at its row's end
+   says it (`.failed-mark`). */
 .state-glyph {
   position: relative;
   display: inline-flex;
@@ -648,8 +648,22 @@ body,
   height: 100%;
 }
 
-.state-glyph[data-state="failed"] {
+/* A failure's mark at a row's or a tab's end: the alert in the danger
+   colour, a size under the glyph it follows, so it reads as a note on the
+   row rather than a second glyph. */
+.failed-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   color: var(--danger);
+}
+
+.failed-mark > svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
