@@ -73,7 +73,7 @@ import {
 } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { deleteConversation, insertConversation } from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -1477,7 +1477,10 @@ interface ClockStand extends Stand {
  * accepted, is held at `release` so it finds the turn the test has played
  * by then and every look reads the journal.
  */
-const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget) {
+const standOnTestClock = Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  accountId: string = target.userId,
+) {
   const eve = fakeEve();
   const reports: string[] = [];
   const gate = yield* Deferred.make<void>();
@@ -1510,7 +1513,7 @@ const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget
   const sql = yield* Scope.provide(Layer.build(database.sql), scope);
   const brain = yield* Scope.provide(
     hostedLiveBrain({
-      accountId: target.userId,
+      accountId,
       conversation: target,
       asks: { asks: askEffects, eve },
       store,
@@ -1574,6 +1577,54 @@ const parkedOnTask = Effect.fnUntraced(function* (target: ConversationTarget, f:
   );
   return { runId: accepted.runId, standing };
 });
+
+/** The worker's own session, relayed into the child conversation of the call that started it, on the scripted model, under the planning conversation's owner. */
+async function workerRan(target: ConversationTarget, callId: string): Promise<void> {
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, callId),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  await play(
+    [
+      stampedEveEvent({ type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: 0 } }, NOW),
+      stampedEveEvent(
+        {
+          type: "message.received",
+          data: { turnId: FIRST_EVE_TURN, sequence: 0, message: "Compare the queues." },
+        },
+        NOW,
+      ),
+      stampedEveEvent(
+        {
+          type: "step.started",
+          data: { turnId: FIRST_EVE_TURN, sequence: 0, stepIndex: 0, modelId: "m" },
+        },
+        NOW,
+      ),
+      stampedEveEvent(
+        {
+          type: "message.completed",
+          data: {
+            turnId: FIRST_EVE_TURN,
+            sequence: 0,
+            stepIndex: 0,
+            finishReason: "stop",
+            message: "Queue A lets an admin revoke.",
+          },
+        },
+        NOW,
+      ),
+    ],
+    {
+      sessionId: `wrun_${randomUUID()}`,
+      target: child,
+      turn: RELAY_TURN.CHILD,
+      model: "scripted-model",
+      state: memoryRelayState(),
+    },
+  );
+}
 
 /** The follow's word on a look past the plain bound, as the events and reports show it. */
 function toldSoFar(f: ClockStand): readonly string[] {
@@ -1751,58 +1802,42 @@ it.effect(
       const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
       assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
 
-      // The worker's own session, relayed into the child conversation of the call that started it.
-      const child = {
-        userId: target.userId,
-        conversationId: childConversationId(target.conversationId, worker.id),
-      };
-      yield* Effect.promise(() =>
-        database.run(openChildConversation(target, child.conversationId, "worker")),
-      );
-      yield* Effect.promise(() =>
-        play(
-          [
-            stampedEveEvent(
-              { type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: 0 } },
-              NOW,
-            ),
-            stampedEveEvent(
-              {
-                type: "message.received",
-                data: { turnId: FIRST_EVE_TURN, sequence: 0, message: "Compare the queues." },
-              },
-              NOW,
-            ),
-            stampedEveEvent(
-              {
-                type: "step.started",
-                data: { turnId: FIRST_EVE_TURN, sequence: 0, stepIndex: 0, modelId: "m" },
-              },
-              NOW,
-            ),
-            stampedEveEvent(
-              {
-                type: "message.completed",
-                data: {
-                  turnId: FIRST_EVE_TURN,
-                  sequence: 0,
-                  stepIndex: 0,
-                  finishReason: "stop",
-                  message: "Queue A lets an admin revoke.",
-                },
-              },
-              NOW,
-            ),
-          ],
-          {
-            sessionId: `wrun_${randomUUID()}`,
-            target: child,
-            turn: RELAY_TURN.CHILD,
-            model: "scripted-model",
-            state: memoryRelayState(),
-          },
+      yield* Effect.promise(() => workerRan(target, worker.id));
+      yield* f.polls(2);
+
+      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+      assert.deepEqual(drawn.session?.parts, [
+        { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+      ]);
+      assert.equal(drawn.session?.model, "openai/scripted-model", "the model its turn ran on");
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "a member following a turn in the plan conversation a teammate opened is shown the worker's session and the model it ran on, read under the teammate who opened it",
+  () =>
+    Effect.gen(function* () {
+      const opener = yield* Effect.promise(() => database.createUser());
+      const member = yield* Effect.promise(() => database.createUser());
+      const target = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* startPlan(opener, PLAN);
+            yield* joinWorkspace(plan.workspaceId, member);
+            const opened = Option.getOrThrow(yield* openPlanConversation(opener, plan.id));
+            return { userId: opener, conversationId: opened.conversationId };
+          }),
         ),
       );
+      const f = yield* standOnTestClock(target, member);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      yield* parkedOnTask(target, f);
+      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+      yield* Effect.promise(() => workerRan(target, worker.id));
       yield* f.polls(2);
 
       const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
