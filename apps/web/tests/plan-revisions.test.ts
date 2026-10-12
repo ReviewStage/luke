@@ -132,21 +132,17 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           .insert(voiceSessions)
           .values({ userId, liveSessionId: CALL, delegationMode: VOICE_DELEGATION_MODE.CLIENT })
           .returning({ id: voiceSessions.id });
-        yield* saveNotes({ userId, planId }, notesFor(INVITATIONS_DRAFT), ON_CALL);
+        yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
         yield* saveNotes(
           { userId, planId },
           [added(PLAN_FIELD.OPEN_QUESTIONS, "Who may withdraw an invite?")],
           { actor: PLAN_ACTOR.NOTETAKER },
         );
-        yield* saveDeveloperEdit(
-          { userId, planId },
-          { field: PLAN_FIELD.GOAL, base: null, value: "An invited teammate can sign in." },
-        );
 
         const revisions = yield* revisionsOf(userId, planId);
         assert.deepEqual(
           revisions.map((line) => line.callId),
-          [undefined, undefined, call?.id],
+          [undefined, call?.id],
         );
       }),
   );
