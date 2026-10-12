@@ -4,6 +4,7 @@ import path from "node:path";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { test } from "vitest";
 import {
+  placementOf,
   placeWindow,
   readWindowPlacement,
   type WindowPlacement,
@@ -74,4 +75,19 @@ test("a first launch, or a placement file that is not one, opens at the first fr
     });
     assert.deepEqual(opened, { bounds: FIRST, zoomed: false, fullScreen: false });
   }
+});
+
+test("a window moved to another display while full screen reopens full screen on that display, not the one it left", () => {
+  const kept = placementOf({
+    normal: { x: 100, y: 100, width: 1280, height: 840 },
+    shown: EXTERNAL,
+    zoomed: false,
+    fullScreen: true,
+  });
+  const opened = placeWindow({ saved: kept, workAreas: [LAPTOP, EXTERNAL], first: FIRST });
+  assert.deepEqual(opened, {
+    bounds: { x: 2152, y: 288, width: 1280, height: 840 },
+    zoomed: false,
+    fullScreen: true,
+  });
 });

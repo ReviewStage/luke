@@ -59,6 +59,33 @@ function within(bounds: Rectangle, area: Rectangle): Rectangle {
   };
 }
 
+/**
+ * The window as it stands, to be kept: its normal frame, zoomed or full
+ * screen over it. Note that a window moved to another display while full
+ * screen keeps its normal frame on the display it left, so that frame is
+ * centred on the display the window now fills instead, where it would open.
+ */
+export function placementOf(window: {
+  normal: Rectangle;
+  shown: Rectangle;
+  zoomed: boolean;
+  fullScreen: boolean;
+}): WindowPlacement {
+  const { normal, shown, zoomed, fullScreen } = window;
+  const moved = fullScreen && overlap(normal, shown) === 0;
+  const bounds = moved
+    ? within(
+        {
+          ...normal,
+          x: Math.round(shown.x + (shown.width - normal.width) / 2),
+          y: Math.round(shown.y + (shown.height - normal.height) / 2),
+        },
+        shown,
+      )
+    : normal;
+  return { bounds, zoomed, fullScreen };
+}
+
 /** Where the window last stood, or nothing for a first launch or a file that is not one. */
 export function readWindowPlacement(file: string): WindowPlacement | undefined {
   let text: string;

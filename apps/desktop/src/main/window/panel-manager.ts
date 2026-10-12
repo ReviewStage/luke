@@ -10,7 +10,12 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
-import { placeWindow, readWindowPlacement, writeWindowPlacement } from "./window-placement";
+import {
+  placementOf,
+  placeWindow,
+  readWindowPlacement,
+  writeWindowPlacement,
+} from "./window-placement";
 import { trafficLightsAt } from "./zoom";
 
 interface PanelDuck {
@@ -257,11 +262,15 @@ export class PanelManager {
   /** Keeps where the window stands, as it closes, for the next launch to open it there. */
   #keepPlacement(window: BrowserWindow): void {
     if (this.#placementPath === undefined) return;
-    writeWindowPlacement(this.#placementPath, {
-      bounds: window.getNormalBounds(),
-      zoomed: window.isMaximized(),
-      fullScreen: window.isFullScreen(),
-    });
+    writeWindowPlacement(
+      this.#placementPath,
+      placementOf({
+        normal: window.getNormalBounds(),
+        shown: window.getBounds(),
+        zoomed: window.isMaximized(),
+        fullScreen: window.isFullScreen(),
+      }),
+    );
   }
 
   #create(displayId: number): void {

@@ -532,6 +532,16 @@ test("Command-N leaves Settings for a new plan", () => {
   assert.equal(newPlans, 1);
 });
 
+test("a held chord's repeats stay the window's once its offer is gone, so a held ⌘W never falls through to close the window", () => {
+  stubBridge();
+  route(PANEL_TAB.SETTINGS);
+
+  // Settings has no tab to close, so the press is the menu bar's, which
+  // closes the window; its repeats are not.
+  assert.equal(command("w"), false);
+  assert.equal(command("w", { repeat: true }), true);
+});
+
 test("a command chosen from the menu bar runs as its chord does, and only where it can", () => {
   stubBridge();
   route(PANEL_TAB.PLANS);
