@@ -888,11 +888,26 @@ body,
   color: var(--text-primary);
 }
 
-/* The account row: photo, name, and the gear Settings opens from, one press
-   target the height of a plan row so the avatar has room to read as a face. */
+/* The foot's one row: the account at its start, taking what room is left;
+   a release on its way in, while there is one; and Settings' gear last. */
+.sidebar-account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* The account: photo and name, one press target the height of a plan row so
+   the avatar has room to read as a face, and ringed while its menu is open,
+   as a sidebar plan is while its own is. */
 .sidebar-account {
+  min-width: 0;
+  flex: 1;
   height: 42px;
   color: var(--text-primary);
+}
+
+.sidebar-account[aria-expanded="true"] {
+  background: var(--raised);
 }
 
 .sidebar-avatar {
@@ -925,43 +940,45 @@ body,
   font-weight: 600;
 }
 
-.sidebar-account-settings {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.sidebar-account:hover .sidebar-account-settings,
-.sidebar-account[aria-current="page"] .sidebar-account-settings {
+.sidebar-settings[aria-current="page"] {
   color: var(--text-primary);
 }
 
-/* A release on its way in, above the account row. Waiting on its restart it
-   is a row tinted the working blue, as is the download offered once
-   installing it failed: news, not urgency, so a wash rather than the
-   accent's fill. Downloading it is a quiet line, with nothing yet to press. */
+/* A release on its way in, a pill between the account and the gear. Waiting
+   on its restart it is tinted the working blue, as is the download offered
+   once installing it failed: news, not urgency, so a wash rather than the
+   accent's fill. Downloading it is a quiet count, with nothing yet to press. */
 .sidebar-update {
-  margin-bottom: var(--space-4);
-  background: color-mix(in srgb, var(--state-working) 12%, transparent);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  height: 24px;
+  padding: 0 var(--space-8);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--state-working) 14%, transparent);
   color: var(--state-working);
+  font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
 }
 
 .sidebar-update:hover {
-  background: color-mix(in srgb, var(--state-working) 20%, transparent);
-  color: var(--state-working);
+  background: color-mix(in srgb, var(--state-working) 22%, transparent);
 }
 
-.sidebar-update-progress {
-  margin: 0 0 var(--space-4);
-  font-variant-numeric: tabular-nums;
-}
-
+.sidebar-update-progress,
 .sidebar-update-progress:hover {
   background: none;
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-update-progress svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* Work column ------------------------------------------------------------- */
@@ -1344,6 +1361,37 @@ body,
   margin: var(--menu-inset) var(--row-inset);
   border: 0;
   background: var(--hairline);
+}
+
+/* A submenu item keeps its hover while its submenu stands beside it. */
+.plan-menu-item[data-open="true"] {
+  background: var(--raised-strong);
+}
+
+/* Whose menu it is, over its items and pressed by nothing: the account's
+   name, and its email muted under it. */
+.plan-menu-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--row-inset);
+  font-size: 12px;
+}
+
+.account-menu-name,
+.account-menu-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.account-menu-email {
+  color: var(--text-tertiary);
 }
 
 /* A sidebar plan whose menu is open is ringed, the way Finder rings the row a

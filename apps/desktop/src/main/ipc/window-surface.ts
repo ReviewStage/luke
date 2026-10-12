@@ -32,6 +32,13 @@ const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
+/**
+ * Where Contact us > Email writes to: the address the site's footer, the
+ * privacy policy, and the security policy all name. Held here rather than
+ * sent by the panel, so the act can open no other address.
+ */
+const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+
 interface WindowSurfaceDependencies {
   panels: PanelManager;
   requestMicrophone: () => Promise<MicrophoneStatus>;
@@ -48,6 +55,7 @@ type WindowSurfaceActKind =
   | typeof ACT_KIND.MICROPHONE_REQUEST
   | typeof ACT_KIND.MICROPHONE_ROUTE
   | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
+  | typeof ACT_KIND.CONTACT_EMAIL
   | typeof ACT_KIND.WINDOW_SAVE_FILE;
 
 /**
@@ -94,6 +102,7 @@ export function windowSurfaceActRows(
     // The pane that lists every app's notifications, Luke's among them.
     [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: () =>
       dependencies.openExternal("x-apple.systempreferences:com.apple.preference.notifications"),
+    [ACT_KIND.CONTACT_EMAIL]: () => dependencies.openExternal(CONTACT_MAILTO),
     [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }, sender) => {
       if (!sender.panel) throw new ActRefused({ message: ACT[ACT_KIND.WINDOW_SAVE_FILE].refusal });
       return dependencies.saveFile(sender.sender, name, text);
