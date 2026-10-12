@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { Effect, Result, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
@@ -68,6 +69,7 @@ async function target(): Promise<VoiceTarget> {
       sessionId: liveSessionId,
       planId: randomUUID(),
       attachId: randomUUID(),
+      model: LIVE_DEFAULTS.MODEL,
     }),
   );
   return { userId, liveSessionId, conversation: { userId, conversationId } };
@@ -156,6 +158,7 @@ test("segments after a gap land on the same open row, from a fresh writer, with 
       sessionId: live.liveSessionId,
       planId: randomUUID(),
       attachId: randomUUID(),
+      model: LIVE_DEFAULTS.MODEL,
     }),
   );
   assert.deepEqual(

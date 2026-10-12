@@ -1,4 +1,4 @@
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -17,7 +17,12 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * for its session, the same id the voice window reports beside the live
  * call's lines, which is how the tab tells the stored copy of a call from
  * the live one. A call on which nothing was said is no call here. Nothing in
- * this read is the model's: it is the words alone, by whom, on which call.
+ * this read is the model's: it is the words alone, by whom, on which call,
+ * and what the call's record says of the call itself where it says it: when
+ * it ended and why, the seconds the Live API metered, and the model it ran
+ * on. A call recorded before a field was, or still standing, answers
+ * without it. The Live API meters a call by its seconds alone, so there are
+ * no tokens to answer.
  */
 
 export const TRANSCRIPT_BOUNDS = {
@@ -55,13 +60,33 @@ export const transcriptMessageSchema = EffectSchema.Struct({
 
 export type TranscriptMessage = typeof transcriptMessageSchema.Type;
 
-/** One call about the plan: the store's id for its session, when it started, and its messages in the order they opened. */
+/**
+ * One call about the plan: the store's id for its session, when it started,
+ * its messages in the order they opened, and what its record says of the
+ * call where it says it.
+ */
 export const transcriptCallSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** Epoch milliseconds the call started. */
   startedAt: countedNumber,
   messages: EffectSchema.Array(transcriptMessageSchema),
+  /** Epoch milliseconds the call ended; absent while it stands, or where no close was recorded. */
+  endedAt: EffectSchema.optionalKey(countedNumber),
+  /** Why the call ended, as the Live API's `session.closed` named it or the sweep that closed it decided. */
+  ending: EffectSchema.optionalKey(LiveCloseReasonSchema),
+  /**
+   * The seconds the Live API metered the call for: `confirmed` where its
+   * close counted them, otherwise the last count it reported while the call
+   * stood.
+   */
+  usage: EffectSchema.optionalKey(
+    EffectSchema.Struct({ seconds: countedNumber, confirmed: EffectSchema.Boolean }),
+  ),
+  /** The voice model the call ran on. */
+  model: EffectSchema.optionalKey(EffectSchema.String),
 });
+
+export type TranscriptCall = typeof transcriptCallSchema.Type;
 
 /** A plan's transcript: its calls oldest first, and whether older words were left out of the read. */
 export const planTranscriptSchema = EffectSchema.Struct({

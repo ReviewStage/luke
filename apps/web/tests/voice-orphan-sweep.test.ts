@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterAll } from "vitest";
@@ -64,7 +65,13 @@ async function orphanOf(
   const attachId = randomUUID();
   clocked.clock.now = startedAt;
   await database.run(
-    clocked.record.register({ userId, sessionId, planId: randomUUID(), attachId }),
+    clocked.record.register({
+      userId,
+      sessionId,
+      planId: randomUUID(),
+      attachId,
+      model: LIVE_DEFAULTS.MODEL,
+    }),
   );
   await database.run(clocked.record.noteUsage({ sessionId, seconds: 120 }));
   clocked.clock.now = NOW - VOICE_DETACH_GRACE_MS - 1_000;
@@ -121,7 +128,15 @@ it.effect(
       const held = `live_${randomUUID()}`;
       const attachId = randomUUID();
       for (const sessionId of [orphan, recent, returned, held]) {
-        await database.run(record.register({ userId, sessionId, planId: randomUUID(), attachId }));
+        await database.run(
+          record.register({
+            userId,
+            sessionId,
+            planId: randomUUID(),
+            attachId,
+            model: LIVE_DEFAULTS.MODEL,
+          }),
+        );
       }
       clock.now = NOW - VOICE_DETACH_GRACE_MS - 60_000;
       await database.run(record.detach({ sessionId: orphan, attachId }));
@@ -216,7 +231,13 @@ it.effect(
       const attachId = randomUUID();
       clocked.clock.now = at - 2 * VOICE_DETACH_GRACE_MS;
       await database.run(
-        clocked.record.register({ userId, sessionId: running, planId: randomUUID(), attachId }),
+        clocked.record.register({
+          userId,
+          sessionId: running,
+          planId: randomUUID(),
+          attachId,
+          model: LIVE_DEFAULTS.MODEL,
+        }),
       );
       await database.run(clocked.record.noteUsage({ sessionId: running, seconds: 120 }));
       clocked.clock.now = at - VOICE_DETACH_GRACE_MS - 1_000;

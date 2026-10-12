@@ -31,7 +31,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
@@ -45,6 +45,7 @@ import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
 import {
+  VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
@@ -386,9 +387,15 @@ const NOTE = {
 /** One fragment said on a call: who, the words as the delta carried them, and the span on the call's clock. */
 type Said = readonly [role: VoiceSegmentRole, text: string, startMs: number];
 
+/** What a call's row recorded of its end, as the record writes it; an earlier build's row holds none of it. */
+type Recorded = Pick<
+  typeof voiceSessions.$inferInsert,
+  "closedAt" | "closeReason" | "usage" | "model"
+>;
+
 /** A call about the plan, started at the instant given, with the fragments said on it in the order they were written. */
 const callAbout = (
-  input: { userId: string; planId: string; startedAt: number },
+  input: { userId: string; planId: string; startedAt: number; recorded?: Recorded },
   said: readonly Said[],
 ) =>
   Effect.gen(function* () {
@@ -400,6 +407,7 @@ const callAbout = (
         liveSessionId: `live_t_${randomUUID()}`,
         delegationMode: VOICE_DELEGATION_MODE.CLIENT,
         startedAt: new Date(input.startedAt),
+        ...input.recorded,
       })
       .returning({ id: voiceSessions.id });
     assert.ok(row);
@@ -1461,6 +1469,56 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(TRANSCRIPT, owner, { method: "PUT", id: planId })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "a transcript's call says when and why it ended, what it metered, and its model where its row records them, and an earlier build's call says only its words",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const earlier = yield* callAbout({ userId: owner, planId, startedAt: 1_000_000 }, [
+          [VOICE_SEGMENT_ROLE.USER, "Invites should expire.", 0],
+        ]);
+        const ended = yield* callAbout(
+          {
+            userId: owner,
+            planId,
+            startedAt: 2_000_000,
+            recorded: {
+              closedAt: new Date(2_754_000),
+              closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
+              usage: { seconds: 750, confirmed: false },
+              model: LIVE_DEFAULTS.MODEL,
+            },
+          },
+          [[VOICE_SEGMENT_ROLE.USER, "Seven days.", 0]],
+        );
+
+        const { calls } = readAnswer(
+          planTranscriptAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TRANSCRIPT, owner, { id: planId })),
+        ).transcript;
+        assert.deepEqual(calls, [
+          {
+            id: earlier,
+            startedAt: 1_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.")],
+          },
+          {
+            id: ended,
+            startedAt: 2_000_000,
+            messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.")],
+            endedAt: 2_754_000,
+            ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
+            usage: { seconds: 750, confirmed: false },
+            model: LIVE_DEFAULTS.MODEL,
+          },
+        ]);
       }),
   );
 

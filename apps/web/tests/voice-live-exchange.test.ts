@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
@@ -227,6 +228,7 @@ async function stand(
         sessionId: liveSessionId,
         planId: target.planId,
         attachId: randomUUID(),
+        model: LIVE_DEFAULTS.MODEL,
       }),
     );
   }

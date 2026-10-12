@@ -617,6 +617,13 @@
       "when": 1791370000000,
       "tag": "0088_inbox_item_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1791380000000,
+      "tag": "0089_voice_session_model",
+      "breakpoints": true
     }
   ]
 }

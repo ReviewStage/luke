@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -103,6 +104,7 @@ async function target(registered = true): Promise<VoiceTarget> {
         sessionId: liveSessionId,
         planId: randomUUID(),
         attachId: randomUUID(),
+        model: LIVE_DEFAULTS.MODEL,
       }),
     );
   return { userId, liveSessionId, conversation: { userId, conversationId } };

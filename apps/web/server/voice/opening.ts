@@ -389,6 +389,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId,
         planId: frame.planId,
         attachId,
+        model: config.model,
       });
       const sideband = yield* attach(upstream, sessionId);
       if (sideband === undefined) {

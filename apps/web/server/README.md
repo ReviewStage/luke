@@ -1223,7 +1223,8 @@ and the id of the plan the call is about); the opener
 or a refusal) checks the account holds that plan, and
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
-client delegation, and the plan the call is bound to), attaches the trusted sideband, stands the hosted
+client delegation, the plan the call is bound to, and the model it was
+created on), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, and the store's own id for the `voice_sessions` row
 (`voiceSessionId`), which is what a stored spoken row names as its

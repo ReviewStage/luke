@@ -17,9 +17,10 @@ import { InstantColumnSchema } from "../hosted/store/database.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
- * Creation writes the row, so a later function connection can prove the
- * account asking to re-attach is the one that opened the session; every
- * `session.usage.updated` overwrites the usage with an unconfirmed snapshot,
+ * Creation writes the row, and the model the session was created on, so a
+ * later function connection can prove the account asking to re-attach is the
+ * one that opened the session and the plan's transcript can say what a call
+ * ran on; every `session.usage.updated` overwrites the usage with an unconfirmed snapshot,
  * never a sum, and only while the row is still open, so a snapshot arriving
  * late on an earlier connection cannot unconfirm a close; and `session.closed`
  * writes the confirmed seconds beside when and why the session ended. A connection that ends without `session.closed`
@@ -61,12 +62,13 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
   SqlClient.SqlClient
 >;
 
-/** The session as its creation names it: the account, the live session, the plan the call is about, and the connection that holds it. */
+/** The session as its creation names it: the account, the live session, the plan the call is about, the connection that holds it, and the model it was created on. */
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
   planId: string;
   attachId: string;
+  model: string;
 }
 
 /** A plan as the account asking for a call about it names it. */
@@ -195,6 +197,7 @@ const RegisterRequestSchema = Schema.Struct({
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
   planId: Schema.String,
   attachId: Schema.String,
+  model: Schema.String,
   startedAt: Schema.Date,
 });
 
@@ -209,6 +212,7 @@ const registerSession = SqlSchema.void({
         delegationMode: row.delegationMode,
         planId: row.planId,
         attachId: row.attachId,
+        model: row.model,
         startedAt: row.startedAt,
       })
       .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
@@ -432,6 +436,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
           planId: input.planId,
           attachId: input.attachId,
+          model: input.model,
           startedAt: new Date(now()),
         }),
         Effect.map(
