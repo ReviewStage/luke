@@ -17,7 +17,7 @@ import type { FolderEntry, RevealOptions } from "./contract";
  */
 
 /** The path Pierre's tree names an entry by: a folder's ends in a slash. */
-function treePath(path: string, folder: boolean): string {
+export function treePath(path: string, folder: boolean): string {
   return folder ? `${path}/` : path;
 }
 

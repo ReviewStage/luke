@@ -219,3 +219,30 @@ test("a search typed before the folders are listed shows the matches once they l
     /No files match/,
   );
 });
+
+test("handed the whole repository, a search finds a file in a folder never opened, which opens on a press, and letting go of it shows the folders as they were", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("README.md", { folder: false, focus: false });
+  await tree.settled();
+  tree.handle.within([
+    { name: "src", folder: true },
+    { name: "src/app", folder: true },
+    { name: "src/app/main.ts", folder: false },
+    { name: "src/index.ts", folder: false },
+    { name: "README.md", folder: false },
+  ]);
+
+  tree.handle.search("main");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "src/app/", "src/app/main.ts"]);
+  const main = [...tree.host.querySelectorAll<HTMLElement>(".file-tree-view")]
+    .find((each) => !each.hidden)
+    ?.querySelector("file-tree-container")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-item-path='src/app/main.ts']");
+  main?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  assert.deepEqual(tree.opened, ["src/app/main.ts"]);
+
+  tree.handle.search("");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
+});

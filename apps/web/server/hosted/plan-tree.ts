@@ -32,11 +32,22 @@ import { isSecretFile } from "./shown-file.js";
  * a folder named as a secret file is, or one inside it, is not listed, so
  * nothing held inside one is named either. A link and a submodule are listed as files,
  * which the File tab says are no regular file when they are opened.
+ *
+ * Asked recursively, the folder is listed whole in one read, which is what
+ * the tree's search reads: every entry under it, by its path from the
+ * folder, held to the same rule, so an entry inside a folder named as a
+ * secret file is left out though the folder itself is named, and cut at a
+ * bound of its own, larger than one folder's, saying so where it was cut.
  */
 
 /** Whether a folder is, or stands inside, one whose name is a secret file's. */
 function withinSecret(path: string): boolean {
   return path.split("/").some(isSecretFile);
+}
+
+/** Whether an entry of a recursive listing stands inside a folder whose name is a secret file's: its name alone may be one. */
+function insideSecret(path: string): boolean {
+  return withinSecret(path.split("/").slice(0, -1).join("/"));
 }
 
 /**
@@ -77,14 +88,19 @@ const readFolder = /* @__PURE__ */ Effect.fn("web/planTreeFolder")(function* (
   const reach = yield* reachPlanRepository(userId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
-  const folder = yield* readRepositoryFolder(token, confirmed, request.path);
+  const recursive = request.recursive === true;
+  const folder = yield* readRepositoryFolder(token, confirmed, request.path, recursive);
   if (!folder.found) {
     return {
       refusal: PLAN_FILE_REFUSAL.MISSING,
       branch: confirmed.defaultBranch,
     } satisfies PlanTreeAnswer;
   }
-  const entries = folder.entries.slice(0, PLAN_TREE_BOUNDS.MAX_ENTRIES).map((entry) => ({
+  const bound = recursive ? PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES : PLAN_TREE_BOUNDS.MAX_ENTRIES;
+  const listed = recursive
+    ? folder.entries.filter((entry) => !insideSecret(entry.name))
+    : folder.entries;
+  const entries = listed.slice(0, bound).map((entry) => ({
     name: entry.name,
     kind: entry.type === GIT_ENTRY.TREE ? PLAN_TREE_ENTRY.FOLDER : PLAN_TREE_ENTRY.FILE,
   }));
@@ -94,7 +110,7 @@ const readFolder = /* @__PURE__ */ Effect.fn("web/planTreeFolder")(function* (
       repository,
       branch: confirmed.defaultBranch,
       entries,
-      truncated: folder.truncated || folder.entries.length > PLAN_TREE_BOUNDS.MAX_ENTRIES,
+      truncated: folder.truncated || listed.length > bound,
     },
   } satisfies PlanTreeAnswer;
 });

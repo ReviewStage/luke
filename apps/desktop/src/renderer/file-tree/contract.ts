@@ -69,6 +69,12 @@ export interface FileTreeHandle {
   readonly search: (query: string) => void;
   /** Shows only these files, every folder above them opened, or the whole repository for none. */
   readonly only: (paths: readonly string[] | undefined) => void;
+  /**
+   * Hands the tree every entry of the repository, each named by its path
+   * from the root, which a search then narrows in place of the folders
+   * listed so far.
+   */
+  readonly within: (entries: readonly FolderEntry[]) => void;
   readonly unmount: () => void;
 }
 

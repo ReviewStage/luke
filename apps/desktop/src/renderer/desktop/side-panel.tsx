@@ -694,6 +694,7 @@ function TabContent({
           shownCode={shownCode}
           readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
           readFolder={(path) => act(ACT_KIND.PLANNING_TREE, { planId, path })}
+          readWhole={() => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
           openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}

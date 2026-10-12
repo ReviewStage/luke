@@ -160,6 +160,9 @@ const FILE_QUERY = {
 /** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
 const TREE_PATH_QUERY = "path";
 
+/** The query asking everything under the folder rather than its own entries, `1` where it asks. */
+const TREE_RECURSIVE_QUERY = "recursive";
+
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
@@ -437,13 +440,29 @@ const fileEndpoint = /* @__PURE__ */ Effect.fn("web/planFileEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
 });
 
-/** The folder the query names, named at most once, the root where it is not named, or the invalid-request refusal. */
+/**
+ * The folder the query names, named at most once, the root where it is not
+ * named, and whether everything under it is asked, or the invalid-request
+ * refusal.
+ */
 const treeRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<PlanTreeRequest, HostedRefusal> {
-  const named = new URL(request.url).searchParams.getAll(TREE_PATH_QUERY);
-  if (named.length > 1) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const read = readEither(planTreeRequestSchema)(unparsedWire({ path: named[0] ?? "" }));
+  const query = new URL(request.url).searchParams;
+  const named = query.getAll(TREE_PATH_QUERY);
+  const recursive = query.getAll(TREE_RECURSIVE_QUERY);
+  if (
+    named.length > 1 ||
+    recursive.length > 1 ||
+    (recursive.length === 1 && recursive[0] !== "1")
+  ) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const folder = {
+    path: named[0] ?? "",
+    ...(recursive.length === 1 ? { recursive: true } : undefined),
+  };
+  const read = readEither(planTreeRequestSchema)(unparsedWire(folder));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
 });
