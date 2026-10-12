@@ -83,8 +83,9 @@ const PULL_REQUEST_RANK = {
 
 /**
  * One plan's agents in brief: those at work named first, then the rest,
- * newest started first within each; the pull requests each number once,
- * since two agents on one branch share theirs, those still open first, then
+ * newest started first within each; the pull requests each named once by
+ * their page, since two agents on one branch share theirs and a plan whose
+ * repository changed may hold two of one number, those still open first, then
  * merged, then closed, newest agent's first within each, so the few a row
  * names always hold the one its mark is drawn for.
  */
@@ -92,11 +93,11 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
   const resting = newest.filter((agent) => !WORKING_STATUSES.has(agent.line.status));
-  const pullRequests = new Map<number, PlanPullRequestLine>();
+  const pullRequests = new Map<string, PlanPullRequestLine>();
   for (const { published } of newest) {
-    if (published === null || pullRequests.has(published.number)) continue;
+    if (published === null || pullRequests.has(published.url)) continue;
     const { number, title, state, checks, additions, deletions, url } = published;
-    pullRequests.set(number, { number, title, state, checks, additions, deletions, url });
+    pullRequests.set(url, { number, title, state, checks, additions, deletions, url });
   }
   return {
     total: agents.length,

@@ -261,7 +261,7 @@ export function PlanCard({
         <ul className="plan-card-lines" aria-label="Pull requests">
           {agents.pullRequests.map((pullRequest) => (
             <PullRequestLine
-              key={pullRequest.number}
+              key={pullRequest.url ?? pullRequest.number}
               pullRequest={pullRequest}
               onOpenGitHub={onOpenGitHub}
             />
