@@ -54,7 +54,7 @@ import {
   savePlanDocument,
 } from "../server/hosted/plan-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { storeWriter } from "../server/hosted/store";
@@ -469,6 +469,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           offered.map((declared) => declared.name),
           [
             QUEUE_QUESTION_TOOL.name,
+            WITHDRAW_QUESTION_TOOL.name,
             SHOW_CODE_TOOL.name,
             RUN_IN_REPOSITORY_TOOL.name,
             SEARCH_WEB_TOOL.name,

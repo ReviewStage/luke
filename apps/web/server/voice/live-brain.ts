@@ -42,7 +42,7 @@ import {
 import { childConversationId } from "../hosted/brain-host/ids.js";
 import { EVE_DELEGATION_TOOL } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { TURN_ABANDON } from "../hosted/store/abandoned-turns.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
@@ -132,6 +132,7 @@ export const HOSTED_ASK_REFUSAL_NOTE = {
 const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
   [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+  [TURN_EVENT_KIND.QUESTION_WITHDRAWN]: LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN,
   [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -149,13 +150,12 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   switch (event.kind) {
     case TURN_EVENT_KIND.SLOW_STEP:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, step: event.step };
-    case TURN_EVENT_KIND.QUESTION_QUEUED:
-      return {
-        kind: RUN_EVENT_OF_TURN_EVENT[event.kind],
-        runId,
-        question: event.question,
-        recommendation: event.recommendation,
-      };
+    case TURN_EVENT_KIND.QUESTION_QUEUED: {
+      const { kind, turnId: _turnId, seq: _seq, ...queued } = event;
+      return { kind: RUN_EVENT_OF_TURN_EVENT[kind], runId, ...queued };
+    }
+    case TURN_EVENT_KIND.QUESTION_WITHDRAWN:
+      return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, question: event.question };
     case TURN_EVENT_KIND.CODE_SHOWN: {
       const { kind, turnId: _turnId, seq: _seq, ...ref } = event;
       return { kind: RUN_EVENT_OF_TURN_EVENT[kind], runId, ref };
@@ -237,11 +237,17 @@ function delegatedOf(journal: StoredUIMessage | undefined): boolean {
     .some((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER);
 }
 
+/** The calls about the plan's questions rather than its work. */
+const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
+  QUEUE_QUESTION_TOOL.name,
+  WITHDRAW_QUESTION_TOOL.name,
+]);
+
 /**
  * The turn's settled calls, oldest first, as the kind of step each was: a
  * repository command as a repository read, and every other call as no named
- * kind. A queued question is the plan's next question and no step of the
- * work, so it is not counted. Note that we read which tool was called and
+ * kind. A queued or withdrawn question is the plan's next question and no
+ * step of the work, so it is not counted. Note that we read which tool was called and
  * nothing of its input or output, so a settled step tells the voice no
  * command and no line the repository holds.
  */
@@ -249,7 +255,7 @@ function settledStepsOf(journal: StoredUIMessage | undefined): readonly (string 
   return (journal?.parts ?? [])
     .filter(isStoredToolPart)
     .filter((part) => isSettledToolPartState(part.state))
-    .filter((part) => storedToolName(part) !== QUEUE_QUESTION_TOOL.name)
+    .filter((part) => !QUESTION_TOOL_NAMES.has(storedToolName(part)))
     .map((part) =>
       storedToolName(part) === RUN_IN_REPOSITORY_TOOL.name
         ? SLOW_STEP_KIND.REPOSITORY_READ

@@ -105,6 +105,7 @@ const CALL_WORDS = {
   [PLAN_WORK_TOOL.DRAW_ON_BOARD]: { verb: "Drew on the board", code: false },
   [PLAN_WORK_TOOL.LOOK_AT_BOARD]: { verb: "Looked at the board", code: false },
   [PLAN_WORK_TOOL.QUEUE_QUESTION]: { verb: "Queued a question", code: false },
+  [PLAN_WORK_TOOL.WITHDRAW_QUESTION]: { verb: "Withdrew a question", code: false },
   [PLAN_WORK_TOOL.WORKER]: { verb: "Asked the worker", code: false },
   [PLAN_WORK_TOOL.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [PLAN_WORK_TOOL.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },

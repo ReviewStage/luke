@@ -37,6 +37,8 @@ export const BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  QUESTION_WITHDRAWN: "question_withdrawn",
   /** A planning run put code of the plan's folder on the developer's screen, by place; told as the call is journaled, before the run ends. */
   CODE_SHOWN: "code_shown",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
@@ -179,6 +181,11 @@ export type BrainRunEventBody =
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
+      readonly runId: string;
+      readonly question: string;
     }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.CODE_SHOWN;

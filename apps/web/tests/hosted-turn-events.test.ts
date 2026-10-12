@@ -24,7 +24,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -434,6 +434,27 @@ test("the projection: code a planning call shows is told by place, in order with
     [
       { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+    ],
+  );
+});
+
+test("the projection: a question a planning call withdrew is told by its words once its call is whole and reads", () => {
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(WITHDRAW_QUESTION_TOOL.name, "c1", { question: "Re-send it?" }),
+        toolPart(WITHDRAW_QUESTION_TOOL.name, "c2", { question: "" }),
+        toolPart(WITHDRAW_QUESTION_TOOL.name, "c3", { question: "Who?" }, "input-streaming"),
+      ]),
+    ),
+    [
+      {
+        turnId: TURN.id,
+        seq: 1,
+        kind: TURN_EVENT_KIND.QUESTION_WITHDRAWN,
+        question: "Re-send it?",
+      },
     ],
   );
 });

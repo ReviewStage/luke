@@ -16,6 +16,7 @@ import type { Effect } from "effect";
 export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
+  QUESTION_WITHDRAWN: "question_withdrawn",
   CODE_SHOWN: "code_shown",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
@@ -69,6 +70,12 @@ export type LiveBrainRunEvent =
       /** A question the planning model queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;
+      readonly runId: string;
+      /** The words of a queued question the planning model took back, so the voice is never handed it. */
+      readonly question: string;
     }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
