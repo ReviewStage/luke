@@ -732,8 +732,10 @@ only. The page reads the template as it opens and saves the words a second
 after the typing pauses and again as focus leaves the box, one write at a
 time, through the `planTemplate.read`/`planTemplate.write` acts and the
 coding-agent chain beside the account's default model. A template past
-20,000 characters is said and never sent. Reset to default asks first and
-writes null, and stands only while the account holds its own. The box is a
+20,000 characters is said and never sent, and words left unsaved as the
+page goes that fail to save are said in a toast with a Retry. Reset to
+default asks first, waits for any save already out, and writes null, and
+stands only while the account holds its own. The box is a
 plain Markdown textarea under `ph-no-capture` for now
 (`plan-template-editor.tsx`); the plan's document editor replaces it.
 

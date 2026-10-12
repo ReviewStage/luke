@@ -16,6 +16,7 @@ import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
+import { TOAST_TONE, useToast } from "../toast";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
 import { PlanTemplateEditor } from "./plan-template-editor";
 
@@ -27,10 +28,11 @@ import { PlanTemplateEditor } from "./plan-template-editor";
  * one. The words save a beat after the developer stops typing and again as
  * focus leaves the box or the page goes, one write at a time: a pause that
  * ends while a write is out is saved once that write answers. A save that
- * failed says so under the box with a Retry, and a template past the bound
+ * failed says so under the box with a Retry, or, once the page has gone, in
+ * a toast whose Retry sends the same words, and a template past the bound
  * says so and is not sent. Reset to default asks first, since the words it
- * replaces are kept nowhere, and stands only while the account holds a
- * template of its own. With no account signed in there is no template to
+ * replaces are kept nowhere, waits for a write already out so the default
+ * lands last, and stands only while the account holds a template of its own. With no account signed in there is no template to
  * show, and the page says so.
  *
  * The box is `PlanTemplateEditor`, kept behind its own small boundary so
@@ -43,6 +45,7 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to edit the template your new plans start from.",
   READ_FAILED: "The template could not be read.",
   WRITE_FAILED: "The template could not be saved.",
+  LEFT_UNSAVED: "Your plan template could not be saved.",
   RESET_FAILED: "The template could not be reset. Try again.",
   TOO_LONG: `That template is too long to save. Keep it to ${PLAN_TEMPLATE_BOUNDS.MAX_CHARS.toLocaleString("en-US")} characters.`,
   SAVING: "Saving…",
@@ -86,16 +89,30 @@ const RESET_QUESTION: DialogQuestion = {
 
 /**
  * What a save reads and writes as it lands, which no render stands between:
- * the box's words, the words the service last answered it keeps, whether a
- * write is out, whether a pause ended while it was, and which reading of the
- * template the box is on, so a write sent before a reset lands nowhere.
+ * the box's words, the words the service last answered it keeps, the write
+ * that is out, whether a pause ended while it was, whether a reset is under
+ * way, and which reading of the template the box is on, so a write sent
+ * before a reset lands nowhere.
  */
 interface HeldTemplate {
   text: string;
   kept: string;
-  sending: boolean;
+  flight: Promise<void> | undefined;
   due: boolean;
+  resetting: boolean;
   generation: number;
+}
+
+/** The held record for a template as the service answered it, with nothing out. */
+function heldFor(template: string, generation: number): HeldTemplate {
+  return {
+    text: template,
+    kept: template,
+    flight: undefined,
+    due: false,
+    resetting: false,
+    generation,
+  };
 }
 
 /** Whether the words are past what the service keeps. */
@@ -111,6 +128,27 @@ function written(
   return act(ACT_KIND.PLAN_TEMPLATE_WRITE, { template })
     .catch((): PlanTemplateAnswerView | undefined => undefined)
     .then((answer) => (answer === undefined || "failure" in answer ? undefined : answer));
+}
+
+/**
+ * Sends words the page left unsaved as it went. Note that a failure is said
+ * in a toast, because the page and its Retry are gone with the words; the
+ * toast's Retry sends the same words again.
+ */
+function saveOnLeaving(
+  act: ActHandle["act"],
+  toast: ReturnType<typeof useToast>,
+  words: string,
+): void {
+  written(act, words).then((answer) => {
+    if (answer !== undefined) return;
+    toast({
+      words: PAGE_LINE.LEFT_UNSAVED,
+      tone: TOAST_TONE.FAILED,
+      persists: true,
+      action: { label: "Retry", onPress: () => saveOnLeaving(act, toast, words) },
+    });
+  });
 }
 
 /** The template as the box edits it, and its doors. */
@@ -138,23 +176,11 @@ function useTemplateDraft(act: ActHandle["act"]): TemplateDraft {
   const stamp = useRef(0);
   // The keystroke whose pause last saved, so a pause saves once however many renders follow it.
   const spent = useRef(0);
-  const held = useRef<HeldTemplate>({
-    text,
-    kept: text,
-    sending: false,
-    due: false,
-    generation: 0,
-  });
+  const toast = useToast();
+  const held = useRef<HeldTemplate>(heldFor(text, 0));
 
   const take = useCallback((answer: PlanTemplateAnswer) => {
-    const generation = held.current.generation + 1;
-    held.current = {
-      text: answer.template,
-      kept: answer.template,
-      sending: false,
-      due: false,
-      generation,
-    };
+    held.current = heldFor(answer.template, held.current.generation + 1);
     setText(answer.template);
     setCustom(answer.custom);
     setSave(SAVE_STATE.QUIET);
@@ -162,15 +188,15 @@ function useTemplateDraft(act: ActHandle["act"]): TemplateDraft {
 
   const send = useCallback(() => {
     const now = held.current;
-    now.due = now.sending;
-    if (now.sending || now.text === now.kept || tooLong(now.text)) return;
+    const sending = now.flight !== undefined;
+    now.due = sending && !now.resetting;
+    if (sending || now.resetting || now.text === now.kept || tooLong(now.text)) return;
     const { text: sent, generation } = now;
-    now.sending = true;
     setSave(SAVE_STATE.SAVING);
-    written(act, sent).then((answer) => {
+    now.flight = written(act, sent).then((answer) => {
       const landed = held.current;
       if (landed.generation !== generation) return;
-      landed.sending = false;
+      landed.flight = undefined;
       if (answer === undefined) {
         setSave(SAVE_STATE.FAILED);
       } else {
@@ -196,9 +222,9 @@ function useTemplateDraft(act: ActHandle["act"]): TemplateDraft {
     () => () => {
       const now = held.current;
       if (now.text === now.kept || tooLong(now.text)) return;
-      written(act, now.text).catch(() => undefined);
+      saveOnLeaving(act, toast, now.text);
     },
-    [act],
+    [act, toast],
   );
 
   return {
@@ -214,14 +240,20 @@ function useTemplateDraft(act: ActHandle["act"]): TemplateDraft {
       stamp.current += 1;
       restartPause(stamp.current);
     },
-    reset: () =>
-      written(act, null).then((answer): ActionResult => {
-        if (answer === undefined) {
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
-        }
-        take(answer);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
-      }),
+    reset: async (): Promise<ActionResult> => {
+      // The write already out lands before the null is sent, so the default is what the service keeps.
+      const now = held.current;
+      now.resetting = true;
+      now.due = false;
+      await now.flight;
+      const answer = await written(act, null);
+      now.resetting = false;
+      if (answer === undefined) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
+      }
+      take(answer);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    },
   };
 }
 

@@ -10,7 +10,7 @@ import {
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import {
@@ -22,6 +22,8 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { newestToastAction, newestToastSays } from "#testing/toast";
+import { ToastHost } from "../toast";
 import { PlanTemplateSection } from "./plan-template-page";
 
 const CUSTOM = "## Why\n\nWhat prompted it.\n\n## Done when\n";
@@ -108,6 +110,18 @@ async function mount(signedIn = true, registry?: AtomRegistry) {
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return { container, root };
+}
+
+/** The page beside the window's toasts, as two roots, so the page can go while the toasts stay. */
+async function mountWithToasts(registry: AtomRegistry) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const toasts = createRoot(host);
+  roots.push(toasts);
+  act(() =>
+    toasts.render(onRegistry(registry, createElement(Fragment, null, createElement(ToastHost)))),
+  );
+  return mount(true, registry);
 }
 
 const box = (page: HTMLElement) =>
@@ -265,6 +279,53 @@ test("Reset to default asks first; Cancel keeps the template, and Reset writes n
   assert.equal(button(container, "Reset to default"), undefined);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
+
+test("a reset while a save is out waits for it, so the default is what the service keeps", async () => {
+  stored = CUSTOM;
+  holdWrites = true;
+  const { container } = await mount();
+  typeInto(box(container), `${CUSTOM}\n## Risks\n`);
+  blur(box(container));
+  await settle();
+
+  act(() => button(container, "Reset to default")?.click());
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.ok(dialog);
+  act(() => [...dialog.querySelectorAll("button")].at(-1)?.click());
+  await settle();
+  assert.deepEqual(writes(), [`${CUSTOM}\n## Risks\n`], "the null waits on the save out");
+
+  act(() => heldWrites.shift()?.());
+  await settle();
+  assert.deepEqual(writes(), [`${CUSTOM}\n## Risks\n`, null]);
+  act(() => heldWrites.shift()?.());
+  await settle();
+  assert.equal(stored, null);
+  assert.equal(box(container).value, DEFAULT_PLAN_TEMPLATE);
+  assert.deepEqual(heldWrites, [], "nothing more is sent after the reset");
+});
+
+it.effect(
+  "words left unsaved as the page goes that fail to save are said in a toast whose Retry saves them",
+  () =>
+    Effect.gen(function* () {
+      refuseWrites = true;
+      const registry = yield* registryOnTestClock;
+      const { container, root } = yield* Effect.promise(() => mountWithToasts(registry));
+      typeInto(box(container), CUSTOM);
+      act(() => root.unmount());
+      yield* settled;
+      assert.match(newestToastSays() ?? "", /Your plan template could not be saved/u);
+
+      refuseWrites = false;
+      const retry = newestToastAction();
+      assert.equal(retry?.textContent, "Retry");
+      act(() => retry?.click());
+      yield* settled;
+      assert.deepEqual(writes(), [CUSTOM, CUSTOM]);
+      assert.equal(stored, CUSTOM);
+    }),
+);
 
 test("a read that fails says so with a Retry, which reads the template again", async () => {
   refuseRead = true;
