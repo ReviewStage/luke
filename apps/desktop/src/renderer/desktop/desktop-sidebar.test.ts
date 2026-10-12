@@ -449,6 +449,14 @@ test("Search stands right under New plan and opens the command palette", () => {
   assert.ok(document.querySelector('[cmdk-root=""]'), "the command palette is open");
 });
 
+test("a rule under Search parts it from the plans, which carry no heading but still name themselves Plans", () => {
+  const container = mount(DEAN, { plans: { plans: [listedPlan("Billing")] } });
+  const rule = searchButton(container).nextElementSibling;
+  assert.equal(rule?.tagName, "HR");
+  assert.equal(container.querySelector("h2"), null, "nothing heads the list");
+  assert.ok(container.querySelector("nav[aria-label='Plans']"), "the list keeps its name");
+});
+
 test("Search names the palette's chord, which it shows at its end only while hovered or reached from the keyboard", () => {
   const button = searchButton(mount(DEAN));
   assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+K");
