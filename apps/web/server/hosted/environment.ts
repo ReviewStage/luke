@@ -1,4 +1,5 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
+import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { text } from "../core.js";
 import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./anthropic.js";
 import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
@@ -30,6 +31,8 @@ export interface HostedEnvironmentValues {
   readonly posthogIngestHost: string | undefined;
   /** Vercel's own bearer on every scheduled call, and the deployment's at eve's door; absent refuses every sweep and every delegation. */
   readonly cronSecret: Redacted.Redacted | undefined;
+  /** The secret GitHub signs the Luke GitHub App's webhook deliveries with; absent refuses every delivery. */
+  readonly githubWebhookSecret: Redacted.Redacted | undefined;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -76,6 +79,7 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
       posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
       cronSecret: Config.option(Config.Redacted(CRON_ENVIRONMENT.CRON_SECRET)),
+      githubWebhookSecret: Config.option(Config.Redacted(GITHUB_APP_ENVIRONMENT.WEBHOOK_SECRET)),
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
@@ -86,6 +90,7 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: presentRedacted(read.posthogProjectApiKey),
       posthogIngestHost: present(read.posthogIngestHost),
       cronSecret: presentRedacted(read.cronSecret),
+      githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
     }),
   ).pipe(
     Effect.provideServiceEffect(

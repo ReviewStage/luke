@@ -56,6 +56,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  githubWebhookSecret: undefined,
 };
 
 /** The catalog every exchange checks a choice against: two models, each with its own efforts. */
