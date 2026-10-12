@@ -23,13 +23,15 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { navigationHistory } from "#testing/navigation-history";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { useAppKeymap } from "../app-commands";
+import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
@@ -83,6 +85,7 @@ function unmountAll(): void {
 
 interface MountOptions {
   update?: UpdateSnapshot;
+  onSignOut?: () => Promise<void>;
   onInstall?: () => void;
   onOpenLatest?: () => void;
   onTabChange?: (tab: PanelTab) => void;
@@ -141,6 +144,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
             tab: options.tab ?? PANEL_TAB.PLANS,
             onTabChange: options.onTabChange ?? (() => undefined),
             account,
+            onSignOut: options.onSignOut ?? (() => Promise.resolve()),
             updates: {
               update: options.update ?? UP_TO_DATE,
               onCheck: () => Promise.resolve(),
@@ -163,7 +167,105 @@ function accountButton(container: ParentNode): HTMLButtonElement {
   return button;
 }
 
+function settingsButton(container: ParentNode): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>(
+    '.sidebar-foot button[aria-label="Settings"]',
+  );
+  assert.ok(button, "the foot draws Settings' gear");
+  return button;
+}
+
+function accountMenu(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="menu"][aria-label="Account"]');
+}
+
+/** The open account menu as it reads down: its heading, each item's label and chord, and a dash for each rule. */
+function accountMenuLines(): string[] {
+  const menu = accountMenu();
+  assert.ok(menu, "the account's menu stands");
+  return [...menu.children]
+    .filter((line) => line.getAttribute("role") !== "menu")
+    .map((line) => {
+      if (line.matches("hr")) return "—";
+      const words = [...line.querySelectorAll(":scope > span, :scope > kbd")].map(
+        (part) => part.textContent ?? "",
+      );
+      return words.filter((word) => word !== "").join(" ");
+    });
+}
+
+/** The open account menu's own item by its label, not a submenu's. */
+function accountItem(label: string): HTMLButtonElement {
+  const item = [...(accountMenu()?.children ?? [])].find(
+    (line): line is HTMLButtonElement =>
+      line instanceof HTMLButtonElement &&
+      line.querySelector(".plan-menu-label")?.textContent === label,
+  );
+  assert.ok(item, `the account's menu offers ${label}`);
+  return item;
+}
+
+function submenu(): HTMLElement | null {
+  return (
+    accountMenu()?.querySelector<HTMLElement>('[role="menu"][aria-label="Contact us"]') ?? null
+  );
+}
+
+function submenuLabels(): string[] {
+  return [...(submenu()?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+function submenuItem(label: string): HTMLButtonElement {
+  const item = [
+    ...(submenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+  ].find((candidate) => candidate.textContent === label);
+  assert.ok(item, `Contact us offers ${label}`);
+  return item;
+}
+
+function keyDown(target: Element | null, key: string): void {
+  assert.ok(target, `something holds focus for ${key}`);
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+function dialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="alertdialog"]');
+}
+
+function dialogButton(label: string): HTMLButtonElement {
+  const button = [...(dialog()?.querySelectorAll("button") ?? [])].find(
+    (candidate) => candidate.textContent === label,
+  );
+  assert.ok(button, `the dialog offers ${label}`);
+  return button;
+}
+
+/** The Help menu's commands, offered as `App` offers them, each press written down. */
+function HelpOffers({ ran }: { ran: string[] }): null {
+  useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => ran.push(APP_COMMAND.SEND_FEEDBACK));
+  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => ran.push(APP_COMMAND.SUGGEST_FEATURE));
+  useAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS, () => ran.push(APP_COMMAND.KEYBOARD_SHORTCUTS));
+  return null;
+}
+
+/** Every act the sidebar sent, in order. */
+let sent: Act[] = [];
+
 beforeEach(() => {
+  sent = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        sent.push(request);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
   installScrollIntoView();
   // Luke's face reads the reduced-motion preference, which jsdom has no media for.
   Object.defineProperty(window, "matchMedia", {
@@ -181,14 +283,21 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-test("the account button is the one way to Settings, and pressing it opens Settings", () => {
+test("the gear is the one press to Settings, beside the account, and marks Settings while it is on show", () => {
   const opened: PanelTab[] = [];
   const container = mount(DEAN, { onTabChange: (tab) => opened.push(tab) });
+  const gear = settingsButton(container);
 
-  assert.equal(container.querySelectorAll(".sidebar-foot button").length, 1);
-  act(() => accountButton(container).click());
+  assert.equal(gear.previousElementSibling, accountButton(container), "it ends the account's row");
+  assert.equal(gear.getAttribute("aria-keyshortcuts"), "Meta+,");
+  act(() => gear.click());
 
   assert.deepEqual(opened, [PANEL_TAB.SETTINGS]);
+  assert.equal(gear.getAttribute("aria-current"), null);
+  assert.equal(
+    settingsButton(mount(DEAN, { tab: PANEL_TAB.SETTINGS })).getAttribute("aria-current"),
+    "page",
+  );
 });
 
 test("the account button shows the provider's photo and the account's name", () => {
@@ -220,23 +329,185 @@ test("a photo that fails to load falls back to the initial", () => {
   assert.equal(button.querySelector(".sidebar-avatar")?.textContent, "D");
 });
 
-test("signed out, the button still leads to Settings and says so", () => {
+test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Log out, parted by rules", () => {
   const opened: PanelTab[] = [];
-  const button = accountButton(
-    mount({ status: ACCOUNT_STATUS.SIGNED_OUT }, { onTabChange: (tab) => opened.push(tab) }),
+  const container = mount(DEAN, { onTabChange: (tab) => opened.push(tab) });
+  const button = accountButton(container);
+  assert.equal(button.getAttribute("aria-haspopup"), "menu");
+
+  act(() => button.click());
+
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(accountMenuLines(), [
+    "Dean Stratakos dean@example.com",
+    "—",
+    "Settings ⌘,",
+    "—",
+    "Changelog",
+    "Send feedback…",
+    "Suggest a feature…",
+    "Keyboard shortcuts ⌘/",
+    "Contact us",
+    "—",
+    "Log out",
+  ]);
+  assert.equal(document.activeElement?.textContent, "Settings⌘,", "focus lands on its first item");
+  act(() => accountItem("Settings").click());
+  assert.deepEqual(opened, [PANEL_TAB.SETTINGS]);
+  assert.equal(accountMenu(), null, "choosing closes it");
+  assert.equal(document.activeElement, button, "and hands focus back to the account");
+});
+
+test("the account's menu offers the Help menu's own commands and opens the changelog, each closing the menu", () => {
+  const ran: string[] = [];
+  const container = mount(DEAN, { beside: createElement(HelpOffers, { ran }) });
+  for (const label of ["Send feedback…", "Suggest a feature…", "Keyboard shortcuts", "Changelog"]) {
+    act(() => accountButton(container).click());
+    act(() => accountItem(label).click());
+    assert.equal(accountMenu(), null);
+  }
+
+  assert.deepEqual(ran, [
+    APP_COMMAND.SEND_FEEDBACK,
+    APP_COMMAND.SUGGEST_FEATURE,
+    APP_COMMAND.KEYBOARD_SHORTCUTS,
+  ]);
+  assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
+});
+
+test("Contact us opens GitHub and Email beside it, by press or Right, Left or Escape closing it alone, and each writes to Luke's own people", () => {
+  const container = mount(DEAN);
+  act(() => accountButton(container).click());
+  const contact = accountItem("Contact us");
+  assert.equal(contact.getAttribute("aria-haspopup"), "menu");
+
+  act(() => contact.click());
+  assert.equal(contact.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(submenuLabels(), ["GitHub", "Email"]);
+  assert.equal(document.activeElement?.textContent, "GitHub", "focus moves into it");
+  keyDown(document.activeElement, "ArrowDown");
+  assert.equal(document.activeElement?.textContent, "Email", "its arrows walk its own items");
+  keyDown(document.activeElement, "ArrowLeft");
+  assert.deepEqual(submenuLabels(), []);
+  assert.equal(document.activeElement, contact, "Left hands focus back to Contact us");
+  assert.ok(accountMenu(), "and leaves the menu standing");
+
+  keyDown(contact, "ArrowRight");
+  assert.deepEqual(submenuLabels(), ["GitHub", "Email"]);
+  keyDown(document.activeElement, "Escape");
+  assert.deepEqual(submenuLabels(), []);
+  assert.ok(accountMenu(), "Escape in the submenu closes the submenu alone");
+
+  act(() => contact.click());
+  act(() => submenuItem("GitHub").click());
+  assert.equal(accountMenu(), null);
+  act(() => accountButton(container).click());
+  act(() => accountItem("Contact us").click());
+  act(() => submenuItem("Email").click());
+  assert.equal(accountMenu(), null);
+
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/ReviewStage/luke/issues" } },
+    { kind: ACT_KIND.CONTACT_EMAIL },
+  ]);
+});
+
+test("resting on Contact us opens its submenu without taking focus, and resting on or walking to another item closes it", () => {
+  const container = mount(DEAN);
+  act(() => accountButton(container).click());
+  const focused = document.activeElement;
+
+  act(() => {
+    accountItem("Contact us").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.deepEqual(submenuLabels(), ["GitHub", "Email"]);
+  assert.equal(document.activeElement, focused);
+
+  act(() => {
+    submenuItem("Email").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.deepEqual(submenuLabels(), ["GitHub", "Email"], "crossing into it keeps it");
+  act(() => {
+    accountItem("Changelog").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.deepEqual(submenuLabels(), []);
+
+  act(() => {
+    accountItem("Contact us").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  keyDown(document.activeElement, "ArrowDown");
+  assert.deepEqual(submenuLabels(), [], "walking the menu by key leaves it behind too");
+});
+
+test("Log out asks first, and only its answer signs the account out", async () => {
+  let signOuts = 0;
+  const container = mount(DEAN, {
+    onSignOut: () => {
+      signOuts += 1;
+      return Promise.resolve();
+    },
+  });
+  const logOut = () => {
+    act(() => accountButton(container).click());
+    act(() => accountItem("Log out").click());
+  };
+
+  logOut();
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Log out of dean@example.com?");
+  act(() => dialogButton("Cancel").click());
+  assert.equal(dialog(), null);
+  assert.equal(signOuts, 0);
+
+  logOut();
+  await act(async () => dialogButton("Log out").click());
+  assert.equal(signOuts, 1);
+});
+
+test("a Log out that fails keeps the dialog up saying so, and the account still signed in", async () => {
+  const container = mount(DEAN, { onSignOut: () => Promise.reject(new Error("refused")) });
+  act(() => accountButton(container).click());
+  act(() => accountItem("Log out").click());
+
+  await act(async () => dialogButton("Log out").click());
+
+  assert.match(
+    dialog()?.querySelector('[role="alert"]')?.textContent ?? "",
+    /could not log out, so you are still signed in/u,
   );
+});
+
+test("signed out, the account says so and its menu names no one and offers no Log out", () => {
+  const button = accountButton(mount({ status: ACCOUNT_STATUS.SIGNED_OUT }));
 
   assert.equal(button.querySelector("img"), null);
-  assert.equal(button.querySelector(".sidebar-account-name")?.textContent, "Settings");
+  assert.equal(button.querySelector(".sidebar-account-name")?.textContent, "Not signed in");
   act(() => button.click());
-  assert.deepEqual(opened, [PANEL_TAB.SETTINGS]);
+  assert.deepEqual(accountMenuLines(), [
+    "Settings ⌘,",
+    "—",
+    "Changelog",
+    "Send feedback…",
+    "Suggest a feature…",
+    "Keyboard shortcuts ⌘/",
+    "Contact us",
+  ]);
+});
+
+test("the account's menu closes when the sidebar folds away", () => {
+  const container = mount(DEAN);
+  act(() => accountButton(container).click());
+  assert.ok(accountMenu());
+
+  restages.get(container)?.({ collapsed: true });
+
+  assert.equal(accountMenu(), null);
 });
 
 function updateControl(container: ParentNode): HTMLElement | null {
-  return container.querySelector<HTMLElement>(".sidebar-foot > :not(.sidebar-account)");
+  return container.querySelector<HTMLElement>(".sidebar-foot .sidebar-update");
 }
 
-test("a downloaded release puts Restart to update above the account row, and pressing it installs", () => {
+test("a downloaded release puts Update between the account and the gear, and pressing it installs", () => {
   let installs = 0;
   const container = mount(DEAN, {
     update: READY,
@@ -246,10 +517,15 @@ test("a downloaded release puts Restart to update above the account row, and pre
   });
   const control = updateControl(container);
   assert.ok(control instanceof HTMLButtonElement, "the foot draws the update button");
-  assert.equal(control.textContent, "Restart to update");
-  assert.ok(
-    control.nextElementSibling === accountButton(container),
-    "it stands just above the account row",
+  assert.equal(control.textContent, "Update");
+  assert.equal(control.previousElementSibling, accountButton(container));
+  assert.equal(control.nextElementSibling, settingsButton(container));
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(
+    document.body.querySelector('[role="tooltip"]')?.textContent,
+    "Luke 0.11.0 is ready. Restart to update.",
   );
 
   act(() => control.click());
@@ -257,7 +533,7 @@ test("a downloaded release puts Restart to update above the account row, and pre
   assert.equal(installs, 1);
 });
 
-test("a downloading release is a quiet line with how far along it is, and nothing to press", () => {
+test("a downloading release is a quiet count of how far along it is, and nothing to press", () => {
   const container = mount(DEAN, {
     update: {
       status: UPDATE_STATUS.DOWNLOADING,
@@ -270,22 +546,24 @@ test("a downloading release is a quiet line with how far along it is, and nothin
   const control = updateControl(container);
 
   assert.equal(control?.getAttribute("role"), "status");
-  assert.equal(control?.textContent, "Downloading update… 42%");
-  assert.equal(container.querySelectorAll(".sidebar-foot button").length, 1);
+  assert.equal(control?.textContent, "42%");
+  assert.equal(container.querySelectorAll(".sidebar-foot button").length, 2);
 });
 
-test("up to date, checking, or unable to install in place, the sidebar draws no update control", () => {
+test("up to date, checking, or unable to install in place, the foot draws no update control", () => {
   const unsupported: UpdateSnapshot = { ...READY, installSupported: false };
   for (const update of [
     UP_TO_DATE,
     { status: UPDATE_STATUS.CHECKING, currentVersion: "0.10.0", installSupported: true },
     unsupported,
   ] as const) {
-    assert.equal(updateControl(mount(DEAN, { update })), null);
+    const container = mount(DEAN, { update });
+    assert.equal(updateControl(container), null);
+    assert.equal(container.querySelectorAll(".sidebar-foot button").length, 2);
   }
 });
 
-test("a release that could not be installed puts Download update above the account row, saying why in its hint, and the gear wears no dot in any state", () => {
+test("a release that could not be installed puts Download beside the gear, saying why in its hint, and the account wears no word of the release in any state", () => {
   let opened = 0;
   const failed: UpdateSnapshot = {
     status: UPDATE_STATUS.ERROR,
@@ -301,7 +579,7 @@ test("a release that could not be installed puts Download update above the accou
   });
   const control = updateControl(container);
   assert.ok(control instanceof HTMLButtonElement, "the foot draws the download");
-  assert.equal(control.textContent, "Download update");
+  assert.equal(control.textContent, "Download");
   act(() => {
     control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -314,8 +592,7 @@ test("a release that could not be installed puts Download update above the accou
 
   for (const update of [READY, failed, UP_TO_DATE]) {
     const button = accountButton(mount(DEAN, { update }));
-    assert.equal(button.querySelector(".tab-note"), null, "no dot on the gear");
-    assert.doesNotMatch(button.textContent ?? "", /update|install/iu, "nor words of the release");
+    assert.doesNotMatch(button.textContent ?? "", /update|install|download/iu);
   }
 });
 

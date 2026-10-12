@@ -1,4 +1,4 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   ArchiveIcon,
@@ -8,16 +8,12 @@ import {
   ComposeIcon,
   EllipsisIcon,
   FolderIcon,
-  GearIcon,
   PinIcon,
   PlusIcon,
   SearchIcon,
   UnpinIcon,
-  UpdateIcon,
-  UserIcon,
 } from "@sidecar/panel";
 import { useRef, useState } from "react";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -40,12 +36,12 @@ import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
-import { updateInSidebar, updateRow } from "../update-row";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SidebarFoot } from "./sidebar-foot";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
@@ -123,125 +119,6 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
         </button>
       </Tooltip>
     </div>
-  );
-}
-
-/**
- * The account's face: the provider's photo when one travelled and loads,
- * otherwise the first letter of who it is, otherwise a person glyph while no
- * one is signed in. A photo that fails is remembered by its address for as
- * long as the sidebar stands, so a new address gets its own chance. Note that
- * we let a remount try the address again, because a failure is as often a
- * launch with no network as a dead link, and the empty `alt` means a retry
- * that fails again draws no broken-image glyph.
- */
-function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
-  const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
-  if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
-    return (
-      <span className="sidebar-avatar sidebar-avatar-neutral" aria-hidden="true">
-        <UserIcon />
-      </span>
-    );
-  }
-  const { pictureUrl } = account;
-  if (pictureUrl !== undefined && pictureUrl !== failedUrl) {
-    return (
-      <img
-        className="sidebar-avatar"
-        src={pictureUrl}
-        alt=""
-        referrerPolicy="no-referrer"
-        draggable={false}
-        onError={() => setFailedUrl(pictureUrl)}
-      />
-    );
-  }
-  return (
-    <span className="sidebar-avatar" aria-hidden="true">
-      {(account.name ?? account.email).slice(0, 1).toUpperCase()}
-    </span>
-  );
-}
-
-/**
- * A newer release on its way in, just above the account row, where a desktop
- * devtool keeps it: a quiet line while it downloads, then the restart that
- * installs it, which is the very act Settings' Restart to update runs; or,
- * once installing it failed, the download from the releases page that
- * Settings offers in its place, its hint saying what went wrong. It draws
- * nothing in any other state, so the column carries no control with nothing
- * to do, and it is the one place outside Settings that says a release waits.
- */
-function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
-  const { update } = updates;
-  if (!updateInSidebar(update)) return null;
-  switch (update.status) {
-    case UPDATE_STATUS.READY:
-      return (
-        <Tooltip label={`Luke ${update.latestVersion} is ready`}>
-          <button type="button" className="sidebar-item sidebar-update" onClick={updates.onInstall}>
-            <UpdateIcon />
-            Restart to update
-          </button>
-        </Tooltip>
-      );
-    case UPDATE_STATUS.DOWNLOADING:
-      return (
-        <p className="sidebar-item sidebar-update-progress" role="status">
-          <UpdateIcon />
-          Downloading update…
-          {update.progress ? ` ${Math.round(update.progress.percent)}%` : null}
-        </p>
-      );
-    default:
-      return (
-        <Tooltip label={updateRow(update).detail}>
-          <button
-            type="button"
-            className="sidebar-item sidebar-update"
-            onClick={updates.onOpenLatest}
-          >
-            <UpdateIcon />
-            Download update
-          </button>
-        </Tooltip>
-      );
-  }
-}
-
-/**
- * The foot of the column: one row that is who is signed in and the way to
- * Settings at once, the way every desktop devtool keeps it. Signed out it
- * names where it leads instead.
- */
-function AccountButton({
-  account,
-  current,
-  onPress,
-}: {
-  account: AccountSnapshot;
-  current: boolean;
-  onPress: () => void;
-}): React.JSX.Element {
-  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  return (
-    <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
-      <button
-        type="button"
-        className="sidebar-item sidebar-account"
-        aria-current={current ? "page" : undefined}
-        onClick={onPress}
-      >
-        <AccountAvatar account={account} />
-        <span className="sidebar-account-name">
-          {signedIn ? (account.name ?? account.email) : "Settings"}
-        </span>
-        <span className="sidebar-account-settings">
-          <GearIcon />
-        </span>
-      </button>
-    </Tooltip>
   );
 }
 
@@ -623,7 +500,7 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan the account owns, and the account's
- * row that leads to Settings. The pinned plans, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, a plan naming its repository
  * and a tab its plan, under a header that folds as a repository's does;
@@ -647,6 +524,7 @@ export function DesktopSidebar({
   onTabChange,
   account,
   updates,
+  onSignOut,
   call,
 }: {
   sidebar: SidebarCollapse;
@@ -656,6 +534,8 @@ export function DesktopSidebar({
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   updates: UpdateControl;
+  /** Signs the account out, once the account menu's Log out is answered. */
+  onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
 }): React.JSX.Element {
@@ -819,11 +699,13 @@ export function DesktopSidebar({
 
       <div className="sidebar-foot">
         <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
-        <SidebarUpdate updates={updates} />
-        <AccountButton
+        <SidebarFoot
           account={account}
-          current={tab === PANEL_TAB.SETTINGS}
-          onPress={() => onTabChange(PANEL_TAB.SETTINGS)}
+          updates={updates}
+          shown={!sidebar.collapsed}
+          settingsOpen={tab === PANEL_TAB.SETTINGS}
+          onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
+          onSignOut={onSignOut}
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}

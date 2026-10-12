@@ -262,6 +262,8 @@ export const ACT_KIND = {
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
+  /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
+  CONTACT_EMAIL: "contact.email",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
   WINDOW_SAVE_FILE: "window.saveFile",
@@ -405,7 +407,7 @@ export const FENCE_LANGUAGE_MAX_CHARS = 32;
 /** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
-/** An address on GitHub, and nowhere else: what a repository link or the installation link opens. */
+/** An address on GitHub, and nowhere else: what a repository link, the installation link, or Luke's own issues open. */
 const githubAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(GITHUB_ADDRESS),
@@ -771,6 +773,7 @@ export const ACT = {
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
+  [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's plan forward on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {

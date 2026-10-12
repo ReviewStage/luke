@@ -13,9 +13,10 @@ const SENDER = {} as WebContents;
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
-/** The window surface's rows over a save dialog that answers `choosing`, every file it saved written down. */
+/** The window surface's rows over a save dialog that answers `choosing`, every file it saved and every address it opened written down. */
 function fixture(choosing: boolean) {
   const saved: string[] = [];
+  const opened: string[] = [];
   const rows = windowSurfaceActRows({
     // SAFETY: a save reads nothing of the panels.
     panels: {} as PanelManager,
@@ -23,7 +24,10 @@ function fixture(choosing: boolean) {
     microphoneRoute: () => undefined,
     microphoneRouteWatcher: () => undefined,
     recordProductEvent: () => undefined,
-    openExternal: () => Promise.resolve(),
+    openExternal: (url) => {
+      opened.push(url);
+      return Promise.resolve();
+    },
     saveFile: (sender, name, text) => {
       if (choosing)
         saved.push(`${sender === SENDER ? "over the panel" : "elsewhere"}: ${name} ${text}`);
@@ -31,7 +35,7 @@ function fixture(choosing: boolean) {
     },
   });
   // SAFETY: the router reads only the rows of the kinds it is asked, and every act here is one of these.
-  return { router: createActRouter(rows as ActRows), saved };
+  return { router: createActRouter(rows as ActRows), saved, opened };
 }
 
 it.effect(
@@ -66,4 +70,16 @@ it.effect(
         { status: ACT_OUTCOME_STATUS.DONE, value: false },
       );
     }),
+);
+
+it.effect("Contact us by email opens a new message to Luke's own address and no other", () =>
+  Effect.gen(function* () {
+    const { router, opened } = fixture(false);
+
+    assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.CONTACT_EMAIL }, PANEL), {
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: undefined,
+    });
+    assert.deepEqual(opened, ["mailto:founders@stagereview.app"]);
+  }),
 );
