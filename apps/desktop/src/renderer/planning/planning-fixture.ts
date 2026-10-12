@@ -18,7 +18,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
-import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import { type Workspace, WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
@@ -41,6 +41,29 @@ import {
  * what the planning capture shows. Every name and repository here is
  * invented; nothing is read from an account.
  */
+
+/**
+ * The fixture account's workspaces: its personal one, which the sidebar
+ * lists, the workspace of the acme organization's GitHub App installation,
+ * which it is a member of, and globex's, which it may join, so the captures
+ * draw the sidebar's switcher.
+ */
+const FIXTURE_PERSONAL: Workspace = {
+  id: "workspace-personal",
+  name: "Personal",
+  personal: true,
+  role: WORKSPACE_ROLE.OWNER,
+  active: true,
+};
+const FIXTURE_TEAM: Workspace = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
+const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_PERSONAL, FIXTURE_TEAM];
+const FIXTURE_AVAILABLE: PlanningView["available"] = [{ installationId: 4242, name: "globex" }];
 
 /**
  * The reference journey's plan partway through its conversation: the
@@ -87,7 +110,7 @@ const FIXTURE_TEXT = [
 
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
-  workspaceId: "workspace-personal",
+  workspaceId: FIXTURE_PERSONAL.id,
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -98,11 +121,19 @@ const FIXTURE_PLAN: Plan = {
 const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   {
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
-    workspaceId: "workspace-personal",
+    workspaceId: FIXTURE_PERSONAL.id,
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
     repository: "acme/ledger",
+  },
+  {
+    id: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
+    workspaceId: FIXTURE_TEAM.id,
+    name: "Usage alerts",
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
   },
 ];
 
@@ -141,7 +172,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   plans: [
     {
       id: FIXTURE_PLAN.id,
-      workspaceId: "workspace-personal",
+      workspaceId: FIXTURE_PERSONAL.id,
       name: FIXTURE_PLAN.name,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,
@@ -150,16 +181,8 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     ...FIXTURE_OTHER_PLANS,
   ],
   listStatus: PLANNING_READ.READY,
-  workspaces: [
-    {
-      id: "workspace-personal",
-      name: "Personal",
-      personal: true,
-      role: WORKSPACE_ROLE.OWNER,
-      active: true,
-    },
-  ],
-  available: [],
+  workspaces: FIXTURE_WORKSPACES,
+  available: FIXTURE_AVAILABLE,
   document: { status: PLANNING_READ.IDLE },
 };
 

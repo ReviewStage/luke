@@ -47,6 +47,7 @@ import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * What the sidebar leaves the work column beside it, in CSS pixels: the
@@ -570,7 +571,9 @@ function SidebarInboxRow({
 
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
- * opens the command palette, every plan the account owns, and the account's
+ * opens the command palette, every plan of the workspace chosen, headed by
+ * the workspace's switcher while the account is in more than one
+ * (`workspace-switcher.tsx`), and the account's
  * row, whose menu and gear lead to Settings and the rest. The Inbox's row
  * follows Search above the rule, counting what waits unseen, and opens the
  * window's Inbox. The pinned plans, and the side panel tabs
@@ -757,6 +760,9 @@ export function DesktopSidebar({
         onOpen={openInbox}
       />
       <hr className="sidebar-rule" />
+      {/* The workspace the list is, while the account is in more than one;
+          it stands over the scroller, so it never scrolls away. */}
+      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}

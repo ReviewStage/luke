@@ -762,6 +762,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
           ...("repository" in request ? { repository: request.repository } : undefined),
+          ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok
