@@ -1,8 +1,9 @@
-import type { PlanCode } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { PanelRightIcon } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import type { FileTreeHandle } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
+import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileTab, type ReadFileWindow } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
@@ -53,6 +54,7 @@ export function FileView({
   repository,
   file,
   snippet,
+  shownCode,
   readFile,
   readFolder,
   openGitHub,
@@ -66,6 +68,8 @@ export function FileView({
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: PlanCode | undefined;
+  /** Every code Luke showed on the plan, whose files of this repository the tree's filter narrows to. */
+  shownCode: readonly PlanCodeShowing[] | undefined;
   readFile: ReadFileWindow;
   /** Lists one folder of the repository through the service. */
   readFolder: ListFolder;
@@ -83,6 +87,16 @@ export function FileView({
   const listFolder = useMemo(
     () => keptListings((path) => latestRead.current(path)),
     [planId, repository],
+  );
+
+  // Note that the list is kept while the plan shows nothing new, because
+  // a fresh one would have the tree draw its filter anew.
+  const shown = useMemo(
+    () =>
+      shownFiles((shownCode ?? []).filter(({ code }) => code.repository === repository)).map(
+        (ref) => ref.path,
+      ),
+    [shownCode, repository],
   );
 
   // The tree as mounted, and a folder a breadcrumb asked for before it was.
@@ -128,8 +142,8 @@ export function FileView({
       />
       {browsing && treeOpen ? (
         <FileTreePane
-          repository={repository}
           file={file.path}
+          shown={shown}
           listFolder={listFolder}
           onOpen={onBrowse}
           onMounted={onMounted}

@@ -6,7 +6,7 @@ import type {
   ReadFolder,
   RevealOptions,
 } from "./contract";
-import { browseFolders, type FolderBrowser, repositoryPath } from "./folder-browser";
+import { browseFolders, type FolderBrowser, markAlone, repositoryPath } from "./folder-browser";
 
 /**
  * index.ts -- the file tree bundle: Pierre's tree mounted beside a File tab, listed a folder at a time, a file opened on its press.
@@ -26,6 +26,13 @@ import { browseFolders, type FolderBrowser, repositoryPath } from "./folder-brow
  * how it was made: ⌘ held opens it in a tab of its own. Note that Pierre
  * takes a ⌘-press as adding to its selection, which the tab's next reveal
  * puts back to the one file shown.
+ *
+ * Each file is drawn with its type's coloured icon (Pierre's complete set),
+ * and a folder holding one folder alone shares its row, as `src/main` does
+ * in an editor's explorer. The pane's search narrows the rows to those whose
+ * path holds the query, through Pierre's own search; its filter shows only
+ * the files Luke showed, in a second tree of those paths alone, every folder
+ * open, swapped for the repository's while it stands.
  */
 
 /** What Pierre marks a row with: that it is an entry, and that it is a file. */
@@ -34,8 +41,18 @@ const ROW = {
   FILE: "file",
 } as const;
 
+/** How both trees draw: compact rows, each file's type in colour, and a lone folder sharing its parent's row. */
+const TREE_LOOK = {
+  flattenEmptyDirectories: true,
+  density: "compact",
+  icons: "complete",
+} as const;
+
 /** What the pane says while the root is listed. */
 const READING = "Reading the files…";
+
+/** What stands in the tree's place while a search matches nothing. */
+const NO_MATCH = "No files match.";
 
 /** What stands under the tree once a folder in it was listed short of whole. */
 const CUT_SHORT =
@@ -70,6 +87,21 @@ function notice(text: string, retry: (() => void) | undefined): HTMLElement {
   return box;
 }
 
+/** One of the trees the pane shows, and the element it draws in, which is hidden while the other stands. */
+interface View {
+  readonly tree: FileTree;
+  readonly frame: HTMLElement;
+}
+
+/** A tree drawn into a frame of its own over the paths given, Pierre's names for them. */
+function viewOf(paths: readonly string[], expansion: "open" | "closed"): View {
+  const tree = new FileTree({ ...TREE_LOOK, paths, initialExpansion: expansion });
+  const frame = document.createElement("div");
+  frame.className = "file-tree-view";
+  tree.render({ containerWrapper: frame });
+  return { tree, frame };
+}
+
 /** The entries a listing holds, or nothing where it holds why it is not one; `onCut` hears a listing cut short. */
 function entriesOf(read: ReadFolder, onCut: () => void) {
   return (path: string) =>
@@ -81,26 +113,43 @@ function entriesOf(read: ReadFolder, onCut: () => void) {
 }
 
 function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
-  let tree: FileTree | undefined;
+  let browse: View | undefined;
   let browser: FolderBrowser | undefined;
+  let shown: View | undefined;
+  let only: readonly string[] | undefined;
+  let query = "";
+  let marked: string | undefined;
   let taken = false;
   // The reveals asked before the tree is drawn: the tab's file, and a folder a breadcrumb asked for.
   const waiting = new Map<boolean, { path: string; options: RevealOptions }>();
+  const empty = notice(NO_MATCH, undefined);
+  // Note that the line saying a folder was cut short is added once, under the tree.
+  const cut = notice(CUT_SHORT, undefined);
+  cut.classList.add("file-tree-cut");
+
+  // The tree standing now, the files Luke showed while the filter is on,
+  // drawn with the search held, or the words saying it matches nothing.
+  const present = () => {
+    if (browse === undefined) return;
+    if (only !== undefined && shown === undefined) {
+      shown = viewOf(only, "open");
+      if (marked !== undefined) markAlone(shown.tree, marked, false);
+      browse.frame.after(shown.frame);
+    }
+    const view = only === undefined ? browse : (shown ?? browse);
+    view.tree.setSearch(query === "" ? null : query);
+    const matchless = query.trim() !== "" && view.tree.getSearchMatchingPaths().length === 0;
+    browse.frame.hidden = view !== browse || matchless;
+    if (shown !== undefined) shown.frame.hidden = view !== shown || matchless;
+    empty.hidden = !matchless;
+  };
 
   const draw = () => {
-    tree = new FileTree({
-      paths: [],
-      flattenEmptyDirectories: false,
-      density: "compact",
-      icons: "standard",
-    });
-    host.replaceChildren();
-    tree.render({ containerWrapper: host });
-    // Note that the line saying a folder was cut short is added once, under the tree.
-    const cut = notice(CUT_SHORT, undefined);
-    cut.classList.add("file-tree-cut");
+    browse = viewOf([], "closed");
+    empty.hidden = true;
+    host.replaceChildren(browse.frame, empty);
     browser = browseFolders(
-      tree,
+      browse.tree,
       entriesOf(props.readFolder, () => {
         if (!cut.isConnected) host.append(cut);
       }),
@@ -109,6 +158,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
       browser.reveal(path, options).catch(() => undefined);
     }
     waiting.clear();
+    present();
   };
 
   const list = () => {
@@ -128,7 +178,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
   const onKey = (event: KeyboardEvent) => {
-    const path = tree?.getFocusedPath() ?? null;
+    const view = only === undefined ? browse : shown;
+    const path = view?.tree.getFocusedPath() ?? null;
     if (event.key !== "Enter" || path === null || path.endsWith("/")) return;
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
@@ -138,15 +189,29 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
 
   return {
     reveal: (path, options) => {
+      if (!options.folder) marked = path;
+      if (!options.folder && shown !== undefined) markAlone(shown.tree, path, false);
       if (browser === undefined) waiting.set(options.folder, { path, options });
       else browser.reveal(path, options).catch(() => undefined);
+    },
+    search: (asked) => {
+      query = asked;
+      present();
+    },
+    only: (paths) => {
+      shown?.tree.cleanUp();
+      shown?.frame.remove();
+      shown = undefined;
+      only = paths;
+      present();
     },
     unmount: () => {
       taken = true;
       host.removeEventListener("click", onClick);
       host.removeEventListener("keydown", onKey);
       browser?.dispose();
-      tree?.cleanUp();
+      browse?.tree.cleanUp();
+      shown?.tree.cleanUp();
     },
   };
 }

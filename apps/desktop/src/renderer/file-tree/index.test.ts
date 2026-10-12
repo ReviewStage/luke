@@ -105,3 +105,103 @@ test("a folder listed short of whole says so under the tree, once", async () => 
     "Some folders hold more than the tree lists. Open them on GitHub to see the rest.",
   );
 });
+
+/** A repository two folders deep, `src/app` the one folder `src` holds beside its file. */
+function repository(path: string): FolderListing {
+  if (path === "") return ROOT;
+  if (path === "src") {
+    return {
+      entries: [
+        { name: "app", folder: true },
+        { name: "index.ts", folder: false },
+      ],
+      truncated: false,
+    };
+  }
+  if (path === "src/app")
+    return { entries: [{ name: "main.ts", folder: false }], truncated: false };
+  return { entries: [], truncated: false };
+}
+
+/** The rows the tree on screen draws, by path: the frame not hidden. */
+function drawnRows(host: HTMLElement): readonly string[] {
+  const frame = [...host.querySelectorAll<HTMLElement>(".file-tree-view")].find(
+    (each) => !each.hidden,
+  );
+  return [
+    ...(frame
+      ?.querySelector("file-tree-container")
+      ?.shadowRoot?.querySelectorAll<HTMLElement>("[data-item-path]") ?? []),
+  ].map((row) => row.dataset.itemPath ?? "");
+}
+
+test("each file is drawn with its type's icon in that type's colour", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  await tree.settled();
+
+  const shadow = tree.host.querySelector("file-tree-container")?.shadowRoot;
+  assert.ok(
+    shadow?.querySelector("[data-file-tree-colored-icons='true']"),
+    "icons drawn in colour",
+  );
+  assert.equal(
+    tree.row("src/index.ts").querySelector("[data-icon-token]")?.getAttribute("data-icon-token"),
+    "typescript",
+  );
+});
+
+test("a search narrows the rows to the paths holding it, says when none do, and an empty one shows every row again", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("src/app/main.ts", { folder: false, focus: false });
+  await tree.settled();
+
+  tree.handle.search("MAIN");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "src/app/", "src/app/main.ts"]);
+
+  tree.handle.search("nothing like it");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), []);
+  assert.match(tree.host.textContent ?? "", /No files match\./);
+
+  tree.handle.search("");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), [
+    "src/",
+    "src/app/",
+    "src/app/main.ts",
+    "src/index.ts",
+    "README.md",
+  ]);
+  assert.doesNotMatch(
+    [...tree.host.querySelectorAll<HTMLElement>(".file-tree-notice:not([hidden])")]
+      .map((shown) => shown.textContent)
+      .join(),
+    /No files match/,
+  );
+});
+
+test("the filter shows only the files given, every folder open, the tab's file marked and opened on a press, until it is let go", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("README.md", { folder: false, focus: false });
+  tree.handle.only(["src/app/main.ts", "README.md"]);
+  await tree.settled();
+
+  assert.deepEqual(drawnRows(tree.host), ["src/app/", "src/app/main.ts", "README.md"]);
+  const readme = [...tree.host.querySelectorAll<HTMLElement>(".file-tree-view")]
+    .find((each) => !each.hidden)
+    ?.querySelector("file-tree-container")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-item-path='src/app/main.ts']");
+  readme?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  assert.deepEqual(tree.opened, ["src/app/main.ts"]);
+
+  tree.handle.search("readme");
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["README.md"]);
+
+  tree.handle.search("");
+  tree.handle.only(undefined);
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
+});
