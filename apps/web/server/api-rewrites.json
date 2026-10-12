@@ -136,6 +136,10 @@
     "dest": "/api/default.js?route=repository-pins"
   },
   {
+    "src": "/api/workspaces",
+    "dest": "/api/default.js?route=workspaces"
+  },
+  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   }
