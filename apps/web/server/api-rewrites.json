@@ -216,6 +216,14 @@
     "dest": "/api/default.js?route=workspaces"
   },
   {
+    "src": "/api/workspaces/join",
+    "dest": "/api/default.js?route=workspaces/join"
+  },
+  {
+    "src": "/api/workspaces/members",
+    "dest": "/api/default.js?route=workspaces/members"
+  },
+  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   }

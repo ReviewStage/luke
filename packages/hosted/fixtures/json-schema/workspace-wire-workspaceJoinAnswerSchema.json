@@ -1,0 +1,44 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "name": {
+          "type": "string"
+        },
+        "personal": {
+          "type": "boolean"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "admin",
+            "member"
+          ]
+        },
+        "active": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "personal",
+        "role",
+        "active"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "workspace"
+  ],
+  "additionalProperties": false
+}

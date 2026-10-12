@@ -138,6 +138,18 @@ sets the column not null). A plan's summary on the wire names it as `workspaceId
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
 statement joins into its own where clause.
 
+A workspace of an installation is joined and its members read through
+`server/workspaces-app.ts` under the bearer, since the plugin's own member
+reads take a session cookie a Mac never holds. `POST /api/workspaces/join`
+takes an active installation's id, asks GitHub on the account's own token
+whether it still reaches it (`GitHubApp.userReachesInstallation`), and adds
+the account as a member through the plugin's server-only `addMember`
+(`hosted/workspace-seams.ts`); one already in is answered as it stands.
+`GET /api/workspaces/members?workspaceId=` answers a workspace's members to a
+member, read through Drizzle (`hosted/workspace-members.ts`). A workspace the
+account is not in is `not-found`; a personal one `not-permitted`.
+`tests/workspaces-app.test.ts` holds each over the plugin on PGlite.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server

@@ -15,6 +15,11 @@ import { workspaceIdSchema } from "./plan-wire.js";
  * removed is still listed, marked inactive, and is never offered to join.
  * A workspace's id is the one a plan's summary
  * names, `plan-wire.ts`'s `workspaceIdSchema`.
+ *
+ * An account joins the workspace of an installation it may join by the
+ * installation's id, once GitHub confirms it still reaches it, and a member
+ * of a workspace reads its members. A personal workspace is joined by
+ * nobody, and its members are read by nobody.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -41,6 +46,8 @@ export const workspaceSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
+export type Workspace = typeof workspaceSchema.Type;
+
 /** A workspace the account may join: the GitHub App installation it stands for, by GitHub's id, and its name, the account's login. */
 export const availableWorkspaceSchema = EffectSchema.Struct({
   installationId: EffectSchema.Int.check(EffectSchema.isGreaterThan(0)),
@@ -56,3 +63,29 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
 });
 
 export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
+
+/** Joining the workspace of a GitHub App installation (POST), by GitHub's id for the installation. */
+export const workspaceJoinRequestSchema = EffectSchema.Struct({
+  installationId: availableWorkspaceSchema.fields.installationId,
+});
+
+/** The workspace joined, with the account's role in it: a member's, or the one it already held. */
+export const workspaceJoinAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
+
+/** One member of a workspace: the account, its name and email, and its role. */
+export const workspaceMemberSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+  email: EffectSchema.String,
+  role: workspaceSchema.fields.role,
+});
+
+export type WorkspaceMember = typeof workspaceMemberSchema.Type;
+
+/** A workspace's members, owners first, then admins, then members, each by name (GET). */
+export const workspaceMembersAnswerSchema = EffectSchema.Struct({
+  members: EffectSchema.Array(workspaceMemberSchema),
+});
+
+/** The query a members read names its workspace under. */
+export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;

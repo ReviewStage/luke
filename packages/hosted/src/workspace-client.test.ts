@@ -78,3 +78,62 @@ it.effect("reads a key a newer service added past, and a refusal or a malformed 
     assert.equal(yield* Effect.provide(client().list(), malformed.layer), undefined);
   }),
 );
+
+const ADA = { userId: "user-ada", name: "Ada Lovelace", email: "ada@luke.test", role: "owner" };
+const GRACE = {
+  userId: "user-grace",
+  name: "Grace Hopper",
+  email: "grace@luke.test",
+  role: "member",
+};
+
+it.effect(
+  "joins an installation's workspace and reads its members, each asked as the service names it",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/join": { answer: () => ({ workspace: SHARED }) },
+        "GET /api/workspaces/members": { answer: () => ({ members: [ADA, GRACE] }) },
+      });
+      const workspaces = client();
+
+      const joined = yield* Effect.provide(workspaces.join(JOINABLE.installationId), api.layer);
+      const members = yield* Effect.provide(workspaces.members(SHARED.id), api.layer);
+
+      assert.deepEqual(joined, SHARED);
+      assert.deepEqual(members, [ADA, GRACE]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, search, body }) => ({
+          route: `${method} ${pathname}${search}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/join",
+            body: { installationId: JOINABLE.installationId },
+          },
+          { route: `GET /api/workspaces/members?workspaceId=${SHARED.id}`, body: undefined },
+        ],
+      );
+    }),
+);
+
+it.effect("answers nothing where the service refused", () =>
+  Effect.gen(function* () {
+    const refusal = {
+      answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+      status: HTTP_STATUS.FORBIDDEN,
+    };
+    const api = fakeCloudApi({
+      "POST /api/workspaces/join": refusal,
+      "GET /api/workspaces/members": refusal,
+    });
+    const workspaces = client();
+
+    assert.equal(
+      yield* Effect.provide(workspaces.join(JOINABLE.installationId), api.layer),
+      undefined,
+    );
+    assert.equal(yield* Effect.provide(workspaces.members(SHARED.id), api.layer), undefined);
+  }),
+);
