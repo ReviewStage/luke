@@ -7,7 +7,7 @@ import {
 import { WorkIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -22,6 +22,7 @@ import { EmptyState } from "../empty-state";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel } from "../spinner";
 import { WorkingMark } from "../working-mark";
+import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import {
   TranscriptNote,
   TranscriptOpeningCall,
@@ -403,6 +404,42 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
   );
 }
 
+/** The turn that was running at `at`: the last to start at or before it, or the first where every turn drawn started after it. */
+function turnAt(rows: readonly WorkTurnRow[], at: number): string | undefined {
+  return (rows.findLast((row) => row.startedAt <= at) ?? rows[0])?.key;
+}
+
+/**
+ * Reads older pages of the work while the moment a version's Open asked for
+ * is older than every turn drawn and an older page stands, answering whether
+ * it is still reading. A page that did not land leaves the page before it
+ * where it was, so a read settling with the same page before it is one that
+ * failed, and the seeking stops there rather than asking again forever.
+ */
+function useEarlierUntil(
+  at: number | undefined,
+  rows: readonly WorkTurnRow[],
+  earlier: string | undefined,
+  onLoadEarlier: () => Promise<void>,
+): boolean {
+  const [failedAt, setFailedAt] = useState<string | undefined>(undefined);
+  const oldest = rows[0]?.startedAt;
+  const seeking =
+    at !== undefined &&
+    earlier !== undefined &&
+    earlier !== failedAt &&
+    oldest !== undefined &&
+    oldest > at;
+  const latest = useRef(onLoadEarlier);
+  latest.current = onLoadEarlier;
+  useEffect(() => {
+    if (!seeking || earlier === undefined) return;
+    const settled = () => setFailedAt(earlier);
+    latest.current().then(settled, settled);
+  }, [seeking, earlier]);
+  return seeking;
+}
+
 export function PlanWork({
   turns,
   callLive,
@@ -412,6 +449,7 @@ export function PlanWork({
   onOpenAgent,
   shown,
   models,
+  reveal,
 }: {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
@@ -427,11 +465,17 @@ export function PlanWork({
   shown: boolean;
   /** The catalog as last read, which names each subagent's model; none before the first read lands. */
   models?: readonly CatalogModel[] | undefined;
+  /** The moment whose turn a version's Open asked to bring into view, and the word that it has. */
+  reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }): React.JSX.Element {
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
+  const root = useRef<HTMLElement>(null);
+  const seeking = useEarlierUntil(reveal?.at, rows, earlier, onLoadEarlier);
+  const revealed = reveal === undefined ? undefined : turnAt(rows, reveal.at);
+  useRevealInLog(root, turns !== undefined && !seeking, reveal?.onRevealed);
   return (
-    <section className="plan-work ph-no-capture" aria-label="Work">
+    <section ref={root} className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
         <ModelsContext.Provider value={models ?? []}>
           <OpenAgentContext.Provider value={onOpenAgent}>
@@ -447,7 +491,10 @@ export function PlanWork({
                       <EarlierWork key={earlier} onLoad={onLoadEarlier} />
                     )}
                     {rows.map((turn) => (
-                      <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
+                      <Fragment key={turn.key}>
+                        {turn.key === revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
+                        <WorkTurn turn={turn} now={now} counting={shown} />
+                      </Fragment>
                     ))}
                   </ConversationContent>
                   <ConversationScrollButton />

@@ -41,6 +41,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { CONFIRM_STAGE } from "../settings/confirm-state";
 import { ToastHost } from "../toast";
+import { REVISION_SOURCE } from "./plan-history-model";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { MAIN_TAB } from "./use-main-tabs";
@@ -521,6 +522,59 @@ test("another plan opening leaves the version history, and so does a notificatio
   act(() => tab.control().history.onOpen(PLAN.id));
   act(() => tab.control().onShowAgent(PLAN.id, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"));
   assert.equal(tab.control().history.open, false);
+});
+
+test("a version's Open leaves the history for where it was written: the panel's Transcript asked for its call, or Work asked for its moment, each asked once", () => {
+  const tab = mount({ shown: true, planning: EDITED });
+  const callId = "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22";
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().onShowSource(PLAN.id, { kind: REVISION_SOURCE.CALL, callId }));
+
+  assert.equal(tab.control().history.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  assert.equal(tab.control().transcript.reveal?.call, callId);
+  assert.equal(tab.control().work.reveal, undefined);
+  act(() => tab.control().transcript.reveal?.onRevealed());
+  assert.equal(tab.control().transcript.reveal, undefined, "the ask is answered once");
+
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().onShowSource(PLAN.id, { kind: REVISION_SOURCE.WORK, at: 40 }));
+  assert.equal(tab.control().history.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.WORK });
+  assert.equal(tab.control().work.reveal?.at, 40);
+  assert.equal(tab.control().transcript.reveal, undefined);
+});
+
+test("a version's Open not yet answered when another plan opens is dropped, so coming back asks nothing of the visit after", () => {
+  const tab = mount({ shown: true, planning: EDITED });
+  act(() =>
+    tab.control().onShowSource(PLAN.id, {
+      kind: REVISION_SOURCE.CALL,
+      callId: "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
+    }),
+  );
+  assert.ok(tab.control().transcript.reveal);
+
+  tab.stand({ planning: { ...EDITED, activePlanId: OTHER_PLAN_ID } });
+  tab.stand({ planning: EDITED });
+  assert.equal(tab.control().transcript.reveal, undefined);
+});
+
+test("a version's Open onto an agent's tab leaves the history for the agent's tab, the side panel as it was", async () => {
+  const tab = mount(
+    { shown: true, planning: EDITED },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() =>
+    tab.control().onShowSource(PLAN.id, { kind: REVISION_SOURCE.AGENT, agentId: AGENT_ID }),
+  );
+  await settle();
+
+  assert.equal(tab.control().history.open, false);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(panelOf(tab).open, false);
 });
 
 test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {

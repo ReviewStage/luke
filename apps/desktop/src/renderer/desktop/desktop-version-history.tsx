@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { Plan, PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { BackIcon, ChevronRightIcon, TerminalIcon, WingFace } from "@sidecar/panel";
-import { HistoryIcon } from "lucide-react";
+import { ArrowUpRightIcon, HistoryIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -17,8 +17,10 @@ import {
   REVISION_AUTHOR,
   type RevisionAuthor,
   revisionAuthorOf,
+  revisionSource,
   revisionSummary,
   sectionName,
+  sourceLabel,
   VERSION_CHANGE,
   versionDiff,
   versionMoment,
@@ -34,6 +36,7 @@ import { RetryButton, RetryRowLabel } from "../retry-button";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
+import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -128,6 +131,42 @@ function RevisionMark({ author }: { author: RevisionAuthor }): React.JSX.Element
   }
 }
 
+/** The way from a revision to the place that wrote it: what its Open says, and the press. */
+interface SourceDoor {
+  readonly label: string;
+  readonly onOpen: () => void;
+}
+
+/** A revision's Open as an item of its right-click menu. */
+function sourceItem(source: SourceDoor): MenuAction {
+  return { label: source.label, icon: <ArrowUpRightIcon />, onSelect: source.onOpen };
+}
+
+/** A right-click's door to a row's menu, hung at the pointer and handing focus back to the row. */
+function showMenuAt(menu: ReturnType<typeof useActionMenu>) {
+  return (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    menu.show(atPointer(event), event.currentTarget);
+  };
+}
+
+/** A revision's Open: a quiet arrow that stands at the row's end while the row is hovered or focused, and goes to the place that wrote it. */
+function OpenSourceButton({ source }: { source: SourceDoor }): React.JSX.Element {
+  return (
+    <Tooltip label={source.label}>
+      <button
+        type="button"
+        className="version-row-open"
+        aria-label={source.label}
+        tabIndex={-1}
+        onClick={source.onOpen}
+      >
+        <ArrowUpRightIcon />
+      </button>
+    </Tooltip>
+  );
+}
+
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
  * version is drawn. A revision of several changes carries a chevron at its
@@ -142,6 +181,7 @@ function RevisionRow({
   rowRef,
   onSelect,
   onOpenSections,
+  source,
 }: {
   line: PlanRevisionLine;
   author: RevisionAuthor;
@@ -151,16 +191,26 @@ function RevisionRow({
   onSelect: () => void;
   /** Opens the sections the revision changed; none for a revision that opens none. */
   onOpenSections: (() => void) | undefined;
+  /** The way to the place that wrote the revision; none where nothing else in the window did. */
+  source: SourceDoor | undefined;
 }): React.JSX.Element {
   const { lastEdit } = line;
+  const menu = useActionMenu(true);
+  const items = [
+    ...(source === undefined ? [] : [sourceItem(source)]),
+    ...(onOpenSections === undefined
+      ? []
+      : [{ label: SECTIONS_HINT, icon: <ChevronRightIcon />, onSelect: onOpenSections }]),
+  ];
   return (
-    <li className="version-item">
+    <li className="version-item" data-menu-open={String(menu.open !== undefined)}>
       <button
         ref={rowRef}
         type="button"
         className="version-row"
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
+        onContextMenu={items.length === 0 ? undefined : showMenuAt(menu)}
       >
         <RevisionMark author={author} />
         <span className="version-row-text">
@@ -179,6 +229,7 @@ function RevisionRow({
           <span className="version-row-summary">{revisionSummary(line)}</span>
         </span>
       </button>
+      {source === undefined ? null : <OpenSourceButton source={source} />}
       {onOpenSections === undefined ? null : (
         <Tooltip label={SECTIONS_HINT}>
           <button
@@ -192,6 +243,14 @@ function RevisionRow({
           </button>
         </Tooltip>
       )}
+      {menu.open === undefined ? null : (
+        <ActionMenu
+          label="Version actions"
+          menu={menu.open}
+          groups={[items]}
+          onClose={menu.close}
+        />
+      )}
     </li>
   );
 }
@@ -200,10 +259,12 @@ function RevisionRow({
 function SectionsHead({
   line,
   author,
+  source,
   onBack,
 }: {
   line: PlanRevisionLine;
   author: RevisionAuthor;
+  source: SourceDoor | undefined;
   onBack: () => void;
 }): React.JSX.Element {
   return (
@@ -221,6 +282,7 @@ function SectionsHead({
         <time dateTime={new Date(line.lastEdit.at).toISOString()}>
           {versionMoment(line.lastEdit.at)}
         </time>
+        {source === undefined ? null : <OpenSourceButton source={source} />}
       </p>
     </>
   );
@@ -232,13 +294,17 @@ function SectionRow({
   selected,
   rowRef,
   onSelect,
+  source,
 }: {
   section: ChangedSection;
   selected: boolean;
   rowRef: (row: HTMLButtonElement | null) => void;
   onSelect: () => void;
+  /** The way to the place that wrote its revision, which its right-click offers. */
+  source: SourceDoor | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
+  const menu = useActionMenu(true);
   return (
     <li>
       <button
@@ -247,10 +313,19 @@ function SectionRow({
         className="version-section-row"
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
+        onContextMenu={source === undefined ? undefined : showMenuAt(menu)}
       >
         <span className="version-section-name">{sectionName(section.heading)}</span>
         {word === undefined ? null : <span className="version-section-change">{word}</span>}
       </button>
+      {menu.open === undefined || source === undefined ? null : (
+        <ActionMenu
+          label="Section actions"
+          menu={menu.open}
+          groups={[[sourceItem(source)]]}
+          onClose={menu.close}
+        />
+      )}
     </li>
   );
 }
@@ -306,10 +381,13 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   );
 }
 
-/** Whether a key press belongs to something that takes keys of its own: a field, or a dialog over the window. */
+/** Whether a key press belongs to something that takes keys of its own: a field, a dialog over the window, or a menu open over a row. */
 function keysTaken(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || target.closest("input, textarea, select, dialog") !== null;
+  return (
+    target.isContentEditable ||
+    target.closest('input, textarea, select, dialog, [role="menu"]') !== null
+  );
 }
 
 /** What a list does with the arrow keys: up and down step through it, and right and left go into a row and back out, where the list offers them. */
@@ -516,10 +594,22 @@ export function DesktopVersionHistory({
   // history on to it, as it does over the list, so the sections give way.
   if (opened !== undefined && versions.selected !== opened.seq) setOpened(undefined);
   const sections = openedSections(versions.viewing, opened, plan);
+  const sourceOf = (line: PlanRevisionLine, author: RevisionAuthor): SourceDoor | undefined => {
+    const source = revisionSource(line);
+    const planId = plans.boundFor;
+    if (source === undefined || planId === undefined) return undefined;
+    return { label: sourceLabel(source, author), onOpen: () => plans.onShowSource(planId, source) };
+  };
   const openedLine = revisions.find((line) => line.seq === opened?.seq);
   const chosenSection =
     sections?.find((section) => section.heading === opened?.heading) ?? sections?.[0];
   const unit = chosenSection?.unit;
+  const openedAuthor =
+    openedLine === undefined ? undefined : revisionAuthorOf(openedLine, reader, agents);
+  const openedSource =
+    openedLine === undefined || openedAuthor === undefined
+      ? undefined
+      : sourceOf(openedLine, openedAuthor);
   const openSections = (seq: number) => {
     versions.onSelect(seq);
     setOpened({ seq, heading: undefined });
@@ -575,21 +665,25 @@ export function DesktopVersionHistory({
           <div ref={log} className="sidebar-section version-log-pane" inert={opened !== undefined}>
             {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
             <ol className="version-list">
-              {revisions.map((line) => (
-                <RevisionRow
-                  key={line.seq}
-                  line={line}
-                  author={revisionAuthorOf(line, reader, agents)}
-                  selected={line.seq === versions.selected}
-                  now={now}
-                  rowRef={(row) => {
-                    if (row === null) rows.delete(line.seq);
-                    else rows.set(line.seq, row);
-                  }}
-                  onSelect={() => versions.onSelect(line.seq)}
-                  onOpenSections={opensSections(line) ? () => openSections(line.seq) : undefined}
-                />
-              ))}
+              {revisions.map((line) => {
+                const author = revisionAuthorOf(line, reader, agents);
+                return (
+                  <RevisionRow
+                    key={line.seq}
+                    line={line}
+                    author={author}
+                    source={sourceOf(line, author)}
+                    selected={line.seq === versions.selected}
+                    now={now}
+                    rowRef={(row) => {
+                      if (row === null) rows.delete(line.seq);
+                      else rows.set(line.seq, row);
+                    }}
+                    onSelect={() => versions.onSelect(line.seq)}
+                    onOpenSections={opensSections(line) ? () => openSections(line.seq) : undefined}
+                  />
+                );
+              })}
             </ol>
             {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
               <EarlierRow onRead={versions.onLoadEarlier} />
@@ -604,7 +698,8 @@ export function DesktopVersionHistory({
               <>
                 <SectionsHead
                   line={openedLine}
-                  author={revisionAuthorOf(openedLine, reader, agents)}
+                  author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents)}
+                  source={openedSource}
                   onBack={closeSections}
                 />
                 {sections === undefined ? <LogSkeleton /> : null}
@@ -619,6 +714,7 @@ export function DesktopVersionHistory({
                         else sectionRows.set(section.unit, row);
                       }}
                       onSelect={() => chooseUnit(section.unit)}
+                      source={openedSource}
                     />
                   ))}
                 </ol>

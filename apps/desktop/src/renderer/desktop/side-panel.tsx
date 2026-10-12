@@ -566,6 +566,8 @@ function NoTabs({ onChoose }: { onChoose: (tab: FixedSidePanelTab) => void }): R
 interface SidePanelTranscript {
   region: TranscriptRegion;
   onRetry: () => void;
+  /** The call a version's Open asked to bring into view. */
+  reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
 }
 
 /** What Luke's planning model wrote and ran on the open plan's calls, and whether a call still stands. */
@@ -574,6 +576,8 @@ interface SidePanelWork {
   callLive: boolean;
   earlier: string | undefined;
   onLoadEarlier: () => Promise<void>;
+  /** The moment whose turn a version's Open asked to bring into view. */
+  reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }
 
 /** An open subagent tab the plan draws: its tab, what the strip calls it, where its glyph says it stands, and the planning worker's block where it is one. */
@@ -786,7 +790,13 @@ function TabContent({
         />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
-      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
+      return (
+        <PlanTranscript
+          region={transcript.region}
+          onRetry={transcript.onRetry}
+          reveal={transcript.reveal}
+        />
+      );
     case SIDE_PANEL_TAB.WORK:
       return (
         <PlanWork
@@ -798,6 +808,7 @@ function TabContent({
           onOpenAgent={onOpenAgent}
           shown={shown}
           models={agents.models}
+          reveal={work.reveal}
         />
       );
   }

@@ -10,9 +10,12 @@ import {
   changedSections,
   opensSections,
   REVISION_AUTHOR,
+  REVISION_SOURCE,
   revisionAuthorOf,
   revisionOfSave,
+  revisionSource,
   revisionSummary,
+  sourceLabel,
   VERSION_CHANGE,
   versionDiff,
   versionMoment,
@@ -402,4 +405,41 @@ test("a plan of the template's fields lists its assumptions as one section where
     changedSections(versionDiff(null, after), true).map((section) => section.heading),
     ["Goal", "Assumptions"],
   );
+});
+
+test("a revision's Open goes to its agent's tab, Luke's call, or Luke's moment in Work, and nowhere for anyone else", () => {
+  const callId = "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22";
+  const agentEdit = { actor: PLAN_ACTOR.AGENT, label: "Invite emails", at: NOW, duringCall: false };
+
+  assert.deepEqual(revisionSource({ ...line(), callId }), { kind: REVISION_SOURCE.CALL, callId });
+  assert.deepEqual(revisionSource(line()), {
+    kind: REVISION_SOURCE.WORK,
+    at: line().lastEdit.at,
+  });
+  assert.deepEqual(revisionSource({ lastEdit: agentEdit, agentId: AGENT_ID }), {
+    kind: REVISION_SOURCE.AGENT,
+    agentId: AGENT_ID,
+  });
+  // An agent the line no longer names, the developer, and the plan before history open nothing.
+  assert.equal(revisionSource({ lastEdit: agentEdit }), undefined);
+  assert.equal(
+    revisionSource({ lastEdit: { ...agentEdit, actor: PLAN_ACTOR.DEVELOPER } }),
+    undefined,
+  );
+  assert.equal(
+    revisionSource({ lastEdit: { ...agentEdit, actor: PLAN_ACTOR.EARLIER } }),
+    undefined,
+  );
+
+  const agent = {
+    kind: REVISION_AUTHOR.AGENT,
+    title: "Invite emails",
+    provider: undefined,
+  } as const;
+  assert.equal(
+    sourceLabel({ kind: REVISION_SOURCE.AGENT, agentId: AGENT_ID }, agent),
+    "Open Invite emails",
+  );
+  assert.equal(sourceLabel({ kind: REVISION_SOURCE.CALL, callId }, agent), "Open in Transcript");
+  assert.equal(sourceLabel({ kind: REVISION_SOURCE.WORK, at: NOW }, agent), "Open in Work");
 });

@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanTranscript } from "./plan-transcript";
@@ -48,6 +48,7 @@ const settle = Effect.promise(() =>
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** The list's scroll box as jsdom lays it out: a fixed height over a content height the test sets. */
@@ -469,3 +470,115 @@ it.effect(
       assert.equal(card.textContent, "Oct 12, 2026, 2:51 PM → 3:04 PM");
     }),
 );
+
+test("asked for a call by a version's Open, the tab brings that call to the top of its log once the transcript is read, and says so once", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-reveal")) return new DOMRect(0, 520, 0, 0);
+    if (this.getAttribute("role") === "log") return new DOMRect(0, 120, 300, 400);
+    return new DOMRect();
+  });
+  const call = (key: string, startedAt: number, text: string) => ({
+    key,
+    startedAt,
+    live: false,
+    lukeEnded: false,
+    messages: [
+      {
+        id: "0",
+        role: TRANSCRIPT_SPEAKER.USER,
+        parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+      },
+    ],
+  });
+  const revealed = vi.fn();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (region: TranscriptRegion) =>
+    act(() =>
+      root.render(
+        createElement(PlanTranscript, {
+          region,
+          onRetry: () => undefined,
+          reveal: { call: "call-2", onRevealed: revealed },
+        }),
+      ),
+    );
+
+  draw({ kind: TRANSCRIPT_REGION.READING });
+  assert.equal(revealed.mock.calls.length, 0, "nothing is answered while the transcript is read");
+  draw({
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: [call("call-1", 1_000, "The first call."), call("call-2", 9_000, "The second call.")],
+  });
+
+  const mark = container.querySelector("[data-reveal]");
+  assert.ok(mark);
+  assert.equal(container.querySelectorAll("[data-reveal]").length, 1);
+  assert.match(
+    mark.parentElement?.textContent?.split("The first call.")[1] ?? "",
+    /The second call\./u,
+  );
+  assert.equal(container.querySelector<HTMLElement>('[role="log"]')?.scrollTop, 400);
+  assert.equal(revealed.mock.calls.length, 1);
+});
+
+test("a call brought into view stays there through the redraw its answer asks and a line arriving after", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-reveal")) return new DOMRect(0, -1_480, 0, 0);
+    if (this.getAttribute("role") === "log") return new DOMRect(0, 120, 300, 400);
+    return new DOMRect();
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "log" ? 2_000 : 0;
+  });
+  const call = (key: string, startedAt: number, lines: readonly string[]) => ({
+    key,
+    startedAt,
+    live: false,
+    lukeEnded: false,
+    messages: lines.map((text, at) => ({
+      id: String(at),
+      role: TRANSCRIPT_SPEAKER.USER,
+      parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+    })),
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  let reveal: { call: string; onRevealed: () => void } | undefined = {
+    call: "call-1",
+    onRevealed: () => {
+      reveal = undefined;
+    },
+  };
+  const draw = (lines: readonly string[]) =>
+    act(() =>
+      root.render(
+        createElement(PlanTranscript, {
+          region: {
+            kind: TRANSCRIPT_REGION.READY,
+            earlierOmitted: false,
+            calls: [call("call-1", 1_000, ["The first call."]), call("call-2", 9_000, lines)],
+          },
+          onRetry: () => undefined,
+          reveal,
+        }),
+      ),
+    );
+
+  draw(["The second call."]);
+  const log = container.querySelector<HTMLElement>('[role="log"]');
+  assert.equal(log?.scrollTop, 400);
+  draw(["The second call.", "A line after."]);
+  assert.equal(log?.scrollTop, 400, "the log does not jump back to its newest line");
+});

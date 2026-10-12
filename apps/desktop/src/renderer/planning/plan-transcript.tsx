@@ -1,6 +1,7 @@
 import { TranscriptIcon, WingFace } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { AudioLinesIcon } from "lucide-react";
+import { useRef } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -14,6 +15,7 @@ import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { CallEnded } from "./call-card";
 import { CopyMessageAction } from "./copy-message";
+import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
   callEndedLine,
@@ -81,17 +83,21 @@ function TranscriptTurn({ turn }: { turn: SpeakerTurn }): React.JSX.Element {
   );
 }
 
-/** One call: the checkpoint it begins at, each speaker's turns, and once it has ended, a quiet line saying so and, where the record holds its end, how long it ran (`call-card.tsx`). */
+/** One call: the checkpoint it begins at, each speaker's turns, and once it has ended, a quiet line saying so and, where the record holds its end, how long it ran (`call-card.tsx`); marked where a version's Open asked for it. */
 function TranscriptCall({
   call,
   now,
+  revealed,
 }: {
   call: TranscriptCallRow;
   now: number;
+  revealed: boolean;
 }): React.JSX.Element {
   const ended = callEndedLine(call);
   return (
     <>
+      {/* Before the checkpoint rather than on it, since a sticky checkpoint stands at the top however far it has scrolled. */}
+      {revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
       <Checkpoint
         trailing={
           call.live ? (
@@ -117,8 +123,11 @@ function TranscriptCall({
 /** The calls, kept scrolled to the newest line while the developer has not scrolled away from it. */
 function TranscriptCalls({
   region,
+  revealCall,
 }: {
   region: Extract<TranscriptRegion, { kind: typeof TRANSCRIPT_REGION.READY }>;
+  /** The call a version's Open asked for, by its key. */
+  revealCall: string | undefined;
 }): React.JSX.Element {
   const now = Date.now();
   return (
@@ -129,7 +138,7 @@ function TranscriptCalls({
           <TranscriptNote>Earlier lines are not shown.</TranscriptNote>
         ) : null}
         {region.calls.map((call) => (
-          <TranscriptCall key={call.key} call={call} now={now} />
+          <TranscriptCall key={call.key} call={call} now={now} revealed={call.key === revealCall} />
         ))}
       </ConversationContent>
       <ConversationScrollButton />
@@ -140,14 +149,21 @@ function TranscriptCalls({
 export function PlanTranscript({
   region,
   onRetry,
+  reveal,
 }: {
   region: TranscriptRegion;
   onRetry: () => void;
+  /** The call a version's Open asked to bring into view, by its key, and the word that it has. */
+  reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
 }): React.JSX.Element {
+  const root = useRef<HTMLElement>(null);
+  // Note that an ask is answered once the transcript has been read, whether or not it holds the call.
+  const read = region.kind !== TRANSCRIPT_REGION.READING;
+  useRevealInLog(root, read, reveal?.onRevealed);
   return (
-    <section className="plan-transcript ph-no-capture" aria-label="Transcript">
+    <section ref={root} className="plan-transcript ph-no-capture" aria-label="Transcript">
       {region.kind === TRANSCRIPT_REGION.READY ? (
-        <TranscriptCalls region={region} />
+        <TranscriptCalls region={region} revealCall={reveal?.call} />
       ) : region.kind === TRANSCRIPT_REGION.EMPTY ? (
         <EmptyState icon={<TranscriptIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       ) : (

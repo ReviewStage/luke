@@ -17,6 +17,7 @@ import { codingAgent } from "../db/coding-agent-schema.js";
 import { planRevision } from "../db/plan-revision-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
+import { voiceSessions } from "../db/voice-schema.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -174,6 +175,7 @@ const restored = alias(planRevision, "restored");
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
   agentId: Schema.NullOr(Schema.String),
+  callId: Schema.NullOr(Schema.String),
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
   changes: Schema.Number,
@@ -204,6 +206,7 @@ const findRevisionLines = SqlSchema.findAll({
         agentModel: codingAgent.model,
         agentTitle: codingAgent.title,
         agentId: planRevision.agentId,
+        callId: voiceSessions.id,
         seq: planRevision.seq,
         startedAt: planRevision.startedAt,
         changes: planRevision.changes,
@@ -213,6 +216,14 @@ const findRevisionLines = SqlSchema.findAll({
       .from(planRevision)
       .innerJoin(plan, eq(plan.id, planRevision.planId))
       .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+      // The call a revision names by its Live API id, read as the transcript names it.
+      .leftJoin(
+        voiceSessions,
+        and(
+          eq(voiceSessions.liveSessionId, planRevision.liveSessionId),
+          eq(voiceSessions.userId, userId),
+        ),
+      )
       .leftJoin(
         restored,
         and(eq(restored.planId, planRevision.planId), eq(restored.seq, planRevision.restoredFrom)),
@@ -409,6 +420,7 @@ export function listRevisions(
         seq: row.seq,
         lastEdit: lastEditOf(row),
         ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+        ...(row.callId === null ? undefined : { callId: row.callId }),
         startedAt: row.startedAt.getTime(),
         changes: row.changes,
         ...(row.restoredFrom === null || row.restoredAt === null

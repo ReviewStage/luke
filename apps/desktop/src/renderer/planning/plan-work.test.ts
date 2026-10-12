@@ -21,6 +21,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function mounted(element: ReactElement): HTMLElement {
@@ -242,4 +243,138 @@ test("a coding agent's start, once the agent began, is the one button that opens
   for (const id of ["call-refused", "call-starting"]) {
     assert.equal(work.querySelector(`[data-call-id="${id}"]`)?.tagName, "DETAILS", id);
   }
+});
+
+/** An observer that never sees its row come into view, so the older page is read only when the test asks. */
+class UnseenObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+/** Lays out every element at the top of the window but the reveal mark, which stands `markTop` down, and the log, `logTop` down. */
+function layOut(markTop: number, logTop: number): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-reveal")) return new DOMRect(0, markTop, 0, 0);
+    if (this.getAttribute("role") === "log") return new DOMRect(0, logTop, 300, 400);
+    return new DOMRect();
+  });
+}
+
+test("asked for a moment by a version's Open, the tab brings the turn that was running then to the top of its log, once", () => {
+  layOut(340, 100);
+  const said = (turnId: string, startedAt: number, text: string) => ({
+    turnId,
+    startedAt,
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    parts: [{ type: PLAN_WORK_PART.TEXT, text }],
+  });
+  const revealed = vi.fn();
+  const work = mounted(
+    createElement(PlanWork, {
+      turns: [
+        said("turn-1", 1_000, "First turn."),
+        said("turn-2", 5_000, "Second turn."),
+        said("turn-3", 9_000, "Third turn."),
+      ],
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: async () => undefined,
+      onOpenSubagent: () => undefined,
+      shown: true,
+      reveal: { at: 6_000, onRevealed: revealed },
+    }),
+  );
+
+  const mark = work.querySelector("[data-reveal]");
+  const words = (text: string) =>
+    [...work.querySelectorAll("p")].find((line) => line.textContent === text);
+  assert.ok(mark);
+  assert.equal(work.querySelectorAll("[data-reveal]").length, 1);
+  const precedes = (a: Node | undefined, b: Node | undefined) =>
+    a !== undefined &&
+    b !== undefined &&
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  assert.ok(precedes(words("First turn."), mark), "after the turn before it");
+  assert.ok(precedes(mark, words("Second turn.")), "before the turn running at the moment");
+  assert.equal(work.querySelector<HTMLElement>('[role="log"]')?.scrollTop, 240);
+  assert.equal(revealed.mock.calls.length, 1);
+});
+
+test("asked for a moment older than every turn drawn, the tab reads older pages until the turn running then is drawn, and stops at a page that does not land", () => {
+  layOut(340, 100);
+  vi.stubGlobal("IntersectionObserver", UnseenObserver);
+  const said = (turnId: string, startedAt: number, text: string) => ({
+    turnId,
+    startedAt,
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    parts: [{ type: PLAN_WORK_PART.TEXT, text }],
+  });
+  const revealed = vi.fn();
+  const reads = vi.fn(() => Promise.resolve());
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (turns: ReturnType<typeof said>[], earlier: string | undefined) =>
+    act(() =>
+      root.render(
+        createElement(PlanWork, {
+          turns,
+          callLive: false,
+          earlier,
+          onLoadEarlier: reads,
+          onOpenSubagent: () => undefined,
+          shown: true,
+          reveal: { at: 2_000, onRevealed: revealed },
+        }),
+      ),
+    );
+
+  draw([said("turn-3", 9_000, "Third turn.")], "turn-3");
+  assert.equal(reads.mock.calls.length, 1);
+  assert.equal(revealed.mock.calls.length, 0, "nothing is answered while an older page is read");
+  draw([said("turn-1", 1_000, "First turn."), said("turn-3", 9_000, "Third turn.")], undefined);
+  const mark = container.querySelector("[data-reveal]");
+  const first = [...container.querySelectorAll("p")].find(
+    (line) => line.textContent === "First turn.",
+  );
+  assert.ok(
+    mark && first && (mark.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+  );
+  assert.equal(revealed.mock.calls.length, 1);
+});
+
+test("an older page that does not land stops the seeking, and the ask is answered at the oldest turn drawn", async () => {
+  layOut(340, 100);
+  vi.stubGlobal("IntersectionObserver", UnseenObserver);
+  const revealed = vi.fn();
+  const reads = vi.fn(() => Promise.resolve());
+  mounted(
+    createElement(PlanWork, {
+      turns: [
+        {
+          turnId: "turn-3",
+          startedAt: 9_000,
+          state: PLAN_WORK_STATE.DONE,
+          earlierOmitted: false,
+          parts: [{ type: PLAN_WORK_PART.TEXT, text: "Third turn." }],
+        },
+      ],
+      callLive: false,
+      earlier: "turn-3",
+      onLoadEarlier: reads,
+      onOpenSubagent: () => undefined,
+      shown: true,
+      reveal: { at: 2_000, onRevealed: revealed },
+    }),
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  assert.equal(reads.mock.calls.length, 1, "asked once, not again for the same page");
+  assert.equal(revealed.mock.calls.length, 1);
 });
