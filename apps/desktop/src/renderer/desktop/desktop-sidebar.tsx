@@ -22,7 +22,6 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
 import {
-  PLAN_MARK,
   PLANS_PAGE,
   type RepositoryGroup,
   repositoryGroups,
@@ -281,9 +280,7 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
   const archive: MenuAction = {
     label: "Archive plans",
     icon: <ArchiveIcon />,
-    onSelect: () => {
-      for (const plan of group.plans) plans.onMarkPlan(plan.id, PLAN_MARK.ARCHIVE);
-    },
+    onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
   };
   if (repository === null) return [[archive]];
   const github: MenuAction = {

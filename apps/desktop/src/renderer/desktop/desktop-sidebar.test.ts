@@ -14,7 +14,7 @@ import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
+import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
@@ -666,7 +666,7 @@ test("a repository's ⋯ and a right-click on its header open one menu: Archive 
 
 test("Archive plans archives every plan under the header and no other, and Open on GitHub opens the repository's page", () => {
   window.localStorage.clear();
-  const archived: [string, string][] = [];
+  const archived: (readonly string[])[] = [];
   const opened: string[] = [];
   const container = mount(DEAN, {
     plans: {
@@ -676,7 +676,7 @@ test("Archive plans archives every plan under the header and no other, and Open 
         { ...onRepository("Refunds", "acme/ledger"), pinnedAt: 3 },
         onRepository("Search", "acme/relay"),
       ],
-      onMarkPlan: (planId, mark) => archived.push([planId, mark]),
+      onArchivePlans: (planIds) => archived.push(planIds),
       repositories: { ...plansControl().repositories, openGitHub: (url) => opened.push(url) },
     },
   });
@@ -686,9 +686,6 @@ test("Archive plans archives every plan under the header and no other, and Open 
   openActions(container, "ledger");
   choose("Open on GitHub");
 
-  assert.deepEqual(archived, [
-    ["plan-Billing", PLAN_MARK.ARCHIVE],
-    ["plan-Invoices", PLAN_MARK.ARCHIVE],
-  ]);
+  assert.deepEqual(archived, [["plan-Billing", "plan-Invoices"]], "one archive of them all");
   assert.deepEqual(opened, ["https://github.com/acme/ledger"]);
 });

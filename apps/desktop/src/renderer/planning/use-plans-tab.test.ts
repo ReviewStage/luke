@@ -820,6 +820,76 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a repository's plans archived together say so in one toast, whose Undo brings back every one and opens again the open plan the archive left",
+  () =>
+    Effect.gen(function* () {
+      const listed: PlanningView = {
+        ...OPEN,
+        plans: [row(PLAN.id, 1), row("other", 2), row("third", 3)],
+      };
+      const tab = mount(
+        { shown: true, planning: listed },
+        {
+          [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+          [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(true),
+          [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
+        },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().onArchivePlans([PLAN.id, "other"]));
+      const drawn = tab.control().archived.map((plan) => plan.id);
+      yield* landed;
+      assert.equal(tab.control().boundFor, undefined, "the open plan among them is left");
+      assert.equal(toast(), "2 plans archivedUndo");
+
+      act(() => undoButton().click());
+      yield* landed;
+
+      assert.deepEqual(drawn, [PLAN.id, "other"], "drawn archived at once");
+      assert.deepEqual(
+        tab.control().plans.map((plan) => plan.id),
+        [PLAN.id, "other", "third"],
+      );
+      assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_ARCHIVE).length, 4);
+      assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT, "the left plan opens again");
+    }),
+);
+
+it.effect(
+  "a repository's plans the service refused go back where they were, and the toast counts them",
+  () =>
+    Effect.gen(function* () {
+      const answers = [true, false, false, false];
+      const listed: PlanningView = {
+        ...OPEN,
+        plans: [row(PLAN.id, 1), row("other", 2), row("third", 3)],
+      };
+      const tab = mount(
+        { shown: true, planning: listed },
+        { [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(answers.shift() ?? false) },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().onArchivePlans(["other", "third"]));
+      yield* landed;
+      const partly = toast();
+      const afterPartly = tab.control().plans.map((plan) => plan.id);
+      act(() => tab.control().onArchivePlans([PLAN.id, "third"]));
+      yield* landed;
+
+      assert.equal(partly, "Plan archived, 1 could not beUndo");
+      assert.deepEqual(afterPartly, [PLAN.id, "third"]);
+      assert.equal(toast(), "The plans could not be archived. Try again.");
+      assert.deepEqual(
+        tab.control().plans.map((plan) => plan.id),
+        [PLAN.id, "third"],
+      );
+      assert.equal(tab.control().boundFor, PLAN.id, "the open plan stays open");
+    }),
+);
+
 test("New plan in a repository leaves the open plan for the new-plan page with that repository chosen, and plain New plan chooses none", async () => {
   const tab = mount(
     { shown: true, planning: OPEN },

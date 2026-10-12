@@ -23,6 +23,8 @@ import {
   fixtureSidePanel,
 } from "./planning-fixture";
 import {
+  archivedPlansNote,
+  archivePlansFailedNote,
   type CallStatus,
   callStatus,
   DOCUMENT_REGION,
@@ -204,6 +206,12 @@ export interface PlansControl {
    * leaves it for the new-plan page, as deleting it does.
    */
   onMarkPlan: (planId: string, mark: PlanMark) => void;
+  /**
+   * Archives several plans at once, as a repository's Archive plans asks:
+   * each drawn archived at once, and one toast for them all once the
+   * service answered, whose Undo brings back every plan it kept.
+   */
+  onArchivePlans: (planIds: readonly string[]) => void;
   /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
@@ -519,6 +527,57 @@ export function usePlansTab(input: {
         });
       });
   };
+  // Several plans archived at once answer with one toast rather than one
+  // each, so its Undo brings back every plan the service kept, and opens
+  // again the open plan where the archive left it. A plan the service
+  // refused goes back where it was, and the toast counts it.
+  const archivePlans = (planIds: readonly string[]) => {
+    if (fixture !== undefined || planIds.length === 0) return;
+    const asked = planIds.map((planId) => ({
+      planId,
+      next: { ...marks.get(planId), ...pendingMark(PLAN_MARK.ARCHIVE, Date.now()) },
+    }));
+    setMarks(
+      (held) => new Map([...held, ...asked.map(({ planId, next }) => [planId, next] as const)]),
+    );
+    const answers = asked.map(({ planId }) =>
+      act(ACT_KIND.PLANNING_ARCHIVE, { planId, archived: true }).catch(() => false),
+    );
+    Promise.all(answers).then((changed) => {
+      const refused = asked.filter((_, index) => !changed[index]);
+      const landed = asked.filter((_, index) => changed[index]).map(({ planId }) => planId);
+      setMarks(
+        (held) =>
+          new Map(
+            [...held].filter(([pending, mark]) =>
+              refused.every((each) => each.planId !== pending || each.next !== mark),
+            ),
+          ),
+      );
+      if (landed.length === 0) {
+        toast({
+          words: archivePlansFailedNote(refused.length),
+          tone: TOAST_TONE.FAILED,
+          hold: TOAST_HOLD.FAILED,
+        });
+        return;
+      }
+      const left = landed.find((planId) => planId === openNow.current);
+      if (left !== undefined) leavePlan();
+      toast({
+        words: archivedPlansNote(landed.length, refused.length),
+        tone: TOAST_TONE.DONE,
+        action: {
+          label: UNDO_LABEL,
+          onPress: () => {
+            for (const planId of landed) {
+              markNow.current(planId, PLAN_MARK.UNARCHIVE, { reopen: planId === left });
+            }
+          },
+        },
+      });
+    });
+  };
   // An Undo is pressed renders after its archive landed, so it marks, and
   // opens, through the tab as it stands then rather than as it stood.
   const markNow = useRef(markPlan);
@@ -781,6 +840,7 @@ export function usePlansTab(input: {
     onLeavePlan: leavePlan,
     onRenamePlan: renamePlan,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),
+    onArchivePlans: archivePlans,
     onDeletePlan: deletePlan,
     back,
   };
