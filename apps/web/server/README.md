@@ -1837,10 +1837,17 @@ beside the image's Node and git. As it opens, the agent's repository is
 checked out whole at its default branch through the same firewall-scoped
 clone the planning checkout makes (`repository-shell.ts`'s
 `cloneRepository`), on a token `repositoryWriteToken` mints for that one
-repository with contents and pull requests write, and the token is then set
-at the firewall for the session's own `gh` and `git` through eve's
+repository with contents and pull requests write, plus checks, statuses, and
+Actions read where the installation has granted the App those
+(`CI_READ_PERMISSIONS`; a mint naming a permission the installation never
+granted fails whole, so they are asked only where granted), and the token is
+then set at the firewall for the session's own `gh` and `git` through eve's
 `authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. A token lasts an hour, so the store hook renews it at the
+environment. The session's instructions say whether that read was granted
+(`host.prompt`, through `repositoryCiReadable`): where it was, the agent
+watches its pull request's checks with `gh pr checks` and fixes what fails
+for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
+not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`coder/hooks/store.ts`) relays every event into the store
