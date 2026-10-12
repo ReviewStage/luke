@@ -143,7 +143,7 @@ function Page({
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
   );
 }
 
@@ -1641,22 +1641,23 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
   assert.equal(document.activeElement, tabNamed(container, "GPT 5.6 Sol"));
 });
 
-test("closing the chosen tab chooses its neighbour, and closing the last leaves the panel open offering every kind", () => {
+test("closing the chosen tab chooses the tab viewed before it, and closing the last leaves the panel open offering every kind", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   act(() => tabNamed(page, "Code").click());
   press(page, '[aria-label="Close Code"]');
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Transcript", "the tab after it");
+  assert.equal(chosenTab(page), "Board", "the tab shown before it");
   assert.ok(documentShown(page));
 
   act(() => tabNamed(page, "Work").click());
-  press(page, '[aria-label="Close Work"]');
-  assert.equal(chosenTab(page), "Transcript", "the tab before the last");
+  act(() => tabNamed(page, "Board").click());
+  press(page, '[aria-label="Close Board"]');
+  assert.equal(chosenTab(page), "Work", "the tab viewed before it, not the one beside it");
 
   press(page, '[aria-label="Close Transcript"]');
-  press(page, '[aria-label="Close Board"]');
+  press(page, '[aria-label="Close Work"]');
   assert.ok(panelShown(page));
   assert.deepEqual(panelTabs(page), []);
   const rows = page.querySelectorAll<HTMLButtonElement>(".side-panel-no-tabs button");
@@ -1727,6 +1728,32 @@ function addButton(page: HTMLElement): HTMLElement {
   assert.ok(button, "the panel draws its +");
   return button;
 }
+
+test("Command-T shows a hidden panel and opens the + menu with its search focused, its chord in the +'s pill, and Escape closes the menu choosing nothing", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan();
+  assert.equal(panelShown(page), false);
+
+  assert.equal(keydown({ key: "t", metaKey: true }), true);
+  assert.equal(panelShown(page), true);
+  const search = document.activeElement;
+  assert.ok(search instanceof HTMLInputElement, "the menu's search has focus");
+  assert.ok(search.closest(".tab-add-menu"), "in the + menu");
+
+  key(search, "Escape");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Board");
+  assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
+
+  // With the panel shown, the chord opens the menu again; hidden and shown once more, the menu stays shut.
+  keydown({ key: "t", metaKey: true });
+  assert.ok(document.querySelector(".tab-add-menu"));
+  press(page, '[aria-label="Hide panel"]');
+  press(page, '[aria-label="Show panel"]');
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.equal(hover(addButton(page)), "Open a tab⌘T");
+});
 
 test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
   installScrollIntoView();
@@ -2385,7 +2412,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
     createElement(ToastHost),
   );
 }
@@ -2486,11 +2513,12 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
 
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();
+  act(() => tabNamed(page, "GPT 5.6 Sol").click());
   act(() => tabNamed(page, "Opus 5.5").click());
 
   press(page, '[aria-label="Close Opus 5.5"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "GPT 5.6 Sol"]);
-  assert.equal(chosenTab(page), "GPT 5.6 Sol", "the agent after it");
+  assert.equal(chosenTab(page), "GPT 5.6 Sol", "the tab viewed before it");
   assert.deepEqual(stops, []);
 
   act(() => addButton(page).click());
@@ -2590,7 +2618,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
   );
 }
 
@@ -3131,12 +3159,13 @@ it.effect(
     }),
 );
 
-test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the next tab is chosen", () => {
+test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the tab viewed before it is chosen", () => {
   const page = mountAgents();
+  act(() => tabNamed(page, "Work").click());
   act(() => tabNamed(page, "Code").click());
   assert.equal(keydown({ key: "w", metaKey: true }), true);
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Opus 5.5", "GPT 5.6 Sol"]);
-  assert.equal(chosenTab(page), "Transcript");
+  assert.equal(chosenTab(page), "Work");
 
   chooseFromTab(tabNamed(page, "Work"), "Pin tab");
   act(() => tabNamed(page, "Work").click());

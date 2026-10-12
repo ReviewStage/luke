@@ -141,7 +141,7 @@ test("choosing an agent's tab opens the panel on it and keeps it across a launch
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("a subagent's tab opens from its call once and is chosen, closes to its neighbour, is held to the plan's work, and is kept across no launch", () => {
+test("a subagent's tab opens from its call once and is chosen, closes to the tab viewed before it, is held to the plan's work, and is kept across no launch", () => {
   const first = mount([AGENT], [CALL, OTHER_CALL]);
   act(() => first.control().onChoose({ subagent: CALL }));
   assert.equal(first.control().open, true);
@@ -153,7 +153,7 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   assert.deepEqual(first.control().subagents, [{ subagent: CALL }, { subagent: OTHER_CALL }]);
   assert.deepEqual(first.control().tab, { subagent: CALL });
 
-  // Closing the chosen one chooses the subagent after it; closing the last, the plan's last agent.
+  // Closing the chosen one chooses the tab viewed before it.
   act(() => first.control().onClose({ subagent: CALL }));
   assert.deepEqual(first.control().subagents, [{ subagent: OTHER_CALL }]);
   assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
@@ -165,7 +165,7 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
   act(() => first.control().onClose({ subagent: OTHER_CALL }));
   assert.deepEqual(first.control().subagents, []);
-  assert.deepEqual(first.control().tab, { agent: AGENT });
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
 
   // A launch after a subagent's tab was chosen opens none, on the first tab.
   act(() => first.control().onChoose({ subagent: CALL }));
@@ -174,9 +174,10 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("a delegated worker's tab is held to the plan's agents: it stands while they are unread or hold its agent, reads as the first tab on another plan's, and closes to its agent", () => {
-  const delegated = { subagent: CALL, delegation: { agent: AGENT, task: "Count the routes." } };
+test("a delegated worker's tab is held to the plan's agents: it stands while they are unread or hold its agent, reads as the first tab on another plan's, and closes to the tab viewed before it", () => {
   const panel = mount([AGENT]);
+  act(() => panel.control().onChoose({ agent: AGENT }));
+  const delegated = { subagent: CALL, delegation: { agent: AGENT, task: "Count the routes." } };
   act(() => panel.control().onChoose(delegated));
   assert.deepEqual(panel.control().tab, delegated);
   // Chosen again it is the one tab open; the planning worker's call of the same name is another tab, as the service names the two apart.
@@ -194,14 +195,14 @@ test("a delegated worker's tab is held to the plan's agents: it stands while the
   assert.deepEqual(panel.control().tab, { agent: AGENT });
 });
 
-test("with no agent, closing the last fixed tab chooses a subagent tab the plan draws, and a closed subagent's neighbour is one the plan's work holds, never another plan's", () => {
+test("a closed tab is replaced by one the plan draws, never a tab viewed that another plan's work holds, and closing the last leaves none", () => {
   const panel = mount([], [CALL]);
   act(() => panel.control().onChoose({ subagent: CALL }));
-  // On another plan, its own subagent closed has the first plan's, not in the strip, for no neighbour.
+  // On another plan, its own subagent closed passes over the first plan's, viewed later but not in the strip.
   panel.stand([], [OTHER_CALL]);
   act(() => panel.control().onChoose({ subagent: OTHER_CALL }));
   act(() => panel.control().onClose({ subagent: OTHER_CALL }));
-  assert.equal(panel.control().tab, SIDE_PANEL_TAB.WORK);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
 
   panel.stand([], [CALL]);
   for (const tab of SIDE_PANEL_TABS) act(() => panel.control().onClose(tab));
@@ -211,18 +212,22 @@ test("with no agent, closing the last fixed tab chooses a subagent tab the plan 
   assert.deepEqual(panel.control().subagents, []);
 });
 
-test("an agent's tab closes to the open agent after it, else the one before, else the last fixed tab, stays closed across a launch while an agent started since opens, and opens again when chosen", () => {
+test("an agent's tab closes to the tab viewed before it, stays closed across a launch while an agent started since opens, and opens again when chosen", () => {
   const THIRD = "3b8f4e5d-7c6a-4b9f-9eaf-4a5b6c7d8e9f";
   const first = mount([AGENT, OTHER, THIRD]);
-  act(() => first.control().onChoose({ agent: OTHER }));
+  for (const agent of [THIRD, AGENT, OTHER]) act(() => first.control().onChoose({ agent }));
 
   act(() => first.control().onClose({ agent: OTHER }));
   assert.deepEqual(first.control().closedAgents, [OTHER]);
-  assert.deepEqual(first.control().tab, { agent: THIRD }, "the open agent after it");
-  act(() => first.control().onClose({ agent: THIRD }));
-  assert.deepEqual(first.control().tab, { agent: AGENT }, "with none after, the one before");
+  assert.deepEqual(first.control().tab, { agent: AGENT });
   act(() => first.control().onClose({ agent: AGENT }));
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "with no agent open, the last fixed tab");
+  assert.deepEqual(
+    first.control().tab,
+    { agent: THIRD },
+    "the one viewed before it, not beside it",
+  );
+  act(() => first.control().onClose({ agent: THIRD }));
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD, "the tab shown before any was chosen");
   assert.equal(first.control().open, true, "closing tabs leaves the panel open");
 
   // Closing a tab that is not chosen leaves the chosen one.
@@ -244,7 +249,7 @@ test("an agent's tab closes to the open agent after it, else the one before, els
   assert.deepEqual(second.control().tab, { agent: OTHER });
 });
 
-test("a draft agent's tab shows while the plan holds the draft, closes to the open agent before it, and is kept across no launch", () => {
+test("a draft agent's tab shows while the plan holds the draft, closes to the tab viewed before it, and is kept across no launch", () => {
   const DRAFT = "draft-key-1";
   const first = mount([AGENT], [], DRAFT);
   act(() => first.control().onChoose({ draft: DRAFT }));
@@ -263,17 +268,10 @@ test("a draft agent's tab shows while the plan holds the draft, closes to the op
   const second = mount([AGENT], [], DRAFT);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 
-  act(() => first.control().onClose({ draft: DRAFT }));
-  assert.deepEqual(first.control().tab, { agent: AGENT }, "the open agent before it");
-  act(() => first.control().onClose({ agent: AGENT }));
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "with no agent open, the tab before it");
+  act(() => first.control().onChoose({ agent: AGENT }));
   act(() => first.control().onChoose({ draft: DRAFT }));
   act(() => first.control().onClose({ draft: DRAFT }));
-  assert.equal(
-    first.control().tab,
-    SIDE_PANEL_TAB.WORK,
-    "a draft's tab closes to the tab before it",
-  );
+  assert.deepEqual(first.control().tab, { agent: AGENT });
 });
 
 const INVITE = "src/invite.ts";
@@ -295,7 +293,7 @@ test("opening a file opens its tab at the strip's end and chooses it, its lines 
   assert.deepEqual(panel.control().tab, { file: INVITE });
 });
 
-test("a file's tab closes to its neighbour, is held to the files shown on the open plan, and is kept across no launch", () => {
+test("a file's tab closes to the tab viewed before it, is held to the files shown on the open plan, and is kept across no launch", () => {
   const first = mount([], [], undefined, [INVITE, ROLES]);
   act(() => first.control().onOpenFile({ path: INVITE }));
   act(() => first.control().onOpenFile({ path: ROLES }));
@@ -308,7 +306,7 @@ test("a file's tab closes to its neighbour, is held to the files shown on the op
   act(() => first.control().onClose({ file: INVITE }));
   assert.deepEqual(first.control().tab, { file: ROLES });
   act(() => first.control().onClose({ file: ROLES }));
-  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "the last fixed tab the plan used");
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD, "the tab shown before either opened");
 
   act(() => first.control().onOpenFile({ path: INVITE }));
   const second = mount([], [], undefined, [INVITE, ROLES]);
@@ -441,4 +439,65 @@ test("a subagent's and a file's tab pinned on a plan are open on it at the next 
     files: [ROLES],
   });
   assert.deepEqual(alone.control().tab, { file: ROLES });
+});
+
+test("closing the tab shown returns to the one viewed before it, wherever it stands in the strip, and closing another leaves the one shown", () => {
+  const panel = mount([]);
+  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
+  for (const tab of [CODE, TRANSCRIPT, WORK]) act(() => panel.control().onChoose(tab));
+  act(() => panel.control().onClose(WORK));
+  assert.equal(panel.control().tab, TRANSCRIPT);
+
+  // Board stands two tabs from Work, so the neighbour would be Transcript.
+  act(() => panel.control().onChoose(BOARD));
+  act(() => panel.control().onChoose(WORK));
+  act(() => panel.control().onClose(WORK));
+  assert.equal(panel.control().tab, BOARD);
+
+  act(() => panel.control().onClose(CODE));
+  assert.equal(panel.control().tab, BOARD, "a tab not shown closes alone");
+});
+
+test("each plan returns to the tabs viewed on it, not those viewed on another", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
+  const used = usedPlan(PLAN).holds;
+  const panel = mountOn(used);
+  act(() => panel.control().onChoose(BOARD));
+  act(() => panel.control().onChoose(WORK));
+
+  panel.standOn(used, OTHER_PLAN);
+  act(() => panel.control().onChoose(TRANSCRIPT));
+  act(() => panel.control().onChoose(CODE));
+
+  // Code, chosen last on the other plan, is the tab this one shows; closing it returns to this plan's own.
+  panel.standOn(used, PLAN);
+  assert.equal(panel.control().tab, CODE);
+  act(() => panel.control().onClose(CODE));
+  assert.equal(panel.control().tab, WORK);
+});
+
+test("with every tab viewed closed, closing the one shown chooses the tab after it, else the one before", () => {
+  const panel = mount([]);
+  const { BOARD, CODE, TRANSCRIPT, WORK } = SIDE_PANEL_TAB;
+  act(() => panel.control().onChoose(TRANSCRIPT));
+  act(() => panel.control().onClose(BOARD));
+  act(() => panel.control().onClose(TRANSCRIPT));
+  assert.equal(panel.control().tab, WORK);
+  act(() => panel.control().onClose(WORK));
+  assert.equal(panel.control().tab, CODE);
+});
+
+test("the tabs viewed on a plan are kept across a launch, a file's dropping out as its tab does", () => {
+  const first = mount([AGENT], [], undefined, [INVITE]);
+  act(() => first.control().onChoose({ agent: AGENT }));
+  act(() => first.control().onOpenFile({ path: INVITE }));
+  act(() => first.control().onChoose(SIDE_PANEL_TAB.CODE));
+
+  const second = mount([AGENT], [], undefined, [INVITE]);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.CODE);
+  act(() => second.control().onClose(SIDE_PANEL_TAB.CODE));
+  assert.deepEqual(second.control().tab, { agent: AGENT });
+  act(() => second.control().onClose({ agent: AGENT }));
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });

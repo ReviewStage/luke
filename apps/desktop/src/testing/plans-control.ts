@@ -102,6 +102,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     sidePanel: {
       open: false,
       fullScreen: false,
+      newTabAsked: false,
       tabs: SIDE_PANEL_TABS,
       closedTabs: [],
       pinned: [],
@@ -112,6 +113,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
       onToggleFullScreen: ignore,
+      onNewTab: ignore,
+      onNewTabAnswered: ignore,
       onChoose: ignore,
       onClose: ignore,
       onMove: ignore,

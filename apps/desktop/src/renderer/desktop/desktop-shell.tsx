@@ -244,6 +244,7 @@ export function DesktopShell({
           <SidePanelToggle
             panel={plans.sidePanel}
             disabled={plans.region.kind !== DOCUMENT_REGION.READY}
+            viewingVersion={plans.history.viewing !== undefined}
           />
         </div>
       ) : null}

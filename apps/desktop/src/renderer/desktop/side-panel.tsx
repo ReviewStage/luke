@@ -330,14 +330,21 @@ function addEntries(input: {
  * Start menu reads its models, so an agent whose tab is not shown, which
  * nothing follows, says where it stands now rather than where it last did.
  * It always opens, since New coding agent always stands in it, and says
- * why where it cannot be picked.
+ * why where it cannot be picked. ⌘T's ask opens it as a press does, once
+ * the panel is on screen to take it (`answers`).
  */
 function AddTabButton({
   entries,
   onOpen,
+  asked,
+  answers,
+  onAnswered,
 }: {
   entries: readonly AddEntry[];
   onOpen: () => void;
+  asked: boolean;
+  answers: boolean;
+  onAnswered: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
@@ -351,6 +358,17 @@ function AddTabButton({
     const room = document.documentElement.clientWidth;
     setSide(menu.getBoundingClientRect().right > room ? MENU_SIDE.END : MENU_SIDE.START);
   }, [open]);
+
+  // Note that the ask is answered once and then let go, because the "+"
+  // stands again each time the panel is shown, and an ask still standing
+  // would open the menu on a panel shown much later.
+  useEffect(() => {
+    if (!asked || !answers) return;
+    onAnswered();
+    setSide(MENU_SIDE.START);
+    setOpen(true);
+    onOpen();
+  }, [asked, answers, onAnswered, onOpen]);
 
   // Note that we hand focus back to the "+", as a native menu returns it to
   // its trigger, because closing takes the focused field away with it.
@@ -366,7 +384,7 @@ function AddTabButton({
 
   return (
     <div ref={root} className="tab-add-anchor" data-side={side}>
-      <Tooltip label="Open a tab">
+      <Tooltip label="Open a tab" command={APP_COMMAND.NEW_TAB}>
         <button
           ref={opener}
           type="button"
@@ -832,6 +850,9 @@ function PanelTabs({
       <AddTabButton
         entries={addEntries({ panel, agents, workers, files: shownFiles })}
         onOpen={agents.onRetryList}
+        asked={panel.newTabAsked}
+        answers={keys}
+        onAnswered={panel.onNewTabAnswered}
       />
     </div>
   );
@@ -1060,19 +1081,24 @@ function TabContent({
  * beside the document, full screen, or still sliding, so a press lands on
  * it however fast the presses come. It stands on every plan's page, so it
  * is also what offers the panel's shortcuts: its own, and one to open the
- * panel on each tab. While the plan is not drawn there is no panel to show,
- * so it is disabled and offers none.
+ * panel on each tab, and ⌘T, which opens a tab from the "+" menu. While the
+ * plan is not drawn there is no panel to show, so it is disabled and offers
+ * none; while a version of it is drawn in the document's place, ⌘T is not
+ * offered either, since the page is the version's rather than the plan's.
  */
 export function SidePanelToggle({
   panel,
   disabled,
+  viewingVersion,
 }: {
   panel: SidePanelControl;
   disabled: boolean;
+  viewingVersion: boolean;
 }): React.JSX.Element {
   const label = panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
+  useAppCommand(APP_COMMAND.NEW_TAB, viewingVersion ? undefined : offer(panel.onNewTab));
   useAppCommand(
     APP_COMMAND.SHOW_BOARD,
     offer(() => panel.onChoose(SIDE_PANEL_TAB.BOARD)),
