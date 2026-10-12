@@ -9,6 +9,7 @@ import {
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
+  useFoldBodyDrawn,
 } from "./fold";
 import { cn } from "./utils";
 
@@ -20,7 +21,9 @@ import { cn } from "./utils";
  * the whole of it opens the call: the tool's icon, what the call did in
  * a few words, and where it stands, the working mark while it runs and a
  * red mark if it failed, trailing the words so that only their cut moves
- * when the mark goes; a call that ended well keeps no seat for one. There
+ * when the mark goes; a call that ended well keeps no seat for one. A
+ * subject the body says whole, as a command's input is the command, is
+ * the closed row's preview, and the open row says its verb alone. There
  * is no chevron: the icon leads, and a hover fill says the line opens. The body under
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
@@ -154,6 +157,8 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subject: string | undefined;
   /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
+  /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
+  subjectInBody?: boolean;
 };
 
 /** How a call's line is set, whether it folds its body open or opens somewhere else. */
@@ -177,7 +182,11 @@ export function ToolLine({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">
-        {label === undefined ? null : <span className="text-muted-foreground">{label} </span>}
+        {label === undefined ? null : (
+          <span className="text-muted-foreground">
+            {subject === undefined ? label : `${label} `}
+          </span>
+        )}
         {subject === undefined ? null : (
           <span className={subjectIsCode ? "font-mono text-[11.5px]" : undefined}>{subject}</span>
         )}
@@ -194,16 +203,18 @@ export function ToolHeader({
   label,
   subject,
   subjectIsCode = true,
+  subjectInBody = false,
   className,
   ...props
 }: ToolHeaderProps): ReactNode {
+  const drawn = useFoldBodyDrawn();
   return (
     <FoldSummary className={cn(TOOL_LINE_CLASS, className)} {...props}>
       <ToolLine
         state={state}
         icon={icon}
         label={label}
-        subject={subject}
+        subject={subjectInBody && drawn ? undefined : subject}
         subjectIsCode={subjectIsCode}
       />
     </FoldSummary>

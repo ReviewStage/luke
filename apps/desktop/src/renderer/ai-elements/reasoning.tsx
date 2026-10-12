@@ -7,6 +7,7 @@ import {
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
+  useFoldBodyDrawn,
 } from "./fold";
 import { cn } from "./utils";
 
@@ -19,8 +20,10 @@ import { cn } from "./utils";
  * agent's transcript asks: the reasoning is there to be read, never in
  * the way. The line leads with a brain in the 16px seat a call's icon
  * stands in, so it lines up with the calls around it, then says
- * "Thought" and no more, because the stored part carries the words alone
- * and no measure of how long they took.
+ * "Thought", because the stored part carries the words alone and no
+ * measure of how long they took, and while closed the thought's own words
+ * after it, cut to the line, as a command's row reads its command. Open,
+ * the line says "Thought" alone, since the words are under it whole.
  */
 
 /** What the folded line says. */
@@ -36,14 +39,19 @@ export function Reasoning({ className, children, ...props }: ReasoningProps): Re
   );
 }
 
-export type ReasoningTriggerProps = FoldSummaryProps;
+export type ReasoningTriggerProps = FoldSummaryProps & {
+  /** The thought as plain words on one line, said after the line's word while the body is not drawn; empty for the word alone. */
+  preview?: string;
+};
 
 /** The one line a folded reasoning shows. */
 export function ReasoningTrigger({
   className,
   children = REASONING_LINE,
+  preview = "",
   ...props
 }: ReasoningTriggerProps): ReactNode {
+  const drawn = useFoldBodyDrawn();
   return (
     <FoldSummary
       className={cn(
@@ -53,7 +61,10 @@ export function ReasoningTrigger({
       {...props}
     >
       <BrainIcon className="size-4 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {children}
+        {drawn || preview === "" ? null : ` ${preview}`}
+      </span>
     </FoldSummary>
   );
 }

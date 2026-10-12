@@ -811,11 +811,14 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.equal(content?.querySelectorAll("[data-plan-card]").length, 1, "the task drawn once");
   assert.ok(content?.querySelector('[data-call-id="wcall_1"]'), "each call on a line of its own");
   assert.equal(content?.querySelector("[data-turn-fold]"), null);
-  // The worker's thinking folds under one quiet line, as the Work tab's and the agent's do.
+  // The worker's thinking folds under one quiet line previewing it, as the Work tab's and the agent's do.
   const thought = content?.querySelector<HTMLDetailsElement>(
     "details:not([data-call-id]):not([data-plan-card])",
   );
-  assert.equal(thought?.querySelector("summary")?.textContent, "Thought");
+  assert.equal(
+    thought?.querySelector("summary")?.textContent,
+    "Thought The routes live under one folder.",
+  );
   assert.equal(thought?.open, false);
 
   act(() => tabNamed(page, "Board").click());

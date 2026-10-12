@@ -776,15 +776,22 @@ test("a long answer is cut to its first lines, and Show more shows the rest", ()
   assert.equal(row.querySelector("button"), null);
 });
 
-test("the reasoning folds under one quiet line and opens on a click", () => {
+test("the reasoning folds under one quiet line previewing its words and opens on a click", () => {
   const container = unfolded([TURN]);
   const selector = "details:not([data-call-id]):not([data-plan-card]):not([data-turn-fold])";
   const reasoning = container.querySelector<HTMLDetailsElement>(selector);
   assert.ok(reasoning);
-  assert.equal(reasoning.querySelector("summary")?.textContent, "Thought");
-  assert.equal(container.textContent?.includes("Read AGENTS.md before anything else."), false);
+  assert.equal(
+    reasoning.querySelector("summary")?.textContent,
+    "Thought Read AGENTS.md before anything else.",
+  );
+  assert.equal(reasoning.querySelector("summary + div"), null);
   open(container, selector);
-  assert.ok(container.textContent?.includes("Read AGENTS.md before anything else."));
+  assert.equal(reasoning.querySelector("summary")?.textContent, "Thought");
+  assert.equal(
+    reasoning.querySelector("summary + div")?.textContent,
+    "Read AGENTS.md before anything else.",
+  );
 });
 
 test("the plan is a card across the top of the transcript, folded under its title, not a bubble", () => {
@@ -922,7 +929,8 @@ test("each kind of part is drawn by its AI Elements component: the plan a card, 
   );
   // The reasoning is one Reasoning fold under its line.
   const thoughts = [...log.querySelectorAll("details")].filter(
-    (fold) => fold.querySelector("summary")?.textContent === "Thought",
+    (fold) =>
+      fold.querySelector("summary")?.textContent === "Thought Read AGENTS.md before anything else.",
   );
   assert.equal(thoughts.length, 1);
   // The words are a Response: markdown inside the assistant's message.

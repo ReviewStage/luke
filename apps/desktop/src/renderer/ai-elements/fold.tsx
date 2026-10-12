@@ -43,6 +43,19 @@ function useFold(): FoldState {
   return context;
 }
 
+/**
+ * Whether the fold around the caller draws its body: open, or a find looking
+ * through it. Note that a summary previewing its body asks this rather than
+ * whether the fold is open, because the body a find draws hidden says the
+ * same words, and a find counting both would open the fold onto a match in
+ * the preview that opening it takes away.
+ */
+export function useFoldBodyDrawn(): boolean {
+  const { open } = useFold();
+  const finding = useFindOpen();
+  return open || finding;
+}
+
 /** Note that the element's own `open` is not a prop: the state is this component's, and a fold meant to start open says `defaultOpen`. */
 export type FoldProps = Omit<ComponentProps<"details">, "open"> & {
   defaultOpen?: boolean;
@@ -132,8 +145,6 @@ export type FoldBodyProps = ComponentProps<"div">;
 
 /** What the fold holds, drawn only while it is open or a find is looking through it. */
 export function FoldBody({ children, ...props }: FoldBodyProps): ReactNode {
-  const { open } = useFold();
-  const finding = useFindOpen();
-  if (!open && !finding) return null;
+  if (!useFoldBodyDrawn()) return null;
   return <div {...props}>{children}</div>;
 }

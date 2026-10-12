@@ -7,10 +7,11 @@ import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
-import { TranscriptSubagent } from "./transcript-blocks";
+import { TranscriptReasoning, TranscriptSubagent, TranscriptTool } from "./transcript-blocks";
+import { CALL_KIND } from "./turn-rows";
 
 /**
  * The Work tab and a coding agent's tab draw a turn's reasoning and its
@@ -152,26 +153,35 @@ function surfaces(
 }
 
 test.each(surfaces(false))(
-  "on %s a tool call is one row saying what it ran, closed until clicked, and the reasoning folds the same way",
+  "on %s a command is one row saying what it ran, closed until clicked, and the reasoning folds the same way, each line dropping its preview while open",
   (_surface, element) => {
     const container = mounted(element);
     const said = () => container.textContent ?? "";
+    const line = (fold: HTMLDetailsElement) => fold.querySelector("summary")?.textContent;
+    const click = (fold: HTMLDetailsElement) => act(() => fold.querySelector("summary")?.click());
 
     const call = foldSaying(container, COMMAND);
-    assert.equal(call.querySelector("summary")?.textContent, `Ran ${COMMAND}`);
+    assert.equal(line(call), `Ran ${COMMAND}`);
     assert.equal(call.open, false);
     assert.equal(call.querySelector("[data-tool-output]"), null);
     assert.equal(said().includes(OUTPUT), false);
-    act(() => call.querySelector("summary")?.click());
+    click(call);
     assert.equal(call.open, true);
+    assert.equal(line(call), "Ran");
     assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
     assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
+    click(call);
+    assert.equal(line(call), `Ran ${COMMAND}`);
 
     const thought = foldSaying(container, "Thought");
     assert.equal(thought.open, false);
-    assert.equal(said().includes(REASONING), false);
-    act(() => thought.querySelector("summary")?.click());
-    assert.ok(said().includes(REASONING));
+    assert.equal(line(thought), `Thought ${REASONING}`);
+    assert.equal(thought.querySelector("summary + div"), null);
+    click(thought);
+    assert.equal(line(thought), "Thought");
+    assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
+    click(thought);
+    assert.equal(line(thought), `Thought ${REASONING}`);
   },
 );
 
@@ -228,7 +238,8 @@ test.each(surfaces(true))(
       // A summary is in the tab order, and Enter and Space press it as a click.
       assert.equal(row.tabIndex, 0);
     }
-    const call = foldSaying(container, COMMAND);
+    const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
+    assert.ok(call);
     act(() => call.querySelector("summary")?.click());
     assert.equal(call.querySelector("summary")?.getAttribute("aria-expanded"), "false");
     assert.equal(call.open, false);
@@ -244,6 +255,55 @@ test.each(surfaces(false))(
     assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
   },
 );
+
+/** The closed line of a thought with these words. */
+function thoughtLine(text: string): string | null | undefined {
+  return mounted(createElement(TranscriptReasoning, { text })).querySelector("summary")
+    ?.textContent;
+}
+
+test("a thought's closed line previews its first line as plain words, its markdown's marks left out", () => {
+  assert.equal(
+    thoughtLine("\n**Reading the route**\n\nStart with the seat check."),
+    "Thought Reading the route",
+  );
+  assert.equal(
+    thoughtLine(
+      "Start with `invite.ts`, then [the docs](https://example.com/docs).\nThen the tests.",
+    ),
+    "Thought Start with invite.ts, then the docs.",
+  );
+});
+
+test("a long thought's preview is one line, cut short of its end", () => {
+  const steps = Array.from({ length: 60 }, (_, index) => `Step ${index + 1} of the plan.`);
+  const line = thoughtLine(steps.join(" ")) ?? "";
+  assert.ok(line.startsWith("Thought Step 1 of the plan. Step 2 of the plan."));
+  assert.equal(line.includes("Step 60"), false);
+});
+
+test("a thought with no words says Thought alone", () => {
+  assert.equal(thoughtLine(""), "Thought");
+  assert.equal(thoughtLine("\n  \n"), "Thought");
+});
+
+test("a call that is not a command keeps its subject on the open row", () => {
+  const container = mounted(
+    createElement(TranscriptTool, {
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind: CALL_KIND.READ_FILE,
+      subject: "src/invite.ts",
+      input: { kind: TOOL_BLOCK.TEXT, text: "src/invite.ts" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "export {};" },
+      errorText: undefined,
+    }),
+  );
+  const summary = container.querySelector("summary");
+  assert.ok(summary);
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+  assert.equal(summary.textContent, "Read src/invite.ts");
+});
 
 const GPT: CatalogModel = {
   id: "openai/gpt-5.6-sol",
