@@ -1403,6 +1403,7 @@ export function SidePanel({
         inert={leaving !== PANEL_LEAVING.NONE}
         data-full-screen={String(panel.fullScreen)}
         data-leaving={leaving === PANEL_LEAVING.NONE ? undefined : leaving}
+        data-popover-room=""
         style={panel.fullScreen ? undefined : { width: panel.width }}
       >
         {/* The row is a drag region and each control in it is not; Chromium

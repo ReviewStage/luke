@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -16,8 +18,9 @@ import {
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
@@ -624,4 +627,204 @@ test("once a step has ended, a ring stands beside the model chip, coloured by ho
   assert.ok(close);
   act(() => close.click());
   assert.equal(popover(), null);
+});
+
+/**
+ * The boxes the composer's popovers are placed from, as a layout would
+ * measure them: the side panel, the model chip, the ring, and the layer the
+ * popover stands in, every other box empty.
+ */
+function measureBoxes(boxes: {
+  room: DOMRect;
+  chip: DOMRect;
+  ring: DOMRect;
+  height: number;
+}): () => void {
+  const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.matches("[data-popover-room]")) return boxes.room;
+    if (this.matches(".agent-model-chip")) return boxes.chip;
+    if (this.matches(".agent-context")) return boxes.ring;
+    if (this.matches(".anchored-popover")) return new DOMRect(0, 0, 340, boxes.height);
+    return new DOMRect();
+  });
+  return () => spy.mockRestore();
+}
+
+/** Where a popover's layer stands against the box that holds its button: its side, its left edge from the button's, and its width. */
+function placeOf(layer: Element | null | undefined) {
+  assert.ok(layer instanceof HTMLElement, "the popover hangs in its anchored layer");
+  return {
+    side: layer.dataset.side,
+    left: Number.parseFloat(layer.style.left),
+    width: Number.parseFloat(layer.style.width),
+  };
+}
+
+test("each composer popover opens right above the button that opened it, from the model chip's leading edge and the ring's trailing edge where that stays inside the panel, pushed back inside where it would not, and Escape hands focus back to the button", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.setAttribute("data-popover-room", "");
+  await tab.stand({ context: CONTEXT });
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  const ring = tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
+  assert.ok(chip && ring);
+  const menuLayer = () => tab.container.querySelector(".agent-model-chip > .anchored-popover");
+  const ringLayer = () => tab.container.querySelector(".agent-context > .anchored-popover");
+  const pressEscape = (from: Element | null) =>
+    act(() => {
+      from?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+  // A 400px panel at the window's right, its composer at its foot.
+  const boxes = {
+    room: new DOMRect(600, 0, 400, 768),
+    chip: new DOMRect(620, 700, 130, 28),
+    ring: new DOMRect(754, 700, 28, 28),
+    height: 320,
+  };
+  const restore = measureBoxes(boxes);
+  try {
+    act(() => chip.click());
+    assert.deepEqual(placeOf(menuLayer()), { side: "above", left: 0, width: 340 });
+    pressEscape(document.activeElement);
+    assert.equal(menuLayer(), null);
+    assert.equal(document.activeElement, chip, "focus goes back to the chip");
+
+    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in to the panel's inset.
+    act(() => ring.click());
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 608 - 754, width: 340 });
+    pressEscape(document.activeElement);
+    assert.equal(document.activeElement, ring, "focus goes back to the ring");
+
+    // Full screen there is room, and the popover ends where the ring does.
+    boxes.room = new DOMRect(0, 0, 1024, 768);
+    boxes.ring = new DOMRect(400, 700, 28, 28);
+    act(() => ring.click());
+    const wide = placeOf(ringLayer());
+    assert.equal(wide.side, "above");
+    assert.equal(wide.left + wide.width, 28, "the popover's trailing edge is the ring's");
+  } finally {
+    restore();
+  }
+});
+
+test("at the panel's narrowest the popovers are no wider than the panel leaves, held inside its edges, and one whose button stands too near the top for it turns below", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.setAttribute("data-popover-room", "");
+  await tab.stand({ context: CONTEXT });
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  const ring = tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
+  assert.ok(chip && ring);
+  const boxes = {
+    room: new DOMRect(744, 0, 280, 768),
+    chip: new DOMRect(764, 700, 130, 28),
+    ring: new DOMRect(898, 700, 28, 28),
+    height: 320,
+  };
+  const restore = measureBoxes(boxes);
+  try {
+    act(() => chip.click());
+    // An 8px inset on each side of a 280px panel: 264px wide, from the panel's left plus 8.
+    const menu = placeOf(tab.container.querySelector(".agent-model-chip > .anchored-popover"));
+    assert.deepEqual(menu, { side: "above", left: 752 - 764, width: 264 });
+    act(() => chip.click());
+
+    act(() => ring.click());
+    const popover = placeOf(tab.container.querySelector(".agent-context > .anchored-popover"));
+    assert.deepEqual(popover, { side: "above", left: 752 - 898, width: 264 });
+    act(() => ring.click());
+
+    boxes.chip = new DOMRect(764, 100, 130, 28);
+    act(() => chip.click());
+    assert.equal(
+      placeOf(tab.container.querySelector(".agent-model-chip > .anchored-popover")).side,
+      "below",
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("an open popover is placed again as it grows past the room above its button, and as its panel is dragged narrower, with the window left the same", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.setAttribute("data-popover-room", "");
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  assert.ok(chip);
+  // The menu opens short, while it reads the models, under a chip 300px below the panel's top.
+  const boxes = {
+    room: new DOMRect(600, 0, 400, 768),
+    chip: new DOMRect(620, 300, 130, 28),
+    ring: new DOMRect(),
+    height: 80,
+  };
+  const restore = measureBoxes(boxes);
+  const layer = () => tab.container.querySelector(".agent-model-chip > .anchored-popover");
+  try {
+    act(() => chip.click());
+    assert.deepEqual(placeOf(layer()), { side: "above", left: 0, width: 340 });
+
+    // The rows arrive, and the menu no longer fits above.
+    boxes.height = 360;
+    act(() => relayout());
+    assert.equal(placeOf(layer()).side, "below");
+
+    // The panel's edge is dragged to its narrowest.
+    boxes.room = new DOMRect(744, 0, 280, 768);
+    boxes.chip = new DOMRect(764, 300, 130, 28);
+    act(() => relayout());
+    assert.deepEqual(placeOf(layer()), { side: "below", left: 752 - 764, width: 264 });
+  } finally {
+    restore();
+  }
+});
+
+test("in a full-screen panel whose composer keeps to a centred column, each popover is positioned against the box holding its own button, never the padded composer, so it stands over its button and not at the panel's edge", async () => {
+  // The sheets that position the composer, its chips, and their layers, which jsdom does not load on its own.
+  const sheet = document.createElement("style");
+  sheet.textContent = ["desktop.css", "planning.css"]
+    .map((name) => readFileSync(join(import.meta.dirname, "..", "styles", name), "utf8"))
+    .join("\n");
+  document.head.append(sheet);
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.classList.add("side-panel-content");
+  tab.container.setAttribute("data-popover-room", "");
+  await tab.stand({ context: CONTEXT });
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  const ring = tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
+  assert.ok(chip && ring);
+  // A 1400px full-screen panel: the 720px column starts 340px in, so the chip stands far from either edge.
+  const boxes = {
+    room: new DOMRect(0, 0, 1400, 800),
+    chip: new DOMRect(356, 730, 130, 28),
+    ring: new DOMRect(490, 730, 28, 28),
+    height: 320,
+  };
+  /** The class of the box a layer's left and bottom are measured from: its nearest positioned ancestor. */
+  const positionedFrom = (layer: Element) => {
+    for (let at = layer.parentElement; at !== null; at = at.parentElement) {
+      if (getComputedStyle(at).position !== "static") return at.className;
+    }
+    return undefined;
+  };
+  const restore = measureBoxes(boxes);
+  try {
+    act(() => chip.click());
+    const menu = tab.container.querySelector(".anchored-popover");
+    assert.ok(menu);
+    assert.equal(getComputedStyle(menu).position, "absolute");
+    assert.equal(positionedFrom(menu), "agent-model-chip", "measured from the chip's own box");
+    assert.deepEqual(placeOf(menu), { side: "above", left: 0, width: 340 });
+    act(() => chip.click());
+
+    act(() => ring.click());
+    const popover = tab.container.querySelector(".anchored-popover");
+    assert.ok(popover);
+    assert.equal(positionedFrom(popover), "agent-context", "measured from the ring's own box");
+    const place = placeOf(popover);
+    assert.equal(place.side, "above");
+    assert.equal(place.left + place.width, 28, "the popover's trailing edge is the ring's");
+  } finally {
+    restore();
+    sheet.remove();
+  }
 });
