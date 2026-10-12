@@ -37,11 +37,11 @@ export const EDIT_PLAN_TOOL = {
   name: "edit_plan",
   description:
     "Take notes on the plan this conversation implements, as its notetaker does: add a point " +
-    "under a field, add an example to a rule by its number, correct a phrase copied exactly " +
-    "from the saved text, or strike the line holding one. Use it to record a question the " +
-    "plan does not answer under openQuestions together with the assumption you go on under, " +
-    "to correct a fact you verified in the code, or to record a decision you made under " +
-    "decisions. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
+    "under a field, correct a phrase copied exactly from the saved text, or strike the line " +
+    "holding one. Use it to record a question the plan does not answer under openQuestions " +
+    "together with the assumption you go on under, to correct a fact you verified in the " +
+    "code, to record a hard part you met under hardParts, to record an interface you had to " +
+    "change under interfaces, or to record a decision you made under approach. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
     "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,
@@ -111,9 +111,7 @@ export function planEditRejected(reason: string): PlanEditResult {
 
 /** A note passed over, in the words the model reads: its kind and where it was aimed. */
 function missedNote(note: PlanNote): string {
-  return note.kind === "addExample"
-    ? `${note.kind} rule ${note.rule}`
-    : `${note.kind} ${note.field}`;
+  return `${note.kind} ${note.field}`;
 }
 
 /**

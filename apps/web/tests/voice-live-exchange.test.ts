@@ -468,7 +468,7 @@ it.live(
         stand(target, {
           scribe: {
             planId: target.planId,
-            model: scriptedScribeModel([{ notes: [added(PLAN_FIELD.PROBLEM, problem)] }]).model,
+            model: scriptedScribeModel([{ notes: [added(PLAN_FIELD.CONTEXT, problem)] }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
         }),

@@ -18,22 +18,16 @@ import { PLAN_FIELD, type PlanField } from "./plan-wire.js";
 
 const HEADER = { name: "Teammate invitations" } as const;
 
-const PROBLEM = "- Only an admin can add a member.\n- Admins are a bottleneck.";
+const CONTEXT = "- Only an admin can add a member.\n- Admins are a bottleneck.";
 
-/** A plan with a problem, one rule with an example, a question, and an assumption. */
+const HARD_PARTS = "- A member invites by email.\n- A withdrawn invite never grants access.";
+
+/** A plan with its context, two hard parts, a question, and an assumption. */
 const NOTED: PlanContent = {
   fields: {
     ...EMPTY_PLAN_CONTENT.fields,
-    goal: { problem: PROBLEM, outcome: null },
-    rules: [
-      {
-        statement: "Any member may invite by email.",
-        examples: [
-          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-          { given: "A member", when: "they send an invite", then: "the teammate gets an email" }, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        ],
-      },
-    ],
+    context: CONTEXT,
+    hardParts: HARD_PARTS,
     openQuestions: ["Who can withdraw an invite?"],
   },
   assumptions: [{ text: "Invites reuse memberships." }],
@@ -77,12 +71,12 @@ function closed(head: string): string {
 }
 
 test("a point added under a text field lands after what it holds, on the next line of its list", () => {
-  const noted = taken(applyNote(NOTED, add(PLAN_FIELD.PROBLEM, "- Invites are lost in email.")));
-  assert.equal(noted.fields.goal.problem, `${PROBLEM}\n- Invites are lost in email.`);
+  const noted = taken(applyNote(NOTED, add(PLAN_FIELD.CONTEXT, "- Invites are lost in email.")));
+  assert.equal(noted.fields.context, `${CONTEXT}\n- Invites are lost in email.`);
   // Prose after prose is a new paragraph, and a first point is the answer itself.
-  const outcome = taken(applyNote(noted, add(PLAN_FIELD.OUTCOME, "Members invite.")));
+  const outcome = taken(applyNote(noted, add(PLAN_FIELD.GOAL, "Members invite.")));
   assert.equal(
-    taken(applyNote(outcome, add(PLAN_FIELD.OUTCOME, "Admins approve."))).fields.goal.outcome,
+    taken(applyNote(outcome, add(PLAN_FIELD.GOAL, "Admins approve."))).fields.goal,
     "Members invite.\n\nAdmins approve.",
   );
 });
@@ -90,32 +84,24 @@ test("a point added under a text field lands after what it holds, on the next li
 test("a correction changes only its phrase, found exactly or across a line it was wrapped on", () => {
   const replace = (find: string, text: string): PlanNote => ({
     kind: NOTE_KIND.REPLACE,
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     find,
     text,
   });
   const exact = taken(applyNote(NOTED, replace("an admin", "an owner")));
-  assert.equal(exact.fields.goal.problem, PROBLEM.replace("an admin", "an owner"));
+  assert.equal(exact.fields.context, CONTEXT.replace("an admin", "an owner"));
   const wrapped = taken(applyNote(NOTED, replace("member.  - Admins", "member.\n- Owners")));
-  assert.equal(wrapped.fields.goal.problem, PROBLEM.replace("Admins", "Owners"));
+  assert.equal(wrapped.fields.context, CONTEXT.replace("Admins", "Owners"));
 });
 
 test("a note naming what the field does not hold changes nothing and is reported as missed", () => {
   const notes: PlanNote[] = [
-    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find: "a guest", text: "a visitor" },
-    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.OUTCOME, find: "anything" },
-    {
-      kind: NOTE_KIND.ADD_EXAMPLE,
-      rule: 3,
-      given: "A",
-      when: "B",
-      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-      then: "C", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-    },
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find: "a guest", text: "a visitor" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.GOAL, find: "anything" },
     add(PLAN_FIELD.OPEN_QUESTIONS, "Do invites expire?"),
   ];
   const { content, missed } = applyNotes(NOTED, notes);
-  assert.deepEqual(missed, notes.slice(0, 3));
+  assert.deepEqual(missed, notes.slice(0, 2));
   assert.deepEqual(content.fields.openQuestions, [
     "Who can withdraw an invite?",
     "Do invites expire?",
@@ -153,56 +139,14 @@ test("an item written as a bullet is drawn under the list's one marker, not nest
 test("striking a line removes that line alone, and striking the last leaves the field unanswered", () => {
   const strike = (find: string): PlanNote => ({
     kind: NOTE_KIND.REMOVE,
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     find,
   });
   const once = taken(applyNote(NOTED, strike("bottleneck")));
-  assert.equal(once.fields.goal.problem, "- Only an admin can add a member.");
+  assert.equal(once.fields.context, "- Only an admin can add a member.");
   const twice = taken(applyNote(once, strike("Only an admin")));
-  assert.equal(twice.fields.goal.problem, null);
-  assert.ok(planBody(HEADER, twice.fields).includes("### Problem\n\n_Unanswered_"));
-});
-
-test("rules take a new rule, an example by number, a correction, and a strike", () => {
-  const notes: PlanNote[] = [
-    add(PLAN_FIELD.RULES, "A withdrawn invite never grants access."),
-    {
-      kind: NOTE_KIND.ADD_EXAMPLE,
-      rule: 2,
-      given: "A withdrawn invite",
-      when: "it is opened",
-      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-      then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-    },
-    {
-      kind: NOTE_KIND.REPLACE,
-      field: PLAN_FIELD.RULES,
-      find: "by email",
-      text: "by email or link",
-    },
-    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.RULES, find: "the teammate gets an email" },
-  ];
-  const { content, missed } = applyNotes(NOTED, notes);
-  assert.deepEqual(missed, []);
-  const [first, second] = content.fields.rules ?? [];
-  assert.equal(first?.statement, "Any member may invite by email or link.");
-  assert.equal(first?.examples, null);
-  assert.equal(second?.statement, "A withdrawn invite never grants access.");
-  assert.equal(second?.examples?.[0]?.when, "it is opened");
-});
-
-test("a rule noted with a list marker is taken, and numbered, without it", () => {
-  const noted = taken(applyNote(NOTED, add(PLAN_FIELD.RULES, "- Links expire in a week.")));
-
-  assert.equal(noted.fields.rules?.[1]?.statement, "Links expire in a week.");
-  assert.ok(planBody(HEADER, noted.fields).includes("\n### Rule 2: Links expire in a week.\n"));
-});
-
-test("a rule stored with a list marker is formatted without it", () => {
-  const rules = [{ statement: "- Links expire in a week.", examples: null }];
-  const body = planBody(HEADER, { ...EMPTY_PLAN_CONTENT.fields, rules });
-
-  assert.ok(body.includes("\n### Rule 1: Links expire in a week.\n"));
+  assert.equal(twice.fields.context, null);
+  assert.ok(planBody(HEADER, twice.fields).includes("## Context\n\n_Unanswered_"));
 });
 
 test("the lists take an item, correct one, and strike one", () => {
@@ -221,9 +165,9 @@ test("the lists take an item, correct one, and strike one", () => {
 
 test("while the answer streams, each draft differs from the last only where the newest note lands", () => {
   const notes: PlanNote[] = [
-    add(PLAN_FIELD.PROBLEM, "- Invites are lost in email."),
-    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find: "an admin", text: "an owner" },
-    add(PLAN_FIELD.OUTCOME, "- Members invite teammates themselves."),
+    add(PLAN_FIELD.CONTEXT, "- Invites are lost in email."),
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find: "an admin", text: "an owner" },
+    add(PLAN_FIELD.GOAL, "- Members invite teammates themselves."),
   ];
   const whole = JSON.stringify({ notes }).length;
   const bodies: string[] = [];
@@ -261,24 +205,24 @@ test("while the answer streams, each draft differs from the last only where the 
 test("a note that does not read is passed over without holding back the notes after it", () => {
   const partial = unparsedWire({
     notes: [
-      { kind: "rewrite", field: "problem", text: "Everything." },
+      { kind: "rewrite", field: "context", text: "Everything." },
       { kind: NOTE_KIND.ADD, field: "nowhere", text: "Lost." },
-      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.OUTCOME, text: "Members invite.", extra: true },
-      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "" },
+      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.GOAL, text: "Members invite.", extra: true },
+      { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "" },
     ],
   });
   const drafted = notesInProgress(NOTED, partial);
-  assert.equal(drafted.fields.goal.problem, PROBLEM);
-  assert.equal(drafted.fields.goal.outcome, "Members invite.");
-  assert.equal(drafted.fields.decisions, null);
+  assert.equal(drafted.fields.context, CONTEXT);
+  assert.equal(drafted.fields.goal, "Members invite.");
+  assert.equal(drafted.fields.approach, null);
 });
 
 test("a line still being written as nothing but Markdown markers is held back, so its escaping never flickers", () => {
   const growing = (text: string) =>
     notesInProgress(
       NOTED,
-      unparsedWire({ notes: [{ kind: NOTE_KIND.ADD, field: PLAN_FIELD.CONTRACTS, text }] }),
-    ).fields.implementation.contracts;
+      unparsedWire({ notes: [{ kind: NOTE_KIND.ADD, field: PLAN_FIELD.INTERFACES, text }] }),
+    ).fields.interfaces;
   assert.equal(growing("Signatures:\n#"), "Signatures:");
   assert.equal(growing("Signatures:\n- "), "Signatures:");
   assert.equal(growing("Signatures:\n#tag"), "Signatures:\n#tag");
@@ -286,16 +230,16 @@ test("a line still being written as nothing but Markdown markers is held back, s
 
 test("a phrase standing in more than one place names no place, so the note is missed rather than landing on the first", () => {
   const notes: PlanNote[] = [
-    // "dmin" stands in both lines of the problem, and "invite" in the rule and its example.
-    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find: "dmin", text: "owner" },
-    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.RULES, find: "invite" },
+    // "dmin" stands in both lines of the context, and "invite" in both hard parts.
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.CONTEXT, find: "dmin", text: "owner" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.HARD_PARTS, find: "invite" },
     add(PLAN_FIELD.OPEN_QUESTIONS, "Who can resend an invite?"),
     { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.OPEN_QUESTIONS, find: "an invite?" },
   ];
   const { content, missed } = applyNotes(NOTED, notes);
   assert.deepEqual(missed, [notes[0], notes[1], notes[3]]);
-  assert.equal(content.fields.goal.problem, PROBLEM);
-  assert.deepEqual(content.fields.rules, NOTED.fields.rules);
+  assert.equal(content.fields.context, CONTEXT);
+  assert.equal(content.fields.hardParts, HARD_PARTS);
   assert.deepEqual(content.fields.openQuestions, [
     "Who can withdraw an invite?",
     "Who can resend an invite?",
@@ -303,15 +247,15 @@ test("a phrase standing in more than one place names no place, so the note is mi
   // Quoted long enough to name one place, the same correction lands.
   const named = applyNote(content, {
     kind: NOTE_KIND.REPLACE,
-    field: PLAN_FIELD.PROBLEM,
+    field: PLAN_FIELD.CONTEXT,
     find: "an admin",
     text: "an owner",
   });
-  assert.equal(named?.fields.goal.problem, PROBLEM.replace("an admin", "an owner"));
+  assert.equal(named?.fields.context, CONTEXT.replace("an admin", "an owner"));
 });
 
 test("the agents' journal keeps the newest saves and lets the oldest go past its bound", () => {
-  const note: PlanNote = { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "x" };
+  const note: PlanNote = { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "x" };
   let journal: ReturnType<typeof withAgentEdit> = [];
   for (let at = 1; at <= PLAN_AGENT_EDITS_KEPT + 2; at += 1) {
     journal = withAgentEdit(journal, { agentId: "agent", at, notes: [note] });

@@ -69,10 +69,9 @@ sidebar, one page at a time:
  │     acme/relay                                               │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
- │  ## Goal                                                     │
- │  ### Problem                                                 │
+ │  ## Context                                                  │
  │  Only an admin can add someone to a workspace...             │
- │  ### Outcome                                                 │
+ │  ## Goal                                                     │
  │  Unanswered                                                  │
  │  ...  (every section of the template, in order)              │
  │  ## Open questions                                           │
@@ -240,9 +239,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
   on the section, from the writer the plan keeps for each field (`fieldEdits`
-  on the wire, `plan.field_writers` on the service). A rule shares the rules'
-  line, which stands on their heading; a section no save has changed since
-  the service began keeping writers says nothing.
+  on the wire, `plan.field_writers` on the service); a section no save has
+  changed since the service began keeping writers says nothing.
 - The sections someone other than the developer changed since they last
   looked at the plan on this Mac wear a still tint of Luke's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
@@ -265,15 +263,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   it since it started.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
-  every section and field shows from the moment the plan starts, an
-  unanswered field as "Unanswered". The rules are drawn as a numbered list
-  rather than as the body's `### Rule N:` headings: each number muted in a
-  gutter, the statement in the body's own weight, and its examples beneath
-  it as a compact block with muted Given, When, and Then labels; a rule with
-  no examples draws nothing beneath it (`plan-rule.tsx`).
+  every core section shows from the moment the plan starts, an unanswered
+  one as "Unanswered".
 - It is selectable, so a selection can be copied, and each field opens in an
-  editor in place ("Editing" below): a text field, a rule, the open
-  questions, and the assumptions.
+  editor in place ("Editing" below): a text section, the open questions, and
+  the assumptions.
 - When a save lands, the document redraws in place and keeps its scroll
   position, the caret typing in what the notetaker changed; the developer's
   own edit lands at once.
@@ -544,11 +538,9 @@ The answer is notes, the way a person takes notes on a call, never a field
 written out again:
 
 - `add` puts a new point under a field: a bullet after what a text field
-  holds, an item at the end of open questions or assumptions, or a rule at
-  the end of the rules.
-- `addExample` adds a Given/When/Then example to a rule by its number.
+  holds, or an item at the end of open questions or assumptions.
 - `replace` corrects a phrase copied exactly from the field, and `remove`
-  strikes the line, item, rule, or example holding one.
+  strikes the line or item holding one.
 
 A note naming a phrase the plan does not hold is passed over, reported, and
 never guessed into another; a note that does not read under the schema is
@@ -571,7 +563,7 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
 
 - **Opening.** A click into a field's words that selects nothing, or the
   pencil that shows on hover and on focus (the keyboard's way in, named
-  "Edit Problem", "Edit Rule 2", "Edit Assumptions", and so on), opens the
+  "Edit Context", "Edit Hard parts", "Edit Assumptions", and so on), opens the
   field in an editor in place of its answer, the heading still drawn above
   it. One field is open at a time, and an editor stays where it opened while
   it stands, so its inputs never move under the typing.
@@ -582,12 +574,7 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
   - The open questions and the assumptions open in one box, one item a line;
     a line's list marker is dropped, a blank line is none, and an empty box
     leaves the list empty.
-  - A rule opens as its statement and its examples, Given, When, and Then,
-    each its own input, with Add example, a remove per example, and Delete
-    rule. The rules' own heading carries a plus, "Add rule", which opens a
-    new rule that saves after the rules standing. A rule whose statement is
-    left blank is struck, and an example of blank clauses is dropped.
-  - Order and Data and migration, which the body leaves out while they hold
+  - Alternatives and Plan of attack, which the body leaves out while they hold
     nothing, are offered after the body as buttons that open their editor
     there.
 - **Saving.** The words save a second after the developer stops typing, and
@@ -600,8 +587,7 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
   types. Where the field still holds what the words were written from, the
   edit replaces it. Where it does not, the developer's change is laid over
   what it holds now as a patch, line by line for a text field and item by
-  item for a list (a rule is saved as the rules whole, with that one
-  changed), so a point, a question, or a rule Luke added meanwhile stays, and
+  item for a list, so a point or a question Luke added meanwhile stays, and
   the editor's words stay. A change to a line Luke also changed is
   a conflict: nothing is saved, and under the box the editor says "Luke
   changed this section while you were editing." with **Keep mine**, which
@@ -702,9 +688,9 @@ socket as a `plan.draft` frame, at most every 150 ms, then once more as saved,
 so each differs from the one before only where the newest note lands. The
 host draws each draft in place of the open plan's document, and the Plans
 tab's caret types that difference in where it stands: a point typed at the
-end of its field, a correction selected and retyped, a struck line or rule
-selected and erased. A unit of the document is known by its heading, and a
-rule by its statement, so a rule joining or leaving moves no other words. A
+end of its field, a correction selected and retyped, a struck line selected
+and erased. A unit of the document is known by its heading, so an optional
+section joining or leaving moves no other words. A
 run that breaks off sends the saved document back, so no half-written draft
 is left standing.
 
@@ -720,78 +706,88 @@ its bound, and saves the fields, the body, and the assumptions together; no
 code parses the body back. The notetaker reads the fields on its next run,
 and the planning model reads the canonical Markdown on its next turn.
 
-| Section | Fields | What Luke establishes |
-| --- | --- | --- |
-| Goal | `goal.problem`, `outcome` | The current problem and who it affects, and the observable improvement. |
-| Scope | `scope.included`, `excluded`, `constraints` | What is in, what is explicitly out, and the limits that apply (permissions, privacy, performance, compatibility). |
-| Rules | `rules` | Each rule as one sentence, with the Given/When/Then examples that pin it, more of them where a rule is ambiguous. |
-| Implementation | `implementation.changeMap`, `contracts`, `patterns`, `order` | Each path the change touches and what it gets there; new or changed types, schema, and signatures written as code, never function bodies; existing code to follow; and, only where it matters, the order steps must land in. |
-| Decisions | `decisions` | Each consequential choice, why, and the alternative rejected. |
-| Verification | `verification` | The end-to-end check that proves the change works, beyond the examples passing. |
-| Left to the agent | `leftToAgent` | Exactly which choices the implementing agent may make itself. |
-| Open questions | `openQuestions` | What is still unresolved, including a question a coding agent met while implementing, with the assumption it went on under. |
-| Data and migration | `dataAndMigration` | Only when stored data changes: what is stored, how existing data moves, and how the change is undone. |
-| Assumptions | `assumptions` | The existing `{ text }` list. |
+Luke is the developer's teammate: someone to bounce ideas off who is also
+responsible for turning them into a concrete plan. So the template is the
+design doc two engineering teammates would write after talking a task
+through in a meeting, and each section is a question a good teammate asks.
+The sections are what the planning model asks about, so getting them right
+is what shapes Luke's questions. The same
+document is the whole spec a coding agent builds from, so Luke talks like a
+teammate and holds the document to a spec's bar.
 
-- **Types.** An ordinary field is `null` or nonblank text; it is `null` until
-  a note first answers it, or again once every line of it is struck, and a
-  core field renders it as "Unanswered" while it is.
-  `implementation.order` and `dataAndMigration` are optional: the body leaves
-  them out while null. A rule is exactly its one-sentence `statement` and its
-  `examples`, null until one is agreed and rendering "No examples yet" in
-  the body; an example is exactly `given`, `when`, and `then`, each one
-  line. A statement is taken, saved from the developer's editor, and
-  formatted without the list markers it opens with, since the heading
-  numbers the rule. `rules` is
-  null until one is agreed. `openQuestions` is always a list, rendering "No
-  additional questions recorded" while empty.
+Each section is defined once, in `plan-template.ts`: its heading
+(`PLAN_FIELD_HEADING`), what it holds and the form it is written in
+(`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
+from (`PLAN_FIELD_BAR`). The planning model is handed all three; the
+notetaker is handed the purpose alone, since it records what was said
+rather than judging it. `apps/web/tests/planning-instructions.test.ts`
+holds both prompts to those words.
+
+| Section | Field | The question Luke asks |
+| --- | --- | --- |
+| Context | `context` | What is going on today, and why now? The problem, who it affects, and what prompted the work. |
+| Goal | `goal` | What is true once we are done, as outcomes someone could observe? |
+| Approach | `approach` | How would we build it? The main pieces and how they fit, where each lives by path, the code each follows, and each design decision with its reason. |
+| Interfaces | `interfaces` | What boundaries change? Every type, schema, table, route, event, tool, or signature added or changed, as code under its file, never function bodies; "None" with the reason. |
+| Alternatives | `alternatives` | What else could we do, and why not that? |
+| Hard parts | `hardParts` | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
+| Not doing | `notDoing` | What are we leaving out on purpose, and why? |
+| Plan of attack | `planOfAttack` | How does the work split, and in what order does it land? Migration and rollout where they apply. |
+| Testing | `testing` | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
+| Open questions | `openQuestions` | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
+| Assumptions | `assumptions` | The existing `{ text }` list: what Luke proposed and the developer had no preference on. |
+
+- **Types.** Every field but the two lists is `null` or nonblank text; it is
+  `null` until a note first answers it, or again once every line of it is
+  struck, and a core section renders "Unanswered" while it is.
+  `alternatives` and `planOfAttack` are optional: the body leaves them out
+  while null. `openQuestions` is always a list, rendering "No additional
+  questions recorded" while empty.
+- **Decisions live where they answer.** There is no Decisions section. A
+  choice of how to build is written under Approach, the option it beat under
+  Alternatives, and an edge case's behavior under Hard parts. A proposal of
+  Luke's the developer had no view on is an assumption.
 - **Order and containment.** The formatter owns every heading and its order,
-  so the body's order is the template's whatever order notes arrive in. Field text is contained where it stands: a line that would open a
-  heading or an HTML block is escaped, and a code fence left open is closed
-  at the end of its field, so no answer can impersonate a section or swallow
-  the ones after it.
+  so the body's order is the template's whatever order notes arrive in.
+  Field text is contained where it stands: a line that would open a heading
+  or an HTML block is escaped, and a code fence left open is closed at the
+  end of its field, so no answer can impersonate a section or swallow the
+  ones after it.
 - **A new plan** is the template with every field unanswered, no open
   question, and no assumption; its `fields` column is null and its `body`
-  empty until the first save, and the store formats an empty body as the
-  untouched template when it reads it. Migration 0053 reset every plan
-  written under the earlier template this way.
+  empty until the first save, and the store formats an empty body from the
+  row's fields when it reads it. Migration 0082 carried every plan written
+  under the earlier template (Goal, Scope, Rules, Implementation, Decisions,
+  Verification, Left to the agent, Data and migration) onto this one, and
+  its revisions with it: contracts became Interfaces whole, and every other
+  old field's words sit under a bold label in the section that now holds
+  them.
 - **Saving and resuming** go through the same save, so a plan written in the
   template resumes with its answers and its assumptions intact.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
-  is understood, true, or agreed. Resolving each field, or agreeing an
-  explicit "Not applicable: <reason>" or a bounded delegation, is Luke's
-  work, and every proposal Luke adds (a default, a rule, a decision, a
-  contract, an exclusion, a non-applicable field, a delegated choice) is
-  recorded as an assumption.
-  Goal, rules, and verification can never be set aside as not applicable.
-  A populated template is not evidence that the developer agreed.
+  is understood, true, or agreed. Resolving each section, or agreeing that one
+  does not apply, is Luke's work, and every proposal Luke takes without the
+  developer's view is recorded as an assumption. A populated template is not
+  evidence that the developer agreed.
 
-The template holds what a coding agent cannot read from the repository, since
-the agent explores the code itself: what was decided, the rules and their
-examples, and the contracts the change must meet, with pointers into the code
-rather than a description of it. Its aim is that two agents given the plan
-build the same behavior, structure, and contracts, differing only where
-`leftToAgent` allows; no plan makes two runs write identical code.
-
-The field selection is a Luke product decision informed by GitHub's
-[Spec Kit](https://github.com/github/spec-kit/blob/main/templates/spec-template.md)
-(requirements with acceptance scenarios, a data model only when the feature
-has data, contracts but no function bodies), OpenAI's
-[ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans)
-(exact interfaces and signatures, a decision log), Anthropic's
-[Claude Code best practices](https://code.claude.com/docs/en/best-practices)
-(name files and interfaces, state what is out of scope, end with an
-end-to-end check), Google's
-[agent program repair study](https://arxiv.org/pdf/2501.07531) (exact
-locations and a runnable check), the
-[SWE-Bench Pro](https://arxiv.org/html/2509.16941v1) interface block, and
-[Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/)
-(rules, each with its examples, and questions). Users, terminology, current
-behavior, quality, risks, rollout, and steps were cut: the agent reads the
-current system from the code, and no agent-facing source asks for the rest.
-None of these validates these exact fields or a voice model; comparative
-evaluations are outside this work.
+The template replaced one built for the coding agent alone (requirements as
+rules with Given/When/Then examples, a change map, contracts, a decision log,
+and "left to the agent"), drawn from GitHub's
+[Spec Kit](https://github.com/github/spec-kit/blob/main/templates/spec-template.md),
+OpenAI's
+[ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans),
+and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/).
+That template cut alternatives, risks, and steps because no agent-facing
+source asked for them, and those are exactly what two teammates argue about.
+It also made Luke work through fields rather than think with the developer.
+The agent still gets a spec: Interfaces carries the exact shapes, Hard parts
+says what the change does in every case a capable agent could guess wrong,
+and Testing carries a When/then case with an exact result for every goal and
+hard part, which is where the old examples' precision went. Luke proposes
+the interfaces and the cases himself for the developer to confirm, so the
+call never turns into dictating code or test cases. None of this is validated against a
+comparative evaluation.
 
 ### Microphone row and the panel's voice
 
@@ -908,7 +904,8 @@ The developer opens the panel's Plans tab. They press
 chip (a repository is reachable once they have signed in with GitHub and
 installed the Luke GitHub App on it, which the chip's menu offers), and press
 `Start plan`. The header's chip reads `acme/relay`,
-and the document shows the untouched template, every field "Unanswered".
+and the document shows the untouched template, every core section
+"Unanswered".
 
 They press the microphone. The call opens and Luke speaks first, without
 waiting for them: a few words of greeting and what they have in mind, asked so
@@ -939,37 +936,30 @@ Luke comes back with a finding and a direction rather than a questionnaire:
 > that hasn't been accepted, and removing access works the same way for both.
 > Does that match how you think about it?"
 
-The developer answers "Yes, that's simpler", and the model saves every field
-of the template, most of them still null. The body it becomes reads, in part:
+The developer answers "Yes, that's simpler", and the notetaker takes its
+notes. The body reads, in part:
 
 ```markdown
 # Teammate invitations
 
-## Goal
-
-### Problem
+## Context
 
 Only an admin can add someone to a workspace, by creating their account by
 hand, so members wait on an admin to bring a teammate in.
 
-### Outcome
+## Goal
 
 A member invites a teammate by email; the teammate joins by opening the link.
 
-...
+## Approach
 
-## Implementation
-
-### Change map
-
+- Model an invite as a `memberships` row with `state = pending`, so removal
+  covers invites and members alike.
 - `src/db/schema/memberships.ts`: a `pending` state.
 
-...
+## Alternatives
 
-## Decisions
-
-Model an invite as a `memberships` row with `state = pending`. Why: removal
-covers invites and members alike. Rejected: a separate `invitations` table.
+- A separate `invitations` table: a second place removal has to reach.
 
 ...
 
@@ -991,17 +981,17 @@ second is Luke's working assumption, drawn from the existing `role` check.
 
 ### 3. Concrete feature rehearsal
 
-Luke rehearses behavior one question at a time, from a queue of every question
-whose prerequisites are already settled, each with his recommended answer:
+Luke hunts for the hard parts one question at a time, from a queue of every
+question whose prerequisites are already settled, each with his recommended
+answer:
 
 > "Picture this: Priya gets an invite, and before she opens it the admin
 > removes it. She clicks the link. I'd show her a plain 'This invite is no
 > longer valid' page and not tell her who withdrew it. OK?"
 
-The developer agrees. The notetaker writes the rule it implies, "a withdrawn
-or accepted link never grants access again", with the rehearsal as its
-example: given an invite the admin withdrew, when Priya opens its link, then
-the page reads "This invite is no longer valid". It moves
+The developer agrees. The notetaker writes it under Hard parts: a withdrawn
+or accepted link never grants access again, and the page reads "This invite
+is no longer valid". It moves
 the withdrawal question out of `Open questions` and adds
 `{ text: "A withdrawn invite shows a generic invalid-invite page." }`.
 It also adds `{ text: "An invite expires after 7 days." }` as
@@ -1051,9 +1041,9 @@ spoken conversation.
 The plan is done when the document is enough for a separate agent to build
 the change without coming back with a question, not when every branch of the
 design tree has been asked about: every core field holds an answer or an
-agreed reason it does not apply, every rule has an example, nothing open
-would change what gets built, and every choice the developer does not mind
-either way is left to the agent or stated as an assumption. The planning
+agreed reason it does not apply, every hard part says how the change
+behaves, nothing open would change what gets built, and every choice the
+developer does not mind either way is stated as an assumption. The planning
 model queues only decisions that change what is built or how it is checked,
 and states the rest as working assumptions Luke says aloud. Once the plan is
 done it queues nothing more and tells Luke the plan is complete, and Luke
@@ -1069,11 +1059,10 @@ Luke reviews the document aloud before it is copied. It covers:
 - every assumption, one at a time ("I assumed invites expire after 7 days.
   Keep that?");
 - anything left in `Open questions`;
-- any contradiction between sections;
-- the coding choices it proposes to leave to the implementing agent.
+- any contradiction between sections.
 
 The developer keeps the expiry. They drop one open question as out of scope,
-and the model moves it into `scope.excluded`. The review is conversation, not
+and the model moves it into Not doing. The review is conversation, not
 a screen: the tab shows only the document changing as the model saves. Every
 assumption left in the list is copied with the plan as a stated working
 assumption.
@@ -1087,7 +1076,7 @@ every section of the template in order, then the assumption list, which
 reads `_None recorded_` while the list is empty:
 
 ```markdown
-<body as saved, a rule's stray list marker dropped>
+<body exactly as saved>
 
 ## Assumptions
 

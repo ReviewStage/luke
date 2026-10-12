@@ -17,21 +17,16 @@
               "field": {
                 "type": "string",
                 "enum": [
-                  "problem",
-                  "outcome",
-                  "included",
-                  "excluded",
-                  "constraints",
-                  "rules",
-                  "changeMap",
-                  "contracts",
-                  "patterns",
-                  "order",
-                  "decisions",
-                  "verification",
-                  "leftToAgent",
+                  "context",
+                  "goal",
+                  "approach",
+                  "interfaces",
+                  "alternatives",
+                  "hardParts",
+                  "notDoing",
+                  "planOfAttack",
+                  "testing",
                   "openQuestions",
-                  "dataAndMigration",
                   "assumptions"
                 ],
                 "description": "The field the note is taken under."
@@ -40,7 +35,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200000,
-                "description": "The new point, added after what the field holds: a Markdown bullet in a text field, one item in a list, one rule's statement in the rules."
+                "description": "The new point, added after what the field holds: a Markdown bullet in a text field, one item in a list."
               }
             },
             "required": [
@@ -56,90 +51,22 @@
               "kind": {
                 "type": "string",
                 "enum": [
-                  "addExample"
-                ]
-              },
-              "rule": {
-                "type": "integer",
-                "minimum": 1,
-                "description": "The rule's number as the document shows it."
-              },
-              "given": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The starting situation. One line. Null while unknown."
-              },
-              "when": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The action. One line. Null while unknown."
-              },
-              "then": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1000
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The observable result. One line. Null while unknown."
-              }
-            },
-            "required": [
-              "kind",
-              "rule",
-              "given",
-              "when",
-              "then"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
                   "replace"
                 ]
               },
               "field": {
                 "type": "string",
                 "enum": [
-                  "problem",
-                  "outcome",
-                  "included",
-                  "excluded",
-                  "constraints",
-                  "rules",
-                  "changeMap",
-                  "contracts",
-                  "patterns",
-                  "order",
-                  "decisions",
-                  "verification",
-                  "leftToAgent",
+                  "context",
+                  "goal",
+                  "approach",
+                  "interfaces",
+                  "alternatives",
+                  "hardParts",
+                  "notDoing",
+                  "planOfAttack",
+                  "testing",
                   "openQuestions",
-                  "dataAndMigration",
                   "assumptions"
                 ],
                 "description": "The field the note is taken under."
@@ -177,21 +104,16 @@
               "field": {
                 "type": "string",
                 "enum": [
-                  "problem",
-                  "outcome",
-                  "included",
-                  "excluded",
-                  "constraints",
-                  "rules",
-                  "changeMap",
-                  "contracts",
-                  "patterns",
-                  "order",
-                  "decisions",
-                  "verification",
-                  "leftToAgent",
+                  "context",
+                  "goal",
+                  "approach",
+                  "interfaces",
+                  "alternatives",
+                  "hardParts",
+                  "notDoing",
+                  "planOfAttack",
+                  "testing",
                   "openQuestions",
-                  "dataAndMigration",
                   "assumptions"
                 ],
                 "description": "The field the note is taken under."
@@ -200,7 +122,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "A phrase copied exactly from the line, item, rule, or example to strike."
+                "description": "A phrase copied exactly from the line or item to strike."
               }
             },
             "required": [

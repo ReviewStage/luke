@@ -25,8 +25,7 @@ import {
  * opens an editor over, and every heading stays the formatter's. An edit
  * names the field, the answer the editor opened on (`base`), and the answer
  * the developer wrote (`value`): a text field's Markdown, null for one left
- * unanswered, or a list field whole, the rules, the open questions, or the
- * assumptions.
+ * unanswered, or a list field whole, the open questions or the assumptions.
  *
  * Luke may write while the developer types, on a call, so the field the edit
  * lands in need not still hold its base. Where it does, the edit replaces it.
@@ -52,7 +51,6 @@ const ANSWER_BASE = EffectSchema.NullOr(
   EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS)),
 );
 
-const RULES = planFieldsSchema.fields.rules;
 const OPEN_QUESTIONS = planFieldsSchema.fields.openQuestions;
 const ASSUMPTIONS = EffectSchema.Array(planAssumptionSchema).check(
   EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_ASSUMPTIONS),
@@ -69,7 +67,6 @@ export const planEditRequestSchema = EffectSchema.Union([
     base: ANSWER_BASE,
     value: ANSWER,
   }),
-  EffectSchema.Struct({ field: EffectSchema.Literal(PLAN_FIELD.RULES), base: RULES, value: RULES }),
   EffectSchema.Struct({
     field: EffectSchema.Literal(PLAN_FIELD.OPEN_QUESTIONS),
     base: OPEN_QUESTIONS,
@@ -85,12 +82,7 @@ export const planEditRequestSchema = EffectSchema.Union([
 export type PlanEditRequest = typeof planEditRequestSchema.Type;
 
 /** What a field holds, whatever its kind, as a conflict answers it. */
-export const planEditValueSchema = EffectSchema.Union([
-  ANSWER_BASE,
-  RULES,
-  OPEN_QUESTIONS,
-  ASSUMPTIONS,
-]);
+export const planEditValueSchema = EffectSchema.Union([ANSWER_BASE, OPEN_QUESTIONS, ASSUMPTIONS]);
 
 export type PlanEditValue = typeof planEditValueSchema.Type;
 
@@ -174,14 +166,6 @@ function listLens<I, V>(lens: {
   };
 }
 
-const RULES_LENS = listLens({
-  field: RULES,
-  empty: null,
-  items: (rules) => rules ?? [],
-  read: (content) => content.fields.rules,
-  write: (content, rules) => ({ ...content, fields: { ...content.fields, rules } }),
-});
-
 const OPEN_QUESTIONS_LENS = listLens({
   field: OPEN_QUESTIONS,
   empty: [],
@@ -237,8 +221,6 @@ function appliedThrough<V extends PlanEditValue>(
 /** The edit taken into the content, rebased over what the field holds now where it moved since the edit's base. */
 export function applyDeveloperEdit(content: PlanContent, edit: PlanEditRequest): PlanEditOutcome {
   switch (edit.field) {
-    case PLAN_FIELD.RULES:
-      return appliedThrough(content, RULES_LENS, edit.base, edit.value);
     case PLAN_FIELD.OPEN_QUESTIONS:
       return appliedThrough(content, OPEN_QUESTIONS_LENS, edit.base, edit.value);
     case PLAN_FIELD.ASSUMPTIONS:

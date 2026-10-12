@@ -61,13 +61,13 @@ test("a new plan draws its whole template unanswered, and an assumptions section
   assert.deepEqual(
     sections.map((match) => match[1]),
     [
+      "Context",
       "Goal",
-      "Scope",
-      "Rules",
-      "Implementation",
-      "Decisions",
-      "Verification",
-      "Left to the agent",
+      "Approach",
+      "Interfaces",
+      "Hard parts",
+      "Not doing",
+      "Testing",
       "Open questions",
     ],
   );
@@ -78,38 +78,6 @@ test("a new plan draws its whole template unanswered, and an assumptions section
       `<h2 class="plan-assumptions-heading">Assumptions</h2><p class="plan-assumptions-none">${NO_ASSUMPTIONS_LINE}</p>`,
       "u",
     ),
-  );
-});
-
-test("a rule is a numbered item in the body's weight, without the list marker it was saved with or a placeholder for examples", () => {
-  const body = [
-    "# Teammate invitations",
-    "",
-    "## Rules",
-    "",
-    "### Rule 1: - Once Linear is connected, every run may write to it.",
-    "",
-    "_No examples yet_",
-  ].join("\n");
-  const markup = bodyMarkup({ ...PLAN, document: { body, assumptions: [] } });
-
-  assert.match(
-    markup,
-    /<span class="plan-rule-number">1\.<\/span><div class="markdown plan-rule-body"><p>Once Linear is connected, every run may write to it\.<\/p><\/div>/u,
-  );
-  assert.doesNotMatch(markup, /data-level="3"|Rule 1|- Once|No examples yet/u);
-});
-
-test("a rule's examples are drawn beneath its statement, each clause behind its label", () => {
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  const example = { given: "A member", when: "they invite", then: "an email goes out" }; // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-  const rules = [{ statement: "Any member may invite.", examples: [example] }];
-  const body = planBody(PLAN, { ...EMPTY_PLAN_FIELDS, rules });
-  const markup = bodyMarkup({ ...PLAN, document: { body, assumptions: [] } });
-
-  assert.match(
-    markup,
-    /<p>Any member may invite\.<\/p>\s*<ul>\s*<li><strong>Given<\/strong> A member\s*<strong>When<\/strong> they invite\s*<strong>Then<\/strong> an email goes out<\/li>/u,
   );
 });
 

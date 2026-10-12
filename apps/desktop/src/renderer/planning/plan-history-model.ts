@@ -91,19 +91,10 @@ export function revisionSummary(line: PlanRevisionLine): string {
   return line.changes === 1 ? "1 change" : `${line.changes} changes`;
 }
 
-/** A rule's heading, whose number moves when a rule before it comes or goes. */
-const RULE_HEADING = /^### Rule \d+: /u;
-
-/**
- * A unit's key: its first line, which is its heading, or the plan's title
- * for the first. A rule is known by its statement rather than its number,
- * so a rule struck before others strikes that rule, and the rules after it
- * read as renumbered rather than rewritten.
- */
+/** A unit's key: its first line, which is its heading, or the plan's title for the first. */
 function unitKey(words: string): string {
   const end = words.indexOf("\n");
-  const heading = end === -1 ? words : words.slice(0, end);
-  return heading.replace(RULE_HEADING, "### Rule: ");
+  return end === -1 ? words : words.slice(0, end);
 }
 
 /** A space between two words that changed, which a reader takes as part of the change around it. */
@@ -202,8 +193,8 @@ function loneUnit(
 /**
  * The units of the version shown against the base's, in reading order. The
  * units are lined up by their headings; a run struck and the run written in
- * its place are paired one for one, so a rule whose statement was reworded
- * reads as one rule changed rather than one gone and one new.
+ * its place are paired one for one, so a section that took another's place
+ * reads as one unit changed rather than one gone and one new.
  */
 function unitsAgainst(base: readonly string[], shown: readonly string[]): VersionUnit[] {
   const runs = diffArrays(base.map(unitKey), shown.map(unitKey));

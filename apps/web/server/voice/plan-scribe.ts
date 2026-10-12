@@ -1,6 +1,5 @@
 import {
   applyNotes,
-  NOTE_KIND,
   notesInProgress,
   type PlanContent,
   type PlanNote,
@@ -48,7 +47,7 @@ import { spendHostedMeter } from "../hosted/quota.js";
  * and the brain's reply sentences as Luke's research notes, and once the
  * call has been quiet for a beat, whoever spoke last, it makes one model call
  * over what was said since its cursor, which answers with notes: a point
- * added under a field, an example added to a rule, a phrase corrected, or a
+ * added under a field, a phrase corrected, or a
  * line struck. They are saved through `saveNotes`, the plan's one write,
  * under the call, so the plan's history keeps the call's saves as one
  * revision.
@@ -158,9 +157,7 @@ function askText(input: {
 
 /** A note passed over, in words for the report: its kind and field, and never its text. */
 function missedNote(note: PlanNote): string {
-  return note.kind === NOTE_KIND.ADD_EXAMPLE
-    ? `${note.kind} rule ${note.rule}`
-    : `${note.kind} ${note.field}`;
+  return `${note.kind} ${note.field}`;
 }
 
 export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* (

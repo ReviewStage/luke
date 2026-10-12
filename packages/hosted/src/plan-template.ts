@@ -12,11 +12,8 @@ import {
   PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
   type PlanAssumption,
-  type PlanExample,
   type PlanField,
   type PlanFields,
-  type PlanRule,
-  planExamplePartSchema,
 } from "./plan-wire.js";
 
 /**
@@ -25,7 +22,7 @@ import {
  * Every plan has the same sections in the same order (`docs/PLANNING.md`,
  * "The fixed template"). The service keeps the plan's fields as they stand,
  * and the notetaker changes them only by taking notes: a point added under a
- * field, an example added to a rule, a phrase corrected, or a line struck.
+ * field, a phrase corrected, or a line struck.
  * Each note lands in one place and touches nothing else, so a plan is written
  * the way a person takes notes on a call, and a draft drawn while the notes
  * stream differs from the one before only where the newest note lands
@@ -37,10 +34,17 @@ import {
  * stays `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back
  * into fields.
  *
- * The template holds what a coding agent cannot read from the repository:
- * what was decided, the rules and their examples, and the contracts the
- * change must meet. The agent explores the code itself, so the plan carries
- * pointers into it rather than a description of it.
+ * The template is the design doc two engineering teammates would write
+ * after talking a task through: why it matters, what done looks like, how
+ * they will build it and what they weighed against it, the hard parts, what
+ * they leave out, how the work lands, and how they will know it works. Each
+ * section is a question a good teammate asks, so the sections are what the
+ * planning model asks about. The same document is the whole spec a coding
+ * agent builds from, so the sections an agent needs exactly (the
+ * interfaces, how each hard case behaves, and the test cases) each carry a
+ * bar a plan must meet before it is done (`PLAN_FIELD_BAR`). The agent
+ * explores the code itself, so the plan carries pointers into the code
+ * rather than a description of it.
  *
  * The formatter owns every heading and its order. Field text is Markdown the
  * model wrote, contained where it stands: a line that would open a heading or
@@ -50,41 +54,24 @@ import {
  * agreed is the model's judgment.
  */
 
-/** Every heading the formatter writes, section and field alike, in the words the developer reads. */
+/** Every heading the formatter writes, in the words the developer reads. */
 export const PLAN_HEADING = {
+  CONTEXT: "Context",
   GOAL: "Goal",
-  PROBLEM: "Problem",
-  OUTCOME: "Outcome",
-  SCOPE: "Scope",
-  INCLUDED: "Included",
-  EXCLUDED: "Excluded",
-  CONSTRAINTS: "Constraints",
-  RULES: "Rules",
-  IMPLEMENTATION: "Implementation",
-  CHANGE_MAP: "Change map",
-  CONTRACTS: "Contracts",
-  PATTERNS: "Patterns to follow",
-  ORDER: "Order",
-  DECISIONS: "Decisions",
-  VERIFICATION: "Verification",
-  LEFT_TO_AGENT: "Left to the agent",
+  APPROACH: "Approach",
+  INTERFACES: "Interfaces",
+  ALTERNATIVES: "Alternatives",
+  HARD_PARTS: "Hard parts",
+  NOT_DOING: "Not doing",
+  PLAN_OF_ATTACK: "Plan of attack",
+  TESTING: "Testing",
   OPEN_QUESTIONS: "Open questions",
-  DATA_AND_MIGRATION: "Data and migration",
   ASSUMPTIONS: "Assumptions",
-} as const;
-
-/** The labels inside one rule. */
-const PLAN_LABEL = {
-  RULE: "Rule",
-  GIVEN: "Given",
-  WHEN: "When",
-  THEN: "Then",
 } as const;
 
 /** What stands in a field's place while it holds nothing; each is the only rendering of its empty state. */
 export const PLAN_EMPTY_TEXT = {
   UNANSWERED: "_Unanswered_",
-  NO_EXAMPLES: "_No examples yet_",
   NO_QUESTIONS: "_No additional questions recorded_",
   NO_ASSUMPTIONS: "_None recorded_",
 } as const;
@@ -93,9 +80,6 @@ export const PLAN_EMPTY_TEXT = {
 function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
-
-type Rule = PlanRule;
-type Example = PlanExample;
 
 /** What the document's header names: the plan, the service's and never the model's. */
 export interface PlanHeader {
@@ -110,15 +94,16 @@ export interface PlanContent {
 
 /** A new plan's fields: every answer unanswered and no questions. */
 export const EMPTY_PLAN_FIELDS: PlanFields = {
-  goal: { problem: null, outcome: null },
-  scope: { included: null, excluded: null, constraints: null },
-  rules: null,
-  implementation: { changeMap: null, contracts: null, patterns: null, order: null },
-  decisions: null,
-  verification: null,
-  leftToAgent: null,
+  context: null,
+  goal: null,
+  approach: null,
+  interfaces: null,
+  alternatives: null,
+  hardParts: null,
+  notDoing: null,
+  planOfAttack: null,
+  testing: null,
   openQuestions: [],
-  dataAndMigration: null,
 };
 
 /** A new plan's content: every answer unanswered, no questions, and no assumptions. */
@@ -205,10 +190,6 @@ function answerBlock(value: string | null): string {
   return value === null ? PLAN_EMPTY_TEXT.UNANSWERED : contained(value);
 }
 
-function field(heading: string, block: string): string {
-  return `### ${heading}\n\n${block}`;
-}
-
 function section(heading: string, blocks: readonly string[]): string {
   return [`## ${heading}`, ...blocks].join("\n\n");
 }
@@ -221,184 +202,148 @@ function listItem(marker: string, text: string): string {
   return [`${marker}${first ?? ""}`, ...continued].join("\n");
 }
 
-/** One clause of an example on its one line, or the unanswered mark. */
-function clause(value: string | null): string {
-  return value === null ? PLAN_EMPTY_TEXT.UNANSWERED : oneLine(value);
-}
-
-/**
- * One example as one list item, its clauses on their own lines. Note that we
- * draw each clause on one line, because a clause that broke onto a new line
- * could open a fence or a heading behind the label.
- */
-function exampleItem(example: Example): string {
-  return [
-    `- **${PLAN_LABEL.GIVEN}** ${clause(example.given)}`,
-    `  **${PLAN_LABEL.WHEN}** ${clause(example.when)}`,
-    `  **${PLAN_LABEL.THEN}** ${clause(example.then)}`,
-  ].join("\n");
-}
-
-/**
- * One rule under its numbered heading, then its examples. Note that we drop
- * the list markers a statement opens with, as a rule saved before they were
- * dropped on taking still does, because the heading numbers the rule and a
- * marker behind the number reads as a stray dash.
- */
-function ruleBlock(rule: Rule, index: number): string {
-  const examples =
-    rule.examples === null
-      ? PLAN_EMPTY_TEXT.NO_EXAMPLES
-      : rule.examples.map(exampleItem).join("\n");
-  const statement = itemText(oneLine(rule.statement));
-  return [`### ${PLAN_LABEL.RULE} ${index + 1}: ${statement}`, examples].join("\n\n");
-}
-
-function rulesBlocks(rules: readonly Rule[] | null): readonly string[] {
-  return rules === null ? [PLAN_EMPTY_TEXT.UNANSWERED] : rules.map(ruleBlock);
-}
-
 function headerBlock(header: PlanHeader): string {
   return `# ${oneLine(header.name)}`;
 }
 
-/** An optional field: its heading and answer once it holds something, nothing while null. */
-function optionalField(heading: string, value: string | null): readonly string[] {
-  return value === null ? [] : [field(heading, contained(value))];
+/** A core section: its heading over its answer, or over the unanswered mark while null. */
+function coreSection(heading: string, value: string | null): string {
+  return section(heading, [answerBlock(value)]);
 }
 
-/** An optional section, on the same terms as an optional field. */
+/** An optional section: its heading and answer once it holds something, nothing while null. */
 function optionalSection(heading: string, value: string | null): readonly string[] {
   return value === null ? [] : [section(heading, [contained(value)])];
 }
 
 /**
  * The canonical Markdown body of a plan: the header the service supplies,
- * then every section and field in the template's order, whatever order the
- * fields' keys arrived in. The assumptions are not part of the body; they
- * are the document's own list, drawn after it as the template's last section.
+ * then every section in the template's order, whatever order the fields'
+ * keys arrived in. The assumptions are not part of the body; they are the
+ * document's own list, drawn after it as the template's last section.
  */
 export function planBody(header: PlanHeader, fields: PlanFields): string {
-  const { goal, scope, rules, implementation, openQuestions } = fields;
+  const { openQuestions } = fields;
   const blocks = [
     headerBlock(header),
-    section(PLAN_HEADING.GOAL, [
-      field(PLAN_HEADING.PROBLEM, answerBlock(goal.problem)),
-      field(PLAN_HEADING.OUTCOME, answerBlock(goal.outcome)),
-    ]),
-    section(PLAN_HEADING.SCOPE, [
-      field(PLAN_HEADING.INCLUDED, answerBlock(scope.included)),
-      field(PLAN_HEADING.EXCLUDED, answerBlock(scope.excluded)),
-      field(PLAN_HEADING.CONSTRAINTS, answerBlock(scope.constraints)),
-    ]),
-    section(PLAN_HEADING.RULES, rulesBlocks(rules)),
-    section(PLAN_HEADING.IMPLEMENTATION, [
-      field(PLAN_HEADING.CHANGE_MAP, answerBlock(implementation.changeMap)),
-      field(PLAN_HEADING.CONTRACTS, answerBlock(implementation.contracts)),
-      field(PLAN_HEADING.PATTERNS, answerBlock(implementation.patterns)),
-      ...optionalField(PLAN_HEADING.ORDER, implementation.order),
-    ]),
-    section(PLAN_HEADING.DECISIONS, [answerBlock(fields.decisions)]),
-    section(PLAN_HEADING.VERIFICATION, [answerBlock(fields.verification)]),
-    section(PLAN_HEADING.LEFT_TO_AGENT, [answerBlock(fields.leftToAgent)]),
+    coreSection(PLAN_HEADING.CONTEXT, fields.context),
+    coreSection(PLAN_HEADING.GOAL, fields.goal),
+    coreSection(PLAN_HEADING.APPROACH, fields.approach),
+    coreSection(PLAN_HEADING.INTERFACES, fields.interfaces),
+    ...optionalSection(PLAN_HEADING.ALTERNATIVES, fields.alternatives),
+    coreSection(PLAN_HEADING.HARD_PARTS, fields.hardParts),
+    coreSection(PLAN_HEADING.NOT_DOING, fields.notDoing),
+    ...optionalSection(PLAN_HEADING.PLAN_OF_ATTACK, fields.planOfAttack),
+    coreSection(PLAN_HEADING.TESTING, fields.testing),
     section(PLAN_HEADING.OPEN_QUESTIONS, [
       openQuestions.length === 0
         ? PLAN_EMPTY_TEXT.NO_QUESTIONS
         : openQuestions.map((question) => listItem("- ", question)).join("\n"),
     ]),
-    ...optionalSection(PLAN_HEADING.DATA_AND_MIGRATION, fields.dataAndMigration),
   ];
   return `${blocks.join("\n\n")}\n`;
 }
 
-/** A rule's heading as a body saved before `ruleBlock` dropped markers holds it: its number, then the markers. */
-const RULE_HEADING_MARKERS = /^(### Rule \d+: )(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
-
-/**
- * A saved body with the list markers dropped from behind every rule's
- * number, so a body formatted before `ruleBlock` dropped them reads as one
- * formatted now. Note that we leave a fence's lines as written, because a
- * heading inside code is code; outside a fence, `contained` has escaped
- * every heading a field's own text could open, so a rule's heading there is
- * the formatter's.
- */
-export function planBodyTidied(body: string): string {
-  let fence: OpenFence | undefined;
-  return body
-    .split("\n")
-    .map((line) => {
-      if (fence !== undefined) {
-        if (fenceCloses(line, fence)) fence = undefined;
-        return line;
-      }
-      fence = fenceOpened(line);
-      return fence === undefined ? line.replace(RULE_HEADING_MARKERS, "$1") : line;
-    })
-    .join("\n");
-}
-
-/** The fields that hold one Markdown answer, as against the rules and the two lists. */
+/** The fields that hold one Markdown answer, as against the two lists. */
 export type PlanTextField = Exclude<
   PlanField,
-  typeof PLAN_FIELD.RULES | typeof PLAN_FIELD.OPEN_QUESTIONS | typeof PLAN_FIELD.ASSUMPTIONS
+  typeof PLAN_FIELD.OPEN_QUESTIONS | typeof PLAN_FIELD.ASSUMPTIONS
 >;
 
 type TextField = PlanTextField;
 
-/** The heading each field stands under in the body, in the words the developer reads. */
+/** The heading each field stands under in the body, so a prompt or the window names a section as the developer reads it. */
 export const PLAN_FIELD_HEADING = {
-  problem: PLAN_HEADING.PROBLEM,
-  outcome: PLAN_HEADING.OUTCOME,
-  included: PLAN_HEADING.INCLUDED,
-  excluded: PLAN_HEADING.EXCLUDED,
-  constraints: PLAN_HEADING.CONSTRAINTS,
-  rules: PLAN_HEADING.RULES,
-  changeMap: PLAN_HEADING.CHANGE_MAP,
-  contracts: PLAN_HEADING.CONTRACTS,
-  patterns: PLAN_HEADING.PATTERNS,
-  order: PLAN_HEADING.ORDER,
-  decisions: PLAN_HEADING.DECISIONS,
-  verification: PLAN_HEADING.VERIFICATION,
-  leftToAgent: PLAN_HEADING.LEFT_TO_AGENT,
+  context: PLAN_HEADING.CONTEXT,
+  goal: PLAN_HEADING.GOAL,
+  approach: PLAN_HEADING.APPROACH,
+  interfaces: PLAN_HEADING.INTERFACES,
+  alternatives: PLAN_HEADING.ALTERNATIVES,
+  hardParts: PLAN_HEADING.HARD_PARTS,
+  notDoing: PLAN_HEADING.NOT_DOING,
+  planOfAttack: PLAN_HEADING.PLAN_OF_ATTACK,
+  testing: PLAN_HEADING.TESTING,
   openQuestions: PLAN_HEADING.OPEN_QUESTIONS,
-  dataAndMigration: PLAN_HEADING.DATA_AND_MIGRATION,
   assumptions: PLAN_HEADING.ASSUMPTIONS,
 } as const satisfies Record<PlanField, string>;
 
-/** What each field holds, in the words the notetaker is told. */
+/**
+ * What each field holds and the form it is written in. Note that this is the
+ * one statement of a section's meaning, because the planning model asks from
+ * it and the notetaker writes to it, and two copies would drift into Luke
+ * asking for one thing and the notes filing another.
+ */
 export const PLAN_FIELD_PURPOSE = {
-  problem: "The current problem, and who it affects.",
-  outcome: "The observable improvement once the change ships.",
-  included: "What the change includes.",
-  excluded: "What is explicitly out of scope.",
-  constraints:
-    "Limits the change must respect: permissions, privacy, performance, compatibility. Only " +
-    "those that apply, cited or agreed, never invented.",
-  rules:
-    "The behavioral rules, each one sentence that holds in every case, failure, cancellation, " +
-    "and retry included, with concrete examples that pin it.",
-  changeMap: "Each repository-relative path the change touches or adds, and what it gets there.",
-  contracts:
-    "New or changed types, schema, and signatures at module boundaries, written as code in " +
-    "fenced blocks. Signatures only, never function bodies.",
-  patterns: "Existing code to follow, by path, and what to copy from it.",
-  order: "Only where one step must land before another: the steps in order and why.",
-  decisions: "Each consequential choice: the decision, why, and the alternative rejected.",
-  verification: "The end-to-end check that proves the change works, beyond the examples passing.",
-  leftToAgent:
-    "Exactly which choices the implementing agent may make itself; everything else is fixed.",
+  context:
+    "Why this work exists: what happens today, who it affects and how often, and what " +
+    "prompted it now. Current behavior is stated as the code or the developer says it is, " +
+    "never guessed.",
+  goal:
+    "What is true once the work ships, one outcome per bullet, each something a user or a " +
+    "test could observe. No implementation detail.",
+  approach:
+    "The design in plain words: the main pieces and how they fit together, where each lives " +
+    "by repository-relative path, the existing code or pattern each follows, and each " +
+    "design decision with its reason.",
+  interfaces:
+    "Every type, schema, table, route, event, tool, or function signature the change adds " +
+    "or changes, written as code in fenced blocks under the path of the file it lives in. " +
+    'Shapes and signatures only, never function bodies. "None" with the reason when ' +
+    "nothing at a module boundary changes.",
+  alternatives:
+    "Each other approach that was weighed: what it was, and the concrete reason it lost.",
+  hardParts:
+    "Each tricky case as one bullet: the situation, then exactly what the change does in it. " +
+    "Edge cases, failure, cancellation, retry, concurrency, permissions, privacy, and " +
+    "performance where they apply, and each risk with how it is handled.",
+  notDoing:
+    "What is out of scope, one bullet each with why, including anything a capable agent " +
+    "might otherwise build unasked.",
+  planOfAttack:
+    "The steps the work lands in, in order, each one testable on its own, and why the order " +
+    "matters. Data migration, backfill, and rollout where they apply.",
+  testing:
+    'The cases that prove the change, one bullet each written as "When <situation>, then ' +
+    '<exact observable result>", then the end-to-end check a person or a script runs to ' +
+    "prove it works, with its command where there is one.",
   openQuestions:
-    "Unresolved questions, contradictions, or facts no source could settle, one per note.",
-  dataAndMigration:
-    "Only when stored data changes: what is stored, how existing data moves, and how the " +
-    "change is undone.",
-  assumptions: "What the plan assumes without the developer having said it, one per note.",
+    "Each unresolved question, contradiction, or fact no source could settle, worded as a " +
+    "question, one per note.",
+  assumptions:
+    "What the plan assumes without the developer having said it, Luke's suggestions not yet " +
+    "agreed among them, one per note.",
+} as const satisfies Record<PlanField, string>;
+
+/**
+ * When each section is good enough for a coding agent to build from without
+ * coming back with a question. The planning model holds the plan to these
+ * before it calls the plan complete; the notetaker is never told them,
+ * because it records what was said rather than judging it.
+ */
+export const PLAN_FIELD_BAR = {
+  context: "Someone new to the code could explain why the work matters.",
+  goal: "Every outcome can be checked true or false.",
+  approach:
+    "Every piece names the path it lives in and the code it follows, and no step says only " +
+    '"update" or "handle".',
+  interfaces:
+    "Every new or changed boundary is written as code under its file, or the section says " +
+    '"None" and why.',
+  alternatives:
+    "Optional. Every alternative the developer raised or Luke suggested has the reason it lost.",
+  hardParts: "Every case says exactly what the change does, not only that it is hard.",
+  notDoing: "Anything a capable agent might add unasked is listed.",
+  planOfAttack: "Optional. Needed when the order of the steps matters or stored data moves.",
+  testing:
+    "Every goal and every hard part has at least one When/then case with an exact result, " +
+    "and there is an end-to-end check.",
+  openQuestions: "Nothing left in it would change what gets built.",
+  assumptions: "Every choice Luke made for the developer is listed.",
 } as const satisfies Record<PlanField, string>;
 
 /** The kinds of note the notetaker takes. */
 export const NOTE_KIND = {
   ADD: "add",
-  ADD_EXAMPLE: "addExample",
   REPLACE: "replace",
   REMOVE: "remove",
 } as const;
@@ -425,23 +370,8 @@ const addNoteSchema = EffectSchema.Struct({
   text: describeWire(
     trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
     "The new point, added after what the field holds: a Markdown bullet in a text field, " +
-      "one item in a list, one rule's statement in the rules.",
+      "one item in a list.",
   ),
-});
-
-const addExampleNoteSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(NOTE_KIND.ADD_EXAMPLE),
-  rule: describeWire(
-    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
-    "The rule's number as the document shows it.",
-  ),
-  given: describeWire(
-    planExamplePartSchema,
-    "The starting situation. One line. Null while unknown.",
-  ),
-  when: describeWire(planExamplePartSchema, "The action. One line. Null while unknown."),
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: describeWire(planExamplePartSchema, "The observable result. One line. Null while unknown."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
 });
 
 const replaceNoteSchema = EffectSchema.Struct({
@@ -456,18 +386,13 @@ const removeNoteSchema = EffectSchema.Struct({
   field: NOTE_FIELD,
   find: describeWire(
     trimmedText(MAX_FIND_CHARS),
-    "A phrase copied exactly from the line, item, rule, or example to strike.",
+    "A phrase copied exactly from the line or item to strike.",
   ),
 });
 
-const planNoteSchema = EffectSchema.Union([
-  addNoteSchema,
-  addExampleNoteSchema,
-  replaceNoteSchema,
-  removeNoteSchema,
-]);
+const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema, removeNoteSchema]);
 
-/** One note: a point added, an example added to a rule, a phrase corrected, or a line struck. */
+/** One note: a point added, a phrase corrected, or a line struck. */
 export type PlanNote = typeof planNoteSchema.Type;
 
 /** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
@@ -544,77 +469,6 @@ export function withAgentEdit(
   return [...journal, edit].slice(-PLAN_AGENT_EDITS_KEPT);
 }
 
-/** How one text field is read from the fields and written back. */
-interface TextFieldLens {
-  readonly read: (fields: PlanFields) => string | null;
-  readonly write: (fields: PlanFields, value: string | null) => PlanFields;
-}
-
-/** Every field holding one Markdown answer, read and written in place. */
-const TEXT_FIELD = {
-  problem: {
-    read: (fields) => fields.goal.problem,
-    write: (fields, problem) => ({ ...fields, goal: { ...fields.goal, problem } }),
-  },
-  outcome: {
-    read: (fields) => fields.goal.outcome,
-    write: (fields, outcome) => ({ ...fields, goal: { ...fields.goal, outcome } }),
-  },
-  included: {
-    read: (fields) => fields.scope.included,
-    write: (fields, included) => ({ ...fields, scope: { ...fields.scope, included } }),
-  },
-  excluded: {
-    read: (fields) => fields.scope.excluded,
-    write: (fields, excluded) => ({ ...fields, scope: { ...fields.scope, excluded } }),
-  },
-  constraints: {
-    read: (fields) => fields.scope.constraints,
-    write: (fields, constraints) => ({ ...fields, scope: { ...fields.scope, constraints } }),
-  },
-  changeMap: {
-    read: (fields) => fields.implementation.changeMap,
-    write: (fields, changeMap) => ({
-      ...fields,
-      implementation: { ...fields.implementation, changeMap },
-    }),
-  },
-  contracts: {
-    read: (fields) => fields.implementation.contracts,
-    write: (fields, contracts) => ({
-      ...fields,
-      implementation: { ...fields.implementation, contracts },
-    }),
-  },
-  patterns: {
-    read: (fields) => fields.implementation.patterns,
-    write: (fields, patterns) => ({
-      ...fields,
-      implementation: { ...fields.implementation, patterns },
-    }),
-  },
-  order: {
-    read: (fields) => fields.implementation.order,
-    write: (fields, order) => ({ ...fields, implementation: { ...fields.implementation, order } }),
-  },
-  decisions: {
-    read: (fields) => fields.decisions,
-    write: (fields, decisions) => ({ ...fields, decisions }),
-  },
-  verification: {
-    read: (fields) => fields.verification,
-    write: (fields, verification) => ({ ...fields, verification }),
-  },
-  leftToAgent: {
-    read: (fields) => fields.leftToAgent,
-    write: (fields, leftToAgent) => ({ ...fields, leftToAgent }),
-  },
-  dataAndMigration: {
-    read: (fields) => fields.dataAndMigration,
-    write: (fields, dataAndMigration) => ({ ...fields, dataAndMigration }),
-  },
-} as const satisfies Record<TextField, TextFieldLens>;
-
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 
@@ -634,7 +488,7 @@ function itemText(text: string): string {
 }
 
 function isTextField(field: PlanField): field is TextField {
-  return Object.hasOwn(TEXT_FIELD, field);
+  return field !== PLAN_FIELD.OPEN_QUESTIONS && field !== PLAN_FIELD.ASSUMPTIONS;
 }
 
 /** Every field holding one Markdown answer, in the template's order. */
@@ -643,7 +497,7 @@ export const PLAN_TEXT_FIELDS: readonly PlanTextField[] =
 
 /** What a text field holds: its Markdown, or null while it is unanswered. */
 export function planTextFieldValue(fields: PlanFields, field: PlanTextField): string | null {
-  return TEXT_FIELD[field].read(fields);
+  return fields[field];
 }
 
 /** The fields with one text field holding a new answer, or none. */
@@ -652,23 +506,16 @@ export function withPlanTextField(
   field: PlanTextField,
   value: string | null,
 ): PlanFields {
-  return TEXT_FIELD[field].write(fields, value);
+  return { ...fields, [field]: value };
 }
 
-/** What one field of a plan's content holds: an answer, the rules, or a list. */
-type PlanFieldValue =
-  | string
-  | null
-  | PlanFields["rules"]
-  | PlanFields["openQuestions"]
-  | readonly PlanAssumption[];
+/** What one field of a plan's content holds: an answer or a list. */
+type PlanFieldValue = string | null | PlanFields["openQuestions"] | readonly PlanAssumption[];
 
 /** What one field of a plan's content holds, whatever its kind. */
 function planFieldValue(content: PlanContent, field: PlanField): PlanFieldValue {
-  if (isTextField(field)) return TEXT_FIELD[field].read(content.fields);
-  if (field === PLAN_FIELD.RULES) return content.fields.rules;
-  if (field === PLAN_FIELD.OPEN_QUESTIONS) return content.fields.openQuestions;
-  return content.assumptions;
+  if (field === PLAN_FIELD.ASSUMPTIONS) return content.assumptions;
+  return content.fields[field];
 }
 
 /**
@@ -785,88 +632,6 @@ function mapDefined<A, B>(value: A | undefined, map: (value: A) => B): B | undef
   return value === undefined ? undefined : map(value);
 }
 
-/** One example's clauses, in the order the document draws them. */
-function clausesOf(example: Example): readonly (string | null)[] {
-  return [example.given, example.when, example.then];
-}
-
-/** A rule with the phrase replaced in its statement or in one of its examples' clauses. */
-function correctedRule(rule: Rule, find: string, text: string): Rule | undefined {
-  const statement = replacedIn(rule.statement, find, text);
-  if (statement !== undefined) {
-    return statement.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS ? undefined : { ...rule, statement };
-  }
-  const examples = rule.examples;
-  if (examples === null) return undefined;
-  for (const [index, example] of examples.entries()) {
-    const [given = null, when = null, then = null] = clausesOf(example).map((clause) =>
-      clause === null ? null : (replacedIn(clause, find, text) ?? clause),
-    );
-    const corrected = { given, when, then }; // oxlint-disable-line unicorn/no-thenable -- `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-    if (clausesOf(corrected).some((clause, at) => clause !== clausesOf(example)[at])) {
-      return {
-        ...rule,
-        examples: examples.map((standing, at) => (at === index ? corrected : standing)),
-      };
-    }
-  }
-  return undefined;
-}
-
-/** Every text of a rule a phrase may stand in: its statement, then each example's clauses. */
-function ruleTexts(rule: Rule): readonly string[] {
-  return [rule.statement, ...(rule.examples ?? []).flatMap(exampleTexts)];
-}
-
-function exampleTexts(example: Example): readonly string[] {
-  return clausesOf(example).filter((clause) => clause !== null);
-}
-
-/**
- * The rules with the one place the phrase names struck: the rule where it
- * stands in a statement, the example where it stands in a clause, or
- * nothing where it stands nowhere or more than once.
- */
-function rulesStruck(rules: readonly Rule[], find: string): readonly Rule[] | undefined {
-  const index = soleHolder(rules, ruleTexts, find);
-  const rule = rules[index];
-  if (rule === undefined) return undefined;
-  if (located(rule.statement, find) !== undefined) return rules.filter((_, at) => at !== index);
-  const examples = rule.examples ?? [];
-  const exampleAt = soleHolder(examples, exampleTexts, find);
-  const kept = examples.filter((_, at) => at !== exampleAt);
-  const struckRule = { ...rule, examples: kept.length === 0 ? null : kept };
-  return rules.map((standing, at) => (at === index ? struckRule : standing));
-}
-
-/** The rules with a note applied, or nothing where the note names no rule or no phrase in them. */
-function rulesNoted(rules: readonly Rule[], note: PlanNote): readonly Rule[] | undefined {
-  switch (note.kind) {
-    case NOTE_KIND.ADD: {
-      const statement = itemText(note.text);
-      if (statement === "" || statement.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS) return undefined;
-      return [...rules, { statement, examples: null }];
-    }
-    case NOTE_KIND.ADD_EXAMPLE: {
-      const rule = rules[note.rule - 1];
-      if (rule === undefined) return undefined;
-      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-      const example = { given: note.given, when: note.when, then: note.then }; // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      const examples = [...(rule.examples ?? []), example];
-      return rules.map((standing, at) => (at === note.rule - 1 ? { ...rule, examples } : standing));
-    }
-    case NOTE_KIND.REPLACE:
-      return replacedItem(
-        rules,
-        ruleTexts,
-        (rule) => correctedRule(rule, note.find, note.text),
-        note.find,
-      );
-    case NOTE_KIND.REMOVE:
-      return rulesStruck(rules, note.find);
-  }
-}
-
 /** A list of plain items with a note applied, or nothing where the note names no item. */
 function itemsNoted<Item>(
   items: readonly Item[],
@@ -889,8 +654,6 @@ function itemsNoted<Item>(
       const index = soleHolder(items, (item) => [textOf(item)], note.find);
       return index === -1 ? undefined : items.filter((_, at) => at !== index);
     }
-    case NOTE_KIND.ADD_EXAMPLE:
-      return undefined;
   }
 }
 
@@ -907,8 +670,6 @@ function textNoted(current: string | null, note: PlanNote): string | null | unde
       const at = current === null ? undefined : located(current, note.find);
       return current === null || at === undefined ? undefined : answered(struck(current, at));
     }
-    case NOTE_KIND.ADD_EXAMPLE:
-      return undefined;
   }
 }
 
@@ -926,12 +687,7 @@ function withinItems(items: readonly unknown[]): boolean {
  */
 export function applyNote(content: PlanContent, note: PlanNote): PlanContent | undefined {
   const { fields, assumptions } = content;
-  const field = note.kind === NOTE_KIND.ADD_EXAMPLE ? PLAN_FIELD.RULES : note.field;
-  if (field === PLAN_FIELD.RULES) {
-    const rules = rulesNoted(fields.rules ?? [], note);
-    if (rules === undefined || !withinItems(rules)) return undefined;
-    return { fields: { ...fields, rules: rules.length === 0 ? null : rules }, assumptions };
-  }
+  const field = note.field;
   if (field === PLAN_FIELD.OPEN_QUESTIONS) {
     const questions = itemsNoted(fields.openQuestions, note, (text) => text, itemText);
     if (questions === undefined || !withinItems(questions)) return undefined;
@@ -947,10 +703,8 @@ export function applyNote(content: PlanContent, note: PlanNote): PlanContent | u
     if (noted === undefined || !withinItems(noted)) return undefined;
     return { fields, assumptions: noted };
   }
-  if (!isTextField(field)) return undefined;
-  const lens = TEXT_FIELD[field];
-  const text = textNoted(lens.read(fields), note);
-  return text === undefined ? undefined : { fields: lens.write(fields, text), assumptions };
+  const text = textNoted(fields[field], note);
+  return text === undefined ? undefined : { fields: { ...fields, [field]: text }, assumptions };
 }
 
 /** Notes taken over a plan's content: the content after, and the notes that could not be taken. */

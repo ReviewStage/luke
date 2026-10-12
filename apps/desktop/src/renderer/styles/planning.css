@@ -112,59 +112,6 @@
   content: "";
 }
 
-/* A rule as an item of a numbered list (`plan-rule.tsx`): its number muted
-   in a gutter of its own, its statement in the body's weight beside it, and
-   its examples beneath the statement. The number takes the writing mark's
-   accent while the caret types in its rule. */
-.plan-rule {
-  display: grid;
-  grid-template-columns: 1.6em minmax(0, 1fr);
-  column-gap: 0.4em;
-}
-
-.plan-rule-number {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.plan-rule.plan-writing .plan-rule-number {
-  color: var(--accent);
-}
-
-/* A rule's examples: one compact block each, set in from the statement on a
-   hairline, each Given, When, and Then on its own line behind a muted label
-   of one width, so the clauses line up. */
-.plan-rule-body ul {
-  display: grid;
-  gap: var(--space-8);
-  margin-top: var(--space-8);
-  padding-left: 0;
-  list-style: none;
-}
-
-.plan-rule-body li {
-  padding: var(--space-2) 0 var(--space-2) var(--space-12);
-  border-left: 2px solid var(--hairline-strong);
-  font-size: 0.93em;
-  line-height: 1.55;
-  white-space: pre-line;
-}
-
-.plan-rule-body li + li {
-  margin-top: 0;
-}
-
-/* Note that a label takes none of the gap `markdown.css` opens between a
-   list item's children, which as an inline-block it would otherwise take. */
-.plan-rule-body li > strong {
-  display: inline-block;
-  min-width: 3.4em;
-  margin-top: 0;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
 /* A unit or assumption as it settles: a tint behind it that fades, on
    opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
    leave nothing lit. */
@@ -345,31 +292,6 @@
 .plan-field-input:focus {
   border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
   outline: none;
-}
-
-/* A rule in its editor: the statement on its own line, each example's
-   Given, When, and Then side by side with its remove, then the buttons that
-   add an example or strike the rule. One-line inputs, so no box grows. */
-.plan-rule-fields {
-  display: grid;
-  gap: var(--space-6);
-}
-
-.plan-rule-fields .plan-field-input {
-  min-height: 0;
-  padding: var(--space-6) var(--space-8);
-}
-
-.plan-rule-example {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.plan-rule-actions {
-  display: flex;
-  gap: var(--space-8);
 }
 
 /* The sections the body leaves out while they hold nothing, offered after

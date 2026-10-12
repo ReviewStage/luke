@@ -10,15 +10,7 @@ import {
   type PlanTextField,
   planTextFieldValue,
 } from "@sidecar/hosted/plan-template";
-import {
-  PLAN_BOUNDS,
-  PLAN_FIELD,
-  PLAN_FIELD_BOUNDS,
-  type PlanFields,
-  type PlanRule,
-  planAssumptionSchema,
-  planFieldsSchema,
-} from "@sidecar/hosted/plan-wire";
+import { PLAN_FIELD, planAssumptionSchema, planFieldsSchema } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningEditAnswer,
@@ -30,13 +22,12 @@ import { Schema } from "effect";
  * plan-field-editor-model.ts -- one field of the open plan in an editor: what the developer typed, what the service holds of theirs, and when to save.
  *
  * The developer edits a plan a field at a time, never its headings
- * (`@sidecar/hosted/plan-edit`): a text field's Markdown, one rule of the
- * rules (its statement and its examples), or the open questions or the
- * assumptions, one to a line. An editor opens on the field as the plan holds
- * it, which is the edit's base: what the developer's words were written
- * from. A rule is saved as the rules whole, with that one rule changed, so a
- * rule Luke added meanwhile is merged over on the service like any other
- * line. Each save that lands moves the base to what was saved, so the next
+ * (`@sidecar/hosted/plan-edit`): a section's Markdown, or the open questions
+ * or the assumptions, one to a line. An editor opens on the field as the plan
+ * holds it, which is the edit's base: what the developer's words were
+ * written from. A list is saved whole, so an item Luke added meanwhile is
+ * merged over on the service like any other line. Each save that lands
+ * moves the base to what was saved, so the next
  * save is a change from the developer's own last words. One save is out at a
  * time; words typed while it is out are saved once it answers. A conflict
  * holds the editor open with the developer's words until they keep theirs,
@@ -62,40 +53,15 @@ type FieldEditorState =
   | { readonly kind: typeof FIELD_EDITOR_STATE.CONFLICT; readonly current: PlanEditValue }
   | { readonly kind: typeof FIELD_EDITOR_STATE.FAILED; readonly note: string };
 
-/** What an editor edits: a text field, one rule by its place (the rules' length for a new one), or a list. */
+/** What an editor edits: a text field, or a list. */
 export type EditTarget =
   | { readonly field: PlanTextField }
-  | { readonly field: typeof PLAN_FIELD.RULES; readonly rule: number }
   | { readonly field: typeof PLAN_FIELD.OPEN_QUESTIONS }
   | { readonly field: typeof PLAN_FIELD.ASSUMPTIONS };
-
-/** One example of a rule as the editor holds it: each clause as typed, empty while unknown. */
-export interface ExampleDraft {
-  readonly given: string;
-  readonly when: string;
-  readonly then: string;
-}
-
-/** One rule as the editor holds it. */
-export interface RuleDraft {
-  readonly statement: string;
-  readonly examples: readonly ExampleDraft[];
-}
-
-/** The kinds of words an editor holds: a box of text, or a rule's parts. */
-export const EDIT_DRAFT = {
-  TEXT: "text",
-  RULE: "rule",
-} as const;
-
-export type EditDraft =
-  | { readonly kind: typeof EDIT_DRAFT.TEXT; readonly text: string }
-  | { readonly kind: typeof EDIT_DRAFT.RULE; readonly rule: RuleDraft };
 
 /** A field as the service holds it of the developer's, by its kind: the edit's base. */
 type EditBase =
   | { readonly field: PlanTextField; readonly base: string | null }
-  | { readonly field: typeof PLAN_FIELD.RULES; readonly base: PlanFields["rules"] }
   | { readonly field: typeof PLAN_FIELD.OPEN_QUESTIONS; readonly base: readonly string[] }
   | {
       readonly field: typeof PLAN_FIELD.ASSUMPTIONS;
@@ -105,7 +71,8 @@ type EditBase =
 /** One field open in an editor. */
 export interface FieldEditor {
   readonly target: EditTarget;
-  readonly draft: EditDraft;
+  /** The words in the editor's box: a section's Markdown, or a list one item to a line. */
+  readonly draft: string;
   /** The field as the developer's words are a change from: what the editor opened on, or their own last save. */
   readonly saved: EditBase;
   /** The save still out; absent while none is. */
@@ -126,59 +93,29 @@ const FAILURE_NOTE = {
 /** What the editor says while Luke's words and the developer's disagree. */
 export const CONFLICT_NOTE = "Luke changed this section while you were editing.";
 
-/** The longest each part of an editor may hold, the service's own bounds. */
-export const EDITOR_BOUNDS = {
-  ANSWER_CHARS: PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS,
-  RULE_CHARS: PLAN_FIELD_BOUNDS.MAX_RULE_CHARS,
-  EXAMPLE_PART_CHARS: PLAN_FIELD_BOUNDS.MAX_EXAMPLE_PART_CHARS,
-  ASSUMPTION_CHARS: PLAN_BOUNDS.MAX_ASSUMPTION_CHARS,
-} as const;
-
-/** A heading line the formatter writes for a section or a field. */
-const UNIT_HEADING = /^#{2,3} (.+)$/u;
-
-/** A rule's heading: its number, then its statement. */
-const RULE_HEADING = /^### Rule (\d+): /u;
+/** A heading line the formatter writes for a section. */
+const UNIT_HEADING = /^## (.+)$/u;
 
 /** The list markers an item's line may open with, which the formatter draws itself. */
 const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
 
-/** Each text field, by the heading it stands under. */
-const FIELD_OF_HEADING: ReadonlyMap<string, PlanTextField> = new Map(
-  PLAN_TEXT_FIELDS.map((field) => [PLAN_FIELD_HEADING[field], field]),
+/** Each field a unit of the body is edited as, by the heading it stands under: the text fields and the open questions. */
+const FIELD_OF_HEADING: ReadonlyMap<string, EditTarget["field"]> = new Map(
+  [...PLAN_TEXT_FIELDS, PLAN_FIELD.OPEN_QUESTIONS].map((field) => [
+    PLAN_FIELD_HEADING[field],
+    field,
+  ]),
 );
 
-const isRules = Schema.is(planFieldsSchema.fields.rules);
 const isOpenQuestions = Schema.is(planFieldsSchema.fields.openQuestions);
 const isAssumptions = Schema.is(Schema.Array(planAssumptionSchema));
 const isAnswer = Schema.is(Schema.NullOr(Schema.String));
 
-/** The text field a unit of the body holds, by its heading; none for a section's heading, a rule, or a list. */
-export function textFieldOfUnit(words: string): PlanTextField | undefined {
+/** What a unit of the body is edited as, by its heading: its text field, or the open questions; none for the title. */
+export function editTargetOfUnit(words: string): EditTarget | undefined {
   const heading = UNIT_HEADING.exec(words.split("\n", 1)[0] ?? "")?.[1];
-  return heading === undefined ? undefined : FIELD_OF_HEADING.get(heading);
-}
-
-/**
- * What a unit of the body is edited as: its text field, its rule by number,
- * the open questions, or, for the rules' own heading, a new rule after the
- * `ruleCount` rules standing; none for a section's heading or the title.
- */
-export function editTargetOfUnit(words: string, ruleCount: number): EditTarget | undefined {
-  const line = words.split("\n", 1)[0] ?? "";
-  const rule = RULE_HEADING.exec(line)?.[1];
-  if (rule !== undefined) return { field: PLAN_FIELD.RULES, rule: Number(rule) - 1 };
-  const heading = UNIT_HEADING.exec(line)?.[1];
-  if (heading === PLAN_FIELD_HEADING.rules) return { field: PLAN_FIELD.RULES, rule: ruleCount };
-  if (heading === PLAN_FIELD_HEADING.openQuestions) return { field: PLAN_FIELD.OPEN_QUESTIONS };
-  const field = textFieldOfUnit(words);
+  const field = heading === undefined ? undefined : FIELD_OF_HEADING.get(heading);
   return field === undefined ? undefined : { field };
-}
-
-/** Whether two targets name the same editor. */
-export function sameTarget(left: EditTarget, right: EditTarget): boolean {
-  if (left.field !== right.field) return false;
-  return !("rule" in left) || !("rule" in right) || left.rule === right.rule;
 }
 
 /** An item on one line, its own breaks folded into spaces. */
@@ -204,73 +141,15 @@ function itemsKept(lines: readonly string[], standing: readonly string[]): reado
   return lines.map((line) => byLine.get(line) ?? line);
 }
 
-/** A clause as saved: null where nothing but whitespace stands. */
-function clauseOf(text: string): string | null {
+/** A text field's answer as saved: null where nothing but whitespace stands. */
+function answerOf(text: string): string | null {
   const trimmed = text.trim();
   return trimmed === "" ? null : trimmed;
-}
-
-/** A rule's statement with the list markers it opens with dropped, since the document numbers each rule itself. */
-function statementText(statement: string): string {
-  return statement.trim().replace(LEADING_LIST_MARKERS, "").trim();
-}
-
-/**
- * A rule's statement as saved: as typed, its list markers dropped, or as it
- * stands where the developer's words are the same apart from those markers,
- * so opening a rule saved with one saves nothing until they change it.
- */
-function statementOf(typed: string, standing: string | undefined): string {
-  const statement = statementText(typed);
-  return standing !== undefined && statementText(standing) === statement ? standing : statement;
-}
-
-/** A rule's parts as saved, or nothing where its statement is blank, which strikes it; an example of blank clauses is dropped. */
-function ruleOf(draft: RuleDraft, standing: PlanRule | undefined): PlanRule | undefined {
-  const statement = statementOf(draft.statement, standing?.statement);
-  if (statement === "") return undefined;
-  const examples = draft.examples
-    .map((example) => ({
-      given: clauseOf(example.given),
-      when: clauseOf(example.when),
-      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-      then: clauseOf(example.then), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-    }))
-    .filter((example) => example.given !== null || example.when !== null || example.then !== null);
-  return { statement, examples: examples.length === 0 ? null : examples };
-}
-
-/** The rules with one changed in its place, added at their end, or struck. */
-function rulesWith(
-  rules: PlanFields["rules"],
-  index: number,
-  rule: PlanRule | undefined,
-): PlanFields["rules"] {
-  const standing = [...(rules ?? [])];
-  if (rule === undefined) standing.splice(index, 1);
-  else if (index < standing.length) standing[index] = rule;
-  else standing.push(rule);
-  return standing.length === 0 ? null : standing;
-}
-
-/** A rule's draft from the rule as it stands, an empty one for a new rule. */
-function ruleDraftOf(rule: PlanRule | undefined): RuleDraft {
-  return {
-    statement: statementText(rule?.statement ?? ""),
-    examples: (rule?.examples ?? []).map((example) => ({
-      given: example.given ?? "",
-      when: example.when ?? "",
-      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-      then: example.then ?? "", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-    })),
-  };
 }
 
 /** The field a target edits, as the content holds it. */
 function baseOf(target: EditTarget, content: PlanContent): EditBase {
   switch (target.field) {
-    case PLAN_FIELD.RULES:
-      return { field: target.field, base: content.fields.rules };
     case PLAN_FIELD.OPEN_QUESTIONS:
       return { field: target.field, base: content.fields.openQuestions };
     case PLAN_FIELD.ASSUMPTIONS:
@@ -281,81 +160,39 @@ function baseOf(target: EditTarget, content: PlanContent): EditBase {
 }
 
 /** The words an editor holds of a field as it stands. */
-function draftOf(target: EditTarget, saved: EditBase): EditDraft {
+function draftOf(saved: EditBase): string {
   switch (saved.field) {
-    case PLAN_FIELD.RULES: {
-      const index = "rule" in target ? target.rule : 0;
-      return { kind: EDIT_DRAFT.RULE, rule: ruleDraftOf(saved.base?.[index]) };
-    }
     case PLAN_FIELD.OPEN_QUESTIONS:
-      return { kind: EDIT_DRAFT.TEXT, text: saved.base.map(oneLine).join("\n") };
+      return saved.base.map(oneLine).join("\n");
     case PLAN_FIELD.ASSUMPTIONS:
-      return {
-        kind: EDIT_DRAFT.TEXT,
-        text: saved.base.map((assumption) => oneLine(assumption.text)).join("\n"),
-      };
+      return saved.base.map((assumption) => oneLine(assumption.text)).join("\n");
     default:
-      return { kind: EDIT_DRAFT.TEXT, text: saved.base ?? "" };
+      return saved.base ?? "";
   }
-}
-
-/** The text a box holds, or none for a rule. */
-function textOf(draft: EditDraft): string {
-  return draft.kind === EDIT_DRAFT.TEXT ? draft.text : "";
 }
 
 /** The save an editor's words make: the field's base and what the words save as. */
 function requestOf(editor: FieldEditor): PlanEditRequest {
-  const { saved, draft, target } = editor;
+  const { saved, draft } = editor;
   switch (saved.field) {
-    case PLAN_FIELD.RULES: {
-      const index = "rule" in target ? target.rule : 0;
-      const standing = saved.base?.[index];
-      const rule = draft.kind === EDIT_DRAFT.RULE ? ruleOf(draft.rule, standing) : undefined;
-      return { field: saved.field, base: saved.base, value: rulesWith(saved.base, index, rule) };
-    }
     case PLAN_FIELD.OPEN_QUESTIONS:
-      return {
-        field: saved.field,
-        base: saved.base,
-        value: itemsKept(itemsOf(textOf(draft)), saved.base),
-      };
+      return { field: saved.field, base: saved.base, value: itemsKept(itemsOf(draft), saved.base) };
     case PLAN_FIELD.ASSUMPTIONS: {
       const standing = saved.base.map((assumption) => assumption.text);
       return {
         field: saved.field,
         base: saved.base,
-        value: itemsKept(itemsOf(textOf(draft)), standing).map((text) => ({ text })),
+        value: itemsKept(itemsOf(draft), standing).map((text) => ({ text })),
       };
     }
     default:
-      return { field: saved.field, base: saved.base, value: clauseOf(textOf(draft)) };
+      return { field: saved.field, base: saved.base, value: answerOf(draft) };
   }
-}
-
-/**
- * The editor's target once the field it edits stands as `now`: a rule moved
- * by Luke's change found again where the rule the editor opened on now
- * stands, its place kept where Luke changed the rule itself, and the end of
- * the rules where it is gone and its place with it. Any other target stands.
- */
-function retargeted(editor: FieldEditor, now: EditBase): EditTarget {
-  const { target, saved } = editor;
-  if (!("rule" in target) || saved.field !== PLAN_FIELD.RULES || now.field !== PLAN_FIELD.RULES) {
-    return target;
-  }
-  const opened = JSON.stringify(saved.base?.[target.rule]);
-  const rules = now.base ?? [];
-  const found = rules.findIndex((rule) => JSON.stringify(rule) === opened);
-  if (found !== -1) return { ...target, rule: found };
-  return { ...target, rule: Math.min(target.rule, rules.length) };
 }
 
 /** The field as the service holds it of the developer's once a save lands. */
 function savedAs(request: PlanEditRequest): EditBase {
   switch (request.field) {
-    case PLAN_FIELD.RULES:
-      return { field: request.field, base: request.value };
     case PLAN_FIELD.OPEN_QUESTIONS:
       return { field: request.field, base: request.value };
     case PLAN_FIELD.ASSUMPTIONS:
@@ -368,8 +205,6 @@ function savedAs(request: PlanEditRequest): EditBase {
 /** The field as a conflict answered it, as a base of its kind; nothing where it is not one. */
 function currentAs(field: EditBase["field"], current: PlanEditValue): EditBase | undefined {
   switch (field) {
-    case PLAN_FIELD.RULES:
-      return isRules(current) ? { field, base: current } : undefined;
     case PLAN_FIELD.OPEN_QUESTIONS:
       return isOpenQuestions(current) ? { field, base: current } : undefined;
     case PLAN_FIELD.ASSUMPTIONS:
@@ -384,7 +219,7 @@ export function editorOpened(target: EditTarget, content: PlanContent): FieldEdi
   const saved = baseOf(target, content);
   return {
     target,
-    draft: draftOf(target, saved),
+    draft: draftOf(saved),
     saved,
     state: { kind: FIELD_EDITOR_STATE.EDITING },
     closing: false,
@@ -392,7 +227,7 @@ export function editorOpened(target: EditTarget, content: PlanContent): FieldEdi
 }
 
 /** Words typed: a failed save is tried again with them on the next pause; a conflict still waits. */
-export function editorTyped(editor: FieldEditor, draft: EditDraft): FieldEditor {
+export function editorTyped(editor: FieldEditor, draft: string): FieldEditor {
   if (editor.state.kind === FIELD_EDITOR_STATE.FAILED) {
     return { ...editor, draft, state: { kind: FIELD_EDITOR_STATE.EDITING } };
   }
@@ -453,20 +288,17 @@ export function editorRetried(editor: FieldEditor): FieldEditor {
 export function editorKeptMine(editor: FieldEditor): FieldEditor {
   if (editor.state.kind !== FIELD_EDITOR_STATE.CONFLICT) return editor;
   const saved = currentAs(editor.saved.field, editor.state.current) ?? editor.saved;
-  const target = retargeted(editor, saved);
-  return { ...editor, target, saved, state: { kind: FIELD_EDITOR_STATE.EDITING } };
+  return { ...editor, saved, state: { kind: FIELD_EDITOR_STATE.EDITING } };
 }
 
 /** The developer takes Luke's words: the editor holds them and closes, with nothing to save. */
 export function editorTookLukes(editor: FieldEditor): FieldEditor {
   if (editor.state.kind !== FIELD_EDITOR_STATE.CONFLICT) return editor;
   const saved = currentAs(editor.saved.field, editor.state.current) ?? editor.saved;
-  const target = retargeted(editor, saved);
   return {
     ...editor,
-    target,
     saved,
-    draft: draftOf(target, saved),
+    draft: draftOf(saved),
     state: { kind: FIELD_EDITOR_STATE.EDITING },
     closing: true,
   };
@@ -474,16 +306,6 @@ export function editorTookLukes(editor: FieldEditor): FieldEditor {
 
 export function editorCloseAsked(editor: FieldEditor): FieldEditor {
   return { ...editor, closing: true };
-}
-
-/** A rule struck from the editor that holds it: its words emptied and the editor closing, which saves the rules without it. */
-export function editorRuleStruck(editor: FieldEditor): FieldEditor {
-  if (editor.draft.kind !== EDIT_DRAFT.RULE) return editor;
-  return {
-    ...editor,
-    draft: { kind: EDIT_DRAFT.RULE, rule: { statement: "", examples: [] } },
-    closing: true,
-  };
 }
 
 /** Whether the editor closes now: asked to, with nothing out, nothing waiting on the developer, and nothing left to save. */

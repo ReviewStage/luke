@@ -151,7 +151,6 @@ function wordsOutput(output: WireValue, key: string): ToolBlock {
  */
 const NOTE_VERB = {
   add: "added",
-  addExample: "added an example",
   replace: "corrected",
   remove: "struck",
 } as const satisfies Record<PlanNote["kind"], string>;

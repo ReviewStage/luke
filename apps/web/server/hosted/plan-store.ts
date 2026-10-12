@@ -4,7 +4,6 @@ import {
   type PlanFieldWriter,
   planAgentEditSchema,
   planBody,
-  planBodyTidied,
   planFieldWriterSchema,
 } from "@sidecar/hosted/plan-template";
 import {
@@ -192,16 +191,17 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 
 /**
  * The row's document, as the window and the model read it. Note that a plan
- * whose body is still empty, never saved or reset, reads as the untouched
- * template formatted here rather than stored, so it is always the current
- * template's. The row's own account is the one its agents are read under.
+ * whose body is still empty, never saved or carried onto a new template,
+ * reads as its fields formatted here rather than stored, so it is always the
+ * current template's. The row's own account is the one its agents are read under.
  * Its last edit is its newest revision, or, before its history begins, the
  * newest save a coding agent made; each field it has a writer for says who.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
+    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
+    const body = row.body === "" ? planBody({ name: summary.name }, fields) : row.body;
     const labels = yield* agentLabelsOf(row);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
@@ -210,7 +210,6 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
     const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
       Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
     );
-    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
     return {
       plan: {
         ...summary,
@@ -583,7 +582,7 @@ export function savePlanDocument(
  */
 function retitledBody(row: PlanRow, name: string): string {
   if (row.body === "" || row.fields === null) return row.body;
-  if (planBodyTidied(row.body) !== planBody({ name: row.name }, row.fields)) return row.body;
+  if (row.body !== planBody({ name: row.name }, row.fields)) return row.body;
   const retitled = planBody({ name }, row.fields);
   return retitled.length > PLAN_BOUNDS.MAX_BODY_CHARS ? row.body : retitled;
 }

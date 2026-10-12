@@ -751,7 +751,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             request(EDIT, owner, {
               id: planId,
               method: "POST",
-              body: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+              body: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
             }),
           );
         const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED);
@@ -777,7 +777,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         // The archive takes no new work and loses none under way: a call's notes still land.
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.DECISIONS, "Invites expire after a week."),
+          added(PLAN_FIELD.APPROACH, "Invites expire after a week."),
         ]);
         assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
         const held = readAnswer(
@@ -786,7 +786,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(ONE_PLAN, owner, { id: planId })),
         ).plan;
         assert.equal(held.name, RELAY.name);
-        assert.equal(held.fields?.decisions, "Invites expire after a week.");
+        assert.equal(held.fields?.approach, "Invites expire after a week.");
         assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { board: { elements: [], appliedDrawing: 0 } },
@@ -841,7 +841,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             id: planId,
             method: "POST",
             body: {
-              field: PLAN_FIELD.DECISIONS,
+              field: PLAN_FIELD.APPROACH,
               base: null,
               value: " Invites expire after 7 days. ",
             },
@@ -850,7 +850,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
 
         const answered = readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, edited);
         assert.ok("plan" in answered);
-        assert.equal(answered.plan.fields?.decisions, "Invites expire after 7 days.");
+        assert.equal(answered.plan.fields?.approach, "Invites expire after 7 days.");
         assert.equal(answered.plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
         const { plan } = readAnswer(
           planAnswerSchema,
@@ -873,16 +873,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const edit = (body: WireBoundaryInput) =>
           ask(request(EDIT, owner, { id: planId, method: "POST", body }));
 
-        const conflicted = yield* edit({ field: PLAN_FIELD.PROBLEM, base: null, value: null });
+        const conflicted = yield* edit({ field: PLAN_FIELD.CONTEXT, base: null, value: null });
         const oversized = yield* edit({
-          field: PLAN_FIELD.DECISIONS,
+          field: PLAN_FIELD.APPROACH,
           base: null,
           value: "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
         });
 
         assert.deepEqual(conflicted, {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { conflict: { current: INVITATIONS_DRAFT.fields.goal.problem } },
+          body: { conflict: { current: INVITATIONS_DRAFT.fields.context } },
         });
         assert.deepEqual(oversized, {
           status: HOSTED_HTTP_STATUS.OK,
@@ -899,7 +899,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const body = { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." };
+        const body = { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." };
 
         assert.deepEqual(
           yield* ask(request(EDIT, other, { id: planId, method: "POST", body })),
@@ -910,7 +910,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             request(EDIT, owner, {
               id: planId,
               method: "POST",
-              body: { field: PLAN_FIELD.RULES, base: null, value: "Not a text field." },
+              body: { field: PLAN_FIELD.OPEN_QUESTIONS, base: [], value: "Not a list." },
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
@@ -1921,13 +1921,13 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
   /**
    * The owner's plan written twice, far enough apart to be two revisions:
-   * the problem first, then the outcome.
+   * the context first, then the goal.
    */
   const twoRevisions = (userId: string, planId: string) =>
     Effect.gen(function* () {
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")]);
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")]);
       yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.OUTCOME, "Members invite by email.")]);
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.GOAL, "Members invite by email.")]);
     });
 
   it.effect(

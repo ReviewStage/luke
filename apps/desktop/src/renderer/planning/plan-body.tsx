@@ -11,6 +11,7 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
+import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
   EDITOR_PLACE,
@@ -18,10 +19,9 @@ import {
   type FieldEditing,
   type PlanEditDoor,
   PlanFieldEditor,
-  targetLabel,
   useFieldEditing,
 } from "./plan-field-editor";
-import { type EditTarget, editTargetOfUnit, sameTarget } from "./plan-field-editor-model";
+import { editTargetOfUnit } from "./plan-field-editor-model";
 import {
   type ChaseState,
   chaseBehind,
@@ -31,7 +31,6 @@ import {
   chaseView,
   type UnitView,
 } from "./plan-reveal";
-import { PlanUnitWords } from "./plan-rule";
 import { useMinute } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
@@ -294,54 +293,34 @@ function AssumptionRow({
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
 
 /** The text fields the body draws only once they hold something, which the document offers to add while they do not. */
-const OPTIONAL_FIELDS = [PLAN_FIELD.ORDER, PLAN_FIELD.DATA_AND_MIGRATION] as const;
-
-/** The heading an editor draws above its inputs: a rule's by its number, since its statement is being typed; the unit's own otherwise. */
-function editorHeading(target: EditTarget, words: string, ruleCount: number): string {
-  if ("rule" in target && target.rule < ruleCount) return `### Rule ${target.rule + 1}`;
-  return words.split("\n", 1)[0] ?? "";
-}
-
-/**
- * Whether a unit is a rule only a notetaker's draft holds so far: drawn, but
- * not yet among the saved rules an editor opens on, so it is edited once it
- * is saved rather than opened empty.
- */
-function draftedOnly(target: EditTarget, words: string, ruleCount: number): boolean {
-  return "rule" in target && target.rule >= ruleCount && !words.startsWith("## ");
-}
+const OPTIONAL_FIELDS = [PLAN_FIELD.ALTERNATIVES, PLAN_FIELD.PLAN_OF_ATTACK] as const;
 
 /**
  * One unit of the body: drawn as the chase has it, tinted where its field
  * changed since the last look, the editor where it is the one the editor
  * opened from, nothing where it is the field an editor holds elsewhere, and
- * the way into its editor where it can be edited. A unit that opens its
- * field, every one but a rule under the rules' heading, carries the field's
- * byline.
+ * the way into its editor where it can be edited. Every section carries its
+ * field's byline.
  */
 function BodyUnit({
   view,
   editable,
   editing,
-  ruleCount,
   marks,
 }: {
   view: UnitView;
   editable: boolean;
   editing: FieldEditing;
-  ruleCount: number;
   marks: FieldMarks;
 }): React.JSX.Element | null {
-  const target = editTargetOfUnit(view.words, ruleCount);
+  const target = editTargetOfUnit(view.words);
   const changed = target !== undefined && marks.changed.has(target.field);
   const drawn = (
-    <PlanUnitWords words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
   );
   if (target === undefined) return drawn;
-  // A rule shares the rules' line, which stands on their heading.
-  const opensField = !("rule" in target) || view.words.startsWith("## ");
-  const byline = opensField ? bylineOf(marks, target.field) : null;
-  if (!editable || draftedOnly(target, view.words, ruleCount)) {
+  const byline = bylineOf(marks, target.field);
+  if (!editable) {
     return byline === null ? (
       drawn
     ) : (
@@ -353,21 +332,12 @@ function BodyUnit({
   }
   const { editor, host } = editing;
   if (editor !== undefined && host === view.id) {
-    const heading = editorHeading(editor.target, view.words, ruleCount);
-    return (
-      <PlanFieldEditor heading={heading} editor={editor} ruleCount={ruleCount} editing={editing} />
-    );
+    const heading = view.words.split("\n", 1)[0] ?? "";
+    return <PlanFieldEditor heading={heading} editor={editor} editing={editing} />;
   }
-  if (editor !== undefined && sameTarget(editor.target, target)) return null;
-  const adds = "rule" in target && target.rule >= ruleCount;
+  if (editor !== undefined && editor.target.field === target.field) return null;
   return (
-    <EditableUnit
-      target={target}
-      host={view.id}
-      label={targetLabel(target, ruleCount)}
-      adds={adds}
-      editing={editing}
-    >
+    <EditableUnit target={target} host={view.id} editing={editing}>
       {drawn}
       {byline}
     </EditableUnit>
@@ -438,15 +408,9 @@ function PlanAssumptions({
   const { editor, host } = editing;
   const body =
     editor !== undefined && host === EDITOR_PLACE.ASSUMPTIONS ? (
-      <PlanFieldEditor heading={undefined} editor={editor} ruleCount={0} editing={editing} />
+      <PlanFieldEditor heading={undefined} editor={editor} editing={editing} />
     ) : editable ? (
-      <EditableUnit
-        target={target}
-        host={EDITOR_PLACE.ASSUMPTIONS}
-        label={PLAN_FIELD_HEADING.assumptions}
-        adds={false}
-        editing={editing}
-      >
+      <EditableUnit target={target} host={EDITOR_PLACE.ASSUMPTIONS} editing={editing}>
         {list}
       </EditableUnit>
     ) : (
@@ -495,7 +459,6 @@ export function PlanBody({
       : { fields, assumptions: plan.document.assumptions };
   const editable = content !== undefined;
   const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
-  const ruleCount = fields?.rules?.length ?? 0;
   const now = useMinute();
   const marks: FieldMarks = {
     edits: new Map(plan.fieldEdits?.map((edit) => [edit.field, edit])),
@@ -545,20 +508,12 @@ export function PlanBody({
       <ChangedLine looks={looks} />
       <div className="plan-body">
         {views.map((view) => (
-          <BodyUnit
-            key={view.id}
-            view={view}
-            editable={editable}
-            editing={editing}
-            ruleCount={ruleCount}
-            marks={marks}
-          />
+          <BodyUnit key={view.id} view={view} editable={editable} editing={editing} marks={marks} />
         ))}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
           <PlanFieldEditor
-            heading={`## ${targetLabel(editing.editor.target, ruleCount)}`}
+            heading={`## ${PLAN_FIELD_HEADING[editing.editor.target.field]}`}
             editor={editing.editor}
-            ruleCount={ruleCount}
             editing={editing}
           />
         ) : null}

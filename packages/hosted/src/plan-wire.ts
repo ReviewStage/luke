@@ -60,91 +60,51 @@ export type PlanAssumption = typeof planAssumptionSchema.Type;
 export const PLAN_FIELD_BOUNDS = {
   /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
   MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
-  /** A rule's statement is its heading, so it is one sentence. */
-  MAX_RULE_CHARS: 500,
-  /** One part of an example is a clause drawn on one line. */
-  MAX_EXAMPLE_PART_CHARS: 1_000,
-  /** The most rules, examples of one rule, or open questions. */
+  /** The most open questions or assumptions. */
   MAX_ITEMS: 200,
 } as const;
-
-/** A list that is present only once it holds something. */
-function nonEmptyList<S extends EffectSchema.Top>(item: S) {
-  return EffectSchema.Array(item).check(
-    EffectSchema.isMinLength(1),
-    EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
-  );
-}
 
 /** An ordinary answer: null while unanswered, otherwise nonblank text. */
 const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS));
 
-/** One clause of a rule's example, null while unknown. */
-export const planExamplePartSchema = EffectSchema.NullOr(
-  trimmedText(PLAN_FIELD_BOUNDS.MAX_EXAMPLE_PART_CHARS),
-);
-
-const exampleSchema = EffectSchema.Struct({
-  given: planExamplePartSchema,
-  when: planExamplePartSchema,
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: planExamplePartSchema, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-});
-
-const ruleSchema = EffectSchema.Struct({
-  statement: trimmedText(PLAN_FIELD_BOUNDS.MAX_RULE_CHARS),
-  examples: EffectSchema.NullOr(nonEmptyList(exampleSchema)),
-});
-
 /**
- * Every section and field of the fixed template, in its order: what the
- * service keeps for a plan, and what the window edits a field of
- * (`plan-template.ts` formats them into the body).
+ * Every section of the fixed template, in its order: what the service keeps
+ * for a plan, and what the window edits a section of (`plan-template.ts`
+ * formats them into the body).
  */
 export const planFieldsSchema = EffectSchema.Struct({
-  goal: EffectSchema.Struct({ problem: ANSWER, outcome: ANSWER }),
-  scope: EffectSchema.Struct({ included: ANSWER, excluded: ANSWER, constraints: ANSWER }),
-  rules: EffectSchema.NullOr(nonEmptyList(ruleSchema)),
-  implementation: EffectSchema.Struct({
-    changeMap: ANSWER,
-    contracts: ANSWER,
-    patterns: ANSWER,
-    order: ANSWER,
-  }),
-  decisions: ANSWER,
-  verification: ANSWER,
-  leftToAgent: ANSWER,
+  context: ANSWER,
+  goal: ANSWER,
+  approach: ANSWER,
+  interfaces: ANSWER,
+  alternatives: ANSWER,
+  hardParts: ANSWER,
+  notDoing: ANSWER,
+  planOfAttack: ANSWER,
+  testing: ANSWER,
   openQuestions: EffectSchema.Array(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS)).check(
     EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
   ),
-  dataAndMigration: ANSWER,
 });
 
 export type PlanFields = typeof planFieldsSchema.Type;
 
 /** Every field a note may be taken under, in the template's order: the fields above, then the assumptions. */
 export const PLAN_FIELD = {
-  PROBLEM: "problem",
-  OUTCOME: "outcome",
-  INCLUDED: "included",
-  EXCLUDED: "excluded",
-  CONSTRAINTS: "constraints",
-  RULES: "rules",
-  CHANGE_MAP: "changeMap",
-  CONTRACTS: "contracts",
-  PATTERNS: "patterns",
-  ORDER: "order",
-  DECISIONS: "decisions",
-  VERIFICATION: "verification",
-  LEFT_TO_AGENT: "leftToAgent",
+  CONTEXT: "context",
+  GOAL: "goal",
+  APPROACH: "approach",
+  INTERFACES: "interfaces",
+  ALTERNATIVES: "alternatives",
+  HARD_PARTS: "hardParts",
+  NOT_DOING: "notDoing",
+  PLAN_OF_ATTACK: "planOfAttack",
+  TESTING: "testing",
   OPEN_QUESTIONS: "openQuestions",
-  DATA_AND_MIGRATION: "dataAndMigration",
   ASSUMPTIONS: "assumptions",
 } as const;
 
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
-export type PlanRule = typeof ruleSchema.Type;
-export type PlanExample = typeof exampleSchema.Type;
 
 /** The one saved document of a plan, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
