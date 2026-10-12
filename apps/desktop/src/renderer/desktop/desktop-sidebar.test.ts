@@ -463,6 +463,19 @@ test("Log out asks first, and only its answer signs the account out", async () =
   assert.equal(signOuts, 1);
 });
 
+test("a Log out that fails keeps the dialog up saying so, and the account still signed in", async () => {
+  const container = mount(DEAN, { onSignOut: () => Promise.reject(new Error("refused")) });
+  act(() => accountButton(container).click());
+  act(() => accountItem("Log out").click());
+
+  await act(async () => dialogButton("Log out").click());
+
+  assert.match(
+    dialog()?.querySelector('[role="alert"]')?.textContent ?? "",
+    /could not log out, so you are still signed in/u,
+  );
+});
+
 test("signed out, the account says so and its menu names no one and offers no Log out", () => {
   const button = accountButton(mount({ status: ACCOUNT_STATUS.SIGNED_OUT }));
 

@@ -210,9 +210,18 @@ function AccountMenu({
   const { open, show, close } = useActionMenu(shown);
   const logOut = useConfirmDialog(
     { subject: signedIn, surfaceOpen: shown },
+    // A sign-out main refused keeps the dialog up saying so, rather than
+    // closing on an account still signed in.
     async (): Promise<ActionResult> => {
-      await onSignOut();
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      try {
+        await onSignOut();
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      } catch {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "Luke could not log out, so you are still signed in. Try again in a moment.",
+        };
+      }
     },
   );
   const groups = accountMenuGroups(signedIn, {
