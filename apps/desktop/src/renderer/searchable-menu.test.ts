@@ -355,6 +355,56 @@ test("the submenu stands to the right of the menu and down from its row, turning
   }
 });
 
+test("a submenu the pointer moves to from another row's is measured again, so a taller one stands up where the window ends before it", () => {
+  Object.defineProperty(document.documentElement, "clientWidth", {
+    configurable: true,
+    value: 800,
+  });
+  Object.defineProperty(document.documentElement, "clientHeight", {
+    configurable: true,
+    value: 600,
+  });
+  const measure = HTMLElement.prototype.getBoundingClientRect;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    // The context submenu carries a note under its rows and runs past the window's foot.
+    const tall = this.classList.contains("plan-compose-submenu") && this.textContent.includes("1M");
+    return this.classList.contains("plan-compose-submenu")
+      ? new DOMRect(500, 440, 200, tall ? 200 : 120)
+      : measure.call(this);
+  };
+  try {
+    const foot: FootRow[] = [
+      ...effortFoot([]),
+      {
+        id: "context",
+        label: "Context",
+        detail: "1M",
+        submenu: {
+          label: "Context",
+          rows: [
+            { id: "standard", label: "272K" },
+            { id: "long", label: "1M" },
+          ],
+          value: "long",
+          note: "On 1M, prompts over 272K tokens cost more.",
+          onPick: () => undefined,
+        },
+      },
+    ];
+    const menu = mount({ foot, value: undefined });
+    const [effort, context] = menu.container.querySelectorAll<HTMLButtonElement>(
+      ".plan-compose-menu-foot button",
+    );
+    hover(effort);
+    assert.equal(submenuOf(menu)?.dataset["stand"], "down");
+    hover(context);
+    assert.equal(submenuOf(menu)?.textContent.includes("1M"), true);
+    assert.equal(submenuOf(menu)?.dataset["stand"], "up");
+  } finally {
+    HTMLElement.prototype.getBoundingClientRect = measure;
+  }
+});
+
 test("every icon in the menu has a size from the sheet, so none fills the composer", () => {
   const menu = mount({ foot: gitHubFoot() });
   const icons = [...menu.container.querySelectorAll("svg")];

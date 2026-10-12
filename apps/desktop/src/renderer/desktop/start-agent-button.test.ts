@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -131,12 +132,15 @@ function hoverLine(page: HTMLElement): string | undefined {
 }
 
 /** A control over the catalog with Opus at high as the default, every Start and every write recorded. */
-function standing(stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" }) {
+function standing(
+  stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
+  models: readonly CatalogModel[] = MODELS,
+) {
   const presses: (ModelChoice | undefined)[] = [];
   const writes: ModelChoice[] = [];
   const reads: string[] = [];
   const control = codingAgentsControl({
-    models: MODELS,
+    models,
     readModels: () => reads.push("models"),
     // The service answers the last write, as the real one keeps it.
     readDefault: () => {
@@ -330,6 +334,70 @@ test("the Fast switch keeps the model's fast version as the default without clos
   assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "high" });
   assert.ok(page.querySelector(".plan-compose-menu"));
   assert.equal(fastRow(menu).getAttribute("aria-checked"), "false");
+});
+
+/** The catalog with GPT-6.1 Sol offering two windows, priced apart past 272K as OpenAI prices its long context. */
+const WINDOWED: readonly CatalogModel[] = MODELS.map((model) =>
+  model.id === "openai/gpt-6.1-sol"
+    ? {
+        ...model,
+        contextWindows: {
+          standardTokens: 272_000,
+          longTokens: 1_050_000,
+          longInputPriceFactor: 2,
+          longOutputPriceFactor: 1.5,
+        },
+      }
+    : model,
+);
+
+const contextRow = (menu: HTMLElement): HTMLButtonElement | undefined =>
+  [...menu.querySelectorAll<HTMLButtonElement>(".plan-compose-menu-foot button")].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Context",
+  );
+
+test("a Context row stands only for a model offering two windows: it names the window chosen, the whole one by default, opens the two with what the whole one costs under them, and a pick of the standard one keeps it as the default, which the checked row and the hover line then say; a model with one window drops it", async () => {
+  const { writes, control } = standing({ model: "openai/gpt-6.1-sol", effort: "low" }, WINDOWED);
+  const page = mount(control);
+  await settle();
+  assert.equal(hoverLine(page), "GPT-6.1 Sol Low", "the default window says nothing");
+  const menu = await openMenu(page);
+  const context = contextRow(menu);
+  assert.ok(context, "GPT-6.1 Sol offers two windows");
+  assert.equal(context.querySelector(".plan-compose-menu-detail")?.textContent, "1M");
+
+  hover(context);
+  assert.deepEqual(submenuRows(page), [
+    ["272K", null],
+    ["1M", "true"],
+  ]);
+  assert.equal(
+    page.querySelector(".plan-compose-submenu [data-submenu-note]")?.textContent,
+    "On 1M, prompts over 272K tokens cost 2× for input and 1.5× for output.",
+  );
+  const standard = page.querySelectorAll<HTMLElement>(".plan-compose-submenu [role=option]")[0];
+  act(() => standard?.click());
+  assert.deepEqual(writes, [
+    { model: "openai/gpt-6.1-sol", effort: "low", contextWindow: CONTEXT_WINDOW.STANDARD },
+  ]);
+  assert.equal(page.querySelector(".plan-compose-menu"), null, "a pick closes the menu");
+  await settle();
+  assert.equal(hoverLine(page), "GPT-6.1 Sol Low 272K");
+
+  const again = await openMenu(page);
+  const checked = again.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "Low 272K");
+  assert.equal(contextRow(again)?.querySelector(".plan-compose-menu-detail")?.textContent, "272K");
+
+  // Opus offers one window, so the pick drops the standard one and the menu draws no Context row.
+  const opus = [...again.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Opus 5.5",
+  );
+  act(() => opus?.click());
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "low" });
+  const opened = await openMenu(page);
+  assert.equal(contextRow(opened), undefined);
+  assert.equal(opened.querySelectorAll(".plan-compose-menu-foot button").length, 2);
 });
 
 test("a stored fast version shows its base model checked with Fast on, and a pick of a model without a fast version turns Fast off", async () => {

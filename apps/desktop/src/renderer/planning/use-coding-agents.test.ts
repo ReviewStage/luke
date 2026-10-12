@@ -9,6 +9,7 @@ import {
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import { Effect } from "effect";
@@ -227,6 +228,36 @@ test("a press mints one key, a press asked again after no answer carries the sam
   assert.deepEqual(startPayloads(tab.asked).slice(2), [
     { planId: PLAN, idempotencyKey: "key-2", ...choice },
     { planId: PLAN, idempotencyKey: "key-3", ...choice },
+  ]);
+});
+
+test("a press asked again after no answer keeps its key when the choice reads the same as sent, the whole window named or not, and mints another for the standard window", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: STARTED },
+  );
+  await tab.mount();
+
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  act(() => tab.control().start.onPress({ ...choice, contextWindow: CONTEXT_WINDOW.LONG }));
+  await settle();
+  act(() => tab.control().start.onPress(choice));
+  await settle();
+  act(() => tab.control().start.onPress({ ...choice, contextWindow: CONTEXT_WINDOW.STANDARD }));
+  await settle();
+  assert.deepEqual(startPayloads(tab.asked), [
+    { planId: PLAN, idempotencyKey: "key-1", ...choice },
+    { planId: PLAN, idempotencyKey: "key-1", ...choice },
+    {
+      planId: PLAN,
+      idempotencyKey: "key-2",
+      ...choice,
+      contextWindow: CONTEXT_WINDOW.STANDARD,
+    },
   ]);
 });
 
@@ -491,6 +522,29 @@ test("a change of an agent's model asks the service for that agent alone, and th
   await older;
   await settle();
   assert.deepEqual(tab.control().agents, [last]);
+});
+
+test("a change names the context window only where it is the standard one, so the model's whole window travels as no field", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHOOSE, { agent: STARTED }, { agent: STARTED });
+  await tab.mount();
+
+  const standard = {
+    model: "openai/gpt-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  };
+  await tab.control().onChoose(AGENT, standard);
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_CHOOSE,
+    payload: { agentId: AGENT, ...standard },
+  });
+  await tab.control().onChoose(AGENT, { ...standard, contextWindow: CONTEXT_WINDOW.LONG });
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_CHOOSE,
+    payload: { agentId: AGENT, model: standard.model, effort: standard.effort },
+  });
 });
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, opening its tab", async () => {

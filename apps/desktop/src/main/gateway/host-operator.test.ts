@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@sidecar/gateway";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -126,6 +127,43 @@ it.effect(
         [
           [GATEWAY_METHOD.PLANNING_BOARD_SAVE, { ...scene, image: "iVBORw0KGgo=" }],
           [GATEWAY_METHOD.PLANNING_BOARD_SAVE, scene],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "the standard context window travels to the host with a Start, a change, and the default, and a choice naming none carries no window field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+      const standard = {
+        model: "openai/gpt-5.5",
+        effort: "high",
+        contextWindow: CONTEXT_WINDOW.STANDARD,
+      };
+
+      yield* operator.codingAgentStart({ planId, idempotencyKey: "press-1", ...standard });
+      yield* operator.codingAgentChoose({ agentId: "agent-1", ...standard });
+      yield* operator.codingAgentChoose({
+        agentId: "agent-1",
+        model: standard.model,
+        effort: "low",
+      });
+      yield* operator.codingAgentDefaultWrite(standard);
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_START, { planId, idempotencyKey: "press-1", ...standard }],
+          [GATEWAY_METHOD.CODING_AGENTS_CHOOSE, { agentId: "agent-1", ...standard }],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_CHOOSE,
+            { agentId: "agent-1", model: standard.model, effort: "low" },
+          ],
+          [GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, standard],
         ],
       );
     }),

@@ -3,6 +3,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
@@ -19,6 +20,7 @@ import {
   checkoutCommand,
   choiceLabel,
   choiceModelId,
+  choiceOn,
   closesComposer,
   effortFor,
   followsAgent,
@@ -422,6 +424,56 @@ test("a fast version is folded into its base model by its id, read back as the b
   assert.equal(
     choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
     "Fable 5 Extra high",
+  );
+});
+
+test("a choice names its window after the effort only where it runs on the standard one and the model offers two, and a change of model keeps the standard window only where the next model offers two too", () => {
+  const models = [
+    {
+      id: "openai/gpt-5.5",
+      name: "GPT-5.5",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["low", "high"],
+      contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
+    },
+    {
+      id: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["low", "high"],
+    },
+  ];
+  const standard = {
+    model: "openai/gpt-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  };
+  assert.equal(choiceLabel(standard, models), "GPT-5.5 High 272K");
+  assert.equal(choiceLabel({ model: "openai/gpt-5.5", effort: "high" }, models), "GPT-5.5 High");
+  assert.equal(
+    choiceLabel({ ...standard, contextWindow: CONTEXT_WINDOW.LONG }, models),
+    "GPT-5.5 High",
+  );
+  assert.equal(
+    choiceLabel({ ...standard, model: "anthropic/claude-opus-5.5" }, models),
+    "Opus 5.5 High",
+  );
+
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.STANDARD),
+    { model: "openai/gpt-5.5", effort: "low", contextWindow: CONTEXT_WINDOW.STANDARD },
+  );
+  assert.deepEqual(
+    choiceOn(
+      models,
+      { model: "anthropic/claude-opus-5.5", effort: "low" },
+      CONTEXT_WINDOW.STANDARD,
+    ),
+    { model: "anthropic/claude-opus-5.5", effort: "low" },
+  );
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.LONG),
+    { model: "openai/gpt-5.5", effort: "low" },
   );
 });
 

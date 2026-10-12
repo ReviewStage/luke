@@ -32,7 +32,7 @@ export interface AgentModelControl {
   choice: ModelChoice;
   /** Why the last change did not take, said under the box; nothing while none failed. */
   note: string | undefined;
-  /** Changes the agent's model and effort for its next step. */
+  /** Changes the agent's model, effort, and context window for its next step. */
   choose: (next: ModelChoice) => void;
 }
 
@@ -47,7 +47,7 @@ function fresh(agentId: string): Held {
 }
 
 export function useAgentModel(input: {
-  agent: Pick<CodingAgentSummary, "id" | "model" | "effort">;
+  agent: Pick<CodingAgentSummary, "id" | "model" | "effort" | "contextWindow">;
   choose: ChoiceWriter;
 }): AgentModelControl {
   const { agent } = input;
@@ -78,7 +78,11 @@ export function useAgentModel(input: {
   };
 
   return {
-    choice: held.pending ?? { model: agent.model, effort: agent.effort },
+    choice: held.pending ?? {
+      model: agent.model,
+      effort: agent.effort,
+      ...(agent.contextWindow === undefined ? undefined : { contextWindow: agent.contextWindow }),
+    },
     note: held.note,
     choose,
   };

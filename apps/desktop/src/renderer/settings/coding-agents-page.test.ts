@@ -2,7 +2,8 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -51,8 +52,20 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
+/** The catalog with GPT-6.1 Sol offering two windows, priced apart past 272K as OpenAI prices its long context. */
+const WINDOWED: readonly CatalogModel[] = MODELS.map((model) =>
+  model.id === "openai/gpt-6.1-sol"
+    ? {
+        ...model,
+        contextWindows: { standardTokens: 272_000, longTokens: 1_050_000, longInputPriceFactor: 2 },
+      }
+    : model,
+);
+
+/** The catalog the bridge answers. */
+let catalog = MODELS;
 /** The service's default as the test's bridge holds it, written by the page and read back by it. */
-let stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
+let stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 /** Every act the page sent, in order. */
 let sent: Act[] = [];
 /** Whether a write is refused as a choice the catalog does not offer. */
@@ -82,7 +95,9 @@ function answer(request: Act): Promise<ActOutcome> {
       );
     case ACT_KIND.CODING_AGENTS_MODELS:
       return Promise.resolve(
-        done(refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: MODELS }),
+        done(
+          refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: catalog },
+        ),
       );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
@@ -99,6 +114,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
+  catalog = MODELS;
   stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
   sent = [];
   refuseWrites = false;
@@ -276,6 +292,52 @@ test("choosing an effort writes the default once and draws what the service kept
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE).length,
     1,
+  );
+});
+
+test("a model offering two windows draws a context row over the two, its whole window the default and saying what that costs, where the standard one is chosen and kept through an effort change; a model with one draws none", async () => {
+  catalog = WINDOWED;
+  stored = { model: "openai/gpt-6.1-sol", effort: "low" };
+  const page = await mount();
+  const segment = (label: string) =>
+    [...page.querySelectorAll<HTMLElement>(".settings-segment")].find(
+      (each) => each.textContent === label,
+    );
+  assert.deepEqual(efforts(page), [
+    ["Low", "true"],
+    ["Extra high", "false"],
+    ["272K", "false"],
+    ["1M", "true"],
+  ]);
+  assert.ok(page.textContent.includes("On 1M, prompts over 272K tokens cost 2× for input."));
+
+  act(() => segment("272K")?.click());
+  await settle();
+  assert.deepEqual(stored, {
+    model: "openai/gpt-6.1-sol",
+    effort: "low",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  });
+  act(() => segment("Extra high")?.click());
+  await settle();
+  assert.deepEqual(stored, {
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  });
+  assert.deepEqual(efforts(page).slice(2), [
+    ["272K", "true"],
+    ["1M", "false"],
+  ]);
+  act(() => segment("1M")?.click());
+  await settle();
+  assert.deepEqual(stored, { model: "openai/gpt-6.1-sol", effort: "xhigh" });
+
+  stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
+  const other = await mount();
+  assert.equal(
+    [...other.querySelectorAll(".settings-segment")].some((each) => each.textContent === "1M"),
+    false,
   );
 });
 
