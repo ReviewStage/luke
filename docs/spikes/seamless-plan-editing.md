@@ -226,23 +226,78 @@ the lazy-load scripts are beside `measure.mjs` in
    that is a direct child (visible on "as a **member**" in the screenshots).
    This is a small CSS fix to mark the label by class.
 
+## Follow-up: an off-the-shelf Markdown layer instead of ours
+
+The hand-rolled part that breeds edge cases is the Markdown bridge
+(`field-markdown.ts`), together with the input rules and keymaps beside it. A
+second round measured four libraries that would replace it, with the
+same edge cases opened in each editor and read back, once untouched and once with
+one character typed (`apps/desktop/src/renderer/spike/libs/`, raw results in
+the PR's round-trip table). The sizes are against the same `main` build
+(which has since moved to #2086, baseline 733,811, with a lazy `file-tree.js`
+bundle beside `whiteboard.js`).
+
+| Edited paragraph holds | Ours | **Milkdown 7.22** | TipTap 3.31 + markdown, task list, table, image | prosemirror-markdown |
+| --- | --- | --- | --- | --- |
+| `_em_`, `__strong__`, soft wrap | normalised to `*em*`, `**strong**` | **kept as written** | normalised | normalised, wrap joined |
+| `- [ ]` task list | **checkboxes dropped** | kept | kept | **escaped, broken** |
+| `![image](…)` | **escaped, broken** | kept | needs `inline: true` | kept |
+| `<kbd>` inline HTML | **escaped, broken** | kept | **stripped** | kept |
+| Footnote `[^1]` | **escaped, broken** | kept | **escaped, broken** | **escaped, broken** |
+| `[text][ref]` | **escaped, broken** | inlined to `[text](url)` | inlined | inlined |
+| Table | kept, not editable | kept, editable | re-padded | **flattened to one line** |
+| `-` bullets | kept | printed as `*` (a printer option) | kept | printed as `*` |
+| `renderer.js` Δ gz | +72,819 | +107,871 | +160,195 | +114,655 |
+| As a lazy bundle gz | 99,389 | 139,627 | 158,803 | 114,366 |
+
+MDXEditor (Lexical, Markdown-first) measured +247,555 gz and was not taken
+further. BlockNote stores blocks and exports Markdown lossily, so it was
+ruled out.
+
+**Milkdown is the right replacement.** It is ProseMirror with remark as its
+Markdown layer, the same parser `react-markdown` and `remark-gfm` already
+use for the read view. So the editor and the drawn document agree on what a
+field's Markdown means by construction, and the long tail (task lists,
+images, HTML, footnotes, tables) survives an edit. It shares the renderer's
+remark and micromark, which is why it costs less inside the bundle than as a
+lazy bundle. What it removes from our code: the Markdown bridge, the input
+rules, the text-field keymaps, and the paste handling (its commonmark and gfm
+presets and clipboard plugin). Most of the source preservation can go too:
+set the printer's options to the notetaker's style (`-` bullets), or
+normalise stored fields once with the same remark printer on the service.
+
+What stays ours either way, because no library knows the plan:
+
+- the rule editor's Given/When/Then schema, on the ProseMirror that Milkdown
+  re-exports, at no extra bytes;
+- the list fields as one bullet list, and the assumptions as plain text;
+- the glue to `plan-field-editor-model.ts`.
+
+The risks are a smaller community than TipTap's and one lead maintainer, on a
+major (v7) that has been stable for years. It is MIT licensed.
+
 ## Recommendation
 
-**Minimal ProseMirror, one editor per field, our mdast bridge with
-untouched-block preservation, shipped as a lazy `field-editor.js` bundle.**
-Not TipTap: it is the same engine plus 60 KB gz of features this editor does
-not use.
+**Milkdown for the text fields (revised after the follow-up above), one
+editor per field, with the rule and list editors on the ProseMirror it
+re-exports, and no heading in any editor.** The first round's own mdast
+bridge was smaller (99 KB lazy, against Milkdown's 140 KB) but broke five of
+the long-tail cases on an edit. Each of those is a fix we would own forever,
+and Milkdown already handles them with the read view's own parser. Not TipTap:
+it is larger, still loses inline HTML and footnotes, and its Markdown parser
+(`marked`) is not the one the read view draws with.
 
 **Bundle approval: needed in either form, and Dean should pick.**
 
-- **Lazy (recommended).** `renderer.js` does not move (a few hundred bytes of
-  door). A new budget entry, `renderer/field-editor.js` at ~99 KB gz, is
-  added beside `renderer/whiteboard.js`. That is a new bundle's first
-  baseline, not a move of the renderer's, but it is still a recorded number
-  Dean should OK.
-- **In `renderer.js`.** Simpler, with no loader, but +72.7 KB gz takes the
-  renderer to ~787 KB, over the ceiling by 53.6 KB. That needs a **baseline
-  move** under CLAUDE.md's rule, which Dean has to approve.
+- **Lazy (recommended), like `whiteboard.js` and `file-tree.js`.**
+  `renderer.js` does not move (a few hundred bytes of door). A new budget
+  entry, `renderer/field-editor.js` at ~140 KB gz, is a new bundle's first
+  baseline rather than a move of the renderer's, but it is still a recorded
+  number Dean should OK.
+- **In `renderer.js`.** Simpler, with no loader, but about +108 KB gz. That
+  needs a **renderer baseline move** under CLAUDE.md's rule. The spike branch
+  records one (787,092, for the first round's editor) only so the branch
+  builds.
 
 ## Migration plan
 
@@ -255,9 +310,10 @@ each falls back to today's editor.
    nothing else here does. Test: a long-plan typing test that counts no
    re-render of untouched units through their public output; the label
    colour by class.
-2. **`field-editor.js`: a ProseMirror field editor as a bundle of its own.**
-   M, ~700 lines with tests. `pm-mount.ts`, the three schemas, the mdast
-   bridge with source preservation, a `contract.ts` mirroring
+2. **`field-editor.js`: a Milkdown field editor as a bundle of its own.**
+   M, ~500 lines with tests. Milkdown's commonmark and gfm presets with the
+   heading node left out and the printer set to the notetaker's style, the
+   rule and list schemas on its ProseMirror, a `contract.ts` mirroring
    `whiteboard/contract.ts`, the `build.mjs` entry, and the new budget entry
    (**Dean's OK**). Tests in vitest with no DOM for the round trips: open a
    field, change nothing, get the same bytes; touch one block, get one block

@@ -306,7 +306,7 @@ export interface FieldEditorProps {
 export function mountFieldEditor(
   host: HTMLElement,
   props: FieldEditorProps,
-): { destroy: () => void } {
+): { destroy: () => void; view: EditorView } {
   const { value, at, label, className, onDraft, onFinish } = props;
   const schema = schemaOf(value.kind);
   const { doc, sources } = docOf(value);
@@ -346,5 +346,5 @@ export function mountFieldEditor(
       : TextSelection.near(view.state.doc.resolve(pos.pos));
   view.dispatch(view.state.tr.setSelection(selection));
   view.focus();
-  return { destroy: () => view.destroy() };
+  return { destroy: () => view.destroy(), view };
 }
