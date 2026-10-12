@@ -31,6 +31,9 @@ import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
  * as the revision it moved on. Everything here is pure.
  */
 
+/** A section as a version compares it: its heading and its words, wherever they stood. */
+type SectionWords = Pick<PlanSection, "heading" | "text">;
+
 /** How a unit or an assumption of a version stands against the plan it is compared with. */
 export const VERSION_CHANGE = {
   SAME: "same",
@@ -199,7 +202,7 @@ function readerRuns(changes: readonly WordChange[]): readonly WordChange[] {
  * field's placeholder giving way to nothing, as a section of the template's
  * fields does when the plan becomes one document.
  */
-function pairedUnit(base: string, shown: PlanSection): VersionUnit {
+function pairedUnit(base: string, shown: SectionWords): VersionUnit {
   const key = shown.heading;
   if (base === shown.text) {
     return { key, words: shown.text, change: VERSION_CHANGE.SAME, marks: [] };
@@ -218,7 +221,7 @@ function pairedUnit(base: string, shown: PlanSection): VersionUnit {
 
 /** A unit only one plan holds, drawn whole as added or struck. */
 function loneUnit(
-  section: PlanSection,
+  section: SectionWords,
   change: typeof VERSION_CHANGE.ADDED | typeof VERSION_CHANGE.REMOVED,
 ) {
   return { key: section.heading, words: section.text, change, marks: [] } satisfies VersionUnit;
@@ -230,14 +233,17 @@ function loneUnit(
  * its place are paired one for one, so a section that took another's place
  * reads as one unit changed rather than one gone and one new.
  */
-function unitsAgainst(base: readonly PlanSection[], shown: readonly PlanSection[]): VersionUnit[] {
-  const headingOf = (section: PlanSection) => section.heading;
+function unitsAgainst(
+  base: readonly SectionWords[],
+  shown: readonly SectionWords[],
+): VersionUnit[] {
+  const headingOf = (section: SectionWords) => section.heading;
   const runs = diffArrays(base.map(headingOf), shown.map(headingOf));
   const units: VersionUnit[] = [];
   let atBase = 0;
   let atShown = 0;
-  let struck: PlanSection[] = [];
-  const settle = (written: readonly PlanSection[]) => {
+  let struck: SectionWords[] = [];
+  const settle = (written: readonly SectionWords[]) => {
     const paired = Math.min(struck.length, written.length);
     written.slice(0, paired).forEach((section, at) => {
       units.push(pairedUnit(struck[at]?.text ?? "", section));
@@ -287,7 +293,7 @@ function assumptionsAgainst(base: PlanDocument, shown: PlanDocument): VersionAss
 }
 
 /** An assumptions list as the section a document holds it in: its heading over one item a line, or its heading alone while it is empty. */
-function assumptionsSection(document: PlanDocument): PlanSection {
+function assumptionsSection(document: PlanDocument): SectionWords {
   const heading = PLAN_HEADING.ASSUMPTIONS;
   const items = document.assumptions.map(({ text }) => `- ${text.replace(WHITESPACE_RUN, " ")}`);
   const blocks = [`## ${heading}`, ...(items.length === 0 ? [] : [items.join("\n")])];
@@ -315,7 +321,7 @@ const OPTIONAL_FIELD_HEADINGS: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether a section is the `# title` line a body of the template's fields opens with, alone. */
-function isTitleLine(section: PlanSection | undefined, title: string): boolean {
+function isTitleLine(section: SectionWords | undefined, title: string): boolean {
   return section?.text === `# ${title.replace(WHITESPACE_RUN, " ").trim()}`;
 }
 
@@ -326,7 +332,7 @@ function isTitleLine(section: PlanSection | undefined, title: string): boolean {
  * Note that we read the whole shape and not the title line alone, because a
  * document may open with a section of its own named as the plan is.
  */
-function isFieldBody(sections: readonly PlanSection[], title: string): boolean {
+function isFieldBody(sections: readonly SectionWords[], title: string): boolean {
   const [first, ...rest] = sections;
   if (!isTitleLine(first, title)) return false;
   const headings = rest.map((section) => section.heading);
@@ -348,7 +354,7 @@ function isFieldBody(sections: readonly PlanSection[], title: string): boolean {
  * document would. A document's own revision has no list, so one with no
  * list is read as the fields' only where its whole shape is theirs.
  */
-function documentSections(document: PlanDocument, title: string): readonly PlanSection[] {
+function documentSections(document: PlanDocument, title: string): readonly SectionWords[] {
   const sections = planSections(document.body);
   const fielded = document.assumptions.length > 0 || isFieldBody(sections, title);
   if (!fielded) return sections;
