@@ -1,3 +1,7 @@
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
@@ -42,6 +46,22 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
 const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
 
 /**
+ * The files eve takes on a message: the images and PDFs the message route
+ * admits, no larger than the largest of them, where eve's default takes 25
+ * MB of anything. A text file never reaches eve as a file, since the route
+ * inlines it as text (`attached-files.ts`).
+ */
+const UPLOAD_POLICY = {
+  maxBytes: CODING_AGENT_BOUNDS.MAX_PDF_BYTES,
+  allowedMediaTypes: [
+    CODING_AGENT_ATTACHMENT_TYPE.PNG,
+    CODING_AGENT_ATTACHMENT_TYPE.JPEG,
+    CODING_AGENT_ATTACHMENT_TYPE.WEBP,
+    CODING_AGENT_ATTACHMENT_TYPE.PDF,
+  ],
+} as const;
+
+/**
  * The two rows the deployment is admitted for here, each the typed line
  * alone, because a coding agent has no spoken turn. The follow-up is a
  * message the voice brain sends an agent, delivered exactly as one the
@@ -84,6 +104,7 @@ export function coderChannelInput(
       ownership,
     ),
     turnPolicy: TURN_POLICY,
+    uploadPolicy: UPLOAD_POLICY,
     onMessage: (ctx) => ({ auth: messageAuth(ctx) }),
   };
 }

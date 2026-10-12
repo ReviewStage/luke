@@ -55,6 +55,18 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TODOS: 40,
   /** The most characters one to-do may spell: a line of the list, not a paragraph. */
   MAX_TODO_CHARS: 300,
+  /** The most files one message or Start may carry. */
+  MAX_ATTACHMENTS: 10,
+  /** The most characters an attached file's name may spell: its own name, never a path. */
+  MAX_ATTACHMENT_NAME_CHARS: 255,
+  /** The most bytes one image may hold as it travels; the desktop re-encodes a larger one smaller. */
+  MAX_IMAGE_BYTES: 1_500_000,
+  /** The most bytes one PDF may hold. */
+  MAX_PDF_BYTES: 3_000_000,
+  /** The most bytes one text file may hold: about 25,000 tokens of code, inlined whole for the model. */
+  MAX_TEXT_BYTES: 100_000,
+  /** The most bytes every file of one message holds together, which base64 grows by a third and which stays under a function's request body limit. */
+  MAX_ATTACHMENTS_BYTES: 3_000_000,
 } as const;
 
 /**
@@ -117,6 +129,102 @@ export const CODING_AGENT_FAILURE = {
 
 export type CodingAgentFailure = (typeof CODING_AGENT_FAILURE)[keyof typeof CODING_AGENT_FAILURE];
 
+/**
+ * The files a message may carry, by the media type each travels as: an
+ * image or a PDF, which the model reads as a file, or a text file of any
+ * extension, which travels as its UTF-8 bytes and is inlined for the model
+ * as fenced text under its name.
+ */
+export const CODING_AGENT_ATTACHMENT_TYPE = {
+  PNG: "image/png",
+  JPEG: "image/jpeg",
+  WEBP: "image/webp",
+  PDF: "application/pdf",
+  TEXT: "text/plain",
+} as const;
+
+export type CodingAgentAttachmentType =
+  (typeof CODING_AGENT_ATTACHMENT_TYPE)[keyof typeof CODING_AGENT_ATTACHMENT_TYPE];
+
+/** The most bytes one file of each type may hold. */
+const CODING_AGENT_ATTACHMENT_BYTES = {
+  [CODING_AGENT_ATTACHMENT_TYPE.PNG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.JPEG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.WEBP]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.PDF]: CODING_AGENT_BOUNDS.MAX_PDF_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.TEXT]: CODING_AGENT_BOUNDS.MAX_TEXT_BYTES,
+} as const satisfies Record<CodingAgentAttachmentType, number>;
+
+/** The characters base64 spells a count of bytes in, padded, as an attachment's data carries them. */
+export function base64Chars(bytes: number): number {
+  return 4 * Math.ceil(bytes / 3);
+}
+
+/** The bytes standard padded base64 spells, as an attachment's data carries them. */
+function base64Bytes(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor(base64.length / 4) * 3 - padding;
+}
+
+/** A file's name on one line, which is how the model reads it, under its heading. */
+const ONE_LINE_PATTERN = /^[^\r\n]*$/u;
+
+/** Standard base64, padded, with no data-URL prefix and no line breaks. */
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
+
+/** Whether base64 spells UTF-8 text, as a text file must to be inlined for the model. */
+function spellsUtf8(base64: string): boolean {
+  try {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a file is within its type's bound and, where it is text, spells UTF-8. */
+function attachmentIsReadable(attachment: {
+  readonly mediaType: CodingAgentAttachmentType;
+  readonly data: string;
+}): boolean {
+  if (attachment.data.length > base64Chars(CODING_AGENT_ATTACHMENT_BYTES[attachment.mediaType])) {
+    return false;
+  }
+  return attachment.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT || spellsUtf8(attachment.data);
+}
+
+/**
+ * One file a message carries: its own name on one line, never a path; the type it
+ * travels as; and its bytes in base64, bounded by its type, a text file's
+ * spelling UTF-8. Nothing beside it says where on the developer's machine
+ * it came from.
+ */
+const codingAgentAttachmentSchema = EffectSchema.Struct({
+  name: EffectSchema.Trim.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+    EffectSchema.isPattern(ONE_LINE_PATTERN),
+  ),
+  mediaType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+  data: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isPattern(BASE64_PATTERN),
+  ),
+}).check(EffectSchema.makeFilter(attachmentIsReadable));
+
+export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
+
+/** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
+const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
+  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
+  EffectSchema.makeFilter(
+    (attachments) =>
+      attachments.reduce((sum, attachment) => sum + base64Bytes(attachment.data), 0) <=
+      CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
+  ),
+);
+
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
@@ -128,7 +236,8 @@ function trimmedText(maximumChars: number) {
  * them; both or neither, since a choice is one thing, and the context
  * window beside them where it is the standard one. A task, where the
  * developer wrote one, is the agent's first message in the plan's place,
- * bounded as a message is; with none, the agent is handed the plan.
+ * bounded as a message is, with the files the developer attached to it;
+ * with none, the agent is handed the plan, and files go only with a task.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -136,13 +245,15 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
+  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
 });
 
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
 
 /**
  * Messaging an agent (POST): the developer's words, trimmed and bounded,
- * and the client's own key for this one send, which a retry carries again
+ * the files they attached, where they did, and the client's own key for
+ * this one send, which a retry carries again
  * so the service answers what the first send did rather than sending the
  * words a second time. The message steers the turn under way, so the model
  * sees it at its next step and a call still generating is cut short and
@@ -153,6 +264,7 @@ export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
 export const codingAgentMessageRequestSchema = EffectSchema.Struct({
   text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
   clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
 });
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;

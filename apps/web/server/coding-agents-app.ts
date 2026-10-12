@@ -1,4 +1,5 @@
 import {
+  base64Chars,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
@@ -161,14 +162,21 @@ const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
 const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
 
-/** A Start names a key, a choice, and a task at most: the task's bound at JSON's widest escape, and room for the rest. */
-const MAXIMUM_START_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 4_096;
+/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
+const MAXIMUM_ATTACHMENTS_BODY_BYTES =
+  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
+  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
+
+/** A Start names a key, a choice, and a task with its files at most: the task's bound at JSON's widest escape, the files, and room for the rest. */
+const MAXIMUM_START_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** A change names a model, an effort, and a window, or a title, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
-/** A message is its words and a key: the bound's characters at JSON's widest escape, and room for the keys around them. */
-const MAXIMUM_MESSAGE_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1_024;
+/** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
+const MAXIMUM_MESSAGE_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
 
 export interface CodingAgentsAppSeams {
   resolveUserId: UserIdResolver;
@@ -327,12 +335,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, task } = asked.success;
+  const { idempotencyKey, model, effort, contextWindow, task, attachments } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
-  // and a window without them is a window of no model.
+  // and a window without them is a window of no model; files go only with a task.
   if (
     (model === undefined) !== (effort === undefined) ||
-    (contextWindow !== undefined && model === undefined)
+    (contextWindow !== undefined && model === undefined) ||
+    (attachments !== undefined && task === undefined)
   ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
@@ -341,7 +350,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
       : undefined;
   const { agent, created } = yield* choiceOrInvalid(
-    startCodingAgent(eveFor(seams, request), userId, { planId, idempotencyKey, choice, task }),
+    startCodingAgent(eveFor(seams, request), userId, {
+      planId,
+      idempotencyKey,
+      choice,
+      task,
+      attachments,
+    }),
   );
   if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });

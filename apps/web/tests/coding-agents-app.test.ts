@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
+  base64Chars,
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -484,6 +485,48 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             (each) => each.brief,
           ),
           [CODING_AGENT_BRIEF.TASK],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's files open the session with it, the words first and each file after them, and files with no task to go with are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const shot = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" };
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, { idempotencyKey: randomUUID(), attachments: [shot] }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, 0);
+
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              task: "Fix what this shows.",
+              attachments: [shot],
+            }),
+          ),
+        );
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [
+            [
+              { type: "text", text: "Fix what this shows." },
+              {
+                type: "file",
+                data: "data:image/png;base64,iVBORw0KGgo=",
+                mediaType: "image/png",
+                filename: "shot.png",
+              },
+            ],
+          ],
         );
       }),
   );
@@ -2167,6 +2210,139 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           "Use the helper.",
           "Use the helper.",
         ]);
+      }),
+  );
+
+  it.effect(
+    "a message's files go with its words: eve is handed the words, each text file inlined under its name in a fence, and each image and PDF as a file part, and the line stands in the transcript with every file",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask } = yield* startedAgent(eve, { running: true });
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, {
+              text: "Match this design.",
+              clientKey: randomUUID(),
+              attachments: [
+                { name: "design.png", mediaType: "image/png", data: "iVBORw0KGgo=" },
+                { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" },
+                { name: "spec.pdf", mediaType: "application/pdf", data: "JVBERi0=" },
+              ],
+            }),
+          ),
+        );
+        assert.deepEqual(
+          eve.sent.map((sent) => sent.message.message),
+          [
+            [
+              { type: "text", text: "Match this design." },
+              { type: "text", text: "Attached file: notes.md\n```\n# Notes\n```" },
+              {
+                type: "file",
+                data: "data:image/png;base64,iVBORw0KGgo=",
+                mediaType: "image/png",
+                filename: "design.png",
+              },
+              {
+                type: "file",
+                data: "data:application/pdf;base64,JVBERi0=",
+                mediaType: "application/pdf",
+                filename: "spec.pdf",
+              },
+            ],
+          ],
+        );
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(page.messages.at(-1)?.parts, [
+          { type: "text", text: "Match this design.", state: "done" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "design.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "notes.md",
+            url: "data:text/plain;base64,IyBOb3Rlcw==",
+          },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "spec.pdf",
+            url: "data:application/pdf;base64,JVBERi0=",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a message's files are bounded: a type the route does not take, a text file that is not UTF-8, data that is not bare base64, a nameless file, a file past its type's bound, one file too many, and files past their bound together are refused and eve hears none; files at their bound together, beside words at JSON's widest escape, are taken",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask } = yield* startedAgent(eve, { running: true });
+        const png = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" };
+        const withFiles = (attachments: readonly WireBoundaryInput[], text = "See these.") =>
+          ask(messageAs(owner, agent.id, { text, clientKey: randomUUID(), attachments }));
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const refused: readonly (readonly WireBoundaryInput[])[] = [
+          [{ ...png, mediaType: "image/gif" }],
+          [{ name: "latin1.txt", mediaType: "text/plain", data: "/w==" }],
+          [{ ...png, data: `data:image/png;base64,${png.data}` }],
+          [{ ...png, name: "  " }],
+          [{ ...png, name: "two\nlines.png" }],
+          [{ ...png, data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES) + 4) }],
+          [
+            {
+              name: "big.txt",
+              mediaType: "text/plain",
+              data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_TEXT_BYTES) + 4),
+            },
+          ],
+          Array.from({ length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS + 1 }, () => png),
+          [
+            {
+              name: "spec.pdf",
+              mediaType: "application/pdf",
+              data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)),
+            },
+            png,
+          ],
+        ];
+        for (const attachments of refused) {
+          assert.deepEqual(yield* withFiles(attachments), invalid);
+        }
+        assert.deepEqual(eve.sent, []);
+
+        const widest = "\u0001".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        // The bound is on the bytes together: nine one-byte files each padded apart still fit beside the rest.
+        const atBound = [
+          {
+            name: "x".repeat(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+            mediaType: "application/pdf",
+            data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_PDF_BYTES - 9)),
+          },
+          ...Array.from({ length: 9 }, (_, index) => ({
+            name: `byte-${String(index)}.txt`,
+            mediaType: "text/plain",
+            data: "eA==",
+          })),
+        ];
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* withFiles(atBound, widest),
+        );
+        assert.equal(eve.sent.length, 1);
       }),
   );
 
