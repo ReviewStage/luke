@@ -304,13 +304,51 @@ const TREES = new Map<string, () => Response>([
   ["main:flaky", () => Response.json({ message: "Server Error" }, { status: 502 })],
 ]);
 
+/** What the git trees API holds of the fixture repository asked recursively, by tree-ish: the root whole, and one GitHub cut short. */
+const RECURSIVE_TREES = new Map<string, () => Response>([
+  [
+    "main:",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry(".env", "blob", "100644"),
+          gitEntry(".env.d", "tree", "040000"),
+          gitEntry(".env.d/keys.pem", "blob", "100644"),
+          gitEntry("README.md", "blob", "100644"),
+          gitEntry("src", "tree", "040000"),
+          gitEntry("src/app", "tree", "040000"),
+          gitEntry("src/app/main.ts", "blob", "100644"),
+          gitEntry("src/invite.ts", "blob", "100644"),
+        ],
+        truncated: false,
+      }),
+  ],
+  [
+    "main:huge",
+    () => Response.json({ tree: [gitEntry("a.ts", "blob", "100644")], truncated: true }),
+  ],
+  [
+    "main:deep",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry("a.ts", "blob", "100644"),
+          gitEntry(`${"nested/".repeat(150)}b.ts`, "blob", "100644"),
+        ],
+        truncated: false,
+      }),
+  ],
+]);
+
 const TREES_PATH = /^\/repos\/Acme\/Relay\/git\/trees\/(.+)$/u;
 
 /** The fixture repository's files and folders, as GitHub answers them on the repository's own paths. */
 function repositoryOf(sent: SentToGitHub): Response | undefined {
-  const named = TREES_PATH.exec(new URL(sent.url).pathname);
+  const url = new URL(sent.url);
+  const named = TREES_PATH.exec(url.pathname);
   if (named === null) return contentsOf(sent);
-  const tree = TREES.get(decodeURIComponent(named[1] ?? ""));
+  const trees = url.searchParams.get("recursive") === "1" ? RECURSIVE_TREES : TREES;
+  const tree = trees.get(decodeURIComponent(named[1] ?? ""));
   return tree === undefined ? Response.json({ message: "Not Found" }, { status: 404 }) : tree();
 }
 
@@ -1712,6 +1750,70 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const huge = yield* listed("huge");
         assert.ok("folder" in huge);
         assert.equal(huge.folder.truncated, true);
+      }),
+  );
+
+  it.effect(
+    "asked recursively, a folder is listed whole in one read, each entry by its path, nothing inside a folder named as a secret file though the folder is named; one GitHub cut short, or holding a path longer than the wire carries, says so; and a recursive query other than 1 is invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const whole = (query: Record<string, string>) =>
+          ask(request(TREE, owner, { id: planId, query }));
+
+        const root = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ recursive: "1" }),
+        );
+        const AS_FILE = PLAN_TREE_ENTRY.FILE;
+        const AS_FOLDER = PLAN_TREE_ENTRY.FOLDER;
+        assert.deepEqual(root, {
+          folder: {
+            path: "",
+            repository: "Acme/Relay",
+            branch: "main",
+            entries: [
+              { name: ".env", kind: AS_FILE },
+              { name: ".env.d", kind: AS_FOLDER },
+              { name: "README.md", kind: AS_FILE },
+              { name: "src", kind: AS_FOLDER },
+              { name: "src/app", kind: AS_FOLDER },
+              { name: "src/app/main.ts", kind: AS_FILE },
+              { name: "src/invite.ts", kind: AS_FILE },
+            ],
+            truncated: false,
+          },
+        });
+        const huge = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ path: "huge", recursive: "1" }),
+        );
+        assert.ok("folder" in huge);
+        assert.equal(huge.folder.truncated, true);
+        const deep = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* whole({ path: "deep", recursive: "1" }),
+        );
+        assert.ok("folder" in deep);
+        assert.deepEqual(deep.folder.entries, [{ name: "a.ts", kind: AS_FILE }]);
+        assert.equal(
+          deep.folder.truncated,
+          true,
+          "a path longer than the wire carries is left out, and said",
+        );
+        assert.deepEqual(
+          yield* whole({ recursive: "yes" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }),
   );
 

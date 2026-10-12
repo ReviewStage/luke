@@ -469,7 +469,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningTree: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_TREE, { planId: params.planId, path: params.path }),
+        client.call(GATEWAY_METHOD.PLANNING_TREE, {
+          planId: params.planId,
+          path: params.path,
+          ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
+        }),
         (answer): PlanningTreeAnswer =>
           (answer.ok
             ? Result.getOrUndefined(

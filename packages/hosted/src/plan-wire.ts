@@ -673,16 +673,25 @@ export const PLAN_TREE_ENTRY = {
 export const PLAN_TREE_BOUNDS = {
   /** The most entries one folder's listing carries; a folder holding more is listed to here and says it was cut. */
   MAX_ENTRIES: 5_000,
+  /** The most entries a listing of everything under a folder carries, which the tree's search reads; one holding more is listed to here and says it was cut. */
+  MAX_RECURSIVE_ENTRIES: 50_000,
 } as const;
 
-/** One folder of the plan's repository, as the File tab's tree asks it (GET `/api/plans/{id}/tree`): its path from the repository's root, empty for the root itself. */
+/**
+ * One folder of the plan's repository, as the File tab's tree asks it (GET
+ * `/api/plans/{id}/tree`): its path from the repository's root, empty for
+ * the root itself, and whether everything under it is asked, every entry
+ * then named by its path from the folder, as the tree's search reads the
+ * whole repository in one listing.
+ */
 export const planTreeRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
+  recursive: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type PlanTreeRequest = typeof planTreeRequestSchema.Type;
 
-/** One entry of a folder: its name within the folder, and whether it is a folder or a file. */
+/** One entry of a folder: its name within the folder, its path from the folder in a recursive listing, and whether it is a folder or a file. */
 export const planTreeEntrySchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -706,7 +715,7 @@ export const planTreeFolderSchema = EffectSchema.Struct({
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
   entries: EffectSchema.Array(planTreeEntrySchema).check(
-    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_ENTRIES),
+    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES),
   ),
   truncated: EffectSchema.Boolean,
 });

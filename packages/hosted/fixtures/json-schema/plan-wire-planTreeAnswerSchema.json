@@ -40,7 +40,7 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 5000
+              "maxItems": 50000
             },
             "truncated": {
               "type": "boolean"

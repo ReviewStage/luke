@@ -452,7 +452,7 @@ it.effect(
 );
 
 it.effect(
-  "a folder of the repository is asked by its path, the root by none, and read as the service answers it, a refusal included; a path the wire refuses is never sent",
+  "a folder of the repository is asked by its path, the root by none, everything under it with recursive, and read as the service answers it, a refusal included; a path the wire refuses is never sent",
   () =>
     Effect.gen(function* () {
       const listing = (path: string) => ({
@@ -484,10 +484,15 @@ it.effect(
       assert.deepEqual(yield* read("src/app"), listing("src/app"));
       assert.deepEqual(yield* read("gone"), { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" });
       assert.equal(yield* read("a".repeat(CODE_PATH_MAX_CHARS + 1)), undefined);
+      assert.deepEqual(
+        yield* Effect.provide(client().readTree(PLAN_ID, { path: "", recursive: true }), api.layer),
+        listing(""),
+      );
       assert.deepEqual(recordedRoutes(api.requests()), [
         `GET /api/plans/${PLAN_ID}/tree`,
         `GET /api/plans/${PLAN_ID}/tree?path=src/app`,
         `GET /api/plans/${PLAN_ID}/tree?path=gone`,
+        `GET /api/plans/${PLAN_ID}/tree?recursive=1`,
       ]);
     }),
 );

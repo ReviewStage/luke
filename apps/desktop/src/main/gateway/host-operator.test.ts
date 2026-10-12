@@ -108,6 +108,27 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
 );
 
 it.effect(
+  "a folder's listing asked whole carries recursive to the host, and one asked alone carries none",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+      yield* operator.planningTree({ planId, path: "", recursive: true });
+      yield* operator.planningTree({ planId, path: "src" });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLANNING_TREE, { planId, path: "", recursive: true }],
+          [GATEWAY_METHOD.PLANNING_TREE, { planId, path: "src" }],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "a board save carries the image of the scene to the host, and a save without one carries none",
   () =>
     Effect.gen(function* () {

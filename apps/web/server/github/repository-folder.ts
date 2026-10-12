@@ -10,6 +10,9 @@
  * segment) is asked nothing and reads as no folder. Git trees rather than
  * the contents API, because the contents API stops a folder's listing at a
  * thousand entries without saying so, and git trees says when it cut one.
+ * Asked recursively, git trees lists everything under the folder in the one
+ * read, each entry by its path from the folder, and says when it cut that
+ * short too (past a hundred thousand entries or seven megabytes).
  * The request composes over the App module's own kit, so the token leaves
  * this module no more than it leaves that one.
  */
@@ -45,7 +48,7 @@ const TreeSchema = Schema.Struct({
   truncated: Schema.Boolean,
 });
 
-/** One entry of a folder: its name, and what git holds it as. */
+/** One entry of a folder: its name, or its path from the folder in a recursive listing, and what git holds it as. */
 interface RepositoryEntry {
   readonly name: string;
   readonly type: GitEntry;
@@ -62,16 +65,22 @@ export type RepositoryFolder =
 
 const NO_FOLDER: RepositoryFolder = { found: false };
 
-/** The repository's folder at the path on the branch named, the root for an empty path, as the git trees API lists it. */
+/**
+ * The repository's folder at the path on the branch named, the root for an
+ * empty path, as the git trees API lists it: its own entries, or with
+ * `recursive` everything under it, each named by its path from the folder.
+ */
 export function readRepositoryFolder(
   token: Redacted.Redacted,
   repository: { readonly fullName: string; readonly defaultBranch: string },
   path: string,
+  recursive = false,
 ): Effect.Effect<RepositoryFolder, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     if (path !== "" && repositorySegments(path) === undefined) return NO_FOLDER;
     const treeish = encodeURIComponent(`${repository.defaultBranch}:${path}`);
-    const request = githubRead(`/repos/${repository.fullName}/git/trees/${treeish}`, token);
+    const listing = `/repos/${repository.fullName}/git/trees/${treeish}`;
+    const request = githubRead(recursive ? `${listing}?recursive=1` : listing, token);
     const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(
       Effect.gen(function* () {

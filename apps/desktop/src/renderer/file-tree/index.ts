@@ -6,7 +6,13 @@ import type {
   ReadFolder,
   RevealOptions,
 } from "./contract";
-import { browseFolders, type FolderBrowser, markAlone, repositoryPath } from "./folder-browser";
+import {
+  browseFolders,
+  type FolderBrowser,
+  markAlone,
+  repositoryPath,
+  treePath,
+} from "./folder-browser";
 
 /**
  * index.ts -- the file tree bundle: Pierre's tree mounted beside a File tab, listed a folder at a time, a file opened on its press.
@@ -30,9 +36,12 @@ import { browseFolders, type FolderBrowser, markAlone, repositoryPath } from "./
  * Each file is drawn with its type's coloured icon (Pierre's complete set),
  * and a folder holding one folder alone shares its row, as `src/main` does
  * in an editor's explorer. The pane's search narrows the rows to those whose
- * path holds the query, through Pierre's own search; its filter shows only
- * the files Luke showed, in a second tree of those paths alone, every folder
- * open, swapped for the repository's while it stands.
+ * path holds the query, through Pierre's own search: over the whole
+ * repository, in a tree of its own, once the pane has handed its every
+ * entry, and over the folders listed so far until then. Its filter shows
+ * only the files Luke showed, in a tree of those paths alone, every folder
+ * open. Each stands in the repository's place while it is asked for, so the
+ * folders opened there are as they were when it is let go.
  */
 
 /** What Pierre marks a row with: that it is an entry, and that it is a file. */
@@ -118,6 +127,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let unheard: (() => void) | undefined;
   let shown: View | undefined;
   let only: readonly string[] | undefined;
+  let whole: View | undefined;
+  let everything: readonly string[] | undefined;
   let query = "";
   let marked: string | undefined;
   let taken = false;
@@ -128,20 +139,34 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const cut = notice(CUT_SHORT, undefined);
   cut.classList.add("file-tree-cut");
 
-  // The tree standing now, the files Luke showed while the filter is on,
-  // drawn with the search held, or the words saying it matches nothing.
-  const present = () => {
-    if (browse === undefined) return;
-    if (only !== undefined && shown === undefined) {
-      shown = viewOf(only, "open");
-      if (marked !== undefined) markAlone(shown.tree, marked, false);
-      browse.frame.after(shown.frame);
+  // The tree standing now, drawn with the search held: the files Luke
+  // showed while the filter is on, the whole repository while a search
+  // stands and it was handed, the folders listed so far otherwise; or the
+  // words saying the search matches nothing.
+  const standing = (): View | undefined => {
+    if (browse === undefined) return undefined;
+    if (only !== undefined) {
+      shown ??= framed(viewOf(only, "open"));
+      return shown;
     }
-    const view = only === undefined ? browse : (shown ?? browse);
+    if (query.trim() === "" || everything === undefined) return browse;
+    whole ??= framed(viewOf(everything, "closed"));
+    return whole;
+  };
+  // A view made after the tree was drawn joins it, the tab's file marked.
+  const framed = (view: View): View => {
+    if (marked !== undefined) markAlone(view.tree, marked, false);
+    empty.before(view.frame);
+    return view;
+  };
+  const present = () => {
+    const view = standing();
+    if (view === undefined) return;
     view.tree.setSearch(query === "" ? null : query);
     const matchless = query.trim() !== "" && view.tree.getSearchMatchingPaths().length === 0;
-    browse.frame.hidden = view !== browse || matchless;
-    if (shown !== undefined) shown.frame.hidden = view !== shown || matchless;
+    for (const each of [browse, shown, whole]) {
+      if (each !== undefined) each.frame.hidden = each !== view || matchless;
+    }
     empty.hidden = !matchless;
   };
 
@@ -184,8 +209,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
   const onKey = (event: KeyboardEvent) => {
-    const view = only === undefined ? browse : shown;
-    const path = view?.tree.getFocusedPath() ?? null;
+    const path = standing()?.tree.getFocusedPath() ?? null;
     if (event.key !== "Enter" || path === null || path.endsWith("/")) return;
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
@@ -195,8 +219,11 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
 
   return {
     reveal: (path, options) => {
-      if (!options.folder) marked = path;
-      if (!options.folder && shown !== undefined) markAlone(shown.tree, path, false);
+      if (!options.folder) {
+        marked = path;
+        for (const view of [shown, whole])
+          if (view !== undefined) markAlone(view.tree, path, false);
+      }
       if (browser === undefined) waiting.set(options.folder, { path, options });
       else browser.reveal(path, options).catch(() => undefined);
     },
@@ -211,14 +238,20 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
       only = paths;
       present();
     },
+    within: (entries) => {
+      whole?.tree.cleanUp();
+      whole?.frame.remove();
+      whole = undefined;
+      everything = entries.map((entry) => treePath(entry.name, entry.folder));
+      present();
+    },
     unmount: () => {
       taken = true;
       host.removeEventListener("click", onClick);
       host.removeEventListener("keydown", onKey);
       unheard?.();
       browser?.dispose();
-      browse?.tree.cleanUp();
-      shown?.tree.cleanUp();
+      for (const view of [browse, shown, whole]) view?.tree.cleanUp();
     },
   };
 }

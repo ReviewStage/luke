@@ -111,11 +111,16 @@ export function planFilePath(
   return `${planPath(planId)}/file?${query}`;
 }
 
-/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one. */
-export function planTreePath(planId: string, folder: { readonly path: string }): string {
+/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
+export function planTreePath(
+  planId: string,
+  folder: { readonly path: string; readonly recursive?: boolean },
+): string {
   const path = `${planPath(planId)}/tree`;
-  if (folder.path === "") return path;
-  return `${path}?${new URLSearchParams({ path: folder.path })}`;
+  const query = new URLSearchParams();
+  if (folder.path !== "") query.set("path", folder.path);
+  if (folder.recursive === true) query.set("recursive", "1");
+  return query.size === 0 ? path : `${path}?${query}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

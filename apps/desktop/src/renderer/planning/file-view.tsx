@@ -1,4 +1,4 @@
-import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { PanelRightIcon } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import type { FileTreeHandle } from "../file-tree/contract";
@@ -57,6 +57,7 @@ export function FileView({
   shownCode,
   readFile,
   readFolder,
+  readWhole,
   openGitHub,
   treeOpen,
   onToggleTree,
@@ -73,6 +74,8 @@ export function FileView({
   readFile: ReadFileWindow;
   /** Lists one folder of the repository through the service. */
   readFolder: ListFolder;
+  /** Lists the whole repository in one read through the service, which the tree's search narrows. */
+  readWhole: () => Promise<PlanningTreeAnswer>;
   openGitHub: (url: string) => void;
   treeOpen: boolean;
   onToggleTree: () => void;
@@ -84,10 +87,18 @@ export function FileView({
   // door neither forgets the listings nor lists the root again.
   const latestRead = useRef(readFolder);
   latestRead.current = readFolder;
+  const latestWhole = useRef(readWhole);
+  latestWhole.current = readWhole;
   const listFolder = useMemo(
     () => keptListings((path) => latestRead.current(path)),
     [planId, repository],
   );
+  // The whole repository is kept beside the folders, read once however many
+  // File tabs search it.
+  const listWhole = useMemo(() => {
+    const kept = keptListings(() => latestWhole.current());
+    return () => kept("");
+  }, [planId, repository]);
 
   // Note that the list is kept while the plan shows nothing new, because
   // a fresh one would have the tree draw its filter anew.
@@ -145,6 +156,7 @@ export function FileView({
           file={file.path}
           shown={shown}
           listFolder={listFolder}
+          readWhole={listWhole}
           onOpen={onBrowse}
           onMounted={onMounted}
         />

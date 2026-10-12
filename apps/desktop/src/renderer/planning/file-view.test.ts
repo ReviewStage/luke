@@ -33,6 +33,10 @@ window.lukeFileTree = {
         tree.reveals.push(`${path}${options.folder ? "/" : ""}${options.focus ? " focused" : ""}`),
       search: (query) => tree.narrowed.push(`search "${query}"`),
       only: (paths) => tree.narrowed.push(`only ${paths?.join(", ") ?? "all"}`),
+      within: (entries) =>
+        tree.narrowed.push(
+          `within ${entries.map((entry) => `${entry.name}${entry.folder ? "/" : ""}`).join(", ")}`,
+        ),
       unmount: () => undefined,
     };
   },
@@ -74,6 +78,22 @@ const FOLDERS = new Map<string, PlanningTreeAnswer>([
   ["flaky", { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE }],
 ]);
 
+/** The whole repository listed in one read, as the search asks it, or cut short. */
+function wholeListing(truncated: boolean): PlanningTreeAnswer {
+  return {
+    folder: {
+      path: "",
+      repository: REPOSITORY,
+      branch: "main",
+      entries: [
+        { name: "apps", kind: PLAN_TREE_ENTRY.FOLDER },
+        { name: FILE, kind: PLAN_TREE_ENTRY.FILE },
+      ],
+      truncated,
+    },
+  };
+}
+
 /** A code Luke showed on the plan, of the file and repository given. */
 function showing(path: string, repository: string): PlanCodeShowing {
   return {
@@ -85,7 +105,10 @@ function showing(path: string, repository: string): PlanCodeShowing {
 }
 
 /** The view over a file, its tree closed, every folder listed and every file browsed to written down. */
-function mounted(shownCode: readonly PlanCodeShowing[] = []) {
+function mounted(
+  shownCode: readonly PlanCodeShowing[] = [],
+  whole: () => Promise<PlanningTreeAnswer> = () => Promise.resolve(wholeListing(false)),
+) {
   const listed: string[] = [];
   const browsed: string[] = [];
   const container = document.createElement("div");
@@ -108,6 +131,7 @@ function mounted(shownCode: readonly PlanCodeShowing[] = []) {
         listed.push(path);
         return Promise.resolve(FOLDERS.get(path) ?? { failure: "unanswered" as const });
       },
+      readWhole: whole,
       openGitHub: () => undefined,
       treeOpen,
       onToggleTree: () => setTreeOpen((was) => !was),
@@ -242,7 +266,10 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
   const filter = view.container.querySelector('[aria-label="Only files Luke showed"]');
   await view.press(filter);
   assert.equal(filter?.getAttribute("aria-pressed"), "true");
-  assert.equal(tree.narrowed.at(-1), `only ${FILE}, apps/web/README.md`);
+  assert.equal(
+    tree.narrowed.findLast((asked) => asked.startsWith("only")),
+    `only ${FILE}, apps/web/README.md`,
+  );
 
   const pane = view.container.querySelector(".file-tree-pane");
   act(() => {
@@ -274,4 +301,78 @@ test("the filter offers nothing while Luke has shown no file of the repository",
     '[aria-label="Only files Luke showed"]',
   );
   assert.equal(filter?.disabled, true);
+});
+
+test("the first search reads the whole repository once and hands the tree its every entry; a listing cut short leaves the search on the folders opened, as the empty field says", async () => {
+  const typeInto = (field: HTMLInputElement, words: string) => {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    act(() => {
+      setValue?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const fieldOf = (container: HTMLElement) => {
+    const field = container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
+    assert.ok(field, "the tree has a search field");
+    return field;
+  };
+
+  const whole = mounted();
+  await whole.draw(FILE);
+  await whole.press(whole.container.querySelector(".file-tree-toggle"));
+  assert.equal(fieldOf(whole.container).placeholder, "Search files");
+  typeInto(fieldOf(whole.container), "plans");
+  await whole.draw(FILE);
+  typeInto(fieldOf(whole.container), "plans-app");
+  await whole.draw(FILE);
+  assert.deepEqual(
+    tree.narrowed.filter((asked) => asked.startsWith("within")),
+    [`within apps/, ${FILE}`],
+  );
+  act(() => roots.pop()?.unmount());
+
+  tree.narrowed = [];
+  const cut = mounted([], () => Promise.resolve(wholeListing(true)));
+  await cut.draw(FILE);
+  await cut.press(cut.container.querySelector(".file-tree-toggle"));
+  typeInto(fieldOf(cut.container), "plans");
+  await cut.draw(FILE);
+  typeInto(fieldOf(cut.container), "");
+  await cut.draw(FILE);
+  assert.equal(fieldOf(cut.container).placeholder, "Search opened folders");
+  assert.deepEqual(
+    tree.narrowed.filter((asked) => asked.startsWith("within")),
+    [],
+  );
+});
+
+test("a whole read that did not land leaves the search on the folders opened without asking again until the field is emptied and a new search begins", async () => {
+  let asked = 0;
+  const view = mounted([], () => {
+    asked += 1;
+    return Promise.resolve({ refusal: PLAN_FILE_REFUSAL.UNAVAILABLE });
+  });
+  await view.draw(FILE);
+  await view.press(view.container.querySelector(".file-tree-toggle"));
+  const field = view.container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
+  assert.ok(field, "the tree has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const type = async (words: string) => {
+    act(() => {
+      setValue?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await view.draw(FILE);
+  };
+
+  await type("plans");
+  await type("plans-app");
+  assert.equal(asked, 1, "the search standing asks once");
+  await type("");
+  await type("routes");
+  assert.equal(asked, 2, "a new search asks again");
+  assert.deepEqual(
+    tree.narrowed.filter((narrowing) => narrowing.startsWith("within")),
+    [],
+  );
 });
