@@ -57,6 +57,7 @@ export interface CodingAgentActsDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
+    | "observePublished"
     | "observePlanGone"
     | "shown"
   >;
@@ -160,7 +161,9 @@ export function codingAgentActRows(
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
-      return host.codingAgentPullRequest(params);
+      return noted(host.codingAgentPullRequest(params), (answer) => {
+        if ("pullRequest" in answer) notices.observePublished(params.agentId, answer.pullRequest);
+      });
     },
   };
 }

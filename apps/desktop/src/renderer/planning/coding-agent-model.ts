@@ -830,7 +830,9 @@ export function pullRequestStateWord(state: PullRequestState): string | undefine
 }
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
-export function pullRequestPillLabel(pullRequest: CodingAgentPullRequest): string {
+export function pullRequestPillLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "number" | "state">,
+): string {
   return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}`;
 }
 

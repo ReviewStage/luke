@@ -487,6 +487,8 @@ export interface LatestTurn {
   /** When the turn was queued, and when eve started it; null until it has. */
   readonly queuedAt: Date;
   readonly startedAt: Date | null;
+  /** When the turn answered or ended; null while it runs. */
+  readonly settledAt: Date | null;
   /** What the turn ran under and what it cost, as the row holds them; null where the row names no model, and until the turn settles. */
   readonly model: string | null;
   readonly usage: StoredTurnUsage | null;
@@ -502,6 +504,7 @@ const LatestTurnRowSchema = Schema.Struct({
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
   queuedAt: InstantColumnSchema,
   startedAt: Schema.NullOr(InstantColumnSchema),
+  settledAt: Schema.NullOr(InstantColumnSchema),
   model: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(TurnUsageColumnSchema),
 });
@@ -522,6 +525,7 @@ const findLatestTurns = SqlSchema.findAll({
         cancelRequestedAt: turns.cancelRequestedAt,
         queuedAt: turns.queuedAt,
         startedAt: turns.startedAt,
+        settledAt: turns.settledAt,
         model: turns.model,
         usage: turns.usage,
       })

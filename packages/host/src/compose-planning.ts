@@ -553,11 +553,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   /**
    * Draws the pin and the archive `plan` was answered with on its row of the
    * list, and on the open document where it is the one held. Note that the
-   * held document keeps everything else it holds, because a draft drawn
-   * during a call may be ahead of the copy the service answered.
+   * row keeps what the list said of the plan's coding agents, which only the
+   * list answers, and the held document keeps everything else it holds,
+   * because a draft drawn during a call may be ahead of the copy the service
+   * answered.
    */
   function takeMarks(plan: Plan): void {
-    const plans = view.plans.map((row) => (row.id === plan.id ? summaryOf(plan) : row));
+    const plans = view.plans.map((row) =>
+      row.id !== plan.id
+        ? row
+        : {
+            ...summaryOf(plan),
+            ...(row.agents === undefined ? undefined : { agents: row.agents }),
+          },
+    );
     const held = heldPlanOf(plan.id);
     if (held === undefined) {
       write({ plans });

@@ -81,6 +81,7 @@ import {
   createCodingAgent,
   fillCodingAgentTitle,
   listCodingAgents,
+  listPublishedCodingAgents,
   readCodingAgent,
   recordCodingAgentCompaction,
   recordCodingAgentStep,
@@ -1180,6 +1181,34 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(request(AGENT_PULL_REQUEST, owner, { method: "POST", id: agent.id })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "every pull request a read of what an agent published finds is kept on the agent's row as GitHub answered it, which is what the plan list reads",
+    () =>
+      Effect.gen(function* () {
+        const pullRequest = pullRequestFixture();
+        const { owner, plan, ask } = yield* openPlan({
+          github: relayRepository({ pullRequest, pushed: true }),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+        const kept = () =>
+          Effect.map(
+            listPublishedCodingAgents(owner, [plan.id]),
+            (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
+          );
+        assert.equal(yield* kept(), null);
+
+        yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id }));
+        assert.equal((yield* kept())?.state, PULL_REQUEST_STATE.OPEN);
+
+        pullRequest.state = "closed";
+        pullRequest.merged = true;
+        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
+        yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id }));
+        assert.equal((yield* kept())?.state, PULL_REQUEST_STATE.MERGED);
       }),
   );
 

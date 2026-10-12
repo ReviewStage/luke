@@ -492,6 +492,37 @@ body,
   text-align: right;
 }
 
+/* A row's one mark leads its time, so it steps out with the time while the
+   row is hovered: a spinner, in the time's own ink, while an agent works on
+   the plan, else the pull request's glyph in GitHub's colours, open in the
+   success green, a draft in the muted ink, merged in the merged purple, and
+   red where its checks failed. The card reuses the glyphs. */
+.plan-mark-glyph {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--text-tertiary);
+  vertical-align: -1.5px; /* off-scale */
+}
+
+.sidebar-plan-time .plan-mark-glyph {
+  margin-right: var(--space-4);
+}
+
+.plan-mark-glyph[data-state="open"] {
+  color: var(--state-complete);
+}
+
+.plan-mark-glyph[data-state="merged"] {
+  color: var(--state-merged);
+}
+
+.plan-mark-glyph[data-failing="true"],
+.plan-card-failed {
+  color: var(--danger);
+}
+
 /* Pin and Archive stand in the time's slot, which is always as wide as the
    two of them, while the row is hovered or holds the keyboard: the time
    steps out and they step in over the name's first line, so the name is cut
@@ -3539,4 +3570,107 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   from {
     transform: translateX(-50%) translateY(var(--space-8));
   }
+}
+
+/* A sidebar plan's card: its name wrapped to two lines with how long ago it
+   was updated at the head's right, its repository under the name, then a
+   few lines each for its agents and its pull requests, each list under a
+   hairline, a glyph column at their start and a muted corner at their end. */
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.plan-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.plan-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.plan-card-time,
+.plan-card-corner,
+.plan-card-more {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plan-card-time,
+.plan-card-corner {
+  flex: none;
+}
+
+.plan-card-repository {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.plan-card-repository :is(.repository-picture, .account-mark) {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.plan-card-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-6) 0 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+}
+
+.plan-card-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: 12px;
+}
+
+.plan-card-glyph {
+  display: inline-flex;
+  width: 12px;
+  flex: none;
+}
+
+.plan-card-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Beside a title, the model steps back to the muted ink, its effort with it. */
+.plan-card-model,
+.plan-card-model :is(.model-label-name, .model-label-detail) {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.plan-card-state {
+  color: var(--text-tertiary);
+}
+
+.plan-card-more {
+  padding-left: calc(12px + var(--space-6));
 }

@@ -130,6 +130,7 @@ function turn(status: string, cancelRequestedAt: Date | null = null) {
     cancelRequestedAt,
     queuedAt: new Date(0),
     startedAt: null,
+    settledAt: null,
     model: null,
     usage: null,
   };

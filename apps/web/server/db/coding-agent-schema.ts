@@ -1,4 +1,8 @@
-import { CONTEXT_WINDOW, type ContextWindow } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  type ContextWindow,
+} from "@sidecar/hosted/coding-agent-wire";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -28,8 +32,11 @@ import { conversations } from "./storage-schema.js";
  * newest model step of the agent's own conversation, with the estimates of
  * what it read that no provider counts apart (`StoredAgentStep`), and
  * `compacted_at` when eve last compacted that conversation; both are null
- * until it happens, and both are what the tab's context ring reads. There
- * is no commit column: the
+ * until it happens, and both are what the tab's context ring reads.
+ * `published` is the pull request from the agent's branch as GitHub last
+ * answered a read of it (`coder-host/published.ts`), null before a read
+ * found one; the plan list reads it so the sidebar asks GitHub nothing.
+ * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
@@ -93,6 +100,8 @@ export const codingAgent = pgTable(
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
     compactedAt: instant("compacted_at"),
+    /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
+    published: jsonb("published").$type<CodingAgentPullRequest>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },

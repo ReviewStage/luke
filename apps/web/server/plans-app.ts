@@ -38,6 +38,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
+import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanFile } from "./hosted/plan-file.js";
 import {
   PLAN_SAVE_REFUSAL,
@@ -65,7 +66,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * the edit no longer lands, with nothing saved; and a restore puts back an
  * earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
- * nothing: the list stands newest started first whatever is opened. A pin
+ * nothing: the list stands newest started first whatever is opened. Each
+ * row of the list carries what the plan's coding agents are doing and what
+ * they published, in brief, where it has any (`hosted/plan-agents.ts`). A pin
  * and an archive are changes like a rename, and the list leaves the archived
  * plans out unless `archived=include` asks for them, so a build from before
  * archiving, which never asks, draws none of them rather than all of them.
@@ -233,7 +236,9 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
     const plans = yield* hostedStoreOrUnavailable(
-      listPlans(userId, { includeArchived: listsArchived(request) }),
+      Effect.flatMap(listPlans(userId, { includeArchived: listsArchived(request) }), (listed) =>
+        withPlanAgents(userId, listed),
+      ),
     );
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans });
   }

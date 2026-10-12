@@ -7,8 +7,15 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import {
+  CHECK_SUMMARY,
+  type CheckSummary,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@sidecar/hosted/coding-agent-wire";
+import type { Plan, PlanAgentsSummary, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -435,6 +442,89 @@ function sections(container: HTMLElement): [string, string[]][] {
     [...group.querySelectorAll(".sidebar-plan-name")].map((name) => name.textContent ?? ""),
   ]);
 }
+
+/** A plan's agents in brief as the list carries them: none working and no pull request, unless the test says. */
+function agentsSummary(patch: Partial<PlanAgentsSummary> = {}): PlanAgentsSummary {
+  return { total: 1, working: 0, agents: [], pullRequestTotal: 0, pullRequests: [], ...patch };
+}
+
+/** A pull request an agent opened, where it stands as given. */
+function pullRequest(state: PullRequestState, checks: CheckSummary = CHECK_SUMMARY.PASSING) {
+  return { number: 128, title: "Invite by email", state, checks, additions: 12, deletions: 3 };
+}
+
+/** Each row's one mark, by the plan's name: what it is, where its pull request stands, and what it says to a reader. */
+function rowMarks(container: HTMLElement): [string, string | null, string | null, string | null][] {
+  return [...container.querySelectorAll<HTMLElement>(".sidebar-plan")].map((row) => {
+    const mark = row.querySelector(".sidebar-plan-time [data-plan-mark]");
+    return [
+      row.querySelector(".sidebar-plan-name")?.textContent ?? "",
+      mark?.getAttribute("data-plan-mark") ?? null,
+      mark?.getAttribute("data-state") ?? null,
+      mark?.getAttribute("aria-label") ?? null,
+    ];
+  });
+}
+
+test("a plan's row marks an agent at work, else its open, draft, or merged pull request, and nothing for a closed one or none", () => {
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        {
+          ...listedPlan("Working"),
+          agents: agentsSummary({
+            working: 1,
+            pullRequestTotal: 1,
+            pullRequests: [pullRequest(PULL_REQUEST_STATE.OPEN)],
+          }),
+        },
+        {
+          ...listedPlan("Open"),
+          agents: agentsSummary({
+            pullRequestTotal: 2,
+            pullRequests: [
+              pullRequest(PULL_REQUEST_STATE.CLOSED),
+              pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING),
+            ],
+          }),
+        },
+        {
+          ...listedPlan("Draft"),
+          agents: agentsSummary({
+            pullRequestTotal: 1,
+            pullRequests: [pullRequest(PULL_REQUEST_STATE.DRAFT)],
+          }),
+        },
+        {
+          ...listedPlan("Merged"),
+          agents: agentsSummary({
+            pullRequestTotal: 1,
+            pullRequests: [pullRequest(PULL_REQUEST_STATE.MERGED)],
+          }),
+        },
+        {
+          ...listedPlan("Closed"),
+          agents: agentsSummary({
+            pullRequestTotal: 1,
+            pullRequests: [pullRequest(PULL_REQUEST_STATE.CLOSED)],
+          }),
+        },
+        { ...listedPlan("Idle"), agents: agentsSummary() },
+        listedPlan("Untouched"),
+      ],
+    },
+  });
+
+  assert.deepEqual(rowMarks(container), [
+    ["Working", "working", null, "Agent working"],
+    ["Open", "pull-request", "open", "Pull request #128, open, checks failing"],
+    ["Draft", "pull-request", "draft", "Pull request #128, draft"],
+    ["Merged", "pull-request", "merged", "Pull request #128, merged"],
+    ["Closed", null, null, null],
+    ["Idle", null, null, null],
+    ["Untouched", null, null, null],
+  ]);
+});
 
 test("the pinned plans stand under Pinned above the rest only while any are pinned", () => {
   const flat = mount(DEAN, { plans: { plans: [listedPlan("Billing"), listedPlan("Invites")] } });

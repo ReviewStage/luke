@@ -4,7 +4,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
@@ -53,6 +57,9 @@ function fixture() {
       },
       observeModels: (models) => {
         noted.push(`models:${models.length}`);
+      },
+      observePublished: (agentId, pullRequest) => {
+        noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
       },
       observePlanGone: (planId) => {
         noted.push(`gone:${planId}`);
@@ -119,7 +126,20 @@ function fixture() {
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
-          return { repository: "acme/relay", branch: null, pullRequest: null };
+          return {
+            repository: "acme/relay",
+            branch: "luke/invites",
+            pullRequest: {
+              number: 41,
+              title: "Teammate invitations",
+              url: "https://github.com/acme/relay/pull/41",
+              state: PULL_REQUEST_STATE.OPEN,
+              checks: CHECK_SUMMARY.PASSING,
+              additions: 12,
+              deletions: 3,
+              changedFiles: 2,
+            },
+          };
         }),
     },
   });
@@ -223,6 +243,21 @@ it.effect(
         reason: ACT[ACT_KIND.CODING_AGENTS_MODELS].refusal,
       });
       assert.deepEqual(asked, []);
+    }),
+);
+
+it.effect(
+  "what an agent published is noted on its way to the panel, so the sidebar's rows can be read again",
+  () =>
+    Effect.gen(function* () {
+      const { router, noted } = fixture();
+
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST, payload: { agentId: AGENT_ID } },
+        PANEL,
+      );
+
+      assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
     }),
 );
 
