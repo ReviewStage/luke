@@ -20,6 +20,7 @@ import { planRevision } from "../db/plan-revision-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
+import { planReachableBy } from "./workspace-store.js";
 
 /**
  * plan-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.
@@ -40,8 +41,10 @@ import { InstantColumnSchema } from "./store/database.js";
  * a restore is undone by restoring the revision before it.
  *
  * A save is recorded for a plan id handed by a caller that already holds the
- * account's own row under its lock; the history is read under the account,
- * so another account's plan id reads as a plan with none.
+ * plan's row under its lock; the history is read under the account's
+ * membership of the plan's workspace, so every member reads the history any
+ * of them wrote, and a plan of a workspace the account is not in reads as a
+ * plan with none.
  */
 
 /** How the history is kept. */
@@ -183,7 +186,7 @@ const RevisionLineRowSchema = Schema.Struct({
 type LastEditRow = typeof LastEditRowSchema.Type;
 
 /**
- * A page of the account's plan's revisions, the newest first, before the one
+ * A page of the plan's revisions, the newest first, before the one
  * `before` names where it names one, with one past the page read to say
  * whether an older page stands.
  */
@@ -218,7 +221,7 @@ const findRevisionLines = SqlSchema.findAll({
       .where(
         and(
           eq(planRevision.planId, planId),
-          eq(plan.userId, userId),
+          planReachableBy(userId),
           before === null ? undefined : lt(planRevision.seq, before),
         ),
       )
@@ -233,7 +236,7 @@ const RevisionContentRowSchema = Schema.Struct({
   assumptions: Schema.Array(planAssumptionSchema),
 });
 
-/** The content of the account's plan at each revision named, with the plan's name as it stands now. */
+/** The content of the plan at each revision named, with the plan's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -254,7 +257,7 @@ const findRevisionContents = SqlSchema.findAll({
       .where(
         and(
           eq(planRevision.planId, planId),
-          eq(plan.userId, userId),
+          planReachableBy(userId),
           inArray(planRevision.seq, [...seqs]),
         ),
       ),
@@ -396,10 +399,10 @@ export function readLastEdit(
 }
 
 /**
- * A page of the account's plan's revisions, the newest first, before the
+ * A page of the plan's revisions, the newest first, before the
  * revision `before` names where it names one, and what the next older page
  * is read before where one stands; no revision for a plan with no history
- * yet, and for a plan id the account does not own.
+ * yet, and for a plan of a workspace the account is not in.
  */
 export function listRevisions(
   userId: string,
@@ -426,7 +429,7 @@ export function listRevisions(
   });
 }
 
-/** The account's plan's content at one revision; nothing where it has no such revision, or the account owns no such plan. */
+/** The plan's content at one revision; nothing where it has no such revision, or the account reaches no such plan. */
 export function readRevisionContent(
   userId: string,
   planId: string,
@@ -441,10 +444,10 @@ export function readRevisionContent(
 }
 
 /**
- * One revision of the account's plan as the History tab shows it: the plan
+ * One revision of the plan as the History tab shows it: the plan
  * after it and before it, the first revision having nothing before it, each
  * formatted under the plan's name as it stands now; nothing where the plan
- * has no such revision, or the account owns no such plan.
+ * has no such revision, or the account reaches no such plan.
  */
 export function readRevision(
   userId: string,

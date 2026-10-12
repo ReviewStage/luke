@@ -50,7 +50,7 @@ import {
   templateHeadingsOf,
 } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
-import { openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
+import { joinWorkspace, openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The named plans and their one document, through the store's public
@@ -539,6 +539,38 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           [ledger.id, relay.id],
         );
       }),
+  );
+
+  it.effect("a member lists, opens, renames, saves notes on, and deletes a teammate's plan", () =>
+    Effect.gen(function* () {
+      const starter = yield* openUser;
+      const teammate = yield* openUser;
+      const stranger = yield* openUser;
+      const started = yield* startPlan(starter, RELAY_PLAN);
+      yield* joinWorkspace(started.workspaceId, teammate);
+
+      assert.deepEqual(
+        (yield* listPlans(teammate)).map((plan) => plan.id),
+        [started.id],
+      );
+      assert.deepEqual(yield* resumedDocument(teammate, started.id), started.document);
+      const renamed = yield* updatePlan(teammate, started.id, { name: "Shared invitations" });
+      assert.deepEqual(
+        Option.map(renamed, (plan) => plan.name),
+        Option.some("Shared invitations"),
+      );
+      const saved = savedDocument(
+        yield* saveNotes(bound(teammate, started.id), notesFor(INVITATIONS_DRAFT)),
+      );
+      assert.deepEqual(yield* resumedDocument(starter, started.id), saved);
+
+      assert.deepEqual(yield* listPlans(stranger), []);
+      assert.equal(Option.isNone(yield* readPlan(stranger, started.id)), true);
+      assert.equal(yield* deletePlan(stranger, started.id), false);
+
+      assert.equal(yield* deletePlan(teammate, started.id), true);
+      assert.equal(Option.isNone(yield* readPlan(starter, started.id)), true);
+    }),
   );
 
   it.effect("a second account cannot read, write, or delete another's plan", () =>

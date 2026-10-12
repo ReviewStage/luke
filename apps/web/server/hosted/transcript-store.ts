@@ -4,7 +4,7 @@ import {
   TRANSCRIPT_PART_TYPE,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger } from "@sidecar/live";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { plan } from "../db/plan-schema.js";
@@ -13,6 +13,7 @@ import { voiceSessions, voiceTranscriptSegments } from "../db/voice-schema.js";
 import { VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
+import { reachablePlan } from "./workspace-store.js";
 
 /**
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
@@ -21,10 +22,11 @@ import { InstantColumnSchema } from "./store/database.js";
  * (`store/voice-writer.ts`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
- * whose id is its place on the call. Every statement names the
- * account beside the plan, so a plan another account owns reads as no plan,
- * exactly as in `plan-store.ts`, and a call another account made about a
- * plan of the same id is never gathered. Nothing is written here.
+ * whose id is its place on the call. The plan is read under the account's
+ * membership of its workspace, so a plan of a workspace the account is not in
+ * reads as no plan, exactly as in `plan-store.ts`; past that gate a shared
+ * plan's transcript is every member's calls about it, so the fragments are
+ * gathered by the plan alone. Nothing is written here.
  */
 
 const SPEAKER_OF_ROLE = {
@@ -34,14 +36,11 @@ const SPEAKER_OF_ROLE = {
 
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
 
-const findOwnedPlan = SqlSchema.findOneOption({
+const findReachablePlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, planId }) =>
-    db
-      .select({ id: plan.id })
-      .from(plan)
-      .where(and(eq(plan.id, planId), eq(plan.userId, userId))),
+    db.select({ id: plan.id }).from(plan).where(reachablePlan(userId, planId)),
 });
 
 const SegmentRowSchema = Schema.Struct({
@@ -56,14 +55,14 @@ const SegmentRowSchema = Schema.Struct({
 type SegmentRow = typeof SegmentRowSchema.Type;
 
 /**
- * The newest fragments of the account's calls about the plan, newest first:
+ * The newest fragments of every member's calls about the plan, newest first:
  * the call by its start, then the fragment by its place. One more than the
  * bound is asked for, so the read can tell whether older words stand.
  */
 const findNewestSegments = SqlSchema.findAll({
-  Request: PlanKeySchema,
+  Request: Schema.String,
   Result: SegmentRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: (planId) =>
     db
       .select({
         voiceSessionId: voiceTranscriptSegments.voiceSessionId,
@@ -75,7 +74,7 @@ const findNewestSegments = SqlSchema.findAll({
       })
       .from(voiceTranscriptSegments)
       .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-      .where(and(eq(voiceSessions.userId, userId), eq(voiceSessions.planId, planId)))
+      .where(eq(voiceSessions.planId, planId))
       .orderBy(
         desc(voiceSessions.startedAt),
         desc(voiceSessions.id),
@@ -126,13 +125,13 @@ function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
   };
 }
 
-/** What was said on the plan's calls, oldest call first; nothing where the account owns no such plan. */
+/** What was said on the plan's calls, oldest call first; nothing where the account reaches no such plan. */
 export function readTranscript(
   userId: string,
   planId: string,
 ): PlanStoreEffect<Option.Option<PlanTranscript>> {
   return Effect.gen(function* () {
-    if (Option.isNone(yield* findOwnedPlan({ userId, planId }))) return Option.none();
-    return Option.some(transcriptOf(yield* findNewestSegments({ userId, planId })));
+    if (Option.isNone(yield* findReachablePlan({ userId, planId }))) return Option.none();
+    return Option.some(transcriptOf(yield* findNewestSegments(planId)));
   });
 }
