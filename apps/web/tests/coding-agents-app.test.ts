@@ -3713,7 +3713,7 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
-        yield* savePlanDocument(owner, second.id, SAVED);
+        yield* savePlanText(owner, second.id, SAVED);
         const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
         const onSecond = (value: InboxPost) =>
           postInboxItem({ userId: owner, planId: second.id, agentId: secondAgent.id }, value);
@@ -3727,7 +3727,7 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           { reply: INBOX_REPLY.ANSWERED, note: "Done." },
           randomUUID(),
         );
-        yield* onSecond({ key: "export-format", kind: INBOX_KIND.QUESTION, title: "CSV or JSON?" });
+        yield* onSecond({ ...QUESTION, key: "export-format", title: "CSV or JSON?" });
 
         const all = yield* waiting();
         assert.deepEqual(
