@@ -1,4 +1,8 @@
-import { codingAgentDelegationOutputSchema } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_TODO_STATUS,
+  type CodingAgentTodos,
+  codingAgentDelegationOutputSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -19,7 +23,8 @@ import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
  * checked out. Told to delegate the rest, it hands it to a worker on the
  * pair below and repeats the worker's answer; the worker, running on the
  * same model, reads the task back under eve's wrapper as the agent reads
- * the plan's title back. It is
+ * the plan's title back. Handed a list of to-dos, it writes them, the first
+ * in progress, and says so. It is
  * selected only by the fixture's own environment variable and a deployment
  * never names it.
  */
@@ -30,6 +35,10 @@ export const SCRIPTED_CODER_REPLY = "I read the plan and have nothing to publish
 export const SCRIPTED_DELEGATE = "Delegate: ";
 /** The reply once the worker has answered: the worker's own words follow. */
 export const SCRIPTED_DELEGATED_REPLY = "The worker says:";
+/** What a developer's words start with when they hand the scripted agent to-dos, each ended by a semicolon but the last. */
+export const SCRIPTED_TODOS = "To-dos: ";
+/** The reply once the to-dos are written. */
+export const SCRIPTED_TODOS_REPLY = "The to-dos are written.";
 /** The pair the scripted agent names for every worker, which the fixture records as asked. */
 export const SCRIPTED_WORKER_CHOICE = { model: "openai/gpt-6.1-sol", effort: "low" } as const;
 
@@ -53,7 +62,24 @@ function delegatedReply(delegated: MockModelToolResult): MockModelResponse {
   });
 }
 
+/** The list the scripted agent writes for the words after `SCRIPTED_TODOS`: one item for each, the first in progress. */
+function scriptedTodos(words: string): CodingAgentTodos {
+  return {
+    todos: words.split(";").map((content, index) => ({
+      content: content.trim(),
+      status: index === 0 ? CODING_AGENT_TODO_STATUS.IN_PROGRESS : CODING_AGENT_TODO_STATUS.PENDING,
+    })),
+  };
+}
+
 function scriptedResponse(request: MockModelRequest): MockModelResponse {
+  if (request.toolResults.some((result) => result.name === CODER_TOOL.WRITE_TODOS)) {
+    return { text: SCRIPTED_TODOS_REPLY };
+  }
+  if (request.lastUserMessage?.startsWith(SCRIPTED_TODOS)) {
+    const input = scriptedTodos(request.lastUserMessage.slice(SCRIPTED_TODOS.length));
+    return { toolCalls: [{ name: CODER_TOOL.WRITE_TODOS, input }] };
+  }
   const delegated = request.toolResults.find((result) => result.name === CODER_TOOL.DELEGATE);
   if (delegated) return delegatedReply(delegated);
   const offered = request.tools.some((tool) => tool.name === CODER_TOOL.DELEGATE);

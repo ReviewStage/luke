@@ -58,6 +58,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
+    codingAgentTodosInputSchema: codingAgentWire.codingAgentTodosInputSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,

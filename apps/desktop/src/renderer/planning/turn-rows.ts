@@ -30,6 +30,7 @@ export const CALL_KIND = {
   LOOK_AT_BOARD: "look-at-board",
   QUEUE_QUESTION: "queue-question",
   EDIT_PLAN: "edit-plan",
+  TODOS: "todos",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -57,6 +58,7 @@ export const CALL_WORDS = {
   [CALL_KIND.LOOK_AT_BOARD]: { verb: "Looked at the board", code: false },
   [CALL_KIND.QUEUE_QUESTION]: { verb: "Queued a question", code: false },
   [CALL_KIND.EDIT_PLAN]: { verb: "Updated the plan:", code: false },
+  [CALL_KIND.TODOS]: { verb: "Updated the to-dos:", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
@@ -93,6 +95,8 @@ export interface RowReading<B> {
   readonly part: (block: B) => RowPart;
   /** Whether the block still moves, which a group of calls shimmers for. */
   readonly running: (block: B) => boolean;
+  /** Whether the block stays out of a finished turn's fold, drawn after it, because it is still worth reading unasked; none stays out where unsaid. */
+  readonly kept?: (block: B) => boolean;
 }
 
 /** The kinds of row a turn is drawn as. */
@@ -209,6 +213,9 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): [number, 
  * words folded into one line saying what it holds, each call inside it on
  * a row of its own. A lead without a call has no work to fold away, so it
  * keeps its rows, its reasoning drawn at the top level as on a moving turn.
+ * A block the reading keeps out of the fold, as an agent's newest to-do
+ * list is, is drawn right after the fold, ahead of the last words, so it
+ * keeps its order against them.
  */
 export function turnRows<B>(
   blocks: readonly B[],
@@ -226,7 +233,8 @@ export function turnRows<B>(
   const last = blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
   if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, turn.grouped);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
-  const lead = keyed.slice(0, last);
+  const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
+  const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const [calls, messages] = counted(lead, read);
   if (calls === 0) return groupedRows(keyed, read, turn.moving, turn.grouped);
   return [
@@ -236,6 +244,6 @@ export function turnRows<B>(
       summary: foldedSummary(calls, messages),
       rows: groupedRows(lead, read, false, false),
     },
-    ...groupedRows(keyed.slice(last), read, turn.moving, turn.grouped),
+    ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, turn.grouped),
   ];
 }

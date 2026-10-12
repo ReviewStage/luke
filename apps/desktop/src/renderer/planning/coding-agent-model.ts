@@ -6,6 +6,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentFailure,
   type CodingAgentMessage,
@@ -13,6 +14,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type CodingAgentTodos,
   type CodingAgentUsage,
   type ContextWindow,
   PULL_REQUEST_STATE,
@@ -29,7 +31,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
-import { AGENT_TOOL } from "./tool-call-model";
+import { AGENT_TOOL, todosView } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
@@ -757,13 +759,56 @@ export function isDelegation(
   return part.kind === AGENT_PART.TOOL && part.tool === CODING_AGENT_DELEGATE_TOOL;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation on a row of its own as the Work tab's worker is, and every other call grouped with the calls beside it. */
+/** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
+function isTodos(part: AgentPart): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.WRITE_TODOS;
+}
+
+/** The agent's newest to-do list, and the call that wrote it. */
+export interface StandingTodos {
+  readonly callId: string;
+  readonly todos: CodingAgentTodos["todos"];
+}
+
+/**
+ * The agent's newest to-do list, which its tab keeps out of a finished
+ * turn's fold and draws open, or docks above the composer while it is
+ * worked (`dockedTodos`); nothing before the first. Note that a write whose
+ * input does not yet read as a list is passed over, because while it
+ * streams the list before it is still the one standing.
+ */
+export function newestTodos(messages: readonly CodingAgentMessage[]): StandingTodos | undefined {
+  const writes = messages.flatMap(agentParts).flatMap((part) => {
+    const todos = isTodos(part) ? todosView(part.input) : undefined;
+    return todos === undefined || part.kind !== AGENT_PART.TOOL
+      ? []
+      : [{ callId: part.callId, todos }];
+  });
+  return writes.at(-1);
+}
+
+/**
+ * The list docked above the composer: the newest, while the agent may
+ * still write and an item of it is not done, as Claude Code keeps its list
+ * over the prompt; nothing otherwise, when the transcript's own row is
+ * where it is read.
+ */
+export function dockedTodos(
+  standing: StandingTodos | undefined,
+  working: boolean,
+): StandingTodos | undefined {
+  if (!working || standing === undefined) return undefined;
+  const open = standing.todos.some((todo) => todo.status !== CODING_AGENT_TODO_STATUS.DONE);
+  return open ? standing : undefined;
+}
+
+/** How the fold reads a part: its words, its reasoning as a note, a delegation and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
-    return isDelegation(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    return isDelegation(part) || isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&
@@ -777,17 +822,24 @@ const AGENT_READING: RowReading<AgentPart> = {
  * across them. The turn moves while the agent may still write to it, which
  * is its last message; any other has ended. A worker's session is read for
  * its detail, so its calls stand each on a line of its own and its lead
- * never folds, as the Work tab's worker's do.
+ * never folds, as the Work tab's worker's do. The agent's newest to-do
+ * list, named by the call that wrote it (`newestTodos`), stays out of
+ * a finished turn's fold, so the list standing is never folded away.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
   grouped = true,
+  newestTodos: string | undefined = undefined,
 ): readonly TurnRow<AgentPart>[] {
   const parts = agentParts(message).filter(
     (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
   );
-  return turnRows(parts, AGENT_READING, {
+  const reading: RowReading<AgentPart> = {
+    ...AGENT_READING,
+    kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
+  };
+  return turnRows(parts, reading, {
     key: message.id,
     moving,
     done: grouped && !moving,

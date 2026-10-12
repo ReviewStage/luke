@@ -173,49 +173,57 @@ function tabMarkup(
   failure?: CodingAgentFailure,
   turnUsage?: CodingAgentUsage,
 ): string {
-  return renderToStaticMarkup(
-    createElement(AgentTabView, {
-      agent: { ...AGENT, status },
-      models: undefined,
-      startedAt: undefined,
-      delegationStarts: undefined,
-      readModels: ignore,
-      transcript: {
-        messages: [PLAN, TURN],
-        failure,
-        usage: undefined,
-        turnUsage,
-        context: undefined,
-        runStartedAt: undefined,
-        pageStatus: undefined,
-        pageTitle: undefined,
-        subagentTitles: new Map(),
-        delegations: new Map(),
-        reading: false,
-        failed: false,
-        onRetry: ignore,
-      },
-      composer: {
-        draft: "",
-        setDraft: ignore,
-        sending: false,
-        note: undefined,
-        closed: undefined,
-        send: ignore,
-        retry: ignore,
-        sent: [],
-      },
-      model: {
-        choice: { model: AGENT.model, effort: AGENT.effort },
-        note: undefined,
-        choose: ignore,
-      },
-      published: undefined,
-      doors: SHUT,
-      onStop: () => Promise.resolve(),
-      openGitHub: ignore,
-    }),
-  );
+  return renderToStaticMarkup(tabElement(status, [PLAN, TURN], failure, turnUsage));
+}
+
+/** The whole tab, with the agent in the status given over the messages given. */
+function tabElement(
+  status: CodingAgentSummary["status"],
+  messages: readonly CodingAgentMessage[],
+  failure?: CodingAgentFailure,
+  turnUsage?: CodingAgentUsage,
+) {
+  return createElement(AgentTabView, {
+    agent: { ...AGENT, status },
+    models: undefined,
+    startedAt: undefined,
+    delegationStarts: undefined,
+    readModels: ignore,
+    transcript: {
+      messages,
+      failure,
+      usage: undefined,
+      turnUsage,
+      context: undefined,
+      runStartedAt: undefined,
+      pageStatus: undefined,
+      pageTitle: undefined,
+      subagentTitles: new Map(),
+      delegations: new Map(),
+      reading: false,
+      failed: false,
+      onRetry: ignore,
+    },
+    composer: {
+      draft: "",
+      setDraft: ignore,
+      sending: false,
+      note: undefined,
+      closed: undefined,
+      send: ignore,
+      retry: ignore,
+      sent: [],
+    },
+    model: {
+      choice: { model: AGENT.model, effort: AGENT.effort },
+      note: undefined,
+      choose: ignore,
+    },
+    published: undefined,
+    doors: SHUT,
+    onStop: () => Promise.resolve(),
+    openGitHub: ignore,
+  });
 }
 
 function drawn(
@@ -425,6 +433,235 @@ function unfolded(
     act(() => fold.querySelector("summary")?.click());
   }
 }
+
+/** A to-do write's part: the whole list, as the agent's `write_todos` call stores it. */
+function todosPart(
+  callId: string,
+  todos: readonly { content: string; status: string }[],
+): CodingAgentMessage["parts"][number] {
+  return {
+    type: "tool-write_todos",
+    toolCallId: callId,
+    state: "output-available",
+    input: { todos },
+    output: "The to-dos are updated.",
+  };
+}
+
+/** A turn that writes its to-dos, works, and writes them again with the first done. */
+const LISTING: CodingAgentMessage = {
+  id: "m-listing",
+  role: "assistant",
+  parts: [
+    todosPart("call_t1", [
+      { content: "Read the invitation routes", status: "in_progress" },
+      { content: "Add the invite endpoint", status: "pending" },
+    ]),
+    {
+      type: "tool-bash",
+      toolCallId: "call_b1",
+      state: "output-available",
+      input: { command: "ls apps/web/server/routes" },
+      output: { status: "completed", exitCode: 0, stdout: "invite.ts\n", stderr: "" },
+    },
+    todosPart("call_t2", [
+      { content: "Read the invitation routes", status: "done" },
+      { content: "Add the invite endpoint", status: "in_progress" },
+    ]),
+  ],
+};
+
+/** The same agent's next turn, which writes the list once more with everything done. */
+const FINISHING: CodingAgentMessage = {
+  id: "m-finishing",
+  role: "assistant",
+  parts: [
+    todosPart("call_t3", [
+      { content: "Read the invitation routes", status: "done" },
+      { content: "Add the invite endpoint", status: "done" },
+    ]),
+  ],
+};
+
+/** What each item of a drawn list says: where it stands, and its words. */
+function listed(row: Element): readonly (readonly [string | null, string | null])[] {
+  return [...row.querySelectorAll("[data-todo-status]")].map((item) => [
+    item.getAttribute("data-todo-status"),
+    item.textContent,
+  ]);
+}
+
+test("each write of the agent's to-dos is drawn where it landed as the list on a row of its own, never in a run of calls, and once the agent stops only the newest is open", () => {
+  const container = document.createElement("div");
+  container.innerHTML = drawn([PLAN, LISTING]);
+  const rows = [...container.querySelectorAll<HTMLDetailsElement>("details[data-todos]")];
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-call-id")),
+    ["call_t1", "call_t2"],
+  );
+  for (const row of rows) assert.equal(row.closest("[data-turn-fold]"), null);
+  const [older, newest] = rows;
+  assert.ok(older && newest);
+  assert.equal(older.open, false);
+  assert.equal(older.querySelector("[data-todo-status]"), null);
+  assert.equal(newest.open, true);
+  assert.match(
+    newest.querySelector("summary")?.textContent ?? "",
+    /Updated the to-dos: 1 of 2 done/u,
+  );
+  assert.deepEqual(listed(newest), [
+    ["done", "Read the invitation routes"],
+    ["in_progress", "Add the invite endpoint"],
+  ]);
+  assert.match(
+    newest.querySelector('[data-todo-status="done"]')?.innerHTML ?? "",
+    /aria-label="Done".*line-through/u,
+  );
+});
+
+test("while the agent works through its list, the newest docks over the composer as one closed line saying how far it has got and the item it is at, and every list in the transcript folds, none in a run of calls", () => {
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING]),
+  );
+  const dock = container.querySelector<HTMLDetailsElement>(".agent-tab-foot [data-todos-dock]");
+  assert.ok(dock);
+  assert.equal(dock.open, false);
+  assert.equal(dock.querySelector("[data-todo-status]"), null);
+  assert.equal(dock.getAttribute("aria-label"), "To-dos");
+  assert.match(
+    dock.querySelector("summary")?.textContent ?? "",
+    /^1 of 2 done\s*Add the invite endpoint$/u,
+  );
+  const composer = container.querySelector(".agent-composer");
+  assert.ok(composer && dock.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const rows = [...container.querySelectorAll<HTMLDetailsElement>("details[data-todos]")];
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.open, false);
+    assert.equal(row.closest("[data-turn-fold]"), null);
+  }
+});
+
+test("the docked list opens on a click onto the whole list", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING])));
+  assert.deepEqual(listed(open(container, "[data-todos-dock]")), [
+    ["done", "Read the invitation routes"],
+    ["in_progress", "Add the invite endpoint"],
+  ]);
+});
+
+test("nothing docks once the agent has stopped, when the newest list is open in the transcript, nor while every item is done", () => {
+  const stopped = document.createElement("div");
+  stopped.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.COMPLETED, [PLAN, LISTING]),
+  );
+  assert.equal(stopped.querySelector("[data-todos-dock]"), null);
+  assert.equal(stopped.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open, true);
+  const finished = document.createElement("div");
+  finished.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING, FINISHING]),
+  );
+  assert.equal(finished.querySelector("[data-todos-dock]"), null);
+  assert.equal(finished.querySelector<HTMLDetailsElement>('[data-call-id="call_t3"]')?.open, true);
+});
+
+test("an older list opens on a click onto the list as it stood, and folds once a newer list lands", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (messages: readonly CodingAgentMessage[]) =>
+    act(() =>
+      root.render(
+        createElement(AgentTranscriptView, {
+          messages,
+          reading: false,
+          failed: false,
+          working: false,
+          onRetry: ignore,
+          openGitHub: ignore,
+        }),
+      ),
+    );
+  render([PLAN, LISTING]);
+  assert.deepEqual(listed(open(container, '[data-call-id="call_t1"]')), [
+    ["in_progress", "Read the invitation routes"],
+    ["pending", "Add the invite endpoint"],
+  ]);
+  const before = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]');
+  assert.equal(before?.open, true);
+  render([PLAN, LISTING, FINISHING]);
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open,
+    false,
+  );
+  const newest = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t3"]');
+  assert.equal(newest?.open, true);
+  assert.match(newest?.querySelector("summary")?.textContent ?? "", /2 of 2 done/u);
+});
+
+test("a finished turn folds its work but keeps the newest list out of the fold, open, ahead of its last words, and an older list stays folded away", () => {
+  const finished: CodingAgentMessage = {
+    ...LISTING,
+    parts: [...LISTING.parts, { type: "text", text: "The endpoint is next." }],
+  };
+  const container = document.createElement("div");
+  container.innerHTML = drawn([PLAN, finished]);
+  const newest = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]');
+  assert.ok(newest);
+  assert.equal(newest.closest("[data-turn-fold]"), null);
+  assert.equal(newest.open, true);
+  assert.equal(container.querySelector('[data-call-id="call_t1"]'), null, "folded with the work");
+  const fold = container.querySelector("[data-turn-fold]");
+  assert.ok(fold);
+  assert.ok(fold.compareDocumentPosition(newest) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.match(
+    container.textContent ?? "",
+    /Updated the to-dos: 1 of 2 done.*The endpoint is next\./su,
+  );
+});
+
+test("while a newer write streams in before it reads as a list, the list standing stays open", () => {
+  const streaming: CodingAgentMessage = {
+    ...LISTING,
+    parts: [
+      ...LISTING.parts,
+      {
+        type: "tool-write_todos",
+        toolCallId: "call_t9",
+        state: "input-streaming",
+        input: { todos: [{ content: "Send the" }] },
+      },
+    ],
+  };
+  const container = mounted([PLAN, streaming]);
+  assert.equal(container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open, true);
+  assert.equal(container.querySelector('[data-call-id="call_t9"][data-todos]'), null);
+});
+
+test("a to-do write whose input does not read as a list is drawn as a call's row with its JSON, not as a list", () => {
+  const turn: CodingAgentMessage = {
+    id: "m-unreadable",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-write_todos",
+        toolCallId: "call_tx",
+        state: "input-streaming",
+        input: { todos: [{ content: "Read" }] },
+      },
+    ],
+  };
+  const container = mounted([PLAN, turn]);
+  assert.equal(container.querySelector("[data-todos]"), null);
+  const row = open(container, '[data-call-id="call_tx"]');
+  assert.match(row.querySelector("[data-tool-input]")?.textContent ?? "", /"content": "Read"/u);
+});
 
 test("a bash call's row reads as the command it ran, never as the input's JSON", () => {
   const markup = unfolded([TURN]).innerHTML;

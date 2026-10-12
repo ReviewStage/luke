@@ -204,6 +204,44 @@ test("the latest step that is a call says it as the concise copy's line does, it
   });
 });
 
+test("a write of the agent's to-dos copies as how far the list has got, and in full as the list in checkboxes", () => {
+  const listing = agentTranscript({
+    title: "Invite flow",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    messages: [
+      ...MESSAGES.slice(0, 1),
+      {
+        id: "m2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-write_todos",
+            toolCallId: "call_t",
+            state: "output-available",
+            input: {
+              todos: [
+                { content: "Read the tests", status: "done" },
+                { content: "Add the route", status: "in_progress" },
+                { content: "Write the docs", status: "pending" },
+              ],
+            },
+            output: "The to-dos are updated.",
+          },
+          { type: "text", text: "On the route." },
+        ],
+      },
+    ],
+  });
+  assert.match(
+    transcriptMarkdown(listing, TRANSCRIPT_COPY.CONCISE),
+    /\n- Updated the to-dos: 1 of 3 done\n\nOn the route\.\n$/u,
+  );
+  assert.match(
+    transcriptMarkdown(listing, TRANSCRIPT_COPY.FULL),
+    /\*\*Updated the to-dos:\*\* 1 of 3 done\n\n```\n- \[x\] Read the tests\n- \[ \] Add the route \(in progress\)\n- \[ \] Write the docs\n```\n\nOn the route\.\n$/u,
+  );
+});
+
 test("the full copy cuts a huge answer and says so, and fences an answer holding a fence with a longer one", () => {
   const huge = "x".repeat(5_000);
   const copied = transcriptMarkdown(
