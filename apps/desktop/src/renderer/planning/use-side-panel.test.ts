@@ -244,6 +244,30 @@ test("a file browsed to from a File tab takes that tab's place, opens a tab of i
   );
 });
 
+test("a file browsed to, or stepped back to, in a File tab keeps that tab's place in the strip, and one browsed to in a tab of its own stands at its end", () => {
+  const panel = mount([], [], [INVITE, ROLES]);
+  const README = "README.md";
+  const STYLE = "docs/STYLE.md";
+  const fixed = [...SIDE_PANEL_TABS];
+  act(() => panel.control().onOpenFile({ path: INVITE }));
+  act(() => panel.control().onOpenFile({ path: ROLES }));
+  act(() => panel.control().onChoose({ file: INVITE }));
+
+  act(() => panel.control().onBrowseFile(INVITE, README, false));
+  assert.deepEqual(panel.control().order, [...fixed, { file: README }, { file: ROLES }]);
+  act(() => panel.control().onFileHistory(README, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(panel.control().order, [...fixed, { file: INVITE }, { file: ROLES }]);
+
+  act(() => panel.control().onChoose({ file: ROLES }));
+  act(() => panel.control().onBrowseFile(ROLES, STYLE, true));
+  assert.deepEqual(panel.control().order, [
+    ...fixed,
+    { file: INVITE },
+    { file: ROLES },
+    { file: STYLE },
+  ]);
+});
+
 test("a File tab's Back walks the files it showed before, its lit lines with them, and Forward walks them again until it browses on; a step to a file with a tab of its own chooses that tab", () => {
   const panel = mount([], [], [INVITE, ROLES]);
   const README = "README.md";
@@ -446,6 +470,98 @@ test("a tab opened on a plan that holds nothing of it stands there across a laun
 
   const second = mountOn({});
   assert.deepEqual(second.control().tabs, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("a fixed tab opened stands at the strip's end, after a subagent's and a file's, one open already is chosen where it stands, and a launch keeps the order", () => {
+  const stood = {
+    plan: { id: PLAN, holds: { [SIDE_PANEL_TAB.TRANSCRIPT]: true } },
+    agents: [],
+    subagents: [CALL],
+    files: [INVITE],
+  };
+  const panel = mountStood(stood);
+  act(() => panel.control().onChoose({ subagent: CALL }));
+  act(() => panel.control().onOpenFile({ path: INVITE }));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+  const opened = [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    { subagent: CALL },
+    { file: INVITE },
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+  ];
+  assert.deepEqual(panel.control().order, opened);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+  ]);
+
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  assert.deepEqual(panel.control().order, opened, "a tab open already does not move");
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.TRANSCRIPT);
+
+  // A tab closed and opened again stands at the end, not where it stood.
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+  ]);
+
+  const next = mountStood(stood);
+  assert.deepEqual(next.control().tabs, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+  ]);
+});
+
+test("a tab closed on a plan and shown there from another, as a pin does, stands at that plan's end, and one open there stays where it stands", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const holds = {
+    [SIDE_PANEL_TAB.BOARD]: true,
+    [SIDE_PANEL_TAB.CODE]: true,
+    [SIDE_PANEL_TAB.WORK]: true,
+  };
+  const panel = mountOn(holds);
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.CODE));
+  panel.standOn({}, OTHER_PLAN);
+
+  act(() => panel.control().onShow(PLAN, SIDE_PANEL_TAB.BOARD));
+  act(() => panel.control().onShow(PLAN, SIDE_PANEL_TAB.CODE));
+  panel.standOn(holds, PLAN);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CODE,
+  ]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
+});
+
+test("a kind's first content on the open plan adds its tab at the strip's end, while a kind's first read leaves it in its kind's place, as the strip stood", () => {
+  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: false, [SIDE_PANEL_TAB.TRANSCRIPT]: true });
+
+  // The plan's code read landing is the plan opening, not anything arriving.
+  panel.standOn({
+    [SIDE_PANEL_TAB.BOARD]: false,
+    [SIDE_PANEL_TAB.CODE]: true,
+    [SIDE_PANEL_TAB.TRANSCRIPT]: true,
+  });
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]);
+
+  panel.standOn({
+    [SIDE_PANEL_TAB.BOARD]: true,
+    [SIDE_PANEL_TAB.CODE]: true,
+    [SIDE_PANEL_TAB.TRANSCRIPT]: true,
+  });
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.BOARD,
+  ]);
 });
 
 test("a fixed tab dragged among a plan's few keeps its place on a plan that has them all", () => {

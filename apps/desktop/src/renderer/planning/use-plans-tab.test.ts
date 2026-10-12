@@ -1490,7 +1490,7 @@ const NOTHING_YET: PlanningView = {
   work: [],
 };
 
-test("a new plan has no tab, and each kind's first content adds its tab in its place, Luke's drawing showing its own", () => {
+test("a new plan has no tab, and each kind's first content adds its tab at the strip's end, Luke's drawing showing its own", () => {
   const tab = mount({ shown: true, planning: OPEN });
   assert.deepEqual(tab.control().sidePanel.tabs, [], "nothing read draws nothing");
   tab.stand({ planning: NOTHING_YET });
@@ -1516,7 +1516,12 @@ test("a new plan has no tab, and each kind's first content adds its tab in its p
       },
     },
   });
-  assert.deepEqual(tab.control().sidePanel.tabs, SIDE_PANEL_TABS);
+  assert.deepEqual(tab.control().sidePanel.tabs, [
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+  ]);
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
@@ -1695,12 +1700,12 @@ test("a drawing while the panel shows another tab takes its place, full screen a
   assert.deepEqual(tab.control().unreadTabs, []);
 });
 
-test("Luke's first drawing adds the Board tab in its place, and shows it", () => {
+test("Luke's first drawing adds the Board tab at the strip's end, and shows it", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD, work: [TURN] } });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
 
   tab.stand({ planning: { ...OPEN, board: drawnBoard(1), work: [TURN] } });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.BOARD]);
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 

@@ -30,9 +30,10 @@ import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
-import { isSubagentTab } from "../planning/tab-strip-model";
+import { isSubagentTab, tabKey } from "../planning/tab-strip-model";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { settingsRowsInput } from "../settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CommandPalette } from "./command-palette";
@@ -449,6 +450,27 @@ test("a subagent chosen over the version history opens its tab with the history 
   pressFilter("Agents");
   choose("Count the routes.");
   assert.deepEqual(seen, ["history closed", "call-worker"]);
+});
+
+test("Show board and the panel's other kinds are listed with the commands, with no chord, and show the panel on the tab over the version history", () => {
+  const seen: string[] = [];
+  const base = plansControl();
+  const asked = mountWindow(PANEL_TAB.SETTINGS, {
+    history: versionHistoryControl({ open: true, onClose: () => seen.push("history closed") }),
+    sidePanel: {
+      ...base.sidePanel,
+      onChoose: (tab) => seen.push(tabKey(tab)),
+    },
+  });
+  const input = openPalette();
+  pressFilter("Actions");
+  search(input, "show");
+  for (const kind of ["Show board", "Show code", "Show transcript", "Show work"]) {
+    assert.ok(rows().includes(kind), `${kind} is listed alone, with no chord`);
+  }
+  choose("Show transcript");
+  assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "the panel opens on the Plans tab");
+  assert.deepEqual(seen, ["history closed", SIDE_PANEL_TAB.TRANSCRIPT]);
 });
 
 test("no plan open lists no agents", () => {

@@ -19,7 +19,7 @@ import {
 import { BotIcon, FileCodeIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
@@ -93,7 +93,7 @@ import {
   StateGlyph,
   stateEndMark,
 } from "../state-glyph";
-import { commandKeyshortcuts, Tooltip } from "../tooltip";
+import { Tooltip } from "../tooltip";
 import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
 import {
@@ -123,8 +123,8 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * full-screen button at its right, which leaves room past itself for the
  * toggle; the tabs narrow, then scroll, rather than push either. The toggle
  * is the window's rather than the panel's (desktop-shell.tsx), so the
- * panel's coming and going never moves it. The fixed tabs the plan has
- * used come first, and a plan that has used none, and has no agent, says
+ * panel's coming and going never moves it. Each tab stands where it was
+ * opened, at the strip's end, and a plan that has used none, and has no agent, says
  * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model and wearing
  * its harness's mark for where the agent stands; after them stand the subagents opened from
  * the Work tab, the "+", or a delegation's row in an agent's tab, one tab
@@ -180,14 +180,6 @@ const TAB_ICON = {
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
   [SIDE_PANEL_TAB.WORK]: <WorkIcon />,
 } as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
-
-/** The shortcut that shows each fixed tab; an agent's tab has none. */
-const TAB_COMMAND = {
-  [SIDE_PANEL_TAB.BOARD]: APP_COMMAND.SHOW_BOARD,
-  [SIDE_PANEL_TAB.CODE]: APP_COMMAND.SHOW_CODE,
-  [SIDE_PANEL_TAB.TRANSCRIPT]: APP_COMMAND.SHOW_TRANSCRIPT,
-  [SIDE_PANEL_TAB.WORK]: APP_COMMAND.SHOW_WORK,
-} as const satisfies Record<FixedSidePanelTab, AppCommand>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
   NONE: "none",
@@ -220,18 +212,16 @@ function kindAction(
   return {
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
-    command: TAB_COMMAND[tab],
     onSelect: () => onChoose(tab),
   };
 }
 
-/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, whether or not its tab is open. */
+/** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open. */
 function kindRow(tab: FixedSidePanelTab): MenuRow {
   return {
     id: tab,
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
-    command: TAB_COMMAND[tab],
   };
 }
 
@@ -354,7 +344,6 @@ function stripTabs(input: {
     look: look(tab, {
       icon: TAB_ICON[tab],
       label: SIDE_PANEL_TAB_KIND[tab].label,
-      keyshortcuts: commandKeyshortcuts(TAB_COMMAND[tab]),
     }),
     close: () => panel.onClose(tab),
   }));
@@ -439,13 +428,12 @@ function stripTabs(input: {
  * subagents and the files, then the "+". A fixed tab's own word is all it
  * needs to say, so it hangs no pill, while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
- * (`agent-tab-card.tsx`); a fixed tab's chord is in the View menu, the "+"
- * menu, and on the Keyboard shortcuts page, and no subagent's or file's tab
- * has a chord. A tab something arrived on while another was shown reads in
- * semibold until shown. The subagent tabs stand after the fixed ones in the
- * order opened, each wearing the worker's glyph with a ring while it runs,
- * until the developer drags or steps any tab to any place, which the plan
- * keeps (`inPlanOrder`). A tab pinned to the sidebar is drawn and moved as
+ * (`agent-tab-card.tsx`); no tab has a chord. A tab something arrived on
+ * while another was shown reads in semibold until shown. Every tab, of
+ * whatever kind, stands at the strip's end once opened, a subagent's
+ * wearing the worker's glyph with a ring while it runs, until the developer
+ * drags or steps any tab to any place, which the plan keeps
+ * (`use-side-panel.ts`). A tab pinned to the sidebar is drawn and moved as
  * any other. Every tab's right-click offers Close, Close others, which
  * closes every tab but it and chooses it, and a fixed tab's and a file's
  * Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
@@ -820,8 +808,7 @@ function TabContent({
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
  * it however fast the presses come. It stands on every plan's page, so it
- * is also what offers the panel's shortcuts: its own, and one to open the
- * panel on each tab. ⌘T is the plan's page's, which hands it to the column
+ * is also what offers the panel's shortcut. ⌘T is the plan's page's, which hands it to the column
  * holding the window's focus (desktop-plans.tsx). While the plan is not
  * drawn there is no panel to show, so it is disabled and offers none.
  */
@@ -835,22 +822,6 @@ export function SidePanelToggle({
   const label = panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
-  useAppCommand(
-    APP_COMMAND.SHOW_BOARD,
-    offer(() => panel.onChoose(SIDE_PANEL_TAB.BOARD)),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_CODE,
-    offer(() => panel.onChoose(SIDE_PANEL_TAB.CODE)),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_TRANSCRIPT,
-    offer(() => panel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT)),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_WORK,
-    offer(() => panel.onChoose(SIDE_PANEL_TAB.WORK)),
-  );
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
       <button

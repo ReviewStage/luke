@@ -136,6 +136,24 @@ test("File's New Tab and Close Tab hand the window their commands on a click, �
   assert.equal(window.sent.length, 2, "Close Window hands the page nothing");
 });
 
+test("the menu bar offers no item that opens a side-panel tab, nor any ⌥⌘1 to ⌥⌘4, the panel's + being what opens one", () => {
+  const items = everyItem();
+  for (const label of ["Show Board", "Show Code", "Show Transcript", "Show Work"]) {
+    assert.equal(
+      items.find((each) => each.label === label),
+      undefined,
+      `${label} is not in the menu bar`,
+    );
+  }
+  for (const digit of ["1", "2", "3", "4"]) {
+    assert.equal(
+      items.find((each) => each.accelerator === `Alt+Command+${digit}`),
+      undefined,
+      `no item answers ⌥⌘${digit}`,
+    );
+  }
+});
+
 test("View holds Actual Size, Zoom In, and Zoom Out as Chrome orders them, each handed to the window it was chosen over", () => {
   const view = appMenuTemplate("Luke").find((menu) => menu.label === "View");
   assert.ok(Array.isArray(view?.submenu));

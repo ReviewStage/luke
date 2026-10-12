@@ -58,7 +58,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
+import { DOCUMENT_REGION } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB_KIND, SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
@@ -370,6 +372,24 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   }));
 }
 
+/**
+ * The side panel's kinds, listed with the commands as Show board and the
+ * rest, each showing the panel on its tab as the panel's "+" does, over
+ * the version history; none while the plan is not drawn, since there is
+ * no panel to show. No chord reaches them.
+ */
+function panelTabRows(
+  plans: PlansControl,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
+  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  return SIDE_PANEL_TABS.map((tab) => {
+    const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
+    const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
+    return { label, terms: [label], onChoose: () => show(pick) };
+  });
+}
+
 /** Every settings row the pages draw now, as the settings search finds them, beside its page's name. */
 function settingRows(
   rows: SettingsRowsInput | undefined,
@@ -633,7 +653,10 @@ export function CommandPalette({
       plans.signedIn ? planRows(plans, (id) => onPlans(() => plans.onSelect(id))) : [],
     [PALETTE_FILTER.AGENTS]: () => agentRows(plans, onPlans),
     [PALETTE_FILTER.FILES]: () => [],
-    [PALETTE_FILTER.ACTIONS]: () => actionRows((command) => choose(() => runAppCommand(command))),
+    [PALETTE_FILTER.ACTIONS]: () => [
+      ...actionRows((command) => choose(() => runAppCommand(command))),
+      ...panelTabRows(plans, onPlans),
+    ],
     [PALETTE_FILTER.SETTINGS]: () => settingRows(settings.rows, land),
   } as const satisfies Record<PaletteKind, () => readonly PaletteRow[]>;
   // Note that a file found opens in a tab of its own, as one chosen in a

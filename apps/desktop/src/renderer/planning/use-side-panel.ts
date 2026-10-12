@@ -9,6 +9,7 @@ import {
   isFileTab,
   isSubagentTab,
   movedOrder,
+  openedOrder,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -32,23 +33,23 @@ import {
  * A fixed tab stands in the strip only once the open plan has used it: its
  * board holds something, Luke showed code on it, a call on it has a line,
  * or Luke's planning model took a turn on it. So a new plan has no tab,
- * and what arrives on it adds its tab as it arrives, never taking the
- * chosen one's place. The developer's own choices lie over that, per plan:
- * a tab they open from the "+" or its shortcut stands on that plan though
- * it holds nothing, and one they close stays closed on that plan however
+ * and what arrives on it adds its tab at the strip's end as it arrives,
+ * never taking the chosen one's place. The developer's own choices lie
+ * over that, per plan: a tab they open from the "+" stands on that plan
+ * though it holds nothing, and one they close stays closed on that plan however
  * much more arrives, until they or Luke's next drawing or snippet open it again. The tab chosen is the
  * window's rather than any plan's, so a chosen tab the open plan does not
  * have reads as the first it does.
  *
  * The four fixed kinds are a constant. A subagent's tab, opened from its
  * call in the Work tab, from the "+", or from a delegation's row in an
- * agent's tab, follows them: it is held to the open plan's work, or to the
- * plan's open agent tabs where one of them delegated, so closing the
+ * agent's tab, is held to the open plan's work, or to the plan's open
+ * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. A file's tab, opened from a snippet in
  * the Code tab or from the "+", is the one kind that stands many times, one
- * per file: it follows the subagents, is held to the files Luke showed on
- * the open plan the same way, closes, and is kept nowhere. Opening a file
+ * per file: it is held to the files Luke showed on the open plan the same
+ * way, closes, and is kept nowhere. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -58,20 +59,30 @@ import {
  * that tab.
  *
  * The panel holds tabs the way an editor's pane does: the developer closes
- * the ones they do not want, and the "+" or a tab's shortcut opens one again
- * in its place in the order. Closing the chosen tab chooses the one viewed
- * before it on that plan that still stands, as an editor or a browser
+ * the ones they do not want, and the "+" opens one again at the strip's
+ * end. Every tab opened, of whatever kind and from wherever, stands there:
+ * the fixed kinds keep no place of their own. Closing the chosen tab
+ * chooses the one viewed before it on that plan that still stands, as an editor or a browser
  * does, kept with the plan's other choices so it holds across a launch;
  * only where none does, its neighbour (`replacementOf`). Closing the last
  * leaves the panel open and empty rather than shutting it.
  *
  * A tab of any kind is dragged or moved from the keyboard to any place in
- * the strip, among tabs of every kind, as an editor's are, and the plan
- * keeps the strip's order from then on with its other choices: a tab closed
- * and opened again stands where it stood, and one never moved, such as one
- * just opened, stands after those that were, in its kind's place. The
- * subagent and file tabs are kept nowhere, so they keep their place until a
- * launch and then drop out of the order, leaving the rest as they stood.
+ * the strip, among tabs of every kind, as an editor's are. The plan keeps
+ * the strip's order with its other choices, written whole as a tab opens or
+ * moves (`openedOrder`, `movedOrder`), so a tab opened stands after every
+ * tab drawn before it, and a tab closed and opened again stands at the end
+ * rather than where it stood. A tab the order holds nothing of, such as
+ * one on a plan no tab was opened or moved on, or one whose kind's first
+ * read landed since (`firstHeld`), stands after those it holds, in its
+ * kind's place (`inPlanOrder`), so a strip kept before stands as it stood.
+ * A tab opened on another plan, as a pin does, goes to the end of that
+ * plan's strip where it is sure to stand in none of it, a fixed tab closed
+ * there or a file with no tab open (`withTabLastOn`), and otherwise
+ * changes nothing of its order, since its strip is not drawn here to say
+ * whether the tab already stands in it. The subagent and file tabs are kept nowhere, so
+ * they keep their place until a launch and then drop out of the order,
+ * leaving the rest as they stood.
  *
  * A fixed tab or a file's may be pinned to the sidebar, and so may a coding
  * agent's from the plan's column, where it stands under Pinned beside the
@@ -181,7 +192,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.WORK]: { label: "Work" },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
-/** Every kind of tab, in the order a first launch stands them in and the "+" offers them; the agent tabs follow them. */
+/** Every kind of tab, in the order the "+" offers them and a plan whose order holds none of them stands them in. */
 export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_PANEL_TAB);
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
@@ -269,8 +280,8 @@ const stripPinSchema = Schema.Union([
 /**
  * The fixed tabs the developer opened on one plan though it held nothing of
  * them, those they closed on it, in the strip's order, the tabs they
- * viewed on it, the latest last, and the strip's order since they first
- * moved a tab on it. A kind is in `opened` or `closed` or neither. The tabs
+ * viewed on it, the latest last, and the strip's order since a tab first
+ * opened or moved on it. A kind is in `opened` or `closed` or neither. The tabs
  * viewed and the order are kept as the chosen tab is, of fixed tabs alone,
  * since no other stands again across a launch. `pinned` is what an
  * earlier version pinned in the strip, read once into the sidebar's pins and
@@ -361,8 +372,8 @@ export interface SidePanelControl {
   /** The open plan's fixed tabs, in the strip's order. */
   tabs: readonly FixedSidePanelTab[];
   /**
-   * The open plan's tabs of any kind in the order the developer moved them
-   * into, none until they first move one; the strip draws them first, as
+   * The open plan's tabs of any kind in the order they were opened and
+   * moved into, none until one first is; the strip draws them first, as
    * they stand here, and every other after them in its kind's place
    * (`inPlanOrder`).
    */
@@ -388,7 +399,7 @@ export interface SidePanelControl {
   onNewTab: () => void;
   /** Says the "+" opened its menu on the ask. */
   onNewTabAnswered: () => void;
-  /** Shows the panel on the tab, opening it where it was closed or the open plan has not used it; a fixed tab stays open on that plan. */
+  /** Shows the panel on the tab, opening it at the strip's end where the strip does not draw it, and choosing it where it does; a fixed tab stays open on that plan. */
   onChoose: (tab: SidePanelTab) => void;
   /** Shows the panel on the tab of the plan given, as `onChoose` does on the open plan: what a pin or a notification asks, the plan opened beside it. */
   onShow: (planId: string, tab: SidePanelTab) => void;
@@ -458,10 +469,10 @@ function planTabs(held: HeldState, planId: string | undefined): PlanTabs {
   return planId === undefined ? NO_CHOICES : (held.plans[planId] ?? NO_CHOICES);
 }
 
-/** A plan no tab was moved on. */
+/** A plan no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
 
-/** The plan's order, none until a tab is first moved on it. */
+/** The plan's order, none until a tab is first opened or moved on it. */
 function orderOn(held: HeldState, planId: string | undefined): readonly SidePanelTab[] {
   return planTabs(held, planId).order ?? NO_ORDER;
 }
@@ -665,7 +676,8 @@ function withOpenFileChosen(
         ...held,
         files: held.files.map((each) => (each === open ? { ...each, browsedOn: planId } : each)),
       };
-  return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
+  const chosen = withTabLast(withChosenViewed(drawnHere, tab, drawn), tab, drawn);
+  return { ...withTab(chosen, tab, planId), open: true };
 }
 
 /** What a File tab's history holds of the file it shows. */
@@ -675,10 +687,16 @@ function visitOf(file: OpenFile): FileVisit {
 
 /**
  * The state with the File tab `from` showing the file a step back or
- * forward along its history, in its place, the one it showed moved to the
- * other way's end; the tab as it stood where that way holds nothing.
+ * forward along its history, in its place in the strip too, the one it
+ * showed moved to the other way's end; the tab as it stood where that way
+ * holds nothing.
  */
-function withFileStepped(held: HeldState, from: OpenFile, step: FileHistoryStep): HeldState {
+function withFileStepped(
+  held: HeldState,
+  planId: string | undefined,
+  from: OpenFile,
+  step: FileHistoryStep,
+): HeldState {
   const back = from.back ?? [];
   const forward = from.forward ?? [];
   const to = step === FILE_HISTORY_STEP.BACK ? back.at(-1) : forward.at(-1);
@@ -691,13 +709,14 @@ function withFileStepped(held: HeldState, from: OpenFile, step: FileHistoryStep)
     ...(from.foldedNotes === undefined ? undefined : { foldedNotes: from.foldedNotes }),
   };
   const files = held.files.map((each) => (each === from ? stepped : each));
-  return { ...held, files, tab: { file: to.path }, open: true };
+  const placed = withFileInPlace(held, planId, from.path, to.path);
+  return { ...placed, files, tab: { file: to.path }, open: true };
 }
 
 /**
  * The state with the file browsed to shown in the File tab `from` stands
- * in, in that tab's place among the file tabs, or in a tab of its own at
- * their end where `from` is none, its lines lit nowhere.
+ * in, in that tab's place in the strip, or in a tab of its own at the
+ * strip's end where `from` is none (`withTabLast`), its lines lit nowhere.
  */
 function withFileBrowsed(
   held: HeldState,
@@ -717,7 +736,8 @@ function withFileBrowsed(
     from === undefined
       ? [...held.files, browsed]
       : held.files.map((each) => (each === from ? browsed : each));
-  return { ...held, files, tab: { file: to }, open: true };
+  const placed = from === undefined ? held : withFileInPlace(held, planId, from.path, to);
+  return { ...placed, files, tab: { file: to }, open: true };
 }
 
 /**
@@ -827,6 +847,78 @@ function withTabAt(held: HeldState, tab: SidePanelTab, to: number, drawn: DrawnT
   return order === undefined
     ? held
     : withPlanTabs(held, planId, (choices) => ({ ...choices, order }));
+}
+
+/**
+ * The state with the tab, which the plan's strip does not draw yet, written
+ * at the end of the plan's order (`openedOrder`), so the open about to
+ * stand it in the strip stands it last. A tab the strip draws already
+ * changes nothing, since opening it only chooses it.
+ */
+function withTabLast(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
+  const planId = drawn.plan.id;
+  const order = openedOrder(orderOn(held, planId), stripOf(held, drawn), tab);
+  return order === undefined
+    ? held
+    : withPlanTabs(held, planId, (choices) => ({ ...choices, order }));
+}
+
+/**
+ * The state with the tab written at the end of the order of `planId`, a
+ * plan whose strip is not drawn here, where that strip is sure not to draw
+ * it: a fixed tab closed there, or a file with no tab open. Every other
+ * fixed kind is written before it, in the order a plan whose order holds
+ * none of them draws them, so it stands after whichever the plan draws.
+ * Any other tab changes nothing, since it may stand there already.
+ */
+function withTabLastOn(held: HeldState, planId: string, tab: SidePanelTab): HeldState {
+  const absent = isFixedTab(tab)
+    ? planTabs(held, planId).closed.includes(tab)
+    : isFileTab(tab) && !held.files.some((each) => each.path === tab.file);
+  if (!absent) return held;
+  const others = held.tabs.filter((each) => !sameTab(each, tab));
+  const order = openedOrder(orderOn(held, planId), others, tab);
+  return order === undefined
+    ? held
+    : withPlanTabs(held, planId, (choices) => ({ ...choices, order }));
+}
+
+/**
+ * The state with each kind that arrived on the plan, its tab not closed
+ * there, standing at the strip's end in the kinds' order, as `withTabLast`
+ * stands a tab opened. `drawn` is the plan as it was before they arrived.
+ */
+function withArrived(
+  held: HeldState,
+  arrivals: readonly FixedSidePanelTab[],
+  drawn: DrawnTabs,
+): HeldState {
+  const { closed } = planTabs(held, drawn.plan.id);
+  return arrivals.reduce(
+    (was, tab) => (closed.includes(tab) ? was : withTabLast(was, tab, drawn)),
+    held,
+  );
+}
+
+/**
+ * The state with the file `to` standing in the plan's order where the file
+ * `from` stood, as a File tab showing another file in its place does, and
+ * nowhere else: a `to` the order held from a tab closed earlier is taken
+ * from where it stood. The state as it is where the order holds neither.
+ */
+function withFileInPlace(
+  held: HeldState,
+  planId: string | undefined,
+  from: string,
+  to: string,
+): HeldState {
+  const order = orderOn(held, planId);
+  if (!order.some((tab) => isFileTab(tab) && (tab.file === from || tab.file === to))) return held;
+  const others = order.filter((tab) => !isFileTab(tab) || tab.file !== to);
+  return withPlanTabs(held, planId, (choices) => ({
+    ...choices,
+    order: others.map((tab) => (isFileTab(tab) && tab.file === from ? { file: to } : tab)),
+  }));
 }
 
 /** Whether a kept tab is of a kind this version still has: any but a retired fixed kind. */
@@ -1009,6 +1101,16 @@ function arrived(was: PlanHolds, now: PlanHolds): boolean {
 }
 
 /**
+ * The kinds read as holding nothing that hold something now, in the kinds'
+ * order. Note that a kind not yet read is left out, unlike in `arrived`,
+ * because its read landing may be the plan opening, whose strip stands as
+ * it stood rather than in the order its reads happened to land.
+ */
+function firstHeld(was: PlanHolds, now: PlanHolds): readonly FixedSidePanelTab[] {
+  return SIDE_PANEL_TABS.filter((tab) => was[tab] === false && now[tab] === true);
+}
+
+/**
  * The side panel's state: the kept preference, kept again on every change,
  * or where a fixture run stages one, that staged state and the presses on
  * it, which are kept nowhere. `plan` is the open plan and what it holds of
@@ -1062,7 +1164,8 @@ export function useSidePanel(
   // back over the one standing in for it: the tab shown is kept as chosen.
   // A tab a pin or a notification asked for is the exception, since it was
   // chosen on this very plan and stands in for nothing: a file's waits for
-  // the plan's code to be read, however much arrives before it.
+  // the plan's code to be read, however much arrives before it. A kind that
+  // arrived stands at the strip's end, as a tab opened does (`firstHeld`).
   if (seen.id !== planId || !sameHolds(seen.holds, plan.holds)) {
     setSeen(plan);
     const before =
@@ -1075,6 +1178,11 @@ export function useSidePanel(
       sameTab(asked.tab, state.tab);
     if (!awaited && before !== undefined && (after === undefined || !sameTab(before, after))) {
       update((held) => ({ ...held, tab: before }));
+    }
+    const arrivals = seen.id === planId ? firstHeld(seen.holds, plan.holds) : [];
+    if (arrivals.length > 0) {
+      const was = { plan: seen, agents, subagents, files: planFiles };
+      update((held) => withArrived(held, arrivals, was));
     }
   }
   // Past the check above, `seen` is the plan as it is, and a new object
@@ -1115,21 +1223,26 @@ export function useSidePanel(
     (tab: SidePanelTab) => {
       setAsked(undefined);
       update((held) => ({
-        ...withTab(withChosenViewed(held, tab, drawn), tab, planId),
+        ...withTab(withTabLast(withChosenViewed(held, tab, drawn), tab, drawn), tab, planId),
         open: true,
       }));
     },
     [update, drawn, planId],
   );
   // Note that a tab shown on another plan is not counted viewed on the open
-  // one, because the plan it is viewed on is the one about to open.
+  // one, because the plan it is viewed on is the one about to open, whose
+  // strip is not drawn yet; it goes to that strip's end only where it is
+  // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
       setAsked({ plan: on, tab });
-      update((held) => ({
-        ...withTab(on === planId ? withChosenViewed(held, tab, drawn) : held, tab, on),
-        open: true,
-      }));
+      update((held) => {
+        const here =
+          on === planId
+            ? withTabLast(withChosenViewed(held, tab, drawn), tab, drawn)
+            : withTabLastOn(held, on, tab);
+        return { ...withTab(here, tab, on), open: true };
+      });
     },
     [update, drawn, planId],
   );
@@ -1139,13 +1252,14 @@ export function useSidePanel(
   );
   const onOpenFile = useCallback(
     (ref: CodeRef, commit?: string) =>
-      update((held) =>
-        withFileOpened(
-          withChosenViewed(held, { file: ref.path }, drawn),
+      update((held) => {
+        const tab: SidePanelTab = { file: ref.path };
+        return withFileOpened(
+          withTabLast(withChosenViewed(held, tab, drawn), tab, drawn),
           ref,
           commit === undefined ? undefined : { commit, planId },
-        ),
-      ),
+        );
+      }),
     [update, drawn, planId],
   );
   // Note that a file with a tab of its own is chosen there, because a file
@@ -1159,7 +1273,9 @@ export function useSidePanel(
         if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
         const tab: SidePanelTab = { file: path };
         const standing = newTab ? undefined : held.files.find((each) => each.path === from);
-        return withFileBrowsed(withChosenViewed(held, tab, drawn), planId, standing, path);
+        const viewed = withChosenViewed(held, tab, drawn);
+        const placed = standing === undefined ? withTabLast(viewed, tab, drawn) : viewed;
+        return withFileBrowsed(placed, planId, standing, path);
       }),
     [update, drawn, planId],
   );
@@ -1176,7 +1292,7 @@ export function useSidePanel(
         if (to === undefined) return held;
         const open = held.files.find((each) => each.path === to);
         if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
-        return withFileStepped(withChosenViewed(held, { file: to }, drawn), standing, step);
+        return withFileStepped(withChosenViewed(held, { file: to }, drawn), planId, standing, step);
       }),
     [update, drawn, planId],
   );

@@ -10,9 +10,10 @@
  *
  * Each strip keeps, per plan, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both
- * strips read and change those two lists alike: a tab never moved stands
- * after those that were, in its kind's place (`inPlanOrder`); a move takes
- * the tab out and puts it back before the tab standing at its new place
+ * strips read and change those two lists alike: a tab the order does not
+ * hold stands after those it does, in its kind's place (`inPlanOrder`); a
+ * tab opened goes to the strip's end (`openedOrder`); a move takes the tab
+ * out and puts it back before the tab standing at its new place
  * (`movedOrder`); and closing the chosen tab chooses the one viewed before
  * it that still stands, and only where none does its neighbour
  * (`replacementOf`), as a browser's tabs do.
@@ -108,6 +109,31 @@ export function inPlanOrder<T>(
 }
 
 /**
+ * The plan's order written whole: the tabs `was` already held, those the
+ * strip does not draw now among them, such as one closed, then the rest of
+ * `strip`, the run of tabs the strip draws now, as it stands.
+ */
+function wholeOrder<T extends StripTab>(was: readonly T[], strip: readonly T[]): T[] {
+  return [...was, ...strip.filter((each) => !was.some((other) => sameTab(other, each)))];
+}
+
+/**
+ * The plan's order with the tab opened at the end of `strip`, the run of
+ * tabs the strip draws now, as an editor opens a file: the order written
+ * whole (`wholeOrder`), so every tab keeps the place it is drawn in, then
+ * the tab, taken from wherever the order held it. Nothing where the tab
+ * already stands in the strip, which an open only chooses.
+ */
+export function openedOrder<T extends StripTab>(
+  was: readonly T[],
+  strip: readonly T[],
+  tab: T,
+): readonly T[] | undefined {
+  if (strip.some((other) => sameTab(other, tab))) return undefined;
+  return [...wholeOrder(was, strip).filter((other) => !sameTab(other, tab)), tab];
+}
+
+/**
  * The plan's order with the tab moved to `to` in `strip`, the run of tabs
  * the strip draws now: the tabs the order already held, those the strip
  * does not draw now among them, such as one closed, then the rest of the
@@ -121,7 +147,7 @@ export function movedOrder<T extends StripTab>(
   tab: T,
   to: number,
 ): readonly T[] | undefined {
-  const all = [...was, ...strip.filter((each) => !was.some((other) => sameTab(other, each)))];
+  const all = wholeOrder(was, strip);
   const at = strip.findIndex((other) => sameTab(other, tab));
   const own = all.find((other) => sameTab(other, tab));
   if (at < 0 || to === at || own === undefined) return undefined;
