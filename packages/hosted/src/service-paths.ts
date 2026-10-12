@@ -19,6 +19,12 @@ export const HOSTED_SERVICE_PATH = {
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
+  /**
+   * A clip dictated into a message box, answered with its words (POST).
+   * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
+   * both bodies.
+   */
+  DICTATION: "/api/dictation",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

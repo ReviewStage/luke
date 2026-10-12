@@ -70,6 +70,51 @@ export function spendHostedMeter(input: {
   );
 }
 
+const DictationUsageWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  day: Schema.String,
+  seconds: Schema.Number,
+});
+
+/**
+ * One dictated clip on the account's day: one more call, and its seconds
+ * added to the day's dictated seconds. Both are functions of the standing
+ * row, so the conflicting update names each column through the builder's
+ * own reference, as `ONE_MORE_CALL` does.
+ */
+const spendDictationUsage = SqlSchema.void({
+  Request: DictationUsageWriteSchema,
+  execute: (write) =>
+    db
+      .insert(hostedUsage)
+      .values({ userId: write.userId, day: write.day, calls: 1, dictationSeconds: write.seconds })
+      .onConflictDoUpdate({
+        target: [hostedUsage.userId, hostedUsage.day],
+        set: {
+          calls: ONE_MORE_CALL,
+          dictationSeconds: sql`${hostedUsage.dictationSeconds} + ${write.seconds}`,
+        },
+      }),
+});
+
+/**
+ * Counts one transcribed clip against the account's UTC day: a call, as
+ * every hosted operation is, and its seconds of audio beside it. It is taken
+ * once the transcription answered, since the seconds are what the model
+ * billed, and nothing is refused on it, as nothing is on the calls.
+ */
+export function spendDictationMeter(input: {
+  readonly userId: string;
+  readonly seconds: number;
+  readonly now: number;
+}): Effect.Effect<void, QuotaFailure, SqlClient.SqlClient> {
+  return spendDictationUsage({
+    userId: input.userId,
+    day: utcDayKey(input.now),
+    seconds: input.seconds,
+  });
+}
+
 /**
  * What recording a session's seconds came to: recorded, repeated for a
  * session already recorded, and unknown user for an account the report names
