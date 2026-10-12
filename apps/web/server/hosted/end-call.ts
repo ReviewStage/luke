@@ -33,12 +33,14 @@ const isEndCallInput = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 export const END_CALL_TOOL = {
   name: "end_call",
   description:
-    "End the voice call once the developer has clearly said they are done with it, such as " +
-    '"bye", "that\'s all", "thanks, I\'m done", or "let\'s stop here". Luke is already saying ' +
-    "goodbye, so call it first and add nothing to your return. Never call it on a bare " +
-    '"okay" or "thanks" mid-conversation, while the developer is still mid-sentence, or ' +
-    "because the plan looks complete. The call hangs up once Luke's goodbye has played, and " +
-    "stays up if the developer speaks first. Answers `accepted`.",
+    "End the voice call once the developer asks you to end it or has clearly said they are " +
+    'done with it, such as "can you end the call", "bye", "see ya", "that\'s all", "thanks, ' +
+    'I\'m done", or "let\'s stop here", even right after another request such as starting a ' +
+    "coding agent. Luke is already saying goodbye, so call it first and add nothing to your " +
+    'return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer ' +
+    'is still mid-sentence, when they ask for it later ("end the call when the agent ' +
+    "finishes\"), or because the plan looks complete. The call hangs up once Luke's goodbye " +
+    "has played, and stays up if the developer speaks first. Answers `accepted`.",
   inputSchema: END_CALL_INPUT,
 } as const;
 

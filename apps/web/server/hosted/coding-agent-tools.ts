@@ -5,6 +5,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
+import { modelLabel } from "@sidecar/hosted/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { isTextUIPart } from "ai";
@@ -201,7 +202,8 @@ export const LIST_CODING_AGENTS_TOOL = {
   name: "list_coding_agents",
   description:
     "List the coding agents working on this plan: each with its id, its title (how the " +
-    "developer sees it named), the model and effort it runs on, its status (starting, running, " +
+    "developer sees it named), the model and effort it runs on with the model's name to say it " +
+    "by, its status (starting, running, " +
     "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, and one " +
     "line of what it last did. Call it when the developer asks about or addresses an agent, to " +
     "find which one they mean.",
@@ -234,7 +236,8 @@ export const START_CODING_AGENT_TOOL = {
     "Start a new coding agent on this plan, exactly as the developer's Start button would: " +
     "on the plan itself with no task, or on the task given in the plan's place. It runs on the " +
     "model and effort named, or on the developer's default with neither. Answers `accepted` " +
-    "with the agent's id, model, effort, and status once its session is open, or `rejected` " +
+    "with the agent's id, model, the model's name to say it by, effort, and status once its " +
+    "session is open, or `rejected` " +
     "and why nothing was started; a rejected model or effort lists the choices.",
   inputSchema: START_CODING_AGENT_INPUT,
 } as const;
@@ -316,6 +319,8 @@ interface AgentReading {
   /** The agent's title as its tab shows it; the model's id where it has none yet, which is what the tab falls back to. */
   readonly title: string;
   readonly model: string;
+  /** The model as Luke says it and the screen shows it, without the maker's word (`modelLabel`). */
+  readonly modelName: string;
   readonly effort: string;
   readonly status: CodingAgentStatus;
   readonly failureReason?: CodingAgentFailure;
@@ -353,6 +358,15 @@ const standingsOf = (userId: string, agents: readonly CodingAgent[]) =>
     };
   });
 
+/**
+ * The models offered as the catalog last read them, or none where it cannot
+ * be read: a model is then named from its id, as the screen names it before
+ * the catalog arrives.
+ */
+const offeredModels = Effect.flatMap(ModelCatalog, (catalog) =>
+  Effect.orElseSucceed(catalog.read, (): readonly OfferedModel[] => []),
+);
+
 const readAgent = (
   userId: string,
   agent: CodingAgent,
@@ -360,6 +374,7 @@ const readAgent = (
     readonly status: CodingAgentStatus;
     readonly failureReason: CodingAgentFailure | undefined;
   },
+  offered: readonly OfferedModel[],
 ): Effect.Effect<AgentReading, StoreFailure, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const [newest] = yield* journalsOf(userId, agent, 1);
@@ -371,6 +386,7 @@ const readAgent = (
       id: agent.id,
       title: agent.title ?? agent.model,
       model: agent.model,
+      modelName: modelLabel(agent.model, offered),
       effort: agent.effort,
       status: standing.status,
       ...(standing.failureReason === undefined
@@ -426,10 +442,11 @@ function choiceRefusal(choice: ModelChoice | undefined, offered: readonly Offere
 }
 
 /** The agent as a start answers it: its id, what it runs on, and where it stands now. */
-const startedReading = (userId: string, agent: CodingAgent) =>
+const startedReading = (userId: string, agent: CodingAgent, offered: readonly OfferedModel[]) =>
   Effect.map(standingsOf(userId, [agent]), (standing) => ({
     id: agent.id,
     model: agent.model,
+    modelName: modelLabel(agent.model, offered),
     effort: agent.effort,
     status: standing(agent).status,
   }));
@@ -450,14 +467,15 @@ function readingsRecord(readings: readonly AgentReading[]): WireRecord[] {
 /** One call of `list_coding_agents`: every agent of the plan, in the order started. */
 export function runListCodingAgents(
   call: CodingAgentCall,
-): Effect.Effect<WireRecord, never, SqlClient.SqlClient> {
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   return orStoreRefusal(
     Effect.gen(function* () {
       const { userId, planId } = call.plan;
       const agents = yield* listCodingAgents(userId, planId);
       const standing = yield* standingsOf(userId, agents);
+      const offered = yield* offeredModels;
       const readings = yield* Effect.forEach(agents, (agent) =>
-        readAgent(userId, agent, standing(agent)),
+        readAgent(userId, agent, standing(agent), offered),
       );
       return { status: ACTION_RESULT_STATUS.ACCEPTED, agents: readingsRecord(readings) };
     }),
@@ -480,7 +498,7 @@ export function runReadCodingAgent(
       const agent = found.value;
       const { userId } = call.plan;
       const standing = yield* standingsOf(userId, [agent]);
-      const reading = yield* readAgent(userId, agent, standing(agent));
+      const reading = yield* readAgent(userId, agent, standing(agent), yield* offeredModels);
       const published = yield* publishedOf(userId, agent);
       const journals = yield* journalsOf(userId, agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
@@ -557,15 +575,13 @@ export function runStartCodingAgent(
       if (Result.isFailure(started)) {
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
-          const catalog = yield* ModelCatalog;
-          const offered = yield* Effect.orElseSucceed(catalog.read, () => []);
-          return rejected(choiceRefusal(choice, offered));
+          return rejected(choiceRefusal(choice, yield* offeredModels));
         }
         return rejected(startRefusalWords(refusal));
       }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        agent: yield* startedReading(userId, started.success.agent),
+        agent: yield* startedReading(userId, started.success.agent, yield* offeredModels),
       };
     }),
   );

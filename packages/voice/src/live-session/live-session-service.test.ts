@@ -39,8 +39,11 @@ import {
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
   END_CALL_BOUNDS,
+  END_CALL_REFUSAL,
+  LIVE_SESSION_TRACE,
   LiveSessionService,
   type LiveSessionStatus,
+  type LiveSessionTrace,
   PROGRESS_NOTE_BOUNDS,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
@@ -343,6 +346,8 @@ interface Fixture {
   codes: PlanShownCode[];
   /** How many times the peer was told the call is ending. */
   endings: { count: number };
+  /** Every hand-off the service traced, in order. */
+  traces: LiveSessionTrace[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -356,6 +361,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const statuses: LiveSessionStatus[] = [];
     const codes: PlanShownCode[] = [];
     const endings = { count: 0 };
+    const traces: LiveSessionTrace[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -366,6 +372,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         onCallEnding: () => {
           endings.count += 1;
         },
+        onTrace: (entry) => traces.push(entry),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -377,6 +384,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       statuses,
       codes,
       endings,
+      traces,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -873,6 +881,13 @@ function commentaryWords(sideband: FakeSideband): string[] {
   );
 }
 
+/** Why each end of the call was not passed on, oldest first, as the service traced it. */
+function endRefusals(traces: readonly LiveSessionTrace[]) {
+  return traces.flatMap((entry) =>
+    entry.event === LIVE_SESSION_TRACE.END_CALL_REFUSED ? [entry.reason] : [],
+  );
+}
+
 /** The goodbye the voice delegated, as the developer said it and the model asked about it. */
 function sayBye(sideband: FakeSideband, delegationId: string, atMs: number) {
   sideband.input("Great, that's all for today, bye!", atMs, atMs + 800);
@@ -942,6 +957,11 @@ it.effect(
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-5" });
       yield* settle();
       assert.equal(f.endings.count, 0, "the stop key cancels the goodbye's end");
+      assert.deepEqual(endRefusals(f.traces), [
+        END_CALL_REFUSAL.SILENCED,
+        END_CALL_REFUSAL.SUPERSEDED,
+        END_CALL_REFUSAL.SILENCED,
+      ]);
     }),
 );
 
@@ -958,6 +978,7 @@ it.effect(
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-1" });
       yield* settle();
       assert.equal(f.endings.count, 0);
+      assert.deepEqual(endRefusals(f.traces), [END_CALL_REFUSAL.PAST_BOUND]);
 
       sayBye(sideband, "item_2", END_CALL_BOUNDS.WITHIN_MS + 5000);
       yield* settle();
@@ -977,7 +998,40 @@ it.effect("a run the backend opened of its own never ends the call", () =>
     f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "explore-sess-1" });
     yield* settle();
     assert.equal(f.endings.count, 0);
+    assert.deepEqual(endRefusals(f.traces), [END_CALL_REFUSAL.UNASKED]);
   }),
+);
+
+it.effect(
+  "each delegation the voice makes is traced as asked, then as sent or refused under its revision, and one for another target reaches no brain",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Can you start an agent on this?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.refuse = "I couldn't reach my judgment just now.";
+      sideband.input("Okay, see ya.", 2000, 2600);
+      sideband.delegation("item_2", 2700);
+      yield* settle();
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.DELEGATION_CREATED,
+        event_id: "delegation-item_3",
+        offset_ms: 3000,
+        delegation: { id: "item_3", target: LIVE_DELEGATION_TARGET.RESPONSES },
+      });
+      yield* settle();
+      assert.deepEqual(f.traces, [
+        { event: LIVE_SESSION_TRACE.DELEGATION_ASKED, target: LIVE_DELEGATION_TARGET.CLIENT },
+        { event: LIVE_SESSION_TRACE.DELEGATION_SENT, revision: 1 },
+        { event: LIVE_SESSION_TRACE.DELEGATION_ASKED, target: LIVE_DELEGATION_TARGET.CLIENT },
+        { event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: 2 },
+        { event: LIVE_SESSION_TRACE.DELEGATION_ASKED, target: LIVE_DELEGATION_TARGET.RESPONSES },
+      ]);
+      assert.equal(f.brain.asks.length, 2);
+    }),
 );
 
 it.effect(

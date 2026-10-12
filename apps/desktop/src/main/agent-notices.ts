@@ -8,10 +8,10 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { modelLabel } from "@sidecar/hosted/model-label";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
-import { modelLabel } from "#shared/model-label";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends: the ledger of where each agent stands, the poll that keeps it current while no tab does, and the notification posted when one ends.

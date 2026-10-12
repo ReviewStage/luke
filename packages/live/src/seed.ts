@@ -13,8 +13,6 @@ export const SEED_ROLE = {
   ASSISTANT: "assistant",
 } as const;
 
-type SeedRole = (typeof SEED_ROLE)[keyof typeof SEED_ROLE];
-
 export const SEED_CONTENT_TYPE = {
   INPUT_TEXT: "input_text",
   OUTPUT_TEXT: "output_text",
@@ -41,28 +39,13 @@ export const LIVE_INPUT_BOUNDS = {
   TOKENS: 8_192,
 } as const;
 
-function seedItem(role: SeedRole, text: string): InitialItem {
-  if (role === SEED_ROLE.ASSISTANT) {
-    return {
-      type: SEED_ITEM_TYPE,
-      role,
-      content: [{ type: SEED_CONTENT_TYPE.OUTPUT_TEXT, text }],
-    };
-  }
-  return { type: SEED_ITEM_TYPE, role, content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text }] };
-}
-
 /** The application's own message in a session's history, which has no system role to carry one. */
 export function developerSeedItem(text: string): InitialItem {
-  return seedItem(SEED_ROLE.DEVELOPER, text);
-}
-
-/** A line said on an earlier call, carried as the developer's or the voice's own words. */
-export function spokenSeedItem(
-  role: typeof SEED_ROLE.USER | typeof SEED_ROLE.ASSISTANT,
-  text: string,
-): InitialItem {
-  return seedItem(role, text);
+  return {
+    type: SEED_ITEM_TYPE,
+    role: SEED_ROLE.DEVELOPER,
+    content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text }],
+  };
 }
 
 /** The estimate the whole list is held under, counted over each message's text. */

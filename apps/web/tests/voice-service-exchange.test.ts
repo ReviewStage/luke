@@ -1418,7 +1418,7 @@ it.effect(
 );
 
 it.effect(
-  "a call picks up the plan's earlier calls: it opens on the plan, then what was said on them oldest first, and a call about another plan opens on none of it",
+  "a call picks up the plan's earlier calls: it opens on the plan, then what was said on them oldest first as one quoted transcript rather than as the voice's own turns, and a call about another plan opens on none of it",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1435,14 +1435,18 @@ it.effect(
       );
 
       const second = await openSession(context, plan.id);
-      const [seed, note, ...history] = seededTexts(context, 1);
+      const [seed, transcript, ...rest] = seededTexts(context, 1);
       assert.equal(seed?.role, SEED_ROLE.DEVELOPER);
       assert.ok(String(seed?.text).includes(PLAN.name));
-      assert.equal(note?.role, SEED_ROLE.DEVELOPER);
-      assert.deepEqual(history, [
-        { role: SEED_ROLE.USER, text: "Invites should expire." },
-        { role: SEED_ROLE.ASSISTANT, text: "After how many days?" },
-      ]);
+      // Luke's earlier words are quoted to the voice, never put in its mouth as turns of its own.
+      assert.equal(transcript?.role, SEED_ROLE.DEVELOPER);
+      assert.ok(
+        String(transcript?.text).endsWith(
+          "\nDeveloper: Invites should expire.\nLuke: After how many days?",
+        ),
+        String(transcript?.text),
+      );
+      assert.deepEqual(rest, []);
       // A plan with earlier calls is told so, not as the new plan its untouched document reads as.
       const firstLine = (item: { text: unknown } | undefined) => String(item?.text).split("\n")[0];
       assert.notEqual(firstLine(seed), firstLine(seededTexts(context, 0)[0]));
@@ -1454,6 +1458,49 @@ it.effect(
       const otherCall = await openSession(context, other.id);
       assert.deepEqual(seededTexts(context, 2).slice(1), []);
       await hangUpConnection(otherCall.desktop, otherCall.attach, otherCall.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
+        () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a device input one message short of the bound still opens on the plan, and on the earlier calls only where a second message fits",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await openSession(context, plan.id);
+      await sendText(
+        first.attach.socket,
+        JSON.stringify(heard("Invites should expire.", 1000, 2000)),
+      );
+      await hangUpConnection(first.desktop, first.attach, first.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the first call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const deviceLines = (count: number) => Array.from({ length: count }, () => SEED[0] ?? {});
+
+      const full = await openSession(context, plan.id, deviceLines(LIVE_INPUT_BOUNDS.MESSAGES - 1));
+      const fullSeeded = seededTexts(context, 1);
+      assert.equal(fullSeeded.length, LIVE_INPUT_BOUNDS.MESSAGES);
+      assert.equal(fullSeeded[0]?.role, SEED_ROLE.DEVELOPER);
+      assert.ok(String(fullSeeded[0]?.text).includes(PLAN.name));
+      assert.equal(fullSeeded[1]?.role, SEED_ROLE.USER, "no room is left for the earlier calls");
+      await hangUpConnection(full.desktop, full.attach, full.upstream);
+
+      const roomy = await openSession(
+        context,
+        plan.id,
+        deviceLines(LIVE_INPUT_BOUNDS.MESSAGES - 2),
+      );
+      const [seed, transcript] = seededTexts(context, 2);
+      assert.ok(String(seed?.text).includes(PLAN.name));
+      assert.ok(String(transcript?.text).endsWith("Developer: Invites should expire."));
+      await hangUpConnection(roomy.desktop, roomy.attach, roomy.upstream);
       await until(
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
         () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
@@ -1491,10 +1538,11 @@ it.effect(
 
       const second = await openSession(context, plan.id);
       const seeded = seededTexts(context, 1);
-      const [seed, , ...history] = seeded;
+      const [seed, transcript] = seeded;
       assert.ok(String(seed?.text).includes(PLAN.name));
-      assert.ok(String(history.at(-1)?.text).startsWith("Line 299."));
-      assert.ok(!history.some((item) => String(item.text).startsWith("Line 0.")));
+      const lines = String(transcript?.text).split("\n");
+      assert.ok(String(lines.at(-1)).startsWith("Luke: Line 299."));
+      assert.ok(!lines.some((line) => line.includes("Line 0.")));
       assert.ok(seeded.length <= LIVE_INPUT_BOUNDS.MESSAGES);
       const tokens = seeded.reduce((total, item) => total + startupTokens(String(item.text)), 0);
       assert.ok(
@@ -1530,9 +1578,11 @@ it.effect(
 
       const second = await openSession(context, plan.id);
       const seeded = seededTexts(context, 1);
-      const [, , ...history] = seeded;
-      assert.equal(history.length, 1);
-      assert.ok(String(history[0]?.text).startsWith("The long stretch begins."));
+      const [, transcript, ...rest] = seeded;
+      assert.deepEqual(rest, []);
+      assert.ok(
+        String(transcript?.text).split("\n")[2]?.startsWith("Developer: The long stretch begins."),
+      );
       const tokens = seeded.reduce((total, item) => total + startupTokens(String(item.text)), 0);
       assert.ok(
         tokens <= LIVE_INPUT_BOUNDS.TOKENS,

@@ -16,9 +16,9 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { AGENT_TOOL } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
@@ -222,7 +222,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 
 /**
  * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`#shared/model-label`).
+ * notifications so one model is never named two ways (`@sidecar/hosted/model-label`).
  */
 export { modelLabel };
 
