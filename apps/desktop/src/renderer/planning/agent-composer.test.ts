@@ -571,6 +571,40 @@ test("no bar stands between the transcript and the box: nothing that holds the c
   assert.deepEqual(drawn, []);
 });
 
+test("the log runs right up to the card's top edge and fades over `--scroll-fade` there, its foot padded past the fade so the newest line, or a control focused from below, stands whole above it", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  const log = tab.container.querySelector('[role="log"]');
+  const composer = tab.container.querySelector(".agent-composer");
+  assert.ok(log && composer);
+  /** What the sheet's unlayered rules, which outrank every utility, give the box. */
+  const own = (element: Element, property: string) =>
+    ownDeclarations(rules, element)
+      .filter((each) => each.property === property)
+      .filter((each) =>
+        rules.some((rule) => rule.layer === undefined && rule.selectors.includes(each.selector)),
+      )
+      .map((each) => each.value);
+  // Nothing stands between the log's foot and the card: the room around the card gives none above it.
+  const room = composer.parentElement;
+  assert.ok(room);
+  assert.equal(own(composer, "padding")[0]?.split(" ")[0], "0");
+  for (const box of [composer, room]) {
+    assert.deepEqual(own(box, "padding-top"), []);
+    assert.deepEqual(
+      own(box, "margin-top").filter((value) => value !== "auto"),
+      [],
+    );
+  }
+  // The log's foot fades out over the fade's length and pads past it.
+  const [mask] = own(log, "mask-image");
+  assert.match(mask ?? "", /#000 calc\(100% - var\(--scroll-fade\)\), transparent\)$/u);
+  const [foot] = own(log, "padding-bottom");
+  assert.match(foot ?? "", /^calc\(var\(--scroll-fade\) \+ var\(--space-\d+\)\)$/u);
+  // A control focused from below is scrolled in past the fade too, not just to the log's edge.
+  assert.deepEqual(own(log, "scroll-padding-bottom"), [foot]);
+});
+
 /** A step that read 620k of a 1M window whose compaction is at 900k. */
 const CONTEXT: CodingAgentContext = {
   windowTokens: 1_000_000,
@@ -668,7 +702,7 @@ function placeOf(layer: Element | null | undefined) {
   };
 }
 
-test("each composer popover opens right above the button that opened it, from the model chip's leading edge and the ring's trailing edge where that stays inside the panel, pushed back inside where it would not, and Escape hands focus back to the button", async () => {
+test("each composer popover opens right above the button that opened it, from its leading edge, from its trailing edge where the leading one would run past the panel's right, pushed back inside where neither stays inside, and Escape hands focus back to the button", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.container.setAttribute("data-popover-room", "");
   await tab.stand({ context: CONTEXT });
@@ -696,19 +730,25 @@ test("each composer popover opens right above the button that opened it, from th
     assert.equal(menuLayer(), null);
     assert.equal(document.activeElement, chip, "focus goes back to the chip");
 
-    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in to the panel's inset.
+    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in from the panel's right inset.
     act(() => ring.click());
-    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 608 - 754, width: 340 });
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 992 - 340 - 754, width: 340 });
     pressEscape(document.activeElement);
     assert.equal(document.activeElement, ring, "focus goes back to the ring");
 
-    // Full screen there is room, and the popover ends where the ring does.
+    // Full screen there is room to the ring's right, and the popover starts where the ring does, as the menu starts at its chip.
     boxes.room = new DOMRect(0, 0, 1024, 768);
     boxes.ring = new DOMRect(400, 700, 28, 28);
     act(() => ring.click());
-    const wide = placeOf(ringLayer());
-    assert.equal(wide.side, "above");
-    assert.equal(wide.left + wide.width, 28, "the popover's trailing edge is the ring's");
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 0, width: 340 });
+    pressEscape(document.activeElement);
+
+    // A ring too near the panel's right for the popover to start at it, which ends where the ring does instead.
+    boxes.ring = new DOMRect(800, 700, 28, 28);
+    act(() => ring.click());
+    const flipped = placeOf(ringLayer());
+    assert.equal(flipped.side, "above");
+    assert.equal(flipped.left + flipped.width, 28, "the popover's trailing edge is the ring's");
   } finally {
     restore();
   }
@@ -826,9 +866,7 @@ test("in a full-screen panel whose composer keeps to a centred column, each popo
     const popover = tab.container.querySelector(".anchored-popover");
     assert.ok(popover);
     assert.equal(positionedFrom(popover), "agent-context", "measured from the ring's own box");
-    const place = placeOf(popover);
-    assert.equal(place.side, "above");
-    assert.equal(place.left + place.width, 28, "the popover's trailing edge is the ring's");
+    assert.deepEqual(placeOf(popover), { side: "above", left: 0, width: 340 });
   } finally {
     restore();
     sheet.remove();
