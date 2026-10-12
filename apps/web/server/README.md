@@ -634,6 +634,23 @@ invitation nobody is told about. A browser signed in on the site reaches the
 rest — creating a workspace, reading its members, removing one — with its
 session cookie.
 
+Adding a member is the one thing the page cannot do through the plugin's own
+endpoints, since its `addMember` is server-only, so
+`server/workspaces-members-app.ts` answers `POST /api/workspaces/members
+{ organizationId, email, role }` (`server/routes/workspaces/members.ts`) on the
+same browser session, never the desktop's bearer. The session names the
+caller (`auth.api.getSession`), the plugin's own `hasPermission` asks for
+`member:create`, which its default roles give an owner and an admin, and a
+caller who is not in the workspace or lacks the right is answered `not-found`
+alike. A personal workspace is refused, the address is matched to an account
+that already signs in (lowercased, as Better Auth stores it; no invitation is
+sent to an address no account holds, which answers `not-found`), and
+`auth.api.addMember`, called with no headers, writes the row; a refusal of the
+plugin's own, an account already a member or a full workspace, is
+`invalid-request`. The seams are `hosted/workspace-seams.ts`'s
+`workspaceMemberSeams(auth.api)`, and `tests/workspaces-members-app.test.ts`
+runs them over a real Better Auth on PGlite, sessions included.
+
 ## The events and maintenance groups
 
 `server/events-app.ts` and `server/maintenance-app.ts` are two route groups of
