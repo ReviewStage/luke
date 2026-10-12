@@ -390,8 +390,8 @@ type ReceivedParts = Extract<MessageStreamEvent, { type: "message.received" }>["
 
 /**
  * One turn of the agent's session relayed whole, a minute after the one
- * before it: the developer's words received, with the files given, and the
- * agent's answer echoing them, then the turn completed.
+ * before it: the developer's words received, with the files given, the
+ * agent's terse answer, then the turn completed.
  */
 const exchange = (
   host: CoderHost,
@@ -408,7 +408,7 @@ const exchange = (
     yield* TestClock.adjust("1 minute");
     const session = { id: opened.sessionId, auth: opened.auth, turn: { id: turnId } };
     const sequence = 0;
-    const answer = `Looked at it: ${said}`;
+    const answer = "Done.";
     const state = memoryRelayState();
     for (const event of [
       stamped({ type: "turn.started", data: { turnId, sequence } }),
@@ -758,7 +758,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const [asked] = model.doGenerateCalls;
         assert.ok(asked !== undefined);
         const read = JSON.stringify(asked.prompt);
-        assert.match(read, /Add a sign-out button to the header[\s\S]*Looked at it/u);
+        assert.match(read, /Add a sign-out button to the header[\s\S]*Done/u);
         assert.doesNotMatch(read, /Teammate invitations/u);
 
         // A title standing is never asked for again.
@@ -807,6 +807,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         );
         yield* exchange(greeting, hello, "turn_1", "The login test fails on CI now and then.");
         yield* greeting.title(hello.admitted);
+        // The retry reads the task that followed the greeting, which the agent's answer does not repeat.
+        assert.match(JSON.stringify(greeted.doGenerateCalls[1]?.prompt), /login test fails on CI/u);
         assert.equal(
           Option.getOrThrow(yield* readCodingAgent(hello.userId, hello.agent.id)).title,
           "Flaky login test",

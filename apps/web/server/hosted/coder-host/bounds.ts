@@ -50,6 +50,8 @@ export const CODER = {
    * ended agent, or of the worker, waits for the worker's title to land.
    */
   TITLE_TIMEOUT: Duration.seconds(20),
+  /** The turns an agent is titled in (`title.ts`), past which an untitled agent keeps the model's name and a read waits for no title of its own. */
+  TITLE_TURNS: 3,
   /** How long one instance keeps what an agent published before asking GitHub again; a tab asks beside every page of a held read. */
   PUBLISHED_TTL: Duration.seconds(30),
   /**

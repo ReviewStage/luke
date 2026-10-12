@@ -43,7 +43,12 @@ import {
   type MessageCursor,
   type StoredMessageRecord,
 } from "../store/index.js";
-import { type LatestTurn, readMessageByClientId, turnsNamed } from "../store/message-reads.js";
+import {
+  type LatestTurn,
+  readMessageByClientId,
+  turnsBefore,
+  turnsNamed,
+} from "../store/message-reads.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -358,18 +363,25 @@ export type TitleAwaited = TranscriptEffect<boolean>;
 /** A read that waits on no title: one whose deployment generates none. */
 export const NO_TITLE_AWAITED: TitleAwaited = Effect.succeed(false);
 
-/** Whether the agent's own title may still land: the agent untitled, and its newest turn completed inside the title call's bound, which is when that call is made. */
+/** Whether the agent's own title may still land: the agent untitled, its newest turn one of the turns it is titled in, and that turn completed inside the title call's bound, which is when that call is made. */
 function ownTitleMayLand(target: ConversationTarget, since: Date): TranscriptEffect<boolean> {
   return Effect.gen(function* () {
     const own = yield* readCodingAgentOfConversation(target.userId, target.conversationId);
     if (Option.isNone(own) || own.value.title !== null) return false;
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);
-    return (
+    const completed =
       newest?.status === TURN_STATUS.SETTLED &&
       newest.settledAt !== null &&
-      newest.settledAt >= since
+      newest.settledAt >= since;
+    if (!completed) return false;
+    const ran = yield* turnsBefore(
+      target.userId,
+      target.conversationId,
+      CODER.TITLE_TURNS,
+      undefined,
     );
+    return !ran.earlier;
   });
 }
 

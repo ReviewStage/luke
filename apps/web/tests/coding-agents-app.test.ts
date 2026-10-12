@@ -984,7 +984,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "an ended agent's untitled read with nothing new waits for its own title, due from the turn that just completed, and answers with it the moment it lands; one read past the title call's bound answers at once, untitled",
+    "an ended agent's untitled read with nothing new waits for its own title, due from the turn that just completed, and answers with it the moment it lands; one read past the title call's bound, or of an agent past the turns it is titled in, answers at once, untitled",
     () =>
       Effect.gen(function* () {
         const { owner, plan, ask } = yield* openPlan({ titles: true });
@@ -1031,6 +1031,26 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
         assert.deepEqual(untitled.messages, []);
         assert.equal(untitled.title, null);
+
+        // An agent past the turns it is titled in has no title call coming, however recent its end.
+        const past = yield* startedAgent(owner, plan.id, ask);
+        for (let turn = 0; turn <= CODER.TITLE_TURNS; turn += 1) {
+          const wrote = yield* agentWroteMessages(past.target, [line(`Hi ${turn}.`)]);
+          yield* agentEnded(past.target, wrote, yield* Clock.currentTimeMillis);
+        }
+        const first = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id })),
+        );
+        assert.equal(first.messages.length, CODER.TITLE_TURNS + 1);
+        const unawaited = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id, after: first.cursor })),
+        );
+        assert.deepEqual(unawaited.messages, []);
+        assert.equal(unawaited.title, null);
       }),
   );
 

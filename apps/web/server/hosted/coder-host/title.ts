@@ -19,13 +19,14 @@ import { CURSOR_START } from "./transcript.js";
  * title of a few words with nothing around it; what comes back is tidied
  * of the quotes and the full stop a model adds anyway, and cut to the
  * wire's bound. An agent is named from what the developer first said to
- * it and what it last answered, each cut to an excerpt, as a chat is
+ * it, what they said last where that is another message, and what it last
+ * answered, each cut to an excerpt, as a chat is
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
  * names it, and one started on a task of its own is named for that task.
  * An exchange that names no task yet, a greeting or a file with no words,
  * is answered with nothing, and the next turn's end asks again, for the
- * agent's first `AGENT_TITLE.TURNS` turns; a call that fails, times out, or
+ * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or
  * answers nothing writes nothing, and the tab shows the model's name
  * meanwhile. A subagent, a coding agent's worker or a planning worker, is
  * named by the same call over the task it was handed alone, and its title
@@ -44,8 +45,6 @@ const AGENT_TITLE = {
   EXCERPT_CHARS: 2_000,
   /** The newest messages read for the agent's latest answer, past the lines sent since it ended. */
   RECENT_MESSAGES: 8,
-  /** The turns an agent is named in: an agent still untitled past them keeps the model's name. */
-  TURNS: 3,
 } as const;
 
 const INSTRUCTIONS =
@@ -83,7 +82,12 @@ function excerptOf(message: StoredUIMessage | undefined): string {
   return words.slice(0, AGENT_TITLE.EXCERPT_CHARS);
 }
 
-/** What an agent is named from: the developer's first message and the agent's latest answer, each by its speaker, a message with no words left out. */
+/**
+ * What an agent is named from: the developer's first message, their latest
+ * where it is another, so a retry past a greeting reads the task that
+ * followed it, and the agent's latest answer, each by its speaker, a
+ * message with no words left out.
+ */
 function agentExchange(
   target: ConversationTarget,
 ): Effect.Effect<string, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
@@ -102,16 +106,18 @@ function agentExchange(
       CODER_TOOL_SET,
       AGENT_TITLE.RECENT_MESSAGES,
     );
-    const first = opening.read.ok ? opening.read.value[0]?.message : undefined;
-    const latest = recent.ok
-      ? recent.value.findLast((record) => record.message.role === MESSAGE_ROLE.ASSISTANT)?.message
-      : undefined;
+    const first = opening.read.ok ? opening.read.value[0] : undefined;
+    const newest = recent.ok ? recent.value : [];
+    const said = newest.findLast((record) => record.message.role === MESSAGE_ROLE.USER);
+    const answered = newest.findLast((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+    const opened = first?.message.role === MESSAGE_ROLE.USER ? first : undefined;
     return [
+      { speaker: SPEAKER.DEVELOPER, words: excerptOf(opened?.message) },
       {
         speaker: SPEAKER.DEVELOPER,
-        words: excerptOf(first?.role === MESSAGE_ROLE.USER ? first : undefined),
+        words: said === undefined || said.id === opened?.id ? "" : excerptOf(said.message),
       },
-      { speaker: SPEAKER.AGENT, words: excerptOf(latest) },
+      { speaker: SPEAKER.AGENT, words: excerptOf(answered?.message) },
     ]
       .filter((line) => line.words.length > 0)
       .map((line) => `${line.speaker}: ${line.words}`)
@@ -165,7 +171,7 @@ export function titleSubagent(
 
 /**
  * An agent's title generated from its first exchange and written where
- * none stands, as one of its first `AGENT_TITLE.TURNS` turns ends: a title
+ * none stands, as one of its first `CODER.TITLE_TURNS` turns ends: a title
  * already standing, the developer's own included, is never asked for
  * again, an agent past those turns is left on the model's name, and an
  * exchange with no words in it asks nothing. A call that answers nothing
@@ -181,7 +187,7 @@ export function titleCodingAgent(
     const ran = yield* turnsBefore(
       target.userId,
       target.conversationId,
-      AGENT_TITLE.TURNS,
+      CODER.TITLE_TURNS,
       undefined,
     );
     if (ran.earlier) return;
