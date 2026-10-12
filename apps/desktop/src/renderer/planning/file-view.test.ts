@@ -11,7 +11,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
+import { FindScope } from "../find-in-tab";
 import { ToastHost } from "../toast";
 import type { ReadFileWindow } from "./file-tab";
 import { FileView } from "./file-view";
@@ -176,7 +178,8 @@ function mounted(
     const [treeOpen, setTreeOpen] = useState(false);
     const [walk, setWalk] = useState({ files: [start], at: 0 });
     const file = walk.files[walk.at] ?? start;
-    return createElement(FileView, {
+    useAppKeymap(true);
+    const view = createElement(FileView, {
       planId: PLAN,
       repository: REPOSITORY,
       file,
@@ -209,6 +212,8 @@ function mounted(
           })),
       },
     });
+    // The view stands in the side panel's find, as it does in the window.
+    return createElement(FindScope, { active: true, subject: [PLAN, file.path] }, view);
   }
   const draw = async (path: string, range?: OpenFile["range"], opened = 1) => {
     await act(async () => {
@@ -447,6 +452,7 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
     pane?.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
   });
   assert.equal(document.activeElement, field);
+  assert.equal(view.container.querySelector(".find-bar"), null, "the tab's find bar stays shut");
 
   type("web");
   await view.press(view.container.querySelectorAll(".file-breadcrumb")[3]);

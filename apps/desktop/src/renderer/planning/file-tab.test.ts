@@ -18,9 +18,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, onTestFinished, test, vi } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { installHighlights } from "#testing/find-highlights";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
+import { useAppKeymap } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { FileTab } from "./file-tab";
-import { snippetOf } from "./file-tab-model";
+import { FILE_READ, snippetOf, withWindow } from "./file-tab-model";
 import type { OpenFile } from "./use-side-panel";
 
 /** A synthetic file of `lineCount` lines, each saying its own number. */
@@ -317,4 +320,76 @@ test("the lines a File tab draws in its file's place are the newest showing of t
   assert.equal(snippetOf(shown, opened(8))?.lines[0]?.[0]?.text, "again");
   assert.equal(snippetOf(shown, opened(30))?.lines[0]?.[0]?.text, "later");
   assert.equal(snippetOf(shown, { path: "src/gone.ts", range: undefined, opened: 1 }), undefined);
+});
+
+test("while a find bar is open over the tab the rest of the file is read a window after another and drawn whole, so a match past the lines drawn is found", async () => {
+  installHighlights();
+  watchedRows();
+  const asked: string[] = [];
+  const answer = numberedFile(1_200);
+  const readFile = (window: PlanFileRequest) => {
+    asked.push(`${window.firstLine}-${window.lastLine}`);
+    return Promise.resolve().then(() => answer(window));
+  };
+  function Finding() {
+    useAppKeymap(true);
+    return createElement(
+      FindScope,
+      { active: true, subject: ["plan", "src/invite.ts"] },
+      createElement(FileTab, {
+        file: { path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 },
+        snippet: undefined,
+        readFile,
+        openGitHub: () => undefined,
+      }),
+    );
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  act(() => root.render(createElement(Finding)));
+  await settle();
+  assert.deepEqual(asked, ["501-1000"]);
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(asked, ["501-1000", "1-500", "1001-1500"]);
+  assert.equal(drawnLines(container).length, 1_200);
+  const input = container.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
+  assert.ok(input);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, "line 1150");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(container.querySelector(".find-bar-tally")?.textContent, "1 of 1");
+});
+
+test("a window read twice, as a find and a scroll may both ask for it, leaves the run as it was", () => {
+  const read = (firstLine: number, count: number) => ({
+    path: "src/invite.ts",
+    repository: "acme/relay",
+    branch: "main",
+    firstLine,
+    lineCount: 1_200,
+    lines: Array.from({ length: count }, (_, at) => [{ text: `line ${firstLine + at}` }]),
+  });
+  const held = {
+    kind: FILE_READ.READY,
+    ...withWindow({ kind: FILE_READ.READING }, read(501, 500)),
+  };
+  const joined = { kind: FILE_READ.READY, ...withWindow(held, read(1, 500)) };
+
+  const again = withWindow(joined, read(501, 500));
+
+  assert.equal(again.firstLine, 1);
+  assert.equal(again.lines.length, 1_000);
 });

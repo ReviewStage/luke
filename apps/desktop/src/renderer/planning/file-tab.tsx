@@ -1,6 +1,7 @@
 import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useFindOpen } from "../find-in-tab";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
@@ -14,6 +15,7 @@ import {
   refusalLine,
   refusalPasses,
   windowAt,
+  windowUnread,
   withWindow,
 } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
@@ -37,7 +39,9 @@ import type { OpenFile } from "./use-side-panel";
  * own: the File view's bar over it names the file and offers what is done
  * with it (`file-view.tsx`), told how the read stands as it moves. The lines
  * are drawn numbered or not, wrapped or not, as every File tab is
- * (`file-view-settings.ts`). Every line here is
+ * (`file-view-settings.ts`). While a find bar is open over the tab,
+ * the rest of the file is read a window after another until it is drawn
+ * whole, so the find covers every line of it (`find-in-tab.tsx`). Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
@@ -286,6 +290,25 @@ export function FileTab({
       () => false,
     );
   }, [readWindow]);
+
+  // While a find is open, the window above or below what is drawn, one at
+  // a time, until the file is whole: each landing draws a fresh run, which
+  // asks for the next. Note that a window that did not land ends the
+  // reading until the find is opened again, rather than asking at once.
+  const finding = useFindOpen();
+  const readingRest = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!finding || read.kind !== FILE_READ.READY) return;
+    const next = windowUnread(read);
+    if (next === undefined || readingRest.current === next.firstLine) return;
+    readingRest.current = next.firstLine;
+    const missed = () => {
+      readingRest.current = undefined;
+    };
+    readWindow(next).then((landed) => {
+      if (!landed) missed();
+    }, missed);
+  }, [finding, read, readWindow]);
 
   useEffect(() => {
     if (asked.current === file.opened) return;

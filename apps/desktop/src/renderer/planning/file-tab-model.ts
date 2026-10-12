@@ -132,10 +132,22 @@ export function holdsLines(held: FileLines, startLine: number, endLine: number):
 }
 
 /**
+ * The window to read next for the whole file: the one just above the run
+ * held, then the one just below it, while the file runs on past it; none
+ * once the run is the whole file.
+ */
+export function windowUnread(held: FileLines): FileWindow | undefined {
+  if (held.firstLine > 1) return windowAt(held.firstLine - 1);
+  const last = lastLineOf(held);
+  return last < held.lineCount ? windowAt(last + 1) : undefined;
+}
+
+/**
  * The run held with a window read laid beside it: the window just after
- * the run is joined below it, the one just before above it, and any other
- * starts the run afresh. The file's length is the newest read's, since the
- * file is read as it stands at each read.
+ * the run is joined below it, the one just before above it, one the run
+ * already holds, read twice, leaves it as it was, and any other starts the
+ * run afresh. The file's length is the newest read's, since the file is
+ * read as it stands at each read.
  */
 export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   const window: FileLines = {
@@ -146,6 +158,9 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
     lines: read.lines,
   };
   if (held.kind !== FILE_READ.READY) return window;
+  if (holdsLines(held, read.firstLine, read.firstLine + read.lines.length - 1)) {
+    return { ...window, firstLine: held.firstLine, lines: held.lines };
+  }
   if (read.firstLine === lastLineOf(held) + 1) {
     return { ...window, firstLine: held.firstLine, lines: [...held.lines, ...read.lines] };
   }

@@ -232,7 +232,10 @@ export function FileTreePane({
       aria-label="Files"
       onKeyDown={(event) => {
         if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey)) return;
+        // Note that the press goes no further, because the window's ⌘F would
+        // open the tab's find bar over the field it just put the caret in.
         event.preventDefault();
+        event.stopPropagation();
         field.current?.focus();
         field.current?.select();
       }}

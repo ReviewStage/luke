@@ -28,10 +28,15 @@ const { FakeBrowserWindow } = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({ BrowserWindow: FakeBrowserWindow }));
 
+/** Every item in the menu bar, the menus' own items under them. */
+function everyItem(): MenuItemConstructorOptions[] {
+  const under = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
+    items.flatMap((each) => [each, ...(Array.isArray(each.submenu) ? under(each.submenu) : [])]);
+  return under(appMenuTemplate("Luke"));
+}
+
 function item(label: string): MenuItemConstructorOptions {
-  const found = appMenuTemplate("Luke")
-    .flatMap((menu) => (Array.isArray(menu.submenu) ? menu.submenu : []))
-    .find((each) => each.label === label);
+  const found = everyItem().find((each) => each.label === label);
   assert.ok(found?.click, `the menu bar offers ${label}`);
   return found;
 }
@@ -161,13 +166,6 @@ test("View holds Actual Size, Zoom In, and Zoom Out as Chrome orders them, each 
   ]);
 });
 
-/** Every item in the menu bar, the menus' own items under them. */
-function everyItem(): MenuItemConstructorOptions[] {
-  const under = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
-    items.flatMap((each) => [each, ...(Array.isArray(each.submenu) ? under(each.submenu) : [])]);
-  return under(appMenuTemplate("Luke"));
-}
-
 test("the system's own items answer the chords the shortcuts page lists: Hide, Hide Others, Quit, Minimize, and Toggle Full Screen", () => {
   const chords = new Map(
     everyItem().flatMap((each) => (each.role ? [[each.role, each.accelerator]] : [])),
@@ -182,7 +180,7 @@ test("the system's own items answer the chords the shortcuts page lists: Hide, H
 });
 
 test("no chord is bound twice: not across the menu bar, not by the shortcut table, and not over the Edit menu's own", () => {
-  // The Edit menu's role brings these, unseen in the template.
+  // The Edit menu's roles bring these, unseen in the template.
   const editing = [
     "Command+Z",
     "Shift+Command+Z",
@@ -210,4 +208,33 @@ test("no chord is bound twice: not across the menu bar, not by the shortcut tabl
     [],
   );
   for (const chord of menu) assert.ok(table.includes(chord) || chord === "Escape", chord);
+});
+
+test("Edit keeps the system's own items and holds Find as every Mac app's does, Find…, Find Next, and Find Previous each handed to the window on a click and their keys left to the window's keymap", () => {
+  const edit = appMenuTemplate("Luke").find((menu) => menu.label === "Edit");
+  assert.ok(Array.isArray(edit?.submenu));
+  assert.deepEqual(
+    edit.submenu.flatMap((each) => (each.role === undefined ? [] : [each.role])),
+    ["undo", "redo", "cut", "copy", "paste", "pasteAndMatchStyle", "delete", "selectAll"],
+  );
+  const find = edit.submenu.find((each) => each.label === "Find");
+  assert.ok(Array.isArray(find?.submenu));
+  assert.deepEqual(
+    find.submenu.map((each) => [each.label, each.accelerator]),
+    [
+      ["Find…", "Command+F"],
+      ["Find Next", "Command+G"],
+      ["Find Previous", "Shift+Command+G"],
+    ],
+  );
+  const window = new FakeBrowserWindow();
+  for (const label of ["Find…", "Find Next", "Find Previous"]) {
+    choose(label, window, true);
+    choose(label, window, false);
+  }
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.FIND],
+    [channels.onMenuCommand, APP_COMMAND.FIND_NEXT],
+    [channels.onMenuCommand, APP_COMMAND.FIND_PREVIOUS],
+  ]);
 });

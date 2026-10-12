@@ -3,12 +3,14 @@ import { DocumentIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
+import { tabKey } from "../planning/tab-strip-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -48,9 +50,10 @@ import { Tab, TabStrip } from "./tab-strip";
  * read. The document stays laid out while an agent's tab is shown, so
  * coming back to it finds it where it was left.
  *
- * ⌘T opens the "+" of the column holding the window's focus, and ⌘W closes
- * its chosen tab: the side panel's once the pointer or the focus went into
- * it, else this column's, which a panel shut hands them back to.
+ * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
+ * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
+ * panel's once the pointer or the focus went into it, else this column's,
+ * which a panel shut hands them back to.
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
@@ -59,7 +62,7 @@ import { Tab, TabStrip } from "./tab-strip";
  * drawn, and a version viewed is not restored (`../planning/archived-plan.tsx`).
  */
 
-/** Which of the plan's two columns holds the window's focus, which ⌘T and ⌘W answer to. */
+/** Which of the plan's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to. */
 const COLUMN = {
   MAIN: "main",
   SIDE: "side",
@@ -290,7 +293,11 @@ function PlanDocument({
         {/* The summary stands beside what the column shows, under the
             toolbar and over the call bar, which both span the column. */}
         <div className="desktop-plan-body">
-          <div className="desktop-plan-column">
+          <FindScope
+            className="desktop-plan-column"
+            active={plans.shown && !sideFocused}
+            subject={[plan.id, tabKey(tab)]}
+          >
             {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
             <section
               className="desktop-document"
@@ -325,7 +332,7 @@ function PlanDocument({
                 />
               </section>
             )}
-          </div>
+          </FindScope>
           <PlanSummary plans={plans} layout={summaryLayout} cardId={summaryCard} />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be
