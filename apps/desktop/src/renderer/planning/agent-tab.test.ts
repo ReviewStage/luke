@@ -688,6 +688,18 @@ test("a finished turn folds its calls under one line saying how many, as the Wor
   assert.equal(container.querySelectorAll("details[data-call-id]").length, 4);
 });
 
+test("a finished turn's fold names its subagents apart from its calls, a worker still running read no differently", () => {
+  const finished: CodingAgentMessage = {
+    ...DELEGATING,
+    parts: [...TURN.parts, ...DELEGATING.parts, { type: "text", text: "Both workers are on it." }],
+  };
+  const markup = drawn([PLAN, finished]);
+  assert.match(
+    markup,
+    /<details[^>]*data-turn-fold=""[^>]*><summary[^>]*>.*?4 tool calls, 2 subagents, 1 message</u,
+  );
+});
+
 test("each row says what the call did and where it stands, and the icon and mark are 16px", () => {
   const markup = unfolded([TURN]).innerHTML;
   assert.match(

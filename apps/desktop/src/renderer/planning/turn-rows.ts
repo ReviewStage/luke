@@ -10,7 +10,8 @@
  * panel): calls next to one another are one group that is open while it is
  * the turn's latest work on a turn that moves and folded once the model
  * moved on, and a finished turn folds everything ahead of its last words
- * into one line saying how much it holds, so it reads as its answer. That
+ * into one line saying how much it holds, its subagents named apart from
+ * its other calls, so it reads as its answer. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -81,8 +82,10 @@ export const ROW_PART = {
   WORDS: "words",
   /** A call, which runs together with the calls beside it. */
   CALL: "call",
-  /** A call that stands on a row of its own, as a worker does because it runs on after its call. */
+  /** A call that stands on a row of its own, as an agent's to-do list does. */
   LONE_CALL: "lone-call",
+  /** A subagent, which stands on a row of its own because it runs on after its call, and which a fold counts apart from the calls. */
+  SUBAGENT: "subagent",
   /** Anything else, which ends a run and is not counted: reasoning. */
   NOTE: "note",
 } as const;
@@ -132,10 +135,18 @@ export function groupSummary(calls: number): string {
   return `${calls} ${calls === 1 ? "tool called" : "tools called"}`;
 }
 
+/** What a lead's blocks hold, as its fold's line counts them. */
+interface Held {
+  readonly calls: number;
+  readonly subagents: number;
+  readonly messages: number;
+}
+
 /** What a finished turn's folded lead says it holds. */
-function foldedSummary(calls: number, messages: number): string {
+function foldedSummary({ calls, subagents, messages }: Held): string {
   const said = [
     ...(calls > 0 ? [plural(calls, "tool call", "tool calls")] : []),
+    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
     ...(messages > 0 ? [plural(messages, "message", "messages")] : []),
   ];
   return said.join(", ");
@@ -195,16 +206,18 @@ function groupedRows<B>(
   return rows;
 }
 
-/** How many calls and how many of the model's messages a lead's blocks hold. */
-function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): [number, number] {
+/** How many calls, subagents, and of the model's messages a lead's blocks hold. */
+function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
   let calls = 0;
+  let subagents = 0;
   let messages = 0;
   for (const { block } of blocks) {
     const part = read.part(block);
     if (part === ROW_PART.CALL || part === ROW_PART.LONE_CALL) calls += 1;
+    if (part === ROW_PART.SUBAGENT) subagents += 1;
     if (part === ROW_PART.WORDS) messages += 1;
   }
-  return [calls, messages];
+  return { calls, subagents, messages };
 }
 
 /**
@@ -235,13 +248,13 @@ export function turnRows<B>(
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
-  const [calls, messages] = counted(lead, read);
-  if (calls === 0) return groupedRows(keyed, read, turn.moving, turn.grouped);
+  const held = counted(lead, read);
+  if (held.calls + held.subagents === 0) return groupedRows(keyed, read, turn.moving, turn.grouped);
   return [
     {
       kind: TURN_ROW.FOLDED,
       key: `${turn.key}-folded`,
-      summary: foldedSummary(calls, messages),
+      summary: foldedSummary(held),
       rows: groupedRows(lead, read, false, false),
     },
     ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, turn.grouped),

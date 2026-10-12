@@ -133,6 +133,42 @@ test("a finished turn's calls ahead of its words are folded once, under the lead
   ]);
 });
 
+test("a finished turn's fold names its subagents apart from its other calls, in the singular for one, and a subagent still running reads no differently", () => {
+  const summaryOf = (parts: readonly PlanWorkPart[]) => {
+    const [fold] = rowsOf([turn(PLAN_WORK_STATE.DONE, parts)]);
+    assert.ok(fold?.kind === TURN_ROW.FOLDED);
+    return fold.summary;
+  };
+
+  assert.equal(
+    summaryOf([
+      call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"),
+      call("w1", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
+      call("w2", PLAN_WORK_TOOL.WORKER, "Find the admin check.", PLAN_WORK_STATE.RUNNING),
+      call("b", PLAN_WORK_TOOL.WORKER_WAIT, undefined),
+      words("Both workers are on it."),
+      call("c", PLAN_WORK_TOOL.REPOSITORY, "cat invites.ts"),
+      words("Queue A is the one to use."),
+    ]),
+    "3 tool calls, 2 subagents, 1 message",
+  );
+  assert.equal(
+    summaryOf([
+      call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"),
+      call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
+      words("Queue A is the one to use."),
+    ]),
+    "1 tool call, 1 subagent",
+  );
+  assert.equal(
+    summaryOf([
+      call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
+      words("Queue A is the one to use."),
+    ]),
+    "1 subagent",
+  );
+});
+
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
   const rows = rowsOf([
     turn(PLAN_WORK_STATE.DONE, [
