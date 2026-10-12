@@ -132,6 +132,7 @@ const EFFECT_MODULE_SCHEMAS = {
     shownCodeSchema: planWire.shownCodeSchema,
     planFileRequestSchema: planWire.planFileRequestSchema,
     planFileWindowSchema: planWire.planFileWindowSchema,
+    planFileRefusalSchema: planWire.planFileRefusalSchema,
     planFileAnswerSchema: planWire.planFileAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "service-wire": {

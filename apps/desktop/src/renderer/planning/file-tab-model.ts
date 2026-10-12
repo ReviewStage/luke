@@ -3,7 +3,8 @@ import {
   PLAN_FILE_REFUSAL,
   type PlanFileRefusal,
 } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanFileShown } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanCodeShowing, PlanFileShown } from "@sidecar/hosted/planning-view";
+import type { OpenFile } from "./use-side-panel";
 
 /**
  * file-tab-model.ts -- what a File tab holds of its file, apart from drawing it: the windows read so far, joined into one run of lines, and why a file is not shown.
@@ -30,7 +31,12 @@ export interface FileLines {
 export type FileRead =
   | { readonly kind: typeof FILE_READ.READING }
   | ({ readonly kind: typeof FILE_READ.READY } & FileLines)
-  | { readonly kind: typeof FILE_READ.REFUSED; readonly refusal: PlanFileRefusal }
+  | {
+      readonly kind: typeof FILE_READ.REFUSED;
+      readonly refusal: PlanFileRefusal;
+      /** The branch GitHub found nothing at the path on, where the service named it. */
+      readonly branch: string | undefined;
+    }
   | { readonly kind: typeof FILE_READ.FAILED };
 
 /** One window of a file, its first and last line. */
@@ -40,9 +46,9 @@ export interface FileWindow {
 }
 
 /** What a File tab says in its file's place, for each reason the file is not shown. */
-export const FILE_REFUSAL_LINE = {
+const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
-  [PLAN_FILE_REFUSAL.MISSING]: "This file is no longer in the repository.",
+  [PLAN_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
   [PLAN_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
   [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
@@ -50,6 +56,35 @@ export const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED]: "Sign in with GitHub again to read this file.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
 } as const satisfies Record<PlanFileRefusal, string>;
+
+/**
+ * What a File tab says in place of a file refused: the table's line, and
+ * for a missing file the branch it was looked for on where the service
+ * named it, since the snippet was read from a checkout that held it.
+ */
+export function refusalLine(refusal: PlanFileRefusal, branch: string | undefined): string {
+  if (refusal === PLAN_FILE_REFUSAL.MISSING && branch !== undefined) {
+    return `This file is not on ${branch}, the branch Luke reads from GitHub.`;
+  }
+  return FILE_REFUSAL_LINE[refusal];
+}
+
+/**
+ * The lines Luke showed of a File tab's file, which the tab draws where
+ * the file itself cannot be: the newest showing of the lines the tab was
+ * opened on, or else the newest of the file at all.
+ */
+export function snippetOf(
+  shown: readonly PlanCodeShowing[] | undefined,
+  file: OpenFile,
+): PlanCode | undefined {
+  const ofFile = (shown ?? []).filter((each) => each.code.ref.path === file.path);
+  const opened = ofFile.findLast(
+    ({ code: { ref } }) =>
+      ref.startLine === file.range?.startLine && ref.endLine === file.range?.endLine,
+  );
+  return (opened ?? ofFile.at(-1))?.code;
+}
 
 /** Whether a refusal may pass with time, so the tab offers to read again. */
 export function refusalPasses(refusal: PlanFileRefusal): boolean {

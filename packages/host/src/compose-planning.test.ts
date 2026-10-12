@@ -1748,7 +1748,7 @@ it.effect(
 );
 
 it.effect(
-  "a file's window is answered to the tab that asked, its lines coloured, a refusal as the service gave it, and a service that did not answer as unanswered",
+  "a file's window is answered to the tab that asked, its lines coloured, a refusal as the service gave it with the branch a missing file was looked for on, and a service that did not answer as unanswered",
   () =>
     Effect.gen(function* () {
       const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -1762,6 +1762,7 @@ it.effect(
         },
       };
       service.files[".env"] = { refusal: PLAN_FILE_REFUSAL.SECRET };
+      service.files["src/moved.ts"] = { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" };
       const { call } = yield* openPlan(service);
       const window = (path: string) =>
         call(GATEWAY_METHOD.PLANNING_FILE, { planId: INVITES, path, firstLine: 1, lastLine: 500 });
@@ -1778,6 +1779,10 @@ it.effect(
       );
       assert.deepEqual(lines[1], []);
       assert.deepEqual(yield* window(".env"), { refusal: PLAN_FILE_REFUSAL.SECRET });
+      assert.deepEqual(yield* window("src/moved.ts"), {
+        refusal: PLAN_FILE_REFUSAL.MISSING,
+        branch: "main",
+      });
       assert.deepEqual(yield* window("gone.ts"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
     }),
 );

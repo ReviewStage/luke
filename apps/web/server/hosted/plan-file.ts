@@ -43,7 +43,7 @@ import { logStoreFailure } from "./store-failure.js";
  * Note that GitHub's head may differ from the checkout the snippet was read
  * from, whose clone is the default branch as it stood when the session first
  * read the repository: the window is the file as it is now, and a file gone
- * since reads as missing.
+ * since reads as missing, naming the branch GitHub found nothing on.
  */
 
 /** Each reason the shared rule refuses a file, as the File tab hears it. */
@@ -121,6 +121,15 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     bytes: file.regular ? file.bytes : 0,
     binary: content === undefined || holdsNul(content),
   });
+  // Note that a file GitHub found nothing at names the branch it was looked
+  // for on, because the snippet's checkout may hold a file that branch no
+  // longer does; a link or a directory there is missing on no branch.
+  if (refusal === SHOWN_FILE_REFUSAL.MISSING && !file.regular && file.notFound) {
+    return {
+      refusal: PLAN_FILE_REFUSAL.MISSING,
+      branch: confirmed.defaultBranch,
+    } satisfies PlanFileAnswer;
+  }
   if (refusal !== undefined) return refused(FILE_REFUSAL_OF[refusal]);
   // A regular file GitHub carried no bytes of is past the bound, which the rule refused above.
   const all = fileLines(new TextDecoder().decode(content));

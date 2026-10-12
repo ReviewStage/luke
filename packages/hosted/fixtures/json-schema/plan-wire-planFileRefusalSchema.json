@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "refusal": {
+      "type": "string",
+      "enum": [
+        "secret",
+        "missing",
+        "not-text",
+        "no-repository",
+        "not-reachable",
+        "sign-in-required",
+        "unavailable"
+      ]
+    },
+    "branch": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "refusal"
+  ],
+  "additionalProperties": false
+}

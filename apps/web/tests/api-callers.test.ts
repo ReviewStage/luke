@@ -23,7 +23,7 @@ const REPO_ROOT = join(WEB, "..", "..");
 
 /** A small table in the committed table's shape: one exact rewrite, one segment rewrite, one prefix rewrite. */
 const TABLE = [
-  { src: "/api/auth/(.*)", dest: "/api/default.js?route=auth/[...all]&path=auth/$1" },
+  { src: "/api/auth/(.*)", dest: "/api/default.js?route=auth/[...all]&route-path=auth/$1" },
   { src: "/api/plans/([^/]+)/agents", dest: "/api/default.js?route=plans/agents&id=$1" },
   { src: "/api/plans/([^/]+)", dest: "/api/default.js?route=plans/plan&id=$1" },
   { src: "/api/events", dest: "/api/default.js?route=events" },

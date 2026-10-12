@@ -555,6 +555,29 @@ button.code-card-path:hover {
   scrollbar-width: thin;
 }
 
+/* Why the file is not drawn, standing over the lines Luke showed of it. */
+.file-tab-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.file-tab-notice > p {
+  flex: 1;
+}
+
+.file-tab-snippet-label {
+  margin: 0;
+  padding: var(--space-8) var(--space-12) var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
 .file-tab-edge {
   display: block;
   width: 100%;

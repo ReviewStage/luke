@@ -332,8 +332,9 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   (`GET /api/plans/{id}/file`, `hosted/plan-file.ts`), from GitHub at the
   head of the default branch through the Luke GitHub App, since no checkout
   stands outside a call, under the rule `show_code` keeps
-  (`hosted/shown-file.ts`); a file changed since is drawn as it is now. File
-  tabs are kept nowhere. With no code ever shown, the Code tab says so
+  (`hosted/shown-file.ts`); a file changed since is drawn as it is now, and
+  one not on that branch, or not read at all, says so over the lines Luke
+  showed of it. File tabs are kept nowhere. With no code ever shown, the Code tab says so
   quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.

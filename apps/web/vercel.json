@@ -10,7 +10,7 @@
       "routes": [
         {
           "src": "/api/auth/(.*)",
-          "dest": "/api/default.js?route=auth/[...all]&path=auth/$1"
+          "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
         {
           "src": "/api/plans/([^/]+)/board",

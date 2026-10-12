@@ -643,7 +643,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           return carried<PlanningFileAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         }
         return carried<PlanningFileAnswer>(
-          "file" in answer ? { file: highlightFile(answer.file) } : { refusal: answer.refusal },
+          "file" in answer ? { file: highlightFile(answer.file) } : answer,
         );
       }),
     // A page of the history, and a revision beside the one before it, are

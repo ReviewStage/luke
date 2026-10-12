@@ -58,6 +58,7 @@ import {
   type SentToGitHub,
 } from "./support/github-app-fake";
 import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import { dispatched } from "./support/platform-landing";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -115,12 +116,22 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (request: Request) => answer(bearers, github, request);
+    const ask = (request: Request, landedAs?: string) => answer(bearers, github, request, landedAs);
     return { owner, other, ask };
   });
 
-/** The group over the test's own database and the GitHub given, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+/**
+ * The group over the test's own database and the GitHub given, answering
+ * one request: at the route's own path, or, where a route key is named, as
+ * a client sends it, landed by the platform on a function holding the group
+ * under that key.
+ */
+const answer = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  request: Request,
+  landedAs?: string,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -138,7 +149,11 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* Effect.promise(() =>
+      landedAs === undefined
+        ? handler(request)
+        : dispatched(request, new Map([[landedAs, { fetch: (each) => handler(each) }]])),
+    );
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     yield* Effect.promise(() => dispose());
@@ -1190,7 +1205,38 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name",
+    "a File tab's read as a desktop sends it, its file named in a `path` query, is answered by the file route itself once the platform lands it on its function",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const sent = request(
+          `/api/plans/${planId}/file?path=src%2Finvite.ts&first=1&last=2`,
+          owner,
+        );
+
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(sent, "plans/file")),
+          {
+            file: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              firstLine: 1,
+              lineCount: 4,
+              lines: ["one", "two"],
+            },
+          },
+        );
+      }),
+  );
+
+  it.effect(
+    "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, one GitHub found nothing at naming the branch it was looked for on",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
@@ -1211,13 +1257,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(yield* refusalOf("config/.env.local"), {
           refusal: PLAN_FILE_REFUSAL.SECRET,
         });
-        assert.deepEqual(yield* refusalOf("src/../../other/secret.ts"), {
-          refusal: PLAN_FILE_REFUSAL.MISSING,
-        });
+        const missing = { refusal: PLAN_FILE_REFUSAL.MISSING };
+        assert.deepEqual(yield* refusalOf("src/../../other/secret.ts"), missing);
         assert.equal(asked(), 0, "neither is asked of GitHub");
-        assert.deepEqual(yield* refusalOf("gone.ts"), { refusal: PLAN_FILE_REFUSAL.MISSING });
-        assert.deepEqual(yield* refusalOf("src"), { refusal: PLAN_FILE_REFUSAL.MISSING });
-        assert.deepEqual(yield* refusalOf("linked.ts"), { refusal: PLAN_FILE_REFUSAL.MISSING });
+        assert.deepEqual(
+          yield* refusalOf("gone.ts"),
+          { ...missing, branch: "main" },
+          "nothing at the path names the branch it was looked for on",
+        );
+        assert.deepEqual(yield* refusalOf("src"), missing, "a directory is on the branch");
+        assert.deepEqual(yield* refusalOf("linked.ts"), missing, "a link is on the branch");
         assert.deepEqual(yield* refusalOf("big.json"), { refusal: PLAN_FILE_REFUSAL.NOT_TEXT });
         assert.deepEqual(yield* refusalOf("assets/logo.png"), {
           refusal: PLAN_FILE_REFUSAL.NOT_TEXT,
