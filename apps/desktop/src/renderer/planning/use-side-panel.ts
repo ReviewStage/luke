@@ -1030,13 +1030,23 @@ export function useSidePanel(
   );
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most, and one opened in a tab of its own is viewed
-  // after the tab it was chosen from, as a snippet's file is.
+  // after the tab it was chosen from, as a snippet's file is. A tab another
+  // plan browsed to moves to this one, since this plan does not draw it.
   const onBrowseFile = useCallback(
     (from: string, path: string, newTab: boolean) =>
       update((held) => {
         const tab: SidePanelTab = { file: path };
-        if (held.files.some((each) => each.path === path)) {
-          return { ...withTab(withChosenViewed(held, tab, drawn), tab, planId), open: true };
+        const open = held.files.find((each) => each.path === path);
+        if (open !== undefined) {
+          const drawnHere = drawn.files.includes(path)
+            ? held
+            : {
+                ...held,
+                files: held.files.map((each) =>
+                  each === open ? { ...each, browsedOn: planId } : each,
+                ),
+              };
+          return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
         }
         const standing = newTab ? undefined : held.files.find((each) => each.path === from);
         return withFileBrowsed(withChosenViewed(held, tab, drawn), planId, standing, path);

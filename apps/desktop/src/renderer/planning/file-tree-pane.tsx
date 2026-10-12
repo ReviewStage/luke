@@ -38,6 +38,7 @@ function listingOf(answer: PlanningTreeAnswer): FolderListing {
         name: entry.name,
         folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
       })),
+      truncated: answer.folder.truncated,
     };
   }
   if ("failure" in answer) return { notice: "The files could not be read.", retry: true };

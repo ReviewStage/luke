@@ -181,6 +181,7 @@ test("the tree hears a folder in the File tab's words, a refusal saying whether 
       { name: "package.json", folder: false },
       { name: "lib", folder: true },
     ],
+    truncated: false,
   });
   props.onOpen("apps/web/README.md", true);
   assert.deepEqual(view.browsed, ["apps/web/README.md in a new tab"]);

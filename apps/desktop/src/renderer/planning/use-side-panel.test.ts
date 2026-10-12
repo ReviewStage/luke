@@ -254,6 +254,15 @@ test("a file browsed to stands on the plan it was browsed on, though Luke never 
   panel.render({ agents: [], subagents: [], files: [INVITE] });
   act(() => panel.control().onChoose({ file: "README.md" }));
   assert.deepEqual(panel.control().tab, { file: "README.md" });
+
+  // Browsed to again on another plan, the one tab moves there.
+  panel.render({ plan: usedPlan(OTHER), agents: [], subagents: [], files: [INVITE] });
+  act(() => panel.control().onBrowseFile(INVITE, "README.md", false));
+  assert.deepEqual(panel.control().tab, { file: "README.md" });
+  assert.deepEqual(
+    panel.control().files.map((file) => file.path),
+    [INVITE, "README.md"],
+  );
 });
 
 test("what an earlier version kept loads as the order alone: the tabs it held open open none a plan has not used, and its chosen tab shows where a plan has it", () => {

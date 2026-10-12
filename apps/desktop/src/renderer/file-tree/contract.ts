@@ -21,9 +21,13 @@ export interface FolderEntry {
   readonly folder: boolean;
 }
 
-/** A folder listed: its entries, or, in the tab's own words, why it was not, and whether listing it again may help. */
+/**
+ * A folder listed: its entries, and whether the service cut them short of
+ * the whole folder; or, in the tab's own words, why it was not listed, and
+ * whether listing it again may help.
+ */
 export type FolderListing =
-  | { readonly entries: readonly FolderEntry[] }
+  | { readonly entries: readonly FolderEntry[]; readonly truncated: boolean }
   | { readonly notice: string; readonly retry: boolean };
 
 /** Lists one folder of the repository. */

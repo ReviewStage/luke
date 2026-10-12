@@ -76,7 +76,7 @@ test("revealing a file lists the root and each folder above it, opens them, and 
   assert.deepEqual(rows().slice(0, 2), ["docs/", "  STYLE.md"]);
 });
 
-test("revealing another file marks it alone, though a ⌘-press had added to the marks; revealing a folder opens it", async () => {
+test("revealing another file marks it alone, though a ⌘-press had added to the marks; revealing a folder opens it, and the root its first row", async () => {
   const { tree, browser, rows } = browsing((path) => REPOSITORY.get(path));
   await browser.reveal("src/app/main.ts", { folder: false, focus: false });
   tree.getItem("README.md")?.select();
@@ -87,6 +87,10 @@ test("revealing another file marks it alone, though a ⌘-press had added to the
   await browser.reveal("docs", { folder: true, focus: true });
   assert.deepEqual(rows().slice(0, 2), ["docs/", "  STYLE.md"]);
   assert.equal(tree.getFocusedPath(), "docs/");
+
+  await browser.reveal("src/index.ts", { folder: false, focus: true });
+  await browser.reveal("", { folder: true, focus: true });
+  assert.equal(tree.getFocusedPath(), "docs/", "the root takes the keyboard to its first row");
 });
 
 test("a folder that could not be read closes, and is read again when it is opened again", async () => {

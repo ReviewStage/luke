@@ -39,6 +39,7 @@ const ROOT: FolderListing = {
     { name: "src", folder: true },
     { name: "README.md", folder: false },
   ],
+  truncated: false,
 };
 
 test("a root that cannot be listed says why in the tree's place, and Try again lists it and draws the tree", async () => {
@@ -48,7 +49,7 @@ test("a root that cannot be listed says why in the tree's place, and Try again l
       ? { notice: "GitHub could not be read just now.", retry: true }
       : path === ""
         ? ROOT
-        : { entries: [] },
+        : { entries: [], truncated: false },
   );
   await tree.settled();
 
@@ -68,7 +69,7 @@ test("a refusal that cannot pass offers nothing more", async () => {
 });
 
 test("a press on a file opens it, in a tab of its own where ⌘ is held, and a press on a folder opens none", async () => {
-  const tree = mounted((path) => (path === "" ? ROOT : { entries: [] }));
+  const tree = mounted((path) => (path === "" ? ROOT : { entries: [], truncated: false }));
   await tree.settled();
 
   tree.row("README.md").dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
@@ -82,10 +83,25 @@ test("a press on a file opens it, in a tab of its own where ⌘ is held, and a p
 
 test("a file revealed before the root is listed is marked once the tree is drawn", async () => {
   const tree = mounted((path) =>
-    path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }] },
+    path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }], truncated: false },
   );
   tree.handle.reveal("src/index.ts", { folder: false, focus: false });
   await tree.settled();
 
   assert.equal(tree.row("src/index.ts").getAttribute("aria-selected"), "true");
+});
+
+test("a folder listed short of whole says so under the tree, once", async () => {
+  const tree = mounted((path) =>
+    path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }], truncated: true },
+  );
+  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  await tree.settled();
+  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  await tree.settled();
+
+  assert.equal(
+    [...tree.host.querySelectorAll(".file-tree-cut")].map((cut) => cut.textContent).join(),
+    "Some folders hold more than the tree lists. Open them on GitHub to see the rest.",
+  );
 });

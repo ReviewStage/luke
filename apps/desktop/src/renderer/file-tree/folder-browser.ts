@@ -97,9 +97,16 @@ export function browseFolders(tree: FileTree, readFolder: ListEntries): FolderBr
   });
   list("");
 
+  // Note that the root has no row of its own, so revealing it takes the
+  // tree's keyboard to its first row, where the root's entries begin.
   const reveal = async (path: string, options: RevealOptions): Promise<void> => {
     revealing += 1;
     const ticket = revealing;
+    if (path === "") {
+      const listed = await list("");
+      if (ticket === revealing && listed && options.focus) tree.focusFirstItem();
+      return;
+    }
     const folders = options.folder ? [...foldersAbove(path), path] : foldersAbove(path);
     for (const folder of folders) {
       const listed = await list(folder);

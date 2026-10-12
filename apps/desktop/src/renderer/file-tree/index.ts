@@ -37,6 +37,10 @@ const ROW = {
 /** What the pane says while the root is listed. */
 const READING = "Reading the files…";
 
+/** What stands under the tree once a folder in it was listed short of whole. */
+const CUT_SHORT =
+  "Some folders hold more than the tree lists. Open them on GitHub to see the rest.";
+
 /** The row element a press landed in, through the tree's shadow root. */
 function pressedRow(event: Event): HTMLElement | undefined {
   return event
@@ -66,10 +70,14 @@ function notice(text: string, retry: (() => void) | undefined): HTMLElement {
   return box;
 }
 
-/** The entries a listing holds, or nothing where it holds why it is not one. */
-function entriesOf(read: ReadFolder) {
+/** The entries a listing holds, or nothing where it holds why it is not one; `onCut` hears a listing cut short. */
+function entriesOf(read: ReadFolder, onCut: () => void) {
   return (path: string) =>
-    read(path).then((listed) => ("entries" in listed ? listed.entries : undefined));
+    read(path).then((listed) => {
+      if (!("entries" in listed)) return undefined;
+      if (listed.truncated) onCut();
+      return listed.entries;
+    });
 }
 
 function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
@@ -88,7 +96,15 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     });
     host.replaceChildren();
     tree.render({ containerWrapper: host });
-    browser = browseFolders(tree, entriesOf(props.readFolder));
+    // Note that the line saying a folder was cut short is added once, under the tree.
+    const cut = notice(CUT_SHORT, undefined);
+    cut.classList.add("file-tree-cut");
+    browser = browseFolders(
+      tree,
+      entriesOf(props.readFolder, () => {
+        if (!cut.isConnected) host.append(cut);
+      }),
+    );
     for (const { path, options } of waiting.values()) {
       browser.reveal(path, options).catch(() => undefined);
     }

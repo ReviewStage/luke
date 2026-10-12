@@ -682,6 +682,13 @@ button.file-breadcrumb:hover,
   flex: 1;
 }
 
+/* The line under the tree saying a folder was listed short of whole. */
+.file-tree-host > .file-tree-cut {
+  flex: none;
+  border-top: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
 .file-tab-notice {
   display: flex;
