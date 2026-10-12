@@ -7,7 +7,7 @@ import {
 } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { planSections } from "./plan-document.js";
+import { openFenceAt, planSections } from "./plan-document.js";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -784,9 +784,19 @@ function addedText(note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>): str
 }
 
 /**
+ * Words with any fence still open at their end closed on a line of its own,
+ * so a point written after them is not taken into the code the fence holds.
+ */
+function fenceClosed(words: string): string {
+  const open = openFenceAt(words, words.length + 1);
+  return open === undefined ? words : `${words}\n${open}`;
+}
+
+/**
  * The text with a point added at the end of the first section under the
  * note's heading, or, where the text has no such section, a new one at the
- * end of the text holding it.
+ * end of the text holding it; a fence the section or the text leaves open is
+ * closed before it.
  */
 function addedToText(
   text: string,
@@ -796,11 +806,12 @@ function addedToText(
   const added = addedText(note);
   const section = planSections(text).find((each) => each.heading === heading);
   if (section === undefined) {
-    const head = text.trimEnd();
+    const head = fenceClosed(text.trimEnd());
     return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
   }
-  const lines = section.text.split("\n");
-  const under = lines.length > 1 ? appended(section.text, added) : `${section.text}\n\n${added}`;
+  const words = fenceClosed(section.text);
+  const lines = words.split("\n");
+  const under = lines.length > 1 ? appended(words, added) : `${words}\n\n${added}`;
   return text.slice(0, section.from) + under + text.slice(section.to);
 }
 
@@ -841,7 +852,9 @@ function applyNoteToText(text: string, note: PlanNote): string | undefined {
   const at = located(text, note.find);
   if (at === undefined || touchesHeading(text, at)) return undefined;
   if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
-  return text.slice(0, at.from) + contained(note.text) + text.slice(at.to);
+  // A correction inside a fence is code, written as given rather than contained as prose.
+  const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
+  return text.slice(0, at.from) + words + text.slice(at.to);
 }
 
 /** Notes taken over a document's text: the text after, and the notes that could not be taken. */

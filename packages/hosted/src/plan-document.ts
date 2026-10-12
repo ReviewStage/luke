@@ -64,6 +64,30 @@ const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
 /** What opens a `#` or `##` heading line: up to three spaces, the hashes, then a space, a tab, or the line's end. */
 const SECTION_OPENER = /^ {0,3}#{1,2}(?=[ \t]|$)/u;
 
+/** The fence open after a line, given the one open before it: a line opens one outside a fence and closes the one it matches inside it. */
+function fenceAfter(open: string | undefined, line: string): string | undefined {
+  const fence = (open === undefined ? FENCE_LINE : CLOSING_FENCE_LINE).exec(line)?.[1];
+  if (fence === undefined) return open;
+  if (open === undefined) return fence;
+  return fence[0] === open[0] && fence.length >= open.length ? undefined : open;
+}
+
+/**
+ * The fence still open where a line of the text starts at or past `offset`,
+ * as the run that opened it, or nothing where `offset` stands outside every
+ * fence: what a note writing there must not write into, or must close first.
+ */
+export function openFenceAt(text: string, offset: number): string | undefined {
+  let open: string | undefined;
+  let at = 0;
+  for (const line of text.split("\n")) {
+    if (at + line.length >= offset) break;
+    open = fenceAfter(open, line);
+    at += line.length + 1;
+  }
+  return open;
+}
+
 /** A section while its lines are read: its heading, where it starts, and the lines so far. */
 interface SectionLines {
   readonly heading: string;
@@ -106,7 +130,6 @@ export function planSections(text: string): readonly PlanSection[] {
   let current: SectionLines = { heading: "", from: 0, lines: [] };
   let offset = 0;
   for (const line of text.split("\n")) {
-    const fence = (open === undefined ? FENCE_LINE : CLOSING_FENCE_LINE).exec(line)?.[1];
     const heading = open === undefined ? headingOf(line) : undefined;
     if (heading !== undefined) {
       if (current.heading !== "" || current.lines.some((each) => each.trim() !== "")) {
@@ -116,9 +139,7 @@ export function planSections(text: string): readonly PlanSection[] {
     }
     current.lines.push(line);
     offset += line.length + 1;
-    if (fence === undefined) continue;
-    if (open === undefined) open = fence;
-    else if (fence[0] === open[0] && fence.length >= open.length) open = undefined;
+    open = fenceAfter(open, line);
   }
   if (current.heading !== "" || current.lines.some((each) => each.trim() !== "")) {
     sections.push(current);

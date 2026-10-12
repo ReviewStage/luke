@@ -420,3 +420,23 @@ test("a document drawn while notes stream holds every whole note and the point s
   assert.ok(drawn.includes("- Members invite by email.\n- Admins can withdraw.\n"));
   assert.ok(drawn.includes("Only an admin can add someone.\n\nIt came up\n"));
 });
+
+test("a correction inside a fence is written as code, and a point after an open fence closes it first", () => {
+  const text = "## Interfaces\n\n```c\nOLD\n```\n\n## Approach\n\n```ts\ntype User = string;";
+
+  const { text: noted, missed } = applyNotesToText(text, [
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.INTERFACES, find: "OLD", text: "#define NEW" },
+    { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "Users are strings." },
+    {
+      kind: NOTE_KIND.ADD,
+      field: PLAN_FIELD.TESTING,
+      text: "- When a user signs in, then it works.",
+    },
+  ]);
+
+  assert.deepEqual(missed, []);
+  assert.equal(
+    noted,
+    "## Interfaces\n\n```c\n#define NEW\n```\n\n## Approach\n\n```ts\ntype User = string;\n```\n\nUsers are strings.\n\n## Testing\n\n- When a user signs in, then it works.\n",
+  );
+});
