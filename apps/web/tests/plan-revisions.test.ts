@@ -16,6 +16,8 @@ import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { planRevision } from "../server/db/plan-revision-schema";
 import { db } from "../server/db/query";
+import { voiceSessions } from "../server/db/voice-schema";
+import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   PLAN_SAVE_REFUSAL,
@@ -119,6 +121,34 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         },
       ]);
     }),
+  );
+
+  it.effect(
+    "Luke's revision on a call names the call as the transcript does, and a save off a call names none",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const [call] = yield* db
+          .insert(voiceSessions)
+          .values({ userId, liveSessionId: CALL, delegationMode: VOICE_DELEGATION_MODE.CLIENT })
+          .returning({ id: voiceSessions.id });
+        yield* saveNotes({ userId, planId }, notesFor(INVITATIONS_DRAFT), ON_CALL);
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_FIELD.OPEN_QUESTIONS, "Who may withdraw an invite?")],
+          { actor: PLAN_ACTOR.NOTETAKER },
+        );
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.GOAL, base: null, value: "An invited teammate can sign in." },
+        );
+
+        const revisions = yield* revisionsOf(userId, planId);
+        assert.deepEqual(
+          revisions.map((line) => line.callId),
+          [undefined, undefined, call?.id],
+        );
+      }),
   );
 
   it.effect(

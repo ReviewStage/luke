@@ -173,6 +173,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     history: versionHistoryControl(),
     onSelect: ignore,
     onShowAgent: ignore,
+    onShowSource: ignore,
     onShowPlan: ignore,
     onShowInbox: ignore,
     secondCall: {

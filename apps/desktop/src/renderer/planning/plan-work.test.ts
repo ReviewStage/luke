@@ -243,3 +243,55 @@ test("a coding agent's start, once the agent began, is the one button that opens
     assert.equal(work.querySelector(`[data-call-id="${id}"]`)?.tagName, "DETAILS", id);
   }
 });
+
+/** Lays out every element at the top of the window but the reveal mark, which stands `markTop` down, and the log, `logTop` down. */
+function layOut(markTop: number, logTop: number): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.hasAttribute("data-reveal")) return new DOMRect(0, markTop, 0, 0);
+    if (this.getAttribute("role") === "log") return new DOMRect(0, logTop, 300, 400);
+    return new DOMRect();
+  });
+}
+
+test("asked for a moment by a version's Open, the tab brings the turn that was running then to the top of its log, once", () => {
+  layOut(340, 100);
+  const said = (turnId: string, startedAt: number, text: string) => ({
+    turnId,
+    startedAt,
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    parts: [{ type: PLAN_WORK_PART.TEXT, text }],
+  });
+  const revealed = vi.fn();
+  const work = mounted(
+    createElement(PlanWork, {
+      turns: [
+        said("turn-1", 1_000, "First turn."),
+        said("turn-2", 5_000, "Second turn."),
+        said("turn-3", 9_000, "Third turn."),
+      ],
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: async () => undefined,
+      onOpenSubagent: () => undefined,
+      shown: true,
+      reveal: { at: 6_000, onRevealed: revealed },
+    }),
+  );
+
+  const mark = work.querySelector("[data-reveal]");
+  const words = (text: string) =>
+    [...work.querySelectorAll("p")].find((line) => line.textContent === text);
+  assert.ok(mark);
+  assert.equal(work.querySelectorAll("[data-reveal]").length, 1);
+  const precedes = (a: Node | undefined, b: Node | undefined) =>
+    a !== undefined &&
+    b !== undefined &&
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  assert.ok(precedes(words("First turn."), mark), "after the turn before it");
+  assert.ok(precedes(mark, words("Second turn.")), "before the turn running at the moment");
+  assert.equal(work.querySelector<HTMLElement>('[role="log"]')?.scrollTop, 240);
+  assert.equal(revealed.mock.calls.length, 1);
+});

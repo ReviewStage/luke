@@ -2714,6 +2714,63 @@ body,
   height: 12px;
 }
 
+/* A revision's Open: a quiet arrow at the row's end, beside the chevron
+   where there is one, standing only while the row is hovered, focused, or
+   its menu is open, in the place the time gives up for it. */
+.version-row-open {
+  position: absolute;
+  top: 50%;
+  right: var(--space-4);
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--duration-hover) ease,
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.version-item:has(.version-row-sections) .version-row-open {
+  right: calc(var(--space-4) + 22px);
+}
+
+.version-item:is(:hover, :focus-within, [data-menu-open="true"]) .version-row-open {
+  opacity: 1;
+}
+
+.version-item:is(:hover, :focus-within, [data-menu-open="true"]):has(.version-row-open)
+  .version-row-time {
+  opacity: 0;
+}
+
+.version-row-open:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.version-row-open svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Over a revision's sections the Open stands at the end of its one line,
+   in the flow rather than over a row, while the line is hovered. */
+.version-sections-head .version-row-open {
+  position: static;
+  margin-left: auto;
+  transform: none;
+}
+
+.version-sections-head:is(:hover, :focus-within) .version-row-open {
+  opacity: 1;
+}
+
 /* The versions and the sections of the one opened stand side by side in a
    track as wide as the column, the sections slid in over the column's own
    edge the way a nested page of System Settings is, on transform alone. */

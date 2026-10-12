@@ -27,6 +27,7 @@ import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
+import { REVISION_SOURCE, type RevisionSource } from "../planning/plan-history-model";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
 import { DesktopVersionHistory } from "./desktop-version-history";
@@ -163,6 +164,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.replaceChildren();
+  shownSources.length = 0;
   delete document.documentElement.dataset.keyboard;
 });
 
@@ -171,6 +173,9 @@ let archive: (() => void) | undefined;
 
 /** Says the plan was saved at the moment given, as main does once a save lands, which reads the history again. */
 let saved: ((at: number) => void) | undefined;
+
+/** Each place a version's Open asked the window for, in order, with the plan it was asked about. */
+const shownSources: { planId: string; source: RevisionSource }[] = [];
 
 /** The plan as the window draws it, its document as the service holds it now, archived where asked. */
 function planOf(document: PlanDocument, fields: PlanFields | undefined, archived: boolean): Plan {
@@ -226,6 +231,7 @@ function mount(
       },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
       agents: codingAgentsControl({ agents: [INVITE_AGENT] }),
+      onShowSource: (planId, source) => shownSources.push({ planId, source }),
     });
     return createElement(DesktopVersionHistory, {
       sidebar,
@@ -490,6 +496,96 @@ it.effect(
       assert.deepEqual(marked(page, "del"), ["Only admins"]);
       assert.deepEqual(marked(page, "ins"), ["Any member"]);
       assert.deepEqual(marked(page, ".version-added, .version-removed"), []);
+    }),
+);
+
+/** The Open standing at the end of the row whose words read `row`, if it has one. */
+function openButton(page: HTMLElement, row: string): HTMLButtonElement | null | undefined {
+  const item = [...page.querySelectorAll(".version-item")].find(
+    (each) => each.querySelector(".version-row")?.textContent === row,
+  );
+  return item?.querySelector<HTMLButtonElement>(".version-row-open");
+}
+
+/** Right-clicks the row whose words read `row`, and answers the items of the menu it opened. */
+function rightClick(page: HTMLElement, row: string) {
+  const button = [...page.querySelectorAll<HTMLButtonElement>(".version-row")].find(
+    (each) => each.textContent === row,
+  );
+  assert.ok(button, `no row reads "${row}"`);
+  return Effect.map(
+    Effect.promise(() =>
+      act(async () => {
+        button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      }),
+    ),
+    () =>
+      [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+        (item) => item.textContent ?? "",
+      ),
+  );
+}
+
+it.effect(
+  "a version's Open goes where it was written: an agent's to its tab, Luke's on a call to the call, Luke's other saves to their moment in Work, and the developer's nowhere",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const [onCall, byAgent, offCall] = service.lines;
+      assert.ok(onCall && byAgent && offCall);
+      const callId = "1c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22";
+      service.lines[0] = { ...onCall, callId };
+      service.lines.push({
+        seq: 4,
+        lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
+        startedAt: NOW - 30 * HOUR,
+        changes: 1,
+      });
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      assert.equal(openButton(page, "You1d1 change"), null);
+      for (const row of ["Luke2h2 changes", "Invite emails5h1 change", "Luke1d4 changes"]) {
+        const open = openButton(page, row);
+        assert.ok(open, `no Open on "${row}"`);
+        yield* Effect.promise(() => act(async () => open.click()));
+      }
+      assert.deepEqual(shownSources, [
+        { planId: PLAN_ID, source: { kind: REVISION_SOURCE.CALL, callId } },
+        { planId: PLAN_ID, source: { kind: REVISION_SOURCE.AGENT, agentId: INVITE_AGENT.id } },
+        { planId: PLAN_ID, source: { kind: REVISION_SOURCE.WORK, at: offCall.lastEdit.at } },
+      ]);
+      assert.equal(
+        openButton(page, "Luke2h2 changes")?.getAttribute("aria-label"),
+        "Open in Transcript",
+      );
+      assert.equal(
+        openButton(page, "Invite emails5h1 change")?.getAttribute("aria-label"),
+        "Open Invite emails",
+      );
+      assert.equal(openButton(page, "Luke1d4 changes")?.getAttribute("aria-label"), "Open in Work");
+    }),
+);
+
+it.effect(
+  "a version's right-click offers its Open and its sections where it has them, and the developer's own one change offers no menu",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService(NOW, SECTIONED, true);
+      service.lines.push({
+        seq: 4,
+        lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
+        startedAt: NOW - 30 * HOUR,
+        changes: 1,
+      });
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      assert.deepEqual(yield* rightClick(page, "Luke2h2 changes"), [
+        "Open in Work",
+        "Show the sections it changed",
+      ]);
+      yield* press(document.body, "Open in Work");
+      assert.equal(shownSources.at(-1)?.source.kind, REVISION_SOURCE.WORK);
+      assert.deepEqual(yield* rightClick(page, "You1d1 change"), []);
     }),
 );
 

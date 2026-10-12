@@ -25,6 +25,7 @@ import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
 import { dictationKeywords } from "./dictation-keywords";
+import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -120,6 +121,12 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * the window's toast. The side panel stands as it was behind it.
  */
 
+/** A call or a turn the open plan's side panel is asked to bring into view, on the plan it was asked of. */
+interface SourceReveal {
+  readonly planId: string;
+  readonly source: Exclude<RevisionSource, { kind: typeof REVISION_SOURCE.AGENT }>;
+}
+
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
@@ -166,7 +173,12 @@ export interface PlansControl {
   /** Every code Luke showed on the open plan, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: PlanningView["shownCode"];
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
-  transcript: { region: TranscriptRegion; onRetry: () => void };
+  transcript: {
+    region: TranscriptRegion;
+    onRetry: () => void;
+    /** The call the tab is asked to bring into view, by its key, and the word that it has; what a version's Open asks. */
+    reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
+  };
   /**
    * What Luke's planning model wrote and ran on the open plan's calls,
    * whether its call still stands, the turn the page before the oldest drawn
@@ -177,6 +189,8 @@ export interface PlansControl {
     callLive: boolean;
     earlier: string | undefined;
     onLoadEarlier: () => Promise<void>;
+    /** The moment whose turn the tab is asked to bring into view, and the word that it has; what a version's Open asks. */
+    reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
   };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
@@ -185,6 +199,8 @@ export interface PlansControl {
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
+  /** Leaves the version history for the place that wrote a version: its agent's tab, its call in the Transcript, or its turn in Work. */
+  onShowSource: (planId: string, source: RevisionSource) => void;
   /** The question a Talk press or a start asks before it ends the call standing about another plan. */
   secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a plan on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
@@ -373,6 +389,7 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
+  const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -544,6 +561,8 @@ export function usePlansTab(input: {
   // The version history is the plan's, so another plan, or none, leaves it.
   if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
   const historyOpen = historyFor !== undefined && historyFor.planId === boundFor;
+  // A reveal is the open plan's, so another plan leaves it unasked.
+  const revealing = reveal !== undefined && reveal.planId === boundFor ? reveal.source : undefined;
   const select = useCallback(
     (planId: string) => {
       const ask = { planId, over: openPlanId };
@@ -1007,6 +1026,10 @@ export function usePlansTab(input: {
     transcript: {
       region: transcript,
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
+      reveal:
+        revealing?.kind === REVISION_SOURCE.CALL
+          ? { call: revealing.callId, onRevealed: () => setReveal(undefined) }
+          : undefined,
     },
     // A fixture's open plan is drawn mid-call, as its status and transcript are.
     work: {
@@ -1014,6 +1037,10 @@ export function usePlansTab(input: {
       callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
       earlier: planning.workEarlier,
       onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
+      reveal:
+        revealing?.kind === REVISION_SOURCE.WORK
+          ? { at: revealing.at, onRevealed: () => setReveal(undefined) }
+          : undefined,
     },
     agents,
     history: {
@@ -1024,6 +1051,21 @@ export function usePlansTab(input: {
     },
     onSelect: select,
     onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
+    // A version's Open lands where its writer wrote it: an agent's tab as a
+    // notification opens it, or the side panel's Transcript or Work, asked to
+    // bring the call or the turn into view once it draws.
+    onShowSource: (planId, source) => {
+      if (source.kind === REVISION_SOURCE.AGENT) {
+        showColumnTab(planId, { agent: source.agentId });
+        return;
+      }
+      setHistoryFor(undefined);
+      setReveal({ planId, source });
+      sidePanel.onShow(
+        planId,
+        source.kind === REVISION_SOURCE.CALL ? SIDE_PANEL_TAB.TRANSCRIPT : SIDE_PANEL_TAB.WORK,
+      );
+    },
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {
       confirm: secondCall,
