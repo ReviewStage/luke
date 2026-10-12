@@ -168,6 +168,42 @@ body,
   }
 }
 
+.app-stage[data-surface="desktop"] {
+  /* Where the work column begins, which floating captions centre on, and the
+     width they are drawn at over it: no wider than the call bar draws them. */
+  --work-left: var(--sidebar-width);
+  --caption-width-max: 560px;
+  --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
+  position: absolute;
+  inset: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.desktop-stage {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.desktop-drag-strip {
+  flex: 0 0 auto;
+  height: var(--desktop-bar-height);
+  -webkit-app-region: drag;
+}
+
+.desktop-shell {
+  /* What a pinned header paints behind itself is the window's ground here. */
+  --surface-fill: var(--desktop-ground);
+  display: grid;
+  height: 100%;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+}
+
+.app-stage[data-surface="desktop"]:has(.desktop-shell[data-sidebar-collapsed="true"]) {
+  --work-left: 0px;
+}
+
 /* Sidebar ----------------------------------------------------------------- */
 
 /* Folding the sidebar away moves it rather than narrowing it: the work column
