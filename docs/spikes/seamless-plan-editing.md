@@ -89,6 +89,31 @@ kind):
   the first time a field is hovered or opened (see "Loading the editor
   lazily" below). The read view's code stays plain, as it is on `main`.
 
+## Hover, the keyboard, and the "just changed" tint
+
+- **Hover shows only who last edited the section.** The hover wash and the
+  pencil are gone; a field's words take the text cursor, and a click into
+  them edits them. Hovering a section shows its "Edited by … · 2h ago" line,
+  as it already did, now at the column's edge.
+- **The keyboard still has a way in.** The pencil stays in the DOM as the
+  keyboard's button. It is never shown under the pointer, only when Tab gives
+  it focus, and Return opens the field with the caret at the end. It stays a
+  separate button because putting `role="button"` on the words themselves
+  would hide the plan's text from screen readers, whose button children are
+  presentational. The rules' "+" still shows on hover, because adding a rule
+  is not a click into existing words.
+- **The tint is the hover wash's size.** The highlight a section wears as
+  Luke's or an agent's edit lands now takes the box the hover wash had
+  (2 px above and below, 6 px either side) instead of 2 px all round.
+- **Your own edit does not light up.** It already landed at once rather
+  than being retyped. It now also lands unlit, sections and assumptions
+  alike, because you watched it being typed (`ChaseAim.lit` in
+  `plan-reveal.ts`, with a test). Luke's and agents' edits light as before.
+
+| Hover: only "Edited by…" | Keyboard: Tab brings up the pencil | Luke's edit: the tint at the hover wash's size |
+| --- | --- | --- |
+| ![Hover](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/hover-byline.png) | ![Keyboard](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/keyboard-pencil.png) | ![Tint](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/agent-edit-tint.png) |
+
 ## Should a rule just be a numbered list?
 
 No, not without changing what a rule is. Given/When/Then is the stored shape
@@ -292,7 +317,8 @@ plans matters.
   PR keeps a test that the editor's host carries the class.
 - **Accessibility.** The editor is `role="textbox"`, multiline, and labelled
   with the field's name, which is how the AX tree reads today's textarea.
-  The pencil stays as the keyboard's way in. VoiceOver needs the Mac pass.
+  The pencil stays as the keyboard's way in, shown only with the keyboard's
+  focus. VoiceOver needs the Mac pass.
 - **IME.** ProseMirror owns composition. A real macOS IME (kana, pinyin,
   Hangul, press-and-hold accents) must be checked on a Mac.
 

@@ -450,8 +450,11 @@ function editsOnClick(target: EventTarget): boolean {
 
 /**
  * A unit the developer can edit, drawn as the document draws it, which opens
- * its editor on a click into its words that selects nothing, or from its
- * pencil, or, for a new rule, from its plus.
+ * its editor on a click into its words that selects nothing, the caret where
+ * the click landed. SPIKE: nothing on the words marks them editable. The
+ * pencil stays only as the keyboard's way in, shown when it has the
+ * keyboard's focus and never under the pointer; the rules' heading keeps its
+ * plus on hover, which adds a rule rather than editing one.
  */
 export function EditableUnit({
   target,
@@ -474,7 +477,6 @@ export function EditableUnit({
     <div
       className="plan-unit-editable"
       onPointerEnter={prefetchFieldEditor}
-      onFocus={prefetchFieldEditor}
       onClick={(event) => {
         if (editsOnClick(event.target))
           editing.open(target, host, { x: event.clientX, y: event.clientY });
@@ -484,7 +486,9 @@ export function EditableUnit({
       <button
         type="button"
         className="icon-button plan-unit-edit"
+        data-adds={adds ? "" : undefined}
         aria-label={adds ? "Add rule" : `Edit ${label}`}
+        onFocus={prefetchFieldEditor}
         onClick={(event) => {
           event.stopPropagation();
           editing.open(target, host);

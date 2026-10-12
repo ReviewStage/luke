@@ -3,7 +3,14 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { applyDeveloperEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { EMPTY_PLAN_FIELDS, type PlanContent, planBody } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type Plan, type PlanFields } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_ACTOR,
+  PLAN_FIELD,
+  type Plan,
+  type PlanField,
+  type PlanFieldEdit,
+  type PlanFields,
+} from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -103,6 +110,7 @@ const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 
 function planOf(content: PlanContent, at: number, actor: Plan["lastEdit"]): Plan {
   const plan: Plan = {
+    fieldEdits: [...fieldEdits.values()],
     id: PLAN_ID,
     name: NAME,
     createdAt: 1,
@@ -115,6 +123,29 @@ function planOf(content: PlanContent, at: number, actor: Plan["lastEdit"]): Plan
 }
 
 const params = new URLSearchParams(window.location.search);
+/** Who last changed each field, as the sections' "Edited by" lines read it: Luke and a coding agent to start. */
+const fieldEdits = new Map<PlanField, PlanFieldEdit>([
+  [
+    PLAN_FIELD.PROBLEM,
+    {
+      field: PLAN_FIELD.PROBLEM,
+      actor: PLAN_ACTOR.NOTETAKER,
+      at: Date.now() - 7_200_000,
+      duringCall: true,
+    },
+  ],
+  [
+    PLAN_FIELD.DECISIONS,
+    {
+      field: PLAN_FIELD.DECISIONS,
+      actor: PLAN_ACTOR.AGENT,
+      label: "Invite flow agent",
+      at: Date.now() - 1_800_000,
+      duringCall: false,
+    },
+  ],
+]);
+
 /** The stored content the fake service holds, which the driver reads. */
 let stored: PlanContent = {
   fields: params.get("long") === "1" ? longFields() : FIELDS,
@@ -126,22 +157,31 @@ let stored: PlanContent = {
 
 function Demo(): React.JSX.Element {
   const [plan, setPlan] = useState(() => planOf(stored, Date.now(), undefined));
-  const show = (content: PlanContent, actor: (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR]) => {
+  const show = (
+    content: PlanContent,
+    actor: (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR],
+    field: PlanField,
+  ) => {
     stored = content;
     const at = Date.now();
+    fieldEdits.set(field, { field, actor, at, duringCall: true });
     setPlan(planOf(content, at, { actor, at, duringCall: true }));
   };
   const edit = async (request: PlanEditRequest): Promise<PlanningEditAnswer> => {
     const outcome = applyDeveloperEdit(stored, request);
     if ("conflict" in outcome) return { conflict: outcome.conflict };
-    show(outcome.applied, PLAN_ACTOR.DEVELOPER);
+    show(outcome.applied, PLAN_ACTOR.DEVELOPER, request.field);
     return { saved: true };
   };
   Object.assign(window, {
     spike: {
       content: () => stored,
       lukeWrites: (field: "decisions" | "verification", text: string) =>
-        show({ ...stored, fields: { ...stored.fields, [field]: text } }, PLAN_ACTOR.NOTETAKER),
+        show(
+          { ...stored, fields: { ...stored.fields, [field]: text } },
+          PLAN_ACTOR.NOTETAKER,
+          field,
+        ),
       lukeDraft: (field: "decisions" | "verification", text: string) =>
         setPlan((now) => ({
           ...now,

@@ -221,11 +221,11 @@ function aimed(chase: Chase, plan: Plan): Chase {
   const { body } = plan.document;
   const assumptions = textsOf(plan.document.assumptions);
   const added = { before: chase.assumptions, after: assumptions };
-  // The developer's own edit lands at once: they watched it being typed already.
+  // The developer's own edit lands at once and unlit: they watched it being typed already.
   const lastEditAt = plan.lastEdit?.at;
   const ownEdit = plan.lastEdit?.actor === PLAN_ACTOR.DEVELOPER && lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: ownEdit || prefersReducedMotion() };
+  const aim = { reduced: ownEdit || prefersReducedMotion(), lit: !ownEdit };
   const state = chaseRetargeted(chase.state, body, added, aim);
   return { planId: plan.id, body, assumptions, lastEditAt, state };
 }
