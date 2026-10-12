@@ -1,11 +1,11 @@
 {
   "version": 1,
   "skills": {
-    "drizzle-best-practices": {
-      "source": "honra-io/drizzle-best-practices",
+    "drizzle": {
+      "source": "lobehub/lobehub",
       "sourceType": "github",
-      "skillPath": "SKILL.md",
-      "computedHash": "c723c157f3af98486d64dea4a1c1250ca0c57e1d0cdd426a6c301f844dcdbaed"
+      "skillPath": ".agents/skills/drizzle/SKILL.md",
+      "computedHash": "a51a3da4e421ae171d1b3aea0953cd63241b48a5f2fff59ad7ed0f6ff6d9a459"
     },
     "effect-ts": {
       "source": "Effect-TS/skills",
