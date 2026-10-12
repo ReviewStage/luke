@@ -1,6 +1,7 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@sidecar/hosted/coding-agent-wire";
 import { CloseIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { Tooltip } from "../tooltip";
 import {
   contextFullLine,
@@ -22,7 +23,8 @@ import { useMinute } from "./plan-time";
  * Cursor draw one, filled with the share of the window the agent's newest
  * step read and coloured by how near eve's compaction that is
  * (`agent-context-model.ts`); its hover says the share in words. A press
- * opens a popover above the card, the model menu's width, that says the
+ * opens a popover right above the ring, from its trailing edge where that
+ * keeps it on screen (`../anchored-popover.tsx`), the model menu's width, that says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the
  * cache, the step's answer, where eve compacts, and when it last did. The
@@ -189,15 +191,17 @@ export function AgentContextRing({
         </button>
       </Tooltip>
       {open ? (
-        <ContextPopover
-          id={popoverId}
-          context={context}
-          brief={brief}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-          }}
-        />
+        <AnchoredPopover align={POPOVER_ALIGN.END}>
+          <ContextPopover
+            id={popoverId}
+            context={context}
+            brief={brief}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            }}
+          />
+        </AnchoredPopover>
       ) : null}
     </div>
   );

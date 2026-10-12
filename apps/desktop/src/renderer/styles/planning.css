@@ -840,11 +840,15 @@ button.code-card-path:hover {
   text-underline-offset: 2px;
 }
 
-/* The chips along the box's foot: the model chip, which hangs its menu
-   above itself since the box stands at the panel's foot, and after it
-   what the agent published, in the same chip style, the pull request's
-   wearing its state's colour, the branch's its name in the code face. */
-.agent-model-chip {
+/* The chips along the box's foot: the model chip and the context ring,
+   each the box its popover hangs from (`anchored-popover.tsx`), above
+   itself since the box stands at the panel's foot, and after them what the
+   agent published, in the same chip style, the pull request's wearing its
+   state's colour, the branch's its name in the code face. */
+.agent-model-chip,
+.agent-context {
+  position: relative;
+  display: flex;
   min-width: 0;
 }
 
@@ -888,16 +892,6 @@ button.code-card-path:hover {
   color: var(--text-tertiary);
 }
 
-/* The menu hangs above the card from the card's own left edge, no wider
-   than the card, so a panel at its narrowest never clips it at the
-   window's edge; the composer's room is its containing block. */
-.agent-model-chip .agent-model-menu {
-  top: auto;
-  bottom: calc(100% - var(--space-6));
-  left: 16px;
-  width: min(340px, calc(100% - 32px));
-}
-
 /* The context ring beside the model chip: the window's one icon button
    holding a ring a glyph's size, its track faint and its fill muted with
    room to spare, amber within a tenth of the window of eve's compaction,
@@ -929,16 +923,11 @@ button.code-card-path:hover {
   transition: stroke-dasharray var(--duration-quick) var(--spring);
 }
 
-/* The popover hangs above the card where the model menu does, at its
-   width, on the menu's own surface; each part of the context wears one
-   colour on the bar and on its legend row's square. */
+/* The popover hangs above the ring as the model menu does above its chip,
+   at its width, on the menu's own surface; each part of the context wears
+   one colour on the bar and on its legend row's square. */
 .agent-context-popover {
-  position: absolute;
-  z-index: 2;
-  bottom: calc(100% - var(--space-6));
-  left: var(--space-16);
   display: flex;
-  width: min(340px, calc(100% - 2 * var(--space-16)));
   flex-direction: column;
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16) var(--space-16);

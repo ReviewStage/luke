@@ -2,6 +2,7 @@ import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { ChevronDownIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { agentUsageLine } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";
@@ -14,7 +15,8 @@ import type { AgentModelControl } from "./use-agent-model";
  * no border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
  * the fast version is on, and a chevron saying it opens a menu. A press
- * opens the shared model menu (`model-menu.tsx`) above the chip, the
+ * opens the shared model menu (`model-menu.tsx`) right above the chip,
+ * from its leading edge (`../anchored-popover.tsx`), the
  * agent's choice checked; what the menu chooses is the agent's model and
  * effort for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
@@ -76,18 +78,20 @@ export function AgentModelChip({
         <ChevronDownIcon />
       </button>
       {open ? (
-        <ModelMenu
-          id={menuId}
-          className="agent-model-menu"
-          models={models}
-          chosen={settledChoice(models, model.choice)}
-          onChoose={model.choose}
-          footNote={agentUsageLine(usage)}
-          onClose={close}
-          onLeave={(left) => {
-            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
-          }}
-        />
+        <AnchoredPopover align={POPOVER_ALIGN.START}>
+          <ModelMenu
+            id={menuId}
+            className="agent-model-menu"
+            models={models}
+            chosen={settledChoice(models, model.choice)}
+            onChoose={model.choose}
+            footNote={agentUsageLine(usage)}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            }}
+          />
+        </AnchoredPopover>
       ) : null}
     </div>
   );
