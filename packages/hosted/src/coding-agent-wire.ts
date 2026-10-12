@@ -306,7 +306,9 @@ export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Typ
 /**
  * Archiving an agent, or bringing it back (PATCH). Archiving one with a
  * turn running stops that turn first, as a Stop would, and the answer is
- * the agent as it then stands.
+ * the agent as it then stands. One still starting, or with a message
+ * awaiting its turn, has no turn to stop yet and is refused as not ready,
+ * to be tried again. An archived agent takes no message.
  */
 export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.Boolean,

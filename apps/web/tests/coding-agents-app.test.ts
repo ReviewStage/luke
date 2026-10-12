@@ -1270,10 +1270,10 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "an archived agent is left out of the plan's list and the plans' briefs, listed with its stamp where the list asks for archived agents, and still read by its id; bringing it back lists it again, and another account's agent is not found",
+    "an archived agent is left out of the plan's list and the plans' briefs, listed with its stamp where the list asks for archived agents, still read by its id, and takes no message; bringing it back lists it again, one still starting is not archived yet, and another account's agent is not found",
     () =>
       Effect.gen(function* () {
-        const { owner, other, plan, ask } = yield* openPlan();
+        const { owner, other, plan, eve, ask } = yield* openPlan();
         const kept = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
@@ -1299,6 +1299,13 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* archive(other, true),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+        // Still starting, its session may yet open a turn no Stop could name, so it is not archived yet.
+        assert.deepEqual(
+          yield* archive(owner, true),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        // Past the grace its first turn never landed in, the agent reads failed, which is what is archived.
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.seconds(1)));
         const archived = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1315,14 +1322,23 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           briefs.map((brief) => brief.agent.id),
           [kept.id],
         );
-        // The transcript still reads by the agent's id.
-        const page = yield* Effect.forkChild(ask(request(AGENT_MESSAGES, owner, { id: agent.id })));
-        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        // The transcript still reads by the agent's id, and a message reaches nothing.
         readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(page, CODER.MESSAGES_POLL),
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
+        assert.deepEqual(
+          yield* ask(
+            request(AGENT_MESSAGES, owner, {
+              method: "POST",
+              id: agent.id,
+              body: { text: "Try again.", clientKey: randomUUID() },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(eve.sent, []);
 
         const restored = readAnswer(
           codingAgentAnswerSchema,

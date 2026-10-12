@@ -45,7 +45,9 @@ import { codingAgentStatusOf } from "./status.js";
  * deployment for the account, which the coder channel's table admits for
  * exactly this message (`coder-host/channel.ts`). An archived plan's agents
  * take no message, so a send to one is refused before eve is asked; a turn
- * already running when the plan was archived runs on to its end.
+ * already running when the plan was archived runs on to its end. An agent
+ * archived on its own takes none either, and is refused as one that names
+ * nothing, since every list leaves it out until it is brought back.
  */
 
 /** The developer's words, the files they attached where they did, and the key the send is made under, which a repeat carries again. */
@@ -101,6 +103,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     sentLineStands(userId, agent.conversationId, sentLineId(line.clientKey)),
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
+  if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const held = yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
   if (Option.isNone(held)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (held.value.plan.archivedAt !== undefined) {

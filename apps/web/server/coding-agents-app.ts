@@ -148,7 +148,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * lands only where none stands, so a rename is never undone. The same PATCH
  * carrying `archived` archives the agent or brings it back: an archive
  * stops a turn still running first, as a Stop does, and refuses where that
- * Stop could not reach eve; the list leaves an archived agent out unless
+ * Stop could not reach eve, or where the agent works on with no turn a Stop
+ * can name yet, still starting or with a line awaiting its turn, which the
+ * desktop tries again; an archived agent takes no message; the list leaves an archived agent out unless
  * `archived=include` asks for it, while its transcript and what it
  * published still read by its id. A Stop
  * (`POST /api/agents/{id}/stop`) is eve's cancel
@@ -652,8 +654,16 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   const archive = readEither(codingAgentArchiveRequestSchema)(body);
   if (Result.isSuccess(archive)) {
     const { archived } = archive.success;
-    // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-    if (archived) yield* stoppedTurn(seams, writer, request, userId, agent, target);
+    if (archived) {
+      // An archived agent works on unseen, so a turn still running is stopped before the stamp.
+      yield* stoppedTurn(seams, writer, request, userId, agent, target);
+      // A session still coming up, or a line awaiting the turn it opens, has no turn a Stop can
+      // name yet, so nothing is archived until there is one to stop or it has ended.
+      const { status } = yield* summaryOf(userId, agent);
+      if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
+        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      }
+    }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
