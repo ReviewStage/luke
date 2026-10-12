@@ -32,6 +32,7 @@
   },
   "types": "./src/schemas/index.ts",
   "scripts": {
+    "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -43,7 +44,10 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "drizzle-kit": "0.31.10",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

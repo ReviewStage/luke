@@ -258,8 +258,8 @@ export const turns = pgTable(
     // The per-conversation latest-turn lateral reads the newest queued turn of one conversation.
     index("turns_conversation_queued").on(
       table.conversationId,
-      table.queuedAt.desc(),
-      table.id.desc(),
+      table.queuedAt.desc().nullsFirst(),
+      table.id.desc().nullsFirst(),
     ),
     // The abandoned-turn sweep reads the turns still running past the bound.
     // The predicate is DDL, which takes no bound parameter, so the status is inlined rather than passed.

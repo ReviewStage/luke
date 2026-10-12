@@ -9,13 +9,13 @@ import { afterAll, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
- * The drift check between the restored schema modules and the database the
- * migrations actually build. `drizzle-kit` no longer generates one from the
- * other — `packages/database/migrations/meta/` stops at 0025 and the modules are hand-maintained
- * beside hand-written SQL — so a migration that renames a column, drops one,
- * widens one, or makes one nullable leaves a module that still type-checks
- * and lies, and every query built on it is wrong in a way the compiler
- * approves of. The store suites catch that only where a query covers the
+ * The drift check between the schema modules and the database the
+ * migrations actually build. `drizzle-kit` generates each migration from the
+ * modules (`packages/database/src/schemas/__tests__/migrations.test.ts` holds
+ * that it was), but a migration edited by hand afterwards — a backfill, a
+ * rename drizzle-kit asked about — can still rename a column, drop one, widen
+ * one, or make one nullable, and leave a module that type-checks and lies, so
+ * every query built on it is wrong in a way the compiler approves of. The store suites catch that only where a query covers the
  * column; this catches it whether one does or not.
  *
  * So the comparison runs both ways over the whole public schema, against a
@@ -25,7 +25,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * the module declares and the database has not fails, and so does a column
  * the database has and no module declares, which is the direction that
  * catches the migration nobody folded in. Better Auth's tables are compared
- * with the rest: `auth-schema.ts` is in the barrel, and nothing else holds it
+ * with the rest: `schemas/auth.ts` is in the barrel, and nothing else holds it
  * to the database.
  *
  * What is compared is name, type, nullability, and primary key. Not
