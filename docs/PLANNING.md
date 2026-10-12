@@ -252,6 +252,17 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   lights anything. What is kept is the newest save's instant, on the
   service's clock, by plan id in the renderer's own storage; a plan never
   looked at on this Mac lights nothing.
+- The sidebar reads the same marks. A plan's name stands in the body's
+  weight, the open plan's too, whose fill is what marks it; a plan saved
+  after its mark is unread, its name in the heavier weight (and "(unread)"
+  to a screen reader), until a look moves the mark past the save. The plan
+  being looked at is never unread, so a save landing on it while open
+  changes nothing. The first list this Mac reads after unread plans arrived
+  marks every plan in it no look had marked at its last save, once, so the
+  plans from before are not all unread at once, and so does a list none of
+  whose plans has a mark, which is another account's; a plan arriving later
+  with no mark, from another Mac, is unread once anything has been saved in
+  it since it started.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an

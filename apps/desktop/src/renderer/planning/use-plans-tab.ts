@@ -128,6 +128,8 @@ export interface PlansControl {
    */
   boundFor: string | undefined;
   listFailed: boolean;
+  /** Whether the list drawn is one the service answered, rather than the empty one before the first read lands. */
+  listRead: boolean;
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
@@ -820,6 +822,7 @@ export function usePlansTab(input: {
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
+    listRead: planning.listStatus === PLANNING_READ.READY,
     region,
     copy: { onPress: pressCopy },
     edit,

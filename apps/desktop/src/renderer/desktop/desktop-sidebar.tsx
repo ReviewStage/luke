@@ -30,6 +30,7 @@ import {
   repositoryLabel,
   repositoryPageUrl,
 } from "../planning/planning-model";
+import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
@@ -238,6 +239,8 @@ interface RowContext {
   readonly plans: PlansControl;
   readonly current: (planId: string) => boolean;
   readonly onOpen: (planId: string) => void;
+  /** Whether a plan was saved since the developer last looked at it on this Mac. */
+  readonly unread: (plan: PlanSummary) => boolean;
   /** The time each row's last update is counted back from. */
   readonly now: number;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
@@ -262,6 +265,7 @@ function PlanRows({
           plans={context.plans}
           plan={plan}
           current={context.current(plan.id)}
+          unread={context.unread(plan)}
           repositoryShown={repositoryShown}
           now={context.now}
           onOpen={() => context.onOpen(plan.id)}
@@ -516,6 +520,10 @@ export function DesktopSidebar({
     plans.onNewPlanIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
+  const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
+    listRead: plans.listRead,
+    staged: sidebar.staged,
+  });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
@@ -523,6 +531,7 @@ export function DesktopSidebar({
     plans,
     current,
     onOpen: openPlan,
+    unread,
     now,
     inSight: !sidebar.collapsed,
   };
