@@ -6,6 +6,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon, PlusIcon, TerminalIcon } from "@sidecar/panel";
+import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -60,6 +61,11 @@ import { TabStrip } from "./tab-strip";
  * only tab it is quiet, drawing no fill at rest, as a lone tab need not be
  * told from others; beside an agent's it is drawn as any tab is.
  *
+ * The plan's Inbox tab stands after it, anchored the same way, once the
+ * plan has an agent. It counts the items that wait on the developer after
+ * its name, dimmed as a model's effort is after the model's, so an item
+ * posted while the developer reads elsewhere is seen from any tab.
+ *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
  * works and an alert once it failed, and hangs a card naming it whole with
@@ -89,6 +95,9 @@ const NEW_AGENT_ROW = "new-coding-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
+
+/** What the plan's Inbox tab is called. */
+const INBOX_LABEL = "Inbox";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -320,6 +329,7 @@ export function MainTabStrip({
   pins,
   rename,
   keys,
+  inbox,
 }: {
   plan: PlanSummary;
   main: MainTabsControl;
@@ -337,6 +347,8 @@ export function MainTabStrip({
   rename: ReturnType<typeof usePlanRename> | undefined;
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
+  /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
+  inbox: number;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   // The agents' and the draft's tabs in the column's order, which the
@@ -346,20 +358,36 @@ export function MainTabStrip({
     main.tabs,
     (entry) => entry.tab,
   );
+  const inboxTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.INBOX)
+    ? [
+        {
+          tab: MAIN_TAB.INBOX,
+          look: {
+            icon: <InboxIcon />,
+            label: INBOX_LABEL,
+            detail: inbox === 0 ? undefined : String(inbox),
+            selected: main.tab === MAIN_TAB.INBOX,
+            anchored: true,
+            onSelect: () => main.onChoose(MAIN_TAB.INBOX),
+          },
+          close: undefined,
+        },
+      ]
+    : [];
   const planTab: DrawnTab = {
     tab: MAIN_TAB.PLAN,
     look: {
       icon: <DocumentIcon />,
       label: plan.name,
       selected: main.tab === MAIN_TAB.PLAN,
-      quiet: own.length === 0,
+      quiet: own.length === 0 && inboxTab.length === 0,
       anchored: true,
       tooltip: plan.repository ?? undefined,
       onSelect: () => main.onChoose(MAIN_TAB.PLAN),
     },
     close: undefined,
   };
-  const strip = [planTab, ...own];
+  const strip = [planTab, ...inboxTab, ...own];
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const doorsOf = (entry: DrawnTab): TabDoors => {
@@ -447,6 +475,7 @@ export function MainTabStrip({
 /** What an agent's or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
+  if (tab === MAIN_TAB.INBOX) return INBOX_LABEL;
   if (isDraftTab(tab)) return DRAFT_TAB_LABEL;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
@@ -465,7 +494,7 @@ export function MainTabContent({
   views,
   onOpenDelegation,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN>;
+  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;

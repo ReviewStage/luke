@@ -21,6 +21,8 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentDefaultAnswer,
+  type CodingAgentInboxAnsweredView,
+  type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -45,6 +47,12 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import {
+  type InboxAnswerRequest,
+  inboxAnsweredSchema,
+  inboxAnswerRequestSchema,
+  inboxAnswerSchema,
+} from "./inbox-wire.js";
+import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -63,7 +71,9 @@ import {
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
+  inboxItemPath,
   planAgentsPath,
+  planInboxPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
 
@@ -74,12 +84,13 @@ import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./serv
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read is the one call the service holds open, for as long as it waits on
- * the agent's next message, so it travels under a deadline of its own that
- * outlasts that hold; every other call keeps the account call's usual one.
+ * read and the inbox read are the two calls the service holds open, for as
+ * long as it waits on the agent's next message or the inbox's next change,
+ * so they travel under a deadline of their own that outlasts that hold;
+ * every other call keeps the account call's usual one.
  */
 
-/** How long a transcript read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
+/** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
@@ -120,6 +131,9 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
+
+/** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
+const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
@@ -168,7 +182,9 @@ function readAnswer<Answer, Encoded>(
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, and what one published.
+ * and effort changed, one stopped, what one published, and the plan's
+ * inbox of what its agents need of the developer, read past a cursor and
+ * answered an item at a time.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -406,6 +422,40 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
+  inbox(
+    planId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
+      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * Answers one item of the inbox against the revision the window drew,
+   * under the key the window made for the answer, which a retry carries
+   * again, and answers the item as it then stands with whether the answer
+   * was taken; an answer the service would refuse by shape is refused here
+   * without traveling.
+   */
+  answerInbox(
+    itemId: string,
+    request: InboxAnswerRequest,
+  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxAnswerRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxItemPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
     );
   }
 }

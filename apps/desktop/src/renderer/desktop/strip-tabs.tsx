@@ -137,6 +137,8 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
 export interface TabLook {
   icon: React.JSX.Element;
   label: string;
+  /** Words after the label, dimmed (`Tab`'s). */
+  detail?: string | undefined;
   selected: boolean;
   unread?: boolean;
   tooltip?: string | undefined;

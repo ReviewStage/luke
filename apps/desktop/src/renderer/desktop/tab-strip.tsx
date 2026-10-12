@@ -339,7 +339,9 @@ export function TabStrip({
 
 /**
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
- * one that always stands. `editor`, while given, is drawn in the label's
+ * one that always stands. `detail`, while given, follows the label in the
+ * muted secondary colour, parted from it by a space and no mark, as a
+ * model's effort follows its name (`model-label.tsx`). `editor`, while given, is drawn in the label's
  * place as a field of its own, outside the tab's role, so a reader reaches
  * it. A label cut short is said whole in the tab's hint, before what
  * `tooltip` adds and an unread tab's news; `card`, while given, hangs in the
@@ -353,6 +355,7 @@ export function TabStrip({
 export function Tab({
   icon,
   label,
+  detail,
   selected,
   unread = false,
   tooltip,
@@ -368,6 +371,8 @@ export function Tab({
 }: {
   icon: React.JSX.Element;
   label: string;
+  /** Words after the label, dimmed: a count, as the Inbox tab's. */
+  detail?: string | undefined;
   selected: boolean;
   /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
@@ -425,6 +430,12 @@ export function Tab({
       {glyph}
       <span ref={words} className="tab-label" data-overflow={String(clipped)}>
         {label}
+        {detail === undefined ? null : (
+          <>
+            {" "}
+            <span className="tab-detail">{detail}</span>
+          </>
+        )}
       </span>
     </button>
   );

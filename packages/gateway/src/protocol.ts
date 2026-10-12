@@ -80,6 +80,10 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
+  /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
+  CODING_AGENTS_INBOX: "codingAgents.inbox",
+  /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
+  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

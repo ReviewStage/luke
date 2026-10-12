@@ -59,16 +59,38 @@ test("the plan's tab stands first and alone on a plan with no agent, and is show
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN]);
 });
 
+test("the plan's Inbox tab stands second once the plan has an agent, its tab closed or not, never closes nor moves, and a plan left on it opens on it", () => {
+  const first = mount({ agents: [] });
+  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN]);
+  first.render({ agents: [AGENT] });
+  act(() => first.control().onClose({ agent: AGENT }));
+  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX]);
+  act(() => first.control().onChoose(MAIN_TAB.INBOX));
+  act(() => first.control().onClose(MAIN_TAB.INBOX));
+  act(() => first.control().onMove(MAIN_TAB.INBOX, 1));
+  assert.equal(first.control().tab, MAIN_TAB.INBOX);
+  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX]);
+
+  const second = mount({ agents: [AGENT] });
+  assert.equal(second.control().tab, MAIN_TAB.INBOX);
+});
+
 test("the agents' tabs follow the plan's in the order started, and the draft's after them while the plan holds it", () => {
   const column = mount({ agents: [AGENT, OTHER], draft: DRAFT });
   assert.deepEqual(column.control().tabs, [
     MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
     { agent: AGENT },
     { agent: OTHER },
     { draft: DRAFT },
   ]);
   column.render({ agents: [AGENT, OTHER] });
-  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }, { agent: OTHER }]);
+  assert.deepEqual(column.control().tabs, [
+    MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
+    { agent: AGENT },
+    { agent: OTHER },
+  ]);
 });
 
 test("choosing an agent's tab shows it and keeps it as the plan's across a launch, shown once the agents are read and hold it, the plan's meanwhile and once they hold none of it", () => {
@@ -107,7 +129,7 @@ test("closing the tab shown returns to the one viewed before it, and only where 
   );
   act(() => column.control().onClose({ agent: THIRD }));
   assert.equal(column.control().tab, MAIN_TAB.PLAN);
-  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN]);
+  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX]);
 });
 
 test("with no tab viewed still standing, closing the one shown chooses the tab after it, else the one before", () => {
@@ -124,14 +146,20 @@ test("with no tab viewed still standing, closing the one shown chooses the tab a
 test("an agent's tab closed stays closed across a launch, an agent started since opens its own, and choosing it opens it again in its place", () => {
   const first = mount({ agents: [AGENT, OTHER] });
   act(() => first.control().onClose({ agent: AGENT }));
-  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN, { agent: OTHER }]);
+  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX, { agent: OTHER }]);
   assert.deepEqual(first.control().openAgents, [OTHER]);
 
   const second = mount({ agents: [AGENT, OTHER, THIRD] });
-  assert.deepEqual(second.control().tabs, [MAIN_TAB.PLAN, { agent: OTHER }, { agent: THIRD }]);
+  assert.deepEqual(second.control().tabs, [
+    MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
+    { agent: OTHER },
+    { agent: THIRD },
+  ]);
   act(() => second.control().onChoose({ agent: AGENT }));
   assert.deepEqual(second.control().tabs, [
     MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
     { agent: AGENT },
     { agent: OTHER },
     { agent: THIRD },
@@ -158,6 +186,7 @@ test("the agents' tabs move among themselves and the draft's after the plan's, a
   act(() => first.control().onMove({ agent: OTHER }, 0));
   assert.deepEqual(first.control().tabs, [
     MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
     { agent: OTHER },
     { draft: DRAFT },
     { agent: AGENT },
@@ -165,10 +194,16 @@ test("the agents' tabs move among themselves and the draft's after the plan's, a
 
   // Another plan keeps its own order; a launch drops the draft from this one's.
   first.render({ plan: OTHER_PLAN, agents: [THIRD, AGENT] });
-  assert.deepEqual(first.control().tabs, [MAIN_TAB.PLAN, { agent: THIRD }, { agent: AGENT }]);
+  assert.deepEqual(first.control().tabs, [
+    MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
+    { agent: THIRD },
+    { agent: AGENT },
+  ]);
   const second = mount({ agents: [AGENT, OTHER, THIRD] });
   assert.deepEqual(second.control().tabs, [
     MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
     { agent: OTHER },
     { agent: AGENT },
     { agent: THIRD },
@@ -187,7 +222,7 @@ test("an agent shown on another plan, as a notification or a pin asks, is that p
 
   act(() => column.control().onClose({ agent: AGENT }));
   act(() => column.control().onShow(PLAN, { agent: AGENT }));
-  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }]);
+  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX, { agent: AGENT }]);
   assert.deepEqual(column.control().tab, { agent: AGENT });
 });
 
@@ -211,7 +246,12 @@ test("the agents' tabs the side panel kept read into the column once: their clos
     }),
   );
   const column = mount({ agents: [AGENT, OTHER, THIRD] });
-  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: OTHER }, { agent: AGENT }]);
+  assert.deepEqual(column.control().tabs, [
+    MAIN_TAB.PLAN,
+    MAIN_TAB.INBOX,
+    { agent: OTHER },
+    { agent: AGENT },
+  ]);
   assert.equal(column.control().tab, MAIN_TAB.PLAN);
 
   // The views moved too: the plan's tab gone, the agent viewed last before it is shown.
