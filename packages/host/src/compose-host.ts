@@ -154,7 +154,7 @@ export const hostAssemblyLayer: Layer.Layer<
     // composer's own set-once, so a reader that awaits its links suspends
     // until this has run rather than reading nothing.
     yield* settings.link({
-      refreshAccount: account.session.refreshOnce,
+      refreshAccount: account.session.renewOnce,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       endLiveSession: Effect.suspend(() =>

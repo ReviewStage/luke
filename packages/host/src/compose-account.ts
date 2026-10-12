@@ -184,7 +184,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       runMode.sendsNetwork
         ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
         : Effect.succeed(undefined),
-    refreshAccount: session.refreshOnce,
+    refreshAccount: session.renewOnce,
     readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
   };
 
@@ -201,7 +201,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
     }),
     openSocket: openSocketOverWs,
-    refreshAccount: session.refreshOnce,
+    refreshAccount: session.renewOnce,
   });
 
   /**

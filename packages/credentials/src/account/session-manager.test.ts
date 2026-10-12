@@ -153,12 +153,14 @@ it.effect("refresh keeps a valid stored account signed in without rewriting it",
  * a synthetic error object: a network the token endpoint cannot be reached
  * over must never be read as the service's own refusal.
  */
-function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>): AccountClient {
+function refreshingClient(
+  tokenEndpoint: (request: Request) => Promise<Response>,
+  userInfoEndpoint: (request: Request) => Response = () =>
+    jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED),
+): AccountClient {
   const fetchStub: FakeResponder = async (input, init) => {
     const request = new Request(input, init);
-    if (request.url.endsWith("/oauth2/userinfo")) {
-      return jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED);
-    }
+    if (request.url.endsWith("/oauth2/userinfo")) return userInfoEndpoint(request);
     if (request.url.endsWith("/oauth2/token")) return tokenEndpoint(request);
     throw new Error(`unexpected request to ${request.url}`);
   };
@@ -210,6 +212,82 @@ it.effect(
       assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
       assert.equal(subject.stored(), undefined);
     }),
+);
+
+/** Better Auth's userinfo answer for an access token it no longer holds: a 400, never a 401. */
+function deletedAccessToken(): Response {
+  return jsonResponse(
+    { error: "invalid_request", error_description: "Invalid access token" },
+    HTTP_STATUS.BAD_REQUEST,
+  );
+}
+
+it.effect(
+  "a renewal after a refused call signs out an account whose tokens the service deleted",
+  () =>
+    Effect.gen(function* () {
+      const subject = yield* manager({
+        stored: STORED,
+        client: refreshingClient(
+          () =>
+            Promise.resolve(
+              jsonResponse(
+                { error: "invalid_grant", error_description: "session not found" },
+                HTTP_STATUS.BAD_REQUEST,
+              ),
+            ),
+          deletedAccessToken,
+        ),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+      yield* subject.instance.renewOnce();
+
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+      assert.equal(subject.stored(), undefined);
+    }),
+);
+
+/** Userinfo that knows only the tokens a grant issued, as after an hour asleep. */
+function renewedIdentity(request: Request): Response {
+  return request.headers.get("authorization") === `Bearer ${STORED.accessToken}`
+    ? jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED)
+    : jsonResponse({ sub: STORED.id, email: STORED.email });
+}
+
+it.effect("a launch refresh and a refused call's renewal never replay one refresh token", () =>
+  Effect.gen(function* () {
+    // The token endpoint rotates as Better Auth does: a refresh token is good
+    // for one grant, and a second grant on it is a replay that is refused.
+    const spent = new Set<string>();
+    const subject = yield* manager({
+      stored: STORED,
+      client: refreshingClient(async (request) => {
+        const refreshToken = new URLSearchParams(await request.text()).get("refresh_token") ?? "";
+        if (spent.has(refreshToken)) {
+          return jsonResponse(
+            { error: "invalid_grant", error_description: "invalid refresh token" },
+            HTTP_STATUS.BAD_REQUEST,
+          );
+        }
+        spent.add(refreshToken);
+        return jsonResponse({
+          access_token: `${refreshToken}-access`,
+          refresh_token: `${refreshToken}-next`,
+          token_type: "Bearer",
+          expires_in: 3600,
+        });
+      }, renewedIdentity),
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+    yield* Effect.all([subject.instance.refreshOnce(), subject.instance.renewOnce()], {
+      concurrency: 2,
+    });
+
+    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+    assert.equal(subject.stored()?.refreshToken, "refresh-next");
+  }),
 );
 
 /** Waits for the consent trip to have composed its authorization page. */
