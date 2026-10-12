@@ -22,7 +22,9 @@
         "agent-retired",
         "plan-archived",
         "not-permitted",
-        "already-invited"
+        "already-invited",
+        "position-taken",
+        "keeper-taken"
       ]
     }
   },

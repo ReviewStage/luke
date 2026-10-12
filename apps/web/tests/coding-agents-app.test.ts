@@ -4,7 +4,11 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
-import { createCodingAgent, readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import {
+  createCodingAgent,
+  listCodingAgents,
+  readCodingAgent,
+} from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
 import {
@@ -38,6 +42,7 @@ import {
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
@@ -57,6 +62,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { codingAgentsApp } from "../server/coding-agents-app";
 import {
+  BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -125,6 +131,17 @@ function freshInstallation(): InstallationFixture {
   installationsConnected += 1;
   return { id: 7 + installationsConnected, login: RELAY.owner, repositories: [RELAY] };
 }
+
+/** A rollout of two pull requests, the second on the first. */
+const TWO_PULL_REQUESTS: Rollout = [
+  {
+    title: "Invitation schema",
+    scope: "The invitations table.",
+    base: ROLLOUT_BASE.MAIN,
+    acceptance: null,
+  },
+  { title: "Invite by email", scope: "The invite route.", base: 1, acceptance: null },
+];
 
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
@@ -426,6 +443,8 @@ const openPlan = (
     readonly github?: RepositoryScript;
     /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
     readonly titles?: boolean;
+    /** The pull requests the plan's work lands as, where a test starts its builders. */
+    readonly rollout?: Rollout;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -435,7 +454,12 @@ const openPlan = (
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanText(owner, plan.id, SAVED);
+    yield* savePlanText(
+      owner,
+      plan.id,
+      SAVED,
+      options.rollout === undefined ? {} : { rollout: options.rollout },
+    );
     const installation = freshInstallation();
     assert.equal(
       yield* connectWorkspaceGitHub(plan.workspaceId, installation),
@@ -569,6 +593,175 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           ],
         );
       }),
+  );
+
+  it.effect(
+    "a Start at a rollout position a live worker holds is refused as position-taken and opens nothing, though its own retry still answers it, and one past the rollout names no builder; once that worker's turn fails, the position starts again",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: TWO_PULL_REQUESTS });
+        const key = randomUUID();
+        const worker = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, position: 1 })),
+        ).agent;
+        assert.equal(worker.position, 1);
+        // A position implies a builder.
+        assert.equal(worker.role, ROLLOUT_ROLE.BUILDER);
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.POSITION_TAKEN),
+        );
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, position: 1 })),
+        );
+        assert.equal(again.agent.id, worker.id);
+        // Past the rollout, however far past, a position names no pull request.
+        for (const position of [3, 2 ** 40]) {
+          assert.deepEqual(
+            yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position })),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.equal(eve.opened.length, 1);
+        // Another position, and an agent outside the rollout, start beside the worker.
+        const secondKey = randomUUID();
+        const second = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: secondKey,
+              position: 2,
+              baseBranch: "luke/invitations/1-schema",
+            }),
+          ),
+        ).agent;
+        assert.equal(second.position, 2);
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+
+        // The worker's turn fails, which ends it and frees its position.
+        yield* failTurnOf(owner, worker.id);
+        const restarted = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+        ).agent;
+        assert.notEqual(restarted.id, worker.id);
+        assert.equal(restarted.position, 1);
+        assert.equal(eve.opened.length, 4);
+
+        // The rollout loses its second pull request: a retry of that builder's Start still answers
+        // it, and a new Start there names no builder.
+        yield* savePlanText(owner, plan.id, SAVED, { rollout: TWO_PULL_REQUESTS.slice(0, 1) });
+        const retried = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: secondKey, position: 2 })),
+        );
+        assert.equal(retried.agent.id, second.id);
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 2 })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        // A key that made another position's builder, or a builder of another plan, answers
+        // nothing at a position past the rollout.
+        const elsewhere = yield* startPlan(owner, {
+          name: "Invitation reminders",
+          repository: RELAY_FULL_NAME,
+        });
+        for (const [planId, idempotencyKey, position] of [
+          [plan.id, key, 2],
+          [plan.id, secondKey, 3],
+          [elsewhere.id, secondKey, 2],
+        ] as const) {
+          assert.deepEqual(
+            yield* ask(startAs(owner, planId, { idempotencyKey, position })),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.equal(eve.opened.length, 4);
+      }),
+  );
+
+  it.effect(
+    "a rollout's keeper starts on a task at no position and no base, a second while it stands is refused as keeper-taken and opens nothing, though its own retry still answers it; once its turn fails, a keeper starts again",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan({ rollout: TWO_PULL_REQUESTS });
+        const key = randomUUID();
+        const asKeeper = { role: ROLLOUT_ROLE.KEEPER, task: "Keep the rollout's stack." };
+        const keeper = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, ...asKeeper })),
+        ).agent;
+        assert.equal(keeper.role, ROLLOUT_ROLE.KEEPER);
+        assert.equal(keeper.position, undefined);
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), ...asKeeper })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.KEEPER_TAKEN),
+        );
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, ...asKeeper })),
+        );
+        assert.equal(again.agent.id, keeper.id);
+        assert.equal(eve.opened.length, 1);
+        // A keeper with no task, at a position, or on a base, and a builder at none, name no agent.
+        for (const body of [
+          { role: ROLLOUT_ROLE.KEEPER },
+          { ...asKeeper, position: 1 },
+          { ...asKeeper, baseBranch: "luke/invitations/1-schema" },
+          { role: ROLLOUT_ROLE.BUILDER },
+        ]) {
+          assert.deepEqual(
+            yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), ...body })),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.equal(eve.opened.length, 1);
+
+        yield* failTurnOf(owner, keeper.id);
+        const restarted = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), ...asKeeper })),
+        ).agent;
+        assert.notEqual(restarted.id, keeper.id);
+        assert.equal(restarted.role, ROLLOUT_ROLE.KEEPER);
+      }),
+  );
+
+  it.effect("a retry under the same key is the same agent, and opens no second session", () =>
+    Effect.gen(function* () {
+      const { owner, plan, eve, ask } = yield* openPlan();
+      const key = randomUUID();
+      const first = yield* ask(startAs(owner, plan.id, { idempotencyKey: key }));
+      const again = yield* ask(
+        startAs(owner, plan.id, {
+          idempotencyKey: key,
+          model: "openai/gpt-6.1-sol",
+          effort: "high",
+        }),
+      );
+      const one = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, first);
+      const same = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, again);
+      assert.equal(same.agent.id, one.agent.id);
+      assert.equal(same.agent.model, one.agent.model);
+      assert.equal(eve.opened.length, 1);
+      assert.equal((yield* listCodingAgents(owner, plan.id)).length, 1);
+    }),
   );
 
   it.effect(
@@ -973,6 +1166,27 @@ const startedAgent = (
     const stored = yield* readCodingAgent(owner, agent.id);
     assert.ok(Option.isSome(stored));
     return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
+  });
+
+/** The agent's first turn runs and fails, which ends it as a rollout's builder or keeper. */
+const failTurnOf = (userId: string, agentId: string) =>
+  Effect.gen(function* () {
+    const stored = yield* readCodingAgent(userId, agentId);
+    assert.ok(Option.isSome(stored));
+    const target = { userId, conversationId: stored.value.conversationId };
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const turnId = randomUUID();
+    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.consume(target, {
+      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      conversationId: sessionKey(target.conversationId),
+      turnId,
+      sequence: 1,
+      status: BRAIN_REQUEST_STATUS.FAILED,
+      failure: BRAIN_REQUEST_FAILURE.MODEL,
+      responseIds: [],
+      at: 0,
+    });
   });
 
 function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {

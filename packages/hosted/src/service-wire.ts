@@ -76,6 +76,18 @@ export const HOSTED_API_ERROR = {
   NOT_PERMITTED: "not-permitted",
   /** The address is already a member of the workspace, or already holds a pending invitation to it; nothing was sent. */
   ALREADY_INVITED: "already-invited",
+  /**
+   * A live worker already holds the pull request of the plan's rollout the
+   * Start named: its newest turn neither failed nor was stopped. Nothing was
+   * written; a Start at that position is taken once that worker has ended.
+   */
+  POSITION_TAKEN: "position-taken",
+  /**
+   * The plan's rollout already has a live keeper: its newest turn neither
+   * failed nor was stopped, and it is not archived. Nothing was written; a
+   * keeper's Start is taken once that one has ended.
+   */
+  KEEPER_TAKEN: "keeper-taken",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
