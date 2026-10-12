@@ -21,6 +21,7 @@ import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";
+import { rolloutWorkersOf } from "../plan-agents.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
@@ -346,10 +347,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           plan === undefined
             ? Option.none()
             : yield* readBoard(admitted.target.userId, plan.plan.id);
+        // The workers are read only for a plan with a rollout, the one the context names them for.
+        const workers =
+          plan === undefined || plan.plan.rollout.length === 0
+            ? []
+            : yield* rolloutWorkersOf(admitted.target.userId, plan.plan.id);
         return planningStandingContext(
           plan,
           Option.getOrElse(board, () => EMPTY_BOARD),
           seams.now(),
+          workers,
         );
       }),
 

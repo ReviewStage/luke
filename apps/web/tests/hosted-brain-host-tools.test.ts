@@ -228,6 +228,7 @@ async function planConversation(
 async function agentOn(
   userId: string,
   planId: string,
+  position?: number,
 ): Promise<ConversationTarget & { readonly id: string; readonly sessionId: string }> {
   const started = Option.getOrThrow(
     await database.run(
@@ -239,6 +240,7 @@ async function agentOn(
         planSnapshot: "# Teammate invitations",
         task: null,
         repository: RELAY_FULL_NAME,
+        ...(position === undefined ? undefined : { position }),
       }),
     ),
   );
@@ -548,6 +550,26 @@ test("the plan's coding agents are listed with their status, what each published
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
   });
+});
+
+test("a rollout's worker is listed and read with its position, and an agent outside the rollout with none", async () => {
+  const plan = await planConversation(undefined, RELAY_FULL_NAME);
+  const plain = await agentOn(plan.userId, plan.planId);
+  const worker = await agentOn(plan.userId, plan.planId, 2);
+  const call = await callerOn(brainHost(seams), plan);
+
+  const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
+  assert.ok(Array.isArray(listed.agents));
+  assert.deepEqual(
+    listed.agents.map((each) => (isRecord(each) ? [each.id, each.position] : undefined)),
+    [
+      [worker.id, 2],
+      [plain.id, undefined],
+    ],
+  );
+  const read = await call(READ_CODING_AGENT_TOOL.name, { agentId: worker.id });
+  assert.ok(isRecord(read.agent));
+  assert.equal(read.agent.position, 2);
 });
 
 test("a message to the plan's agent steers its session as the deployment acting for the account, under the tool call's own key, and is sent once; another account's agent gets nothing, and a deployment with no secret sends nothing", async () => {

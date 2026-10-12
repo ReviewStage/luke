@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { it } from "@effect/vitest";
+import { describe, it } from "@effect/vitest";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentStatus,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
   type PlanDocument,
   planDocumentSchema,
+  ROLLOUT_BASE,
+  type RolloutItem,
   rolloutSchema,
 } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
@@ -62,7 +71,7 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import { createCodingAgent, recordCodingAgentPublished } from "../server/hosted/coding-agent-store";
 import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
@@ -71,6 +80,7 @@ import {
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
+import { type RolloutWorker, rolloutStateOf } from "../server/hosted/plan-agents";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
@@ -224,6 +234,58 @@ const SPOKEN_ASK = [
   `Developer: Actually no. ${CORRECTION}`,
   `The developer's ask is their latest line above: Actually no. ${CORRECTION}`,
 ].join("\n");
+
+/** A pull request of the rollout's, saying nothing past its title and base. */
+function rolloutItem(title: string, base: RolloutItem["base"]): RolloutItem {
+  return { title, scope: `${title}, and its tests.`, base, acceptance: null };
+}
+
+/** Two pull requests both on the first and not on each other. */
+const SIBLINGS: readonly RolloutItem[] = [
+  rolloutItem("Schema", ROLLOUT_BASE.MAIN),
+  rolloutItem("Route", 1),
+  rolloutItem("Screen", 1),
+];
+
+/** Each pull request on the one before it. */
+const CHAIN: readonly RolloutItem[] = [
+  rolloutItem("Schema", ROLLOUT_BASE.MAIN),
+  rolloutItem("Route", 1),
+  rolloutItem("Accept flow", 2),
+];
+
+/** A pull request as GitHub last answered it for a worker's branch. */
+function pullRequest(
+  number: number,
+  state: CodingAgentPullRequest["state"],
+  checks: CodingAgentPullRequest["checks"] = CHECK_SUMMARY.PENDING,
+): CodingAgentPullRequest {
+  return {
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    state,
+    checks,
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+  };
+}
+
+/** A worker at a position, live unless its newest turn failed or was stopped, as the store reads one. */
+function worker(
+  position: number,
+  status: CodingAgentStatus,
+  published: CodingAgentPullRequest | null = null,
+): RolloutWorker {
+  const ended = status === CODING_AGENT_STATUS.FAILED || status === CODING_AGENT_STATUS.CANCELLED;
+  return { position, status, live: !ended, published };
+}
+
+/** The two ready lines of a rollout's state. */
+function readyLines(rollout: readonly RolloutItem[], workers: readonly RolloutWorker[]) {
+  return rolloutStateOf(rollout, workers).slice(-2);
+}
 
 function unreached(name: string): () => never {
   return () => {
@@ -1023,4 +1085,141 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.equal(reply, `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`);
       }),
   );
+  it.effect(
+    "a plan's rollout reaches the planning model with each position's worker and pull request and what is ready; a plain agent is no worker",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        const start = (position: number | undefined) =>
+          Effect.map(
+            createCodingAgent(userId, {
+              planId,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              planSnapshot: "# Relay",
+              task: null,
+              repository: RELAY_FULL_NAME,
+              ...(position === undefined ? undefined : { position }),
+            }),
+            Option.getOrThrow,
+          );
+        const first = yield* start(1);
+        yield* recordCodingAgentPublished(
+          userId,
+          first.agent.id,
+          pullRequest(415, PULL_REQUEST_STATE.OPEN),
+        );
+        const plain = yield* start(undefined);
+        yield* recordCodingAgentPublished(
+          userId,
+          plain.agent.id,
+          pullRequest(9, PULL_REQUEST_STATE.MERGED),
+        );
+
+        yield* cutRollout(planId, SIBLINGS);
+        const lines = (yield* host.standingContext(standing)).split("\n");
+        const at = lines.indexOf(ROLLOUT_MARKER);
+        assert.notEqual(at, -1);
+        assert.deepEqual(readRollout(lines[at + 1]), SIBLINGS);
+        assert.deepEqual(lines.slice(at + 2, at + 7), [
+          '1. "Schema" · base: main · worker: working · pull request: #415 open',
+          '2. "Route" · base: 1 · worker: none · pull request: none',
+          '3. "Screen" · base: 1 · worker: none · pull request: none',
+          "Ready to start: 2, 3",
+          "Ready to merge: none",
+        ]);
+      }),
+  );
+});
+
+describe("the rollout's state as the planning model reads it", () => {
+  it("names each position's base, newest worker, and pull request, a closed one among them", () => {
+    assert.deepEqual(
+      rolloutStateOf(CHAIN, [
+        worker(1, CODING_AGENT_STATUS.COMPLETED, pullRequest(415, PULL_REQUEST_STATE.MERGED)),
+        worker(2, CODING_AGENT_STATUS.FAILED, pullRequest(416, PULL_REQUEST_STATE.CLOSED)),
+        worker(2, CODING_AGENT_STATUS.RUNNING),
+        worker(3, CODING_AGENT_STATUS.CANCELLED),
+      ]),
+      [
+        '1. "Schema" · base: main · worker: finished · pull request: #415 merged',
+        '2. "Route" · base: 1 · worker: working · pull request: #416 closed',
+        '3. "Accept flow" · base: 2 · worker: stopped · pull request: none',
+        "Ready to start: none",
+        "Ready to merge: none",
+      ],
+    );
+  });
+
+  it("a sibling pair waits on the pull request both base on, then both are ready at once", () => {
+    assert.deepEqual(readyLines(SIBLINGS, []), ["Ready to start: 1", "Ready to merge: none"]);
+    assert.deepEqual(readyLines(SIBLINGS, [worker(1, CODING_AGENT_STATUS.STARTING)]), [
+      "Ready to start: none",
+      "Ready to merge: none",
+    ]);
+    assert.deepEqual(
+      readyLines(SIBLINGS, [
+        worker(1, CODING_AGENT_STATUS.RUNNING, pullRequest(415, PULL_REQUEST_STATE.DRAFT)),
+      ]),
+      ["Ready to start: 2, 3", "Ready to merge: none"],
+    );
+    assert.deepEqual(
+      readyLines(SIBLINGS, [
+        worker(
+          1,
+          CODING_AGENT_STATUS.COMPLETED,
+          pullRequest(415, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
+        ),
+        worker(2, CODING_AGENT_STATUS.RUNNING),
+      ]),
+      ["Ready to start: 3", "Ready to merge: 1"],
+    );
+  });
+
+  it("a chain starts one position at a time and merges from the bottom", () => {
+    const green = (number: number) =>
+      pullRequest(number, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING);
+    // The second is green, but its base is not on main yet; the third's base is open.
+    assert.deepEqual(
+      readyLines(CHAIN, [
+        worker(1, CODING_AGENT_STATUS.COMPLETED, pullRequest(415, PULL_REQUEST_STATE.OPEN)),
+        worker(2, CODING_AGENT_STATUS.COMPLETED, green(416)),
+      ]),
+      ["Ready to start: 3", "Ready to merge: none"],
+    );
+    // Once the first merged, the second merges; a merged position is never ready to start again.
+    assert.deepEqual(
+      readyLines(CHAIN, [
+        worker(1, CODING_AGENT_STATUS.FAILED, pullRequest(415, PULL_REQUEST_STATE.MERGED)),
+        worker(2, CODING_AGENT_STATUS.COMPLETED, green(416)),
+        worker(3, CODING_AGENT_STATUS.RUNNING, green(417)),
+      ]),
+      ["Ready to start: none", "Ready to merge: 2"],
+    );
+    // A worker that failed or was stopped frees its position; checks that failed are no green.
+    assert.deepEqual(
+      readyLines(CHAIN, [
+        worker(
+          1,
+          CODING_AGENT_STATUS.COMPLETED,
+          pullRequest(415, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING),
+        ),
+        worker(2, CODING_AGENT_STATUS.FAILED),
+      ]),
+      ["Ready to start: 2", "Ready to merge: none"],
+    );
+    assert.equal(
+      rolloutStateOf(CHAIN, [
+        worker(
+          1,
+          CODING_AGENT_STATUS.COMPLETED,
+          pullRequest(415, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING),
+        ),
+      ])[0],
+      '1. "Schema" · base: main · worker: finished · pull request: #415 checks failing',
+    );
+  });
 });

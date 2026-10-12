@@ -624,6 +624,11 @@ export function listCodingAgents(
   return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
 }
 
+/** Whether a worker whose newest turn is this one still holds its position: one before its first turn does, and so does one whose newest turn neither failed nor was stopped. */
+export function isLiveWorkerTurn(turn: CodingAgentLatestTurn | undefined): boolean {
+  return turn === undefined || !ENDED_WORKER_TURN_STATUSES.has(turn.status);
+}
+
 /** The live worker at this position of the account's plan's rollout, newest started first: one not archived whose newest turn neither failed nor was stopped; nothing where none stands. */
 export function liveWorkerAtPosition(
   userId: string,
@@ -636,12 +641,8 @@ export function liveWorkerAtPosition(
       userId,
       workers.map((worker) => worker.conversationId),
     );
-    // A worker before its first turn has no newest turn, and already holds its position.
     return Option.fromNullishOr(
-      workers.find((worker) => {
-        const turn = newest.get(worker.conversationId);
-        return turn === undefined || !ENDED_WORKER_TURN_STATUSES.has(turn.status);
-      }),
+      workers.find((worker) => isLiveWorkerTurn(newest.get(worker.conversationId))),
     );
   });
 }
