@@ -2679,13 +2679,15 @@ test("New coding agent opens a draft tab with nothing said and the box focused, 
 
   assert.equal(chosenTab(page), "New agent");
   assert.equal(panelTabs(page).at(-1), "New agent");
-  assert.match(
-    page.querySelector(".side-panel-content")?.textContent ?? "",
-    /The agent starts when you send it\./u,
+  // Nothing stands where the transcript will be: the box's placeholder is the one prompt.
+  const draftTab = page.querySelector(".side-panel-content .agent-tab");
+  assert.deepEqual(
+    [...(draftTab?.children ?? [])].map((child) => child.className),
+    ["agent-tab-foot"],
   );
   const box = draftBox(page);
   assert.equal(document.activeElement, box, "the box takes focus as the tab opens");
-  assert.equal(box.getAttribute("placeholder"), "Describe a task for the agent…");
+  assert.equal(box.getAttribute("placeholder"), "Ask to make changes");
   assert.deepEqual(draftStarts(), [], "a draft asks nothing of the service");
 
   const task = "Rename the invite email's subject to say who sent it.";

@@ -499,6 +499,9 @@ export function AgentTabView({
           published={published}
           doors={doors}
           onStop={onStop}
+          // Note that a started agent's conversation always opens on its plan or
+          // task, so the box takes a follow up even before the transcript is read.
+          followsUp
         />
       </footer>
     </section>

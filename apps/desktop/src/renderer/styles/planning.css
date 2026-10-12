@@ -808,9 +808,11 @@ button.code-card-path:hover {
 }
 
 /* The room under the transcript for the composer, with no rule between
-   them: the card's own edge is where the transcript ends. */
+   them: the card's own edge is where the transcript ends. It keeps to the
+   tab's foot where no transcript stands above it, as in a draft's tab. */
 .agent-tab-foot {
   flex: 0 0 auto;
+  margin-top: auto;
 }
 
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its

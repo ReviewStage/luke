@@ -80,7 +80,8 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-const PLACEHOLDER = "Message the agent…";
+/** What a started agent's box says it takes; a draft's asks to make changes (../desktop/desktop-plans.test.ts). */
+const FOLLOW_UP = "Send a follow up";
 
 /** What would draw a bar across the panel between the transcript and the box: a rule at a box's edge, or a shadow cast over the lines above. */
 const BAR_PROPERTIES: ReadonlySet<string> = new Set([
@@ -303,10 +304,10 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
   };
 }
 
-test("the box reads the same running or idle: one placeholder, no hint, no queue, and no menu; Enter sends under a fresh key and Shift+Enter is the browser's new line", async () => {
+test("the box reads the same running or idle: one follow-up placeholder, no hint, no queue, and no menu; Enter sends under a fresh key and Shift+Enter is the browser's new line", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   const same = () => {
-    assert.equal(tab.field().placeholder, PLACEHOLDER);
+    assert.equal(tab.field().placeholder, FOLLOW_UP);
     assert.equal(tab.container.querySelector(".agent-composer-hint"), null);
     assert.equal(tab.container.querySelector("[data-queued-id]"), null);
     assert.equal(tab.container.querySelector('[role="menu"], [role="listbox"]'), null);
@@ -337,6 +338,11 @@ test("the box reads the same running or idle: one placeholder, no hint, no queue
   assert.notEqual(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
   await tab.stand({ status: CODING_AGENT_STATUS.STARTING });
   same();
+});
+
+test("a started agent's box asks for a follow up even before its transcript is read, because its conversation opened on its plan or task", () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.STARTING, messages: [] });
+  assert.equal(tab.field().placeholder, FOLLOW_UP);
 });
 
 test("the one button is Send with words, disabled with none while the agent is idle or starting, and Stop with none while a turn runs; Stop stops the agent, and Enter on an empty box does nothing", async () => {
@@ -421,7 +427,7 @@ test("a message that did not go comes back into the box with why under the card 
   assert.notEqual(tab.sends[2]?.clientKey, tab.sends[0]?.clientKey);
 
   await tab.answer(2, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
-  assert.equal(tab.field().placeholder, PLACEHOLDER);
+  assert.equal(tab.field().placeholder, FOLLOW_UP);
   assert.equal(tab.field().disabled, true);
   assert.match(tab.note() ?? "", /ended for good/u);
   assert.equal(tab.retry(), null);
