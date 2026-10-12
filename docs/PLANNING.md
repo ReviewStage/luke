@@ -107,11 +107,17 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   while the side panel is showing the Transcript, which streams the same
   ones.
 - A plan is left by Back (`‹`) or Escape on its document page, by opening
-  another plan, or by a sign-out. Leaving ends the plan's call; opening
-  another plan ends the old plan's call before the new one is active in any
-  call (LUKE-346). Only one plan is ever the spoken conversation.
-- While a plan is open, the talk key speaks into that plan's call, whatever
-  the panel is showing. With no plan open, it is the desk's talk key.
+  another plan, or by a sign-out. Leaving a plan, or opening another, leaves
+  its call standing: the call outlives the plan on screen, and Luke goes on
+  hearing, speaking, and writing the call's plan. Only one plan is ever the
+  spoken conversation, so another plan's Talk press, or starting a plan,
+  hangs the call up and opens one about that plan. Deleting the call's plan,
+  open or not, and signing out end it.
+- While a call stands, the talk key speaks into it, whatever plan the panel
+  has open. With no call, it opens the call about the open plan, and with no
+  plan open it does nothing. The microphone and speaker mute chords answer
+  while a call is in progress wherever the panel stands, on another plan,
+  in Settings, or on the new-plan page.
 - Nothing polls. Every change to a plan happens during its call, and the
   notetaker's drafts reach the open plan on the call's own socket as they
   are written. The list and the open plan are read when a panel shows the
@@ -1182,8 +1188,8 @@ changes when a check is run, not when one is planned.
   - a spoken turn reaching the planning model in the plan's own
     conversation, with the saved document on every turn;
   - re-attaching and resuming on the same plan;
-  - switching plans ends the old plan's call, and the new plan is active
-    before that call has finished closing;
+  - switching plans and leaving the plan leave its call standing, and
+    deleting the call's plan or signing out ends it;
   - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
   - the fixed template (LUKE-352), through the tool against a real store: a

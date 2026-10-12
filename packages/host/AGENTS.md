@@ -53,7 +53,7 @@ exchange stands on the voice service: every spoken ask is admitted through
 `acceptAsk` there, every reply is appended there over the same socket the
 relay pipes, and the account's record is the service's. What this package
 keeps is `LiveSessionHolder`, which creates the planning call about the open
-plan for the peer's offer, ends it on the peer's hang-up, a plan switch, or the
+plan for the peer's offer, ends it on the peer's hang-up or the
 drain, and carries the peer's idle and the stop key to the service as
 `session.activity` and `session.stop`, since the idle decision is made against
 appends only the service made and the stop's instruction is the service's to

@@ -969,9 +969,9 @@ The recent words ride the delegation as context, and whether an answer
 agrees to anything is the planning instructions' to judge. The binding is the session's for life. It is written on
 the `voice_sessions` row as a plain `plan_id`,
 and a re-attach reads it from there, so a later connection cannot move a
-session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time and ends a plan's
-call when the window opens another plan, starts one, or closes, so only one
-plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
+session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time, which outlives
+the plan on screen and moves only when another plan's Talk press hangs it up
+and opens one about that plan, so only one plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
 plans and the re-attach over the real store.
 
 The planning model reads source through one tool,

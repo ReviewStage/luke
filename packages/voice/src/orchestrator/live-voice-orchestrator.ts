@@ -170,8 +170,9 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * one-owner rule: the renderer owns the microphone switch and the hang-up,
  * the host owns every append and the close decision. Every session is a
  * planning call about one plan. The talk key is held to talk: its press
- * opens the call about the plan the window has open if none stands and
- * unmutes it, its release mutes, and the microphone is open exactly between
+ * opens the call about the plan the window has open if none stands, speaks
+ * into the standing call whatever plan is open if one does, and unmutes it;
+ * its release mutes, and the microphone is open exactly between
  * the two; the stop key mutes the same way and silences Luke where he is
  * speaking. The host's `voiceLiveSession.changed` is obeyed rather than
  * reasoned about: closing hangs up. No turn is committed, no reply is
@@ -271,31 +272,28 @@ export class LiveVoiceOrchestrator {
    * against a standing session it unmutes. It never mutes: the key coming up
    * does that, so a hold is heard for exactly as long as it lasts, and a
    * hold that ended while the system's microphone dialog stood, or while the
-   * session was opening, unmutes nothing. A press made while the window has
-   * a plan open names that plan: it speaks into the call about that plan,
-   * opening one if none stands and hanging up a call about any other plan
-   * first, as the window's own button does. A press naming no plan speaks
-   * into whatever call stands, and with none standing does nothing: there is
-   * no call about no plan.
+   * session was opening, unmutes nothing. A press speaks into the call
+   * standing or opening, whatever plan the window has open, because the call
+   * outlives the plan on screen and a hold must not hang it up: moving the
+   * call to another plan is that plan's own button. With no call, a press
+   * made while the window has a plan open opens the call about that plan,
+   * and a press naming no plan does nothing: there is no call about no plan.
    */
   beginTalk(planId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const plan = planId ?? (this.#call === undefined ? undefined : this.#callPlan);
-      if (plan === undefined) return;
+      if (planId === undefined && this.#call === undefined) return;
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
       this.#keyDown = true;
-      if (this.#call !== undefined && this.#callPlan !== plan) {
-        yield* this.#hangUp();
-        // Note that a key let go of while the old call closed opens nothing.
-        if (!this.#keyDown) return;
-      }
-      // A press naming no plan spoke into the call that stood; once that call
-      // has gone there is none, and the press opens nothing.
+      // A press over a call the host is closing waits it out. A key let go of
+      // meanwhile opens nothing, and nor does a press naming no plan, which
+      // spoke into the call that has now gone.
       if ((yield* this.#outlastClosing()) && (!this.#keyDown || planId === undefined)) return;
+      const plan = this.#call === undefined ? planId : this.#callPlan;
+      if (plan === undefined) return;
       yield* this.#talk(plan);
     });
   }
@@ -328,6 +326,20 @@ export class LiveVoiceOrchestrator {
       if (call !== undefined && this.#callPlan !== planId) yield* this.#hangUp();
       yield* this.#outlastClosing();
       yield* this.#talk(planId);
+    });
+  }
+
+  /**
+   * The microphone's mute chord, pressed wherever the panel stands: the call
+   * standing is toggled as its plan's own button toggles it, whatever plan
+   * is open, since the call outlives the plan on screen. A press over no call,
+   * or over one the host is closing, opens nothing.
+   */
+  toggleMicrophone(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const plan =
+        this.#call === undefined || this.#closing !== undefined ? undefined : this.#callPlan;
+      return plan === undefined ? Effect.void : this.talkAboutPlan(plan);
     });
   }
 

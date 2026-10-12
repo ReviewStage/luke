@@ -92,6 +92,8 @@ export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & 
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
   END_CALL: "end-call",
+  /** The standing call's microphone muted, or heard again, whatever plan the panel has open. */
+  TOGGLE_MICROPHONE: "toggle-microphone",
   /** Luke's voice silenced on this Mac for the call standing, and heard again; the session is told nothing. */
   MUTE_SPEAKER: "mute-speaker",
   UNMUTE_SPEAKER: "unmute-speaker",
