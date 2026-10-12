@@ -777,7 +777,7 @@ function placeOf(layer: Element | null | undefined) {
   };
 }
 
-test("each composer popover opens right above the button that opened it, from its leading edge, from its trailing edge where the leading one would run past the panel's right, pushed back inside where neither stays inside, and Escape hands focus back to the button", async () => {
+test("each composer popover opens right above the button that opened it, from its trailing edge since the buttons stand at the foot's right, from its leading edge where the trailing one would run past the panel's left, pushed back inside where neither stays inside, and Escape hands focus back to the button", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.container.setAttribute("data-popover-room", "");
   await tab.stand({ context: CONTEXT });
@@ -790,43 +790,64 @@ test("each composer popover opens right above the button that opened it, from it
     act(() => {
       from?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-  // A 400px panel at the window's right, its composer at its foot.
+  // Full screen, the chip and the ring at the foot's right: each popover ends where its button does.
   const boxes = {
-    room: new DOMRect(600, 0, 400, 768),
-    chip: new DOMRect(620, 700, 130, 28),
-    ring: new DOMRect(754, 700, 28, 28),
+    room: new DOMRect(0, 0, 1024, 768),
+    chip: new DOMRect(760, 700, 130, 28),
+    ring: new DOMRect(894, 700, 28, 28),
     height: 320,
   };
   const restore = measureBoxes(boxes);
   try {
     act(() => chip.click());
-    assert.deepEqual(placeOf(menuLayer()), { side: "above", left: 0, width: 340 });
+    assert.deepEqual(placeOf(menuLayer()), { side: "above", left: 130 - 340, width: 340 });
     pressEscape(document.activeElement);
     assert.equal(menuLayer(), null);
     assert.equal(document.activeElement, chip, "focus goes back to the chip");
 
-    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in from the panel's right inset.
     act(() => ring.click());
-    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 992 - 340 - 754, width: 340 });
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 28 - 340, width: 340 });
     pressEscape(document.activeElement);
     assert.equal(document.activeElement, ring, "focus goes back to the ring");
 
-    // Full screen there is room to the ring's right, and the popover starts where the ring does, as the menu starts at its chip.
-    boxes.room = new DOMRect(0, 0, 1024, 768);
-    boxes.ring = new DOMRect(400, 700, 28, 28);
+    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed back in to the panel's left inset.
+    boxes.room = new DOMRect(600, 0, 400, 768);
+    boxes.ring = new DOMRect(834, 700, 28, 28);
     act(() => ring.click());
-    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 0, width: 340 });
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 608 - 834, width: 340 });
     pressEscape(document.activeElement);
 
-    // A ring too near the panel's right for the popover to start at it, which ends where the ring does instead.
-    boxes.ring = new DOMRect(800, 700, 28, 28);
+    // A ring too near the panel's left for the popover to end at it, which starts where the ring does instead.
+    boxes.room = new DOMRect(0, 0, 1024, 768);
+    boxes.ring = new DOMRect(100, 700, 28, 28);
     act(() => ring.click());
-    const flipped = placeOf(ringLayer());
-    assert.equal(flipped.side, "above");
-    assert.equal(flipped.left + flipped.width, 28, "the popover's trailing edge is the ring's");
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 0, width: 340 });
   } finally {
     restore();
   }
+});
+
+test("the foot reads as its keys go: the + at its left, then at its right the model, the context ring, the microphone, and the round button", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  await tab.stand({ context: CONTEXT });
+  const name = (button: HTMLButtonElement) =>
+    button.matches(".agent-model-button") ? "model" : button.getAttribute("aria-label");
+  const presses = (within: string) =>
+    [...tab.container.querySelectorAll<HTMLButtonElement>(`${within} button`)].map(name);
+
+  assert.deepEqual(presses(".agent-composer form"), [
+    "Attach files",
+    "model",
+    "Context usage",
+    "Dictate",
+    "Stop",
+  ]);
+  assert.deepEqual(presses(".agent-composer-actions"), [
+    "model",
+    "Context usage",
+    "Dictate",
+    "Stop",
+  ]);
 });
 
 test("at the panel's narrowest the popovers are no wider than the panel leaves, held inside its edges, and one whose button stands too near the top for it turns below", async () => {
@@ -913,11 +934,11 @@ test("in a full-screen panel whose composer keeps to a centred column, each popo
   const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
   const ring = tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
   assert.ok(chip && ring);
-  // A 1400px full-screen panel: the 720px column starts 340px in, so the chip stands far from either edge.
+  // A 1400px full-screen panel, its centred column's foot holding the chip and the ring far from either edge of the window.
   const boxes = {
     room: new DOMRect(0, 0, 1400, 800),
-    chip: new DOMRect(356, 730, 130, 28),
-    ring: new DOMRect(490, 730, 28, 28),
+    chip: new DOMRect(640, 730, 130, 28),
+    ring: new DOMRect(774, 730, 28, 28),
     height: 320,
   };
   /** The class of the box a layer's left and bottom are measured from: its nearest positioned ancestor. */
@@ -934,14 +955,14 @@ test("in a full-screen panel whose composer keeps to a centred column, each popo
     assert.ok(menu);
     assert.equal(getComputedStyle(menu).position, "absolute");
     assert.equal(positionedFrom(menu), "agent-model-chip", "measured from the chip's own box");
-    assert.deepEqual(placeOf(menu), { side: "above", left: 0, width: 340 });
+    assert.deepEqual(placeOf(menu), { side: "above", left: 130 - 340, width: 340 });
     act(() => chip.click());
 
     act(() => ring.click());
     const popover = tab.container.querySelector(".anchored-popover");
     assert.ok(popover);
     assert.equal(positionedFrom(popover), "agent-context", "measured from the ring's own box");
-    assert.deepEqual(placeOf(popover), { side: "above", left: 0, width: 340 });
+    assert.deepEqual(placeOf(popover), { side: "above", left: 28 - 340, width: 340 });
   } finally {
     restore();
     sheet.remove();
@@ -959,13 +980,12 @@ const PNG = file("design.png", [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
 /** A Markdown file: "# Notes" in UTF-8, under a type the picker leaves empty. */
 const NOTES = file("notes.md", [0x23, 0x20, 0x4e, 0x6f, 0x74, 0x65, 0x73]);
 
-test('"Attach files" is the "+" just left of Send, opening the system\'s picker: picked files stand as chips over the words, one that cannot come says why, and the send carries them, draws them on its line at once, and brings them back with the words when it did not go', async () => {
+test('"Attach files" is the "+" at the foot\'s left, opening the system\'s picker: picked files stand as chips over the words, one that cannot come says why, and the send carries them, draws them on its line at once, and brings them back with the words when it did not go', async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
-  assert.deepEqual(
-    [...tab.container.querySelectorAll(".agent-composer-actions button")].map((each) =>
-      each.getAttribute("aria-label"),
-    ),
-    ["Dictate", "Attach files", "Send"],
+  assert.equal(
+    tab.container.querySelector(".agent-composer-attach")?.closest(".agent-composer-actions"),
+    null,
+    "the + stands at the foot's left, apart from the presses at its right",
   );
   const picker = tab.container.querySelector<HTMLInputElement>('input[type="file"]');
   assert.ok(picker);

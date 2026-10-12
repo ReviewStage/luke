@@ -36,14 +36,15 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * the one the New Plan page draws, at its default type. Along its foot's
- * left stand the chips: the model chip naming what the agent runs on,
- * which opens the menu that changes it for the next step
- * (`agent-model-chip.tsx`), beside it, once a step has ended, the ring
- * that shows how full the agent's model's context is and opens what fills
- * it (`agent-context.tsx`), and after them, once the agent has pushed, the
- * pull request's or the branch's chip, which opens it on GitHub
- * (`agent-published.tsx`). The box takes a message to the agent:
+ * the one the New Plan page draws, at its default type. Its foot is laid
+ * out as ChatGPT's and Codex's are: at the left the "+" that attaches
+ * files and, once the agent has pushed, the pull request's or the branch's
+ * chip, which opens it on GitHub (`agent-published.tsx`); at the right,
+ * in this order, the model chip naming what the agent runs on, which opens
+ * the menu that changes it for the next step (`agent-model-chip.tsx`),
+ * the ring that shows, once a step has ended, how full the agent's model's
+ * context is and opens what fills it (`agent-context.tsx`), the
+ * microphone, and the round button. The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
@@ -65,16 +66,16 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * first message of its still empty conversation, and its model chip once
  * the choice it starts on is known.
  *
- * Files go with a message the way every chat takes them: the "+" left of
- * the button opens the system's file picker, an image pasted into the box
+ * Files go with a message the way every chat takes them: the "+" at the
+ * foot's left opens the system's file picker, an image pasted into the box
  * is taken, and files dropped on the card are, each drawn as a chip above
  * the words with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the card while the rest still come
  * (`attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
  *
- * Words can be spoken into the box as well: the microphone left of the "+"
- * records in place of the foot's controls until ✓ or Enter sends the clip
+ * Words can be spoken into the box as well: the microphone left of the
+ * round button records in place of the foot's controls until ✓ or Enter sends the clip
  * to be heard and the words land at the caret, or ✕ or Escape drops it
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
@@ -279,19 +280,6 @@ export function AgentComposer({
           ) : (
             <>
               <PromptInputTools>
-                {model === undefined ? null : (
-                  <AgentModelChip
-                    model={model}
-                    models={models}
-                    readModels={readModels}
-                    usage={usage}
-                  />
-                )}
-                <AgentContextRing context={context} brief={brief} />
-                <PublishedChip published={published} doors={doors} />
-              </PromptInputTools>
-              <div className="agent-composer-actions">
-                <DictateButton dictation={dictation} disabled={held} />
                 <Tooltip label={BUTTON.ATTACH}>
                   <button
                     type="button"
@@ -315,6 +303,19 @@ export function AgentComposer({
                     attach(picked);
                   }}
                 />
+                <PublishedChip published={published} doors={doors} />
+              </PromptInputTools>
+              <div className="agent-composer-actions">
+                {model === undefined ? null : (
+                  <AgentModelChip
+                    model={model}
+                    models={models}
+                    readModels={readModels}
+                    usage={usage}
+                  />
+                )}
+                <AgentContextRing context={context} brief={brief} />
+                <DictateButton dictation={dictation} disabled={held} />
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

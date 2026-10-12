@@ -1064,11 +1064,13 @@ button.code-card-path:hover {
   padding-left: 4px;
 }
 
-/* The microphone and the "+" that attaches files, just left of the round
-   Send or Stop; the New Plan card's microphone, left of Start. */
+/* The foot's right: the model chip, the context ring, the microphone, and
+   the round Send or Stop; the New Plan card's microphone, left of Start.
+   It may narrow, so a long model name is cut short before the presses are. */
 .agent-composer-actions {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 4px;
 }

@@ -18,7 +18,8 @@ import type { AgentModelControl } from "./use-agent-model";
  * agent runs on that rather than its model's whole window ("GPT-5.5 High
  * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
- * from its leading edge (`../anchored-popover.tsx`), the
+ * from its trailing edge, since the chip stands at the foot's right
+ * (`../anchored-popover.tsx`), the
  * agent's choice checked; what the menu chooses is the agent's model,
  * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
@@ -80,7 +81,7 @@ export function AgentModelChip({
         <ChevronDownIcon />
       </button>
       {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.START}>
+        <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ModelMenu
             id={menuId}
             className="agent-model-menu"
