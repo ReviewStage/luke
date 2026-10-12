@@ -31,7 +31,16 @@
      release that changed it, never an edit to an old one. A capture may show
      real sessions instead of fixture data, but mind what it carries: a title,
      branch, or conversation committed to history stays there, and whatever it
-     reveals is published with it. -->
+     reveals is published with it.
+
+     Every screenshot is the whole Luke window on macOS's Golden Gate Sunset
+     aerial, made by scripts/changelog-screenshot.sh on a Mac: open the release
+     on what the section shows (`./scripts/run.sh --fixture smoke --profile
+     <profile>` stages the fixture's plan, board, transcript, or work), size
+     the window to about 1600 by 1000 points so the side panel has room, run
+     the script with the PNG's path, and click the window. It keeps the
+     window's traffic lights and shadow and lays the wallpaper around them, so
+     every release's pictures match. -->
 
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
@@ -48,11 +57,15 @@ first message is its task, so it starts on your task instead of the plan.
 Each agent gets a generated title, and you can rename it from its tab's
 right-click menu.
 
+![A coding agent's tab beside the plan, with two subagent rows, its model in the message box, and the plan marked as updated by the agent.](apps/web/public/changelog/0.11.0/coding-agents-work-alongside-you.png)
+
 ### Subagents
 
 A coding agent hands scoped work to read-only workers and picks each one's
 model and effort. Each worker draws as a subagent row in the agent's
 transcript, and the row opens the worker's own tab in the side panel.
+
+![A subagent's own tab in the side panel, showing the searches and reads behind its answer.](apps/web/public/changelog/0.11.0/subagents.png)
 
 ### Improvements
 
@@ -102,6 +115,8 @@ says when an agent finishes and names the pull request it opened, and its tab
 wears a dot until you look. Settings › Coding agents holds the default model
 and effort.
 
+![A coding agent's tab in the side panel, mid-run, with its transcript, its pull request in the head, and the message box with Stop.](apps/web/public/changelog/0.10.0/coding-agents.png)
+
 ### Planning on a GitHub repository
 
 Each plan is about a GitHub repository, reached through the Luke GitHub App.
@@ -112,6 +127,8 @@ repository and shows its code from a checkout in the cloud, so planning no
 longer runs commands on your Mac. The local-folder path is gone: a plan from
 an earlier release opens on the repository picker. Sign in with GitHub now
 goes through the Luke GitHub App too.
+
+![The new-plan composer with its repository picker open on recent repositories and a link to GitHub.](apps/web/public/changelog/0.10.0/planning-on-a-github-repository.png)
 
 ### Improvements
 
@@ -151,6 +168,8 @@ A new Work tab in the side panel shows each planning turn like an agent
 transcript: what Luke's planning model thought, the tools it called, and what
 it wrote. A background worker's whole session opens from its call in the tab.
 
+![The Work tab showing a planning turn's thought, its background worker, and the commands it ran.](apps/web/public/changelog/0.9.0/a-work-tab.png)
+
 ### Improvements
 
 - The plan column and the side panel use Cursor-style tabs that go icon-only
@@ -182,6 +201,8 @@ from one account button at its foot. Rename a plan, or delete it after a
 standard confirmation, from one plan menu in the toolbar's ⋯ or a right-click
 in the sidebar.
 
+![The new-plan composer beside the sidebar of plans, with the account button at its foot.](apps/web/public/changelog/0.8.0/a-new-home-for-your-plans.png)
+
 ### A side panel for the board, the code, and the transcript
 
 A plan's whiteboard, the code Luke shows, and the transcript of what was said
@@ -190,12 +211,16 @@ screen, and opens by itself the first time Luke draws or shows code in a plan.
 Luke draws on the whiteboard as he talks, lays it out by Excalidraw's guides,
 then looks at what he drew and fixes what he sees.
 
+![A plan beside the side panel open on the whiteboard Luke drew for it.](apps/web/public/changelog/0.8.0/a-side-panel-for-the-board-the-code-and-the-transcript.png)
+
 ### Luke as a planning teammate
 
 Luke plans with you rather than interviewing you: he takes notes live, doesn't
 assume you already know what you want to build, and opens each call on what was
 said on the plan's earlier calls. He hands slow work to a background worker and
 tells you its result at a natural pause, and Stop cancels that work too.
+
+![A plan beside its transcript, where a new call picks up from what was said on the last one.](apps/web/public/changelog/0.8.0/luke-as-a-planning-teammate.png)
 
 ### Improvements
 
@@ -260,6 +285,8 @@ answer his own questions instead of asking you; each command runs in a sandbox
 with no network, no writes, and no `.env` files. He can also search the web and
 read public pages, and with GitHub connected he reads your repositories.
 
+![An open plan on its fixed template, with the planning call listening and the notetaker writing.](apps/web/public/changelog/0.7.0/plan-a-feature-with-luke.png)
+
 ### Luke opens as a Mac app
 
 Luke opens in an ordinary window with a Dock tile instead of the notch panel,
@@ -267,6 +294,8 @@ on two tabs: Plans and Settings. For now Luke speaks only on a planning call,
 so briefings, the launch greeting, and the talk key outside a plan are off,
 onboarding is skipped after sign-in, and the Sessions and Conversation tabs
 are hidden.
+
+![Luke's window on the Plans tab, listing plans beside an invitation to start a new one.](apps/web/public/changelog/0.7.0/luke-opens-as-a-mac-app.png)
 
 ### Improvements
 

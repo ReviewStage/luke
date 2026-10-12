@@ -45,7 +45,10 @@ nothing.
    release's entry to `CHANGELOG.md` at the repository root in the same change. The
    landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
    refuses a desktop version the changelog does not name, so a bump cannot land without
-   its notes. Merge it through protected `main` like any other change.
+   its notes. A feature section's screenshot is taken on a Mac with
+   `scripts/changelog-screenshot.sh`, which frames Luke's window on the wallpaper
+   every release uses; the comment atop `CHANGELOG.md` says how. Merge it through
+   protected `main` like any other change.
 
 2. **Confirm the hosted service is live.** The service deploys from `main` on merge while
    the desktop ships on the tag, so a build released ahead of its service answers 404
