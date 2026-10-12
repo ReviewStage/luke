@@ -44,8 +44,14 @@ const READY: UpdateSnapshot = {
 
 const roots: Root[] = [];
 
-/** Each mounted sidebar's way to stand again folded away or back in sight, by its container. */
-const refolds = new WeakMap<HTMLElement, (collapsed: boolean) => void>();
+/** What a mounted sidebar may stand again with: folded away or back in sight, or with other plans. */
+interface Restage {
+  collapsed?: boolean;
+  plans?: Partial<PlansControl>;
+}
+
+/** Each mounted sidebar's way to stand again with a change, by its container. */
+const restages = new WeakMap<HTMLElement, (change: Restage) => void>();
 
 /** Takes down every mounted sidebar, so no keymap outlives its test. */
 function unmountAll(): void {
@@ -76,7 +82,7 @@ function mount(
     useAppKeymap(true);
     return createElement(DesktopSidebar, props);
   }
-  const render = (collapsed: boolean) =>
+  const render = ({ collapsed = false, plans = options.plans }: Restage) =>
     root.render(
       createElement(Keyed, {
         sidebar: {
@@ -93,7 +99,7 @@ function mount(
           voiceOpening: false,
         },
         history: navigationHistory(),
-        plans: plansControl(options.plans),
+        plans: plansControl(plans),
         tab: options.tab ?? PANEL_TAB.PLANS,
         onTabChange: options.onTabChange ?? (() => undefined),
         account,
@@ -105,8 +111,8 @@ function mount(
         },
       }),
     );
-  act(() => render(false));
-  refolds.set(container, (collapsed) => act(() => render(collapsed)));
+  act(() => render({}));
+  restages.set(container, (change) => act(() => render(change)));
   return container;
 }
 
@@ -551,6 +557,69 @@ test("the open plan under a folded group still walks to its neighbours", () => {
   window.localStorage.clear();
 });
 
+test("a folded group counts its plans at its header's end, No repository's too, and an open one counts none", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger", null]));
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        onRepository("Billing", "acme/ledger", 3),
+        onRepository("Invoices", "acme/ledger", 2),
+        onRepository("Search", "acme/relay"),
+        onRepository("Notes", null),
+      ],
+    },
+  });
+  const count = (name: string) =>
+    header(container, name).querySelector(".sidebar-repository-count")?.textContent;
+
+  assert.equal(count("ledger"), "2 plans");
+  assert.equal(count("No repository"), "1 plan");
+  assert.equal(count("relay"), undefined);
+  window.localStorage.clear();
+});
+
+test("the open plan stands under its folded group, the group's other plans do not, and opening another moves it", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger", null]));
+  const plans = {
+    page: PLANS_PAGE.DOCUMENT,
+    plans: [
+      onRepository("Billing", "acme/ledger", 3),
+      onRepository("Invoices", "acme/ledger", 2),
+      onRepository("Notes", null),
+    ],
+  };
+  const container = mount(DEAN, { plans: { ...plans, activePlanId: "plan-Billing" } });
+  const open = () => container.querySelector('.sidebar-plan[aria-current="page"]')?.textContent;
+
+  const onBilling = groups(container);
+  const openBilling = open();
+  restages.get(container)?.({ plans: { ...plans, activePlanId: "plan-Invoices" } });
+  const onInvoices = groups(container);
+  restages.get(container)?.({ plans: { ...plans, activePlanId: "plan-Notes" } });
+
+  assert.deepEqual(onBilling, [
+    ["ledger", ["Billing"]],
+    ["No repository", []],
+  ]);
+  assert.match(openBilling ?? "", /^Billing/u);
+  assert.deepEqual(onInvoices, [
+    ["ledger", ["Invoices"]],
+    ["No repository", []],
+  ]);
+  assert.deepEqual(groups(container), [
+    ["ledger", []],
+    ["No repository", ["Notes"]],
+  ]);
+  assert.equal(
+    header(container, "ledger")
+      .querySelector(".sidebar-repository-toggle")
+      ?.getAttribute("aria-expanded"),
+    "false",
+    "the group stays folded",
+  );
+  window.localStorage.clear();
+});
+
 test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps none of its own", () => {
   window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
   const container = mount(DEAN, {
@@ -673,7 +742,7 @@ test("a repository's menu closes when the sidebar folds away, so nothing of a hi
   openActions(container, "ledger");
   const opened = menuItems().length;
 
-  refolds.get(container)?.(true);
+  restages.get(container)?.({ collapsed: true });
 
   assert.ok(opened > 0, "the menu stood open");
   assert.deepEqual(menuItems(), []);

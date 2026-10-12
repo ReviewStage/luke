@@ -312,8 +312,11 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
  * focus: a ⋯ that drops the repository's menu, which a right-click anywhere
  * on the header opens too, and a + that starts a new plan with the
  * repository already chosen. Both stand beside the fold rather than inside
- * it, so pressing either folds nothing. The plans with no repository stand
- * under "No repository", with nothing to preset and no page to open.
+ * it, so pressing either folds nothing. Folded, the header counts its plans
+ * at its end while hovered or reached from the keyboard, and the open plan
+ * still stands under it, so the plan being worked on never leaves the list.
+ * The plans with no repository stand under "No repository", with nothing to
+ * preset and no page to open.
  */
 function RepositorySection({
   group,
@@ -332,6 +335,7 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
+  const rows = folded ? group.plans.filter((plan) => context.current(plan.id)) : group.plans;
   // The menu is drawn over the window rather than inside the sidebar, so it
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useActionMenu(context.plans.shown && context.inSight);
@@ -371,6 +375,14 @@ function RepositorySection({
               <span className="sidebar-repository-pinned">
                 <PinIcon />
                 <span className="visually-hidden">(pinned)</span>
+              </span>
+            ) : null}
+            {folded ? (
+              <span className="sidebar-repository-count">
+                {group.plans.length}
+                <span className="visually-hidden">
+                  {group.plans.length === 1 ? " plan" : " plans"}
+                </span>
               </span>
             ) : null}
           </button>
@@ -417,7 +429,9 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {folded ? null : <PlanRows rows={group.plans} repositoryShown={false} context={context} />}
+      {rows.length === 0 ? null : (
+        <PlanRows rows={rows} repositoryShown={false} context={context} />
+      )}
     </div>
   );
 }
