@@ -168,7 +168,7 @@ const TREE_RECURSIVE_QUERY = "recursive";
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
-/** An edit is a field's answer twice, its base and its value, each at its bound with every character escaped. */
+/** An edit is a field's answer or a document's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS * 2 * 6 + 1_024;
 
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
@@ -563,6 +563,7 @@ const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, Host
   [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
   [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.PLAN_ARCHIVED],
   [PLAN_SAVE_REFUSAL.DOCUMENT, HOSTED_REFUSAL.INVALID_REQUEST],
+  [PLAN_SAVE_REFUSAL.NOT_DOCUMENT, HOSTED_REFUSAL.INVALID_REQUEST],
 ]);
 
 /**
@@ -593,11 +594,13 @@ const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedR
   [PLAN_SAVE_REFUSAL.NO_PLAN, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.PLAN_ARCHIVED],
   [PLAN_SAVE_REFUSAL.DOCUMENT, HOSTED_REFUSAL.INVALID_REQUEST],
+  [PLAN_SAVE_REFUSAL.NOT_DOCUMENT, HOSTED_REFUSAL.INVALID_REQUEST],
 ]);
 
 /**
- * POST saves the developer's edit of one field: answered with the plan as
- * saved, with the field as it now stands where the edit conflicts with it,
+ * POST saves the developer's edit of one field, or of a document plan's
+ * whole text: answered with the plan as saved, with the field or the text
+ * as it now stands where the edit conflicts with it,
  * or as refused where the plan would be longer than a plan may be. An
  * archived plan is refused outright, as no plan is, since a desktop that
  * knows archiving draws no editor on one.

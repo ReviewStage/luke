@@ -210,6 +210,7 @@ it.layer(testSqlClient)("migration 0082 onto the teammate template", (it) => {
         assert.ok(body.endsWith("## Open questions\n\n- Who may withdraw an invite?\n"));
 
         const revision = Option.getOrThrow(yield* readRevisionContent(userId, planId, 1));
+        assert.ok("fields" in revision, "the revision is the template's fields");
         assert.deepEqual(revision.fields, stored.fields);
 
         assert.deepEqual(stored.fieldWriters, [
@@ -240,10 +241,9 @@ it.layer(testSqlClient)("migration 0082 onto the teammate template", (it) => {
       assert.deepEqual(after.fields, BULK_IMPORT.fields);
       assert.deepEqual(after.fieldWriters, NEW_WRITERS);
       assert.deepEqual(after, before);
-      assert.deepEqual(
-        Option.getOrThrow(yield* readRevisionContent(userId, planId, 1)).fields,
-        BULK_IMPORT.fields,
-      );
+      const revision = Option.getOrThrow(yield* readRevisionContent(userId, planId, 1));
+      assert.ok("fields" in revision, "the revision is the template's fields");
+      assert.deepEqual(revision.fields, BULK_IMPORT.fields);
     }),
   );
 });

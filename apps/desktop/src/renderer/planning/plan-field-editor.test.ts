@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
+import type { PlanEditRequest, PlanFieldEditRequest } from "@sidecar/hosted/plan-edit";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD, type Plan, type PlanFields } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
@@ -42,13 +42,14 @@ async function settle(): Promise<void> {
 
 /** The document with an edit door that records each edit and answers from the script, in order. */
 function mount(plan: Plan, answers: readonly PlanningEditAnswer[] = [{ saved: true }]) {
-  const sent: PlanEditRequest[] = [];
+  const sent: PlanFieldEditRequest[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const saved: PlanningEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {
+    if ("document" in request) return assert.fail("a field's editor sent a document's edit");
     sent.push(request);
     return Promise.resolve(answers[sent.length - 1] ?? saved);
   };
@@ -248,6 +249,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
   const { container, sent, root } = mount(PLAN);
   const doors: string[] = [];
   const door = (planId: string) => (request: PlanEditRequest) => {
+    if ("document" in request) return assert.fail("a field's editor sent a document's edit");
     doors.push(planId);
     sent.push(request);
     return Promise.resolve<PlanningEditAnswer>({ saved: true });

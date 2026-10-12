@@ -402,6 +402,27 @@ const replaceDocument = SqlSchema.findOneOption({
       .returning(PLAN_COLUMNS),
 });
 
+const replaceText = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planId: Schema.String,
+    text: Schema.String,
+    sectionWriters: Schema.optionalKey(Schema.Array(planSectionWriterSchema)),
+    now: Schema.Date,
+  }),
+  Result: PlanRowSchema,
+  execute: ({ userId, planId, text, sectionWriters, now }) =>
+    db
+      .update(plan)
+      .set({
+        document: text,
+        ...(sectionWriters ? { sectionWriters } : undefined),
+        updatedAt: now,
+      })
+      .where(ownedPlan(userId, planId))
+      .returning(PLAN_COLUMNS),
+});
+
 /** The plan row under its own lock, so a rename and a save of notes each format the body the other cannot replace meanwhile. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
@@ -641,6 +662,30 @@ export function savePlanDocument(
       body: document.body,
       assumptions: document.assumptions,
       ...extras,
+      now,
+    });
+    return yield* Effect.transposeOption(Option.map(row, planOf));
+  });
+}
+
+/**
+ * Replaces the text of a plan that is one document, with who last changed
+ * each section where it is handed, and answers the plan as saved, or nothing
+ * where the account owns no such plan; nothing is ever created here.
+ */
+export function savePlanText(
+  userId: string,
+  planId: string,
+  text: string,
+  sectionWriters?: readonly PlanSectionWriter[],
+): PlanStoreEffect<Option.Option<Plan>> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const row = yield* replaceText({
+      userId,
+      planId,
+      text,
+      ...(sectionWriters === undefined ? undefined : { sectionWriters }),
       now,
     });
     return yield* Effect.transposeOption(Option.map(row, planOf));

@@ -791,10 +791,17 @@ holds both prompts to those words.
   (they are a section of the text), and no `fields`, so every desktop draws
   it and edits no field, and it names who last changed each section by its
   heading (`sectionEdits`, from `plan.section_writers`). A revision of one is
-  its text (`plan_revision.document`). Until the template's notes and the
-  developer's edit learn the text, a plan that is one document takes no
-  notes, field edit, or restore, and its call's notetaker writes nothing on
-  it. Nothing makes a plan one document yet.
+  its text (`plan_revision.document`). The developer edits it whole:
+  `POST /api/plans/{id}/edit` takes `{ document: { base, value } }`, laid
+  over what Luke wrote since `base` line by line as a field's edit is, or
+  answered as a conflict with the text as it stands, and each section the
+  save moved names the developer as its last writer
+  (`packages/hosted/src/plan-document.ts`). A restore puts back any of its
+  revisions, one kept as the template's fields as the text those fields
+  become (`planDocumentOf`: each section under its heading, an unanswered
+  one its heading alone, the assumptions last). Until the notes learn the
+  text, it takes none of the template's notes or field edits, and its call's
+  notetaker writes nothing on it. Nothing makes a plan one document yet.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
   is understood, true, or agreed. Resolving each section, or agreeing that one

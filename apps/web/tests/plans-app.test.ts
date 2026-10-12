@@ -2220,14 +2220,13 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan that is one document takes no field edit, no restore of the template's fields, and no notes, and its text stands",
+    "a plan that is one document takes no field edit and none of the template's notes, and its text stands",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
 
         const edited = yield* ask(
@@ -2236,9 +2235,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             method: "POST",
             body: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
           }),
-        );
-        const restored = yield* ask(
-          request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } }),
         );
         const noted = yield* saveNotes({ userId: owner, planId }, [
           added(PLAN_FIELD.GOAL, "Members invite by email."),
@@ -2253,21 +2249,176 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           edited,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(
-          restored,
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
         assert.deepEqual(noted, {
           status: PLAN_SAVE_STATUS.NOT_SAVED,
           reason: PLAN_SAVE_REFUSAL.DOCUMENT,
         });
         assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
-        assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.NOTETAKER);
+        assert.equal(plan.lastEdit, undefined);
       }),
   );
 
   it.effect(
-    "a revision of a plan that is one document reads as its text, beside the template's revision before it, and is no field content to restore",
+    "the developer's edit of a document plan saves their text as a revision of theirs, naming them on the sections it moved alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
+          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, duringCall: true, at: 1 },
+        ]);
+        const value = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
+
+        const answered = readAnswer(
+          planEditAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(EDIT, owner, {
+              id: planId,
+              method: "POST",
+              body: { document: { base: INVITATIONS_TEXT, value } },
+            }),
+          ),
+        );
+        const page = readAnswer(
+          planRevisionsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISIONS, owner, { id: planId })),
+        );
+        const { revision } = readAnswer(
+          planRevisionAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "1" } })),
+        );
+
+        assert.ok("plan" in answered);
+        const { plan } = answered;
+        const at = plan.lastEdit?.at ?? assert.fail("the edit names no last edit");
+        assert.deepEqual(plan.document, { body: value, assumptions: [] });
+        assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+        assert.deepEqual(plan.sectionEdits, [
+          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: true },
+          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
+        ]);
+        assert.deepEqual(
+          page.revisions.map(({ seq, lastEdit, changes }) => [seq, lastEdit.actor, changes]),
+          [[1, PLAN_ACTOR.DEVELOPER, 1]],
+        );
+        assert.deepEqual(revision.document, { body: value, assumptions: [] });
+        assert.equal(revision.previous, null);
+      }),
+  );
+
+  it.effect(
+    "a document edit keeps what Luke wrote meanwhile, answers a line he changed as the text stands, refuses a text past the bound, and is refused on a plan of fields",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const fieldsPlanId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })),
+        );
+        const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
+        yield* makeDocumentPlan(planId, lukes);
+        const edit = (id: string, value: string) =>
+          ask(
+            request(EDIT, owner, {
+              id,
+              method: "POST",
+              body: { document: { base: INVITATIONS_TEXT, value } },
+            }),
+          );
+
+        // At the bound alone, but past it once laid over the line Luke added.
+        const padding = "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS - INVITATIONS_TEXT.length);
+        const oversized = yield* edit(
+          planId,
+          INVITATIONS_TEXT.replace("Only an admin", `Only an admin${padding}`),
+        );
+        const merged = readAnswer(
+          planEditAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* edit(planId, INVITATIONS_TEXT.replace("Only an admin", "Only an owner")),
+        );
+        const conflicted = yield* edit(
+          planId,
+          INVITATIONS_TEXT.replace("Only an admin", "Only a workspace admin"),
+        );
+        const onFields = yield* edit(fieldsPlanId, INVITATIONS_TEXT);
+
+        assert.ok("plan" in merged);
+        const mergedText = lukes.replace("Only an admin", "Only an owner");
+        assert.equal(merged.plan.document.body, mergedText);
+        assert.deepEqual(conflicted, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { conflict: { current: mergedText } },
+        });
+        assert.deepEqual(oversized, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
+        });
+        assert.deepEqual(
+          onFields,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a document plan takes back a revision of its text, and one kept as the template's fields as the text those fields become",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+        yield* recordDocumentRevision(
+          planId,
+          2,
+          INVITATIONS_TEXT,
+          new Date(yield* Clock.currentTimeMillis),
+        );
+
+        const fromFields = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } })),
+        ).plan;
+        const fromText = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "2" } })),
+        ).plan;
+        const page = readAnswer(
+          planRevisionsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISIONS, owner, { id: planId })),
+        );
+
+        assert.ok(fromFields.document.body.startsWith("## Context\n\nOnly admins.\n\n## Goal\n"));
+        assert.ok(fromFields.document.body.endsWith("## Assumptions\n"));
+        assert.equal(fromFields.fields, undefined);
+        assert.deepEqual(fromText.document, { body: INVITATIONS_TEXT, assumptions: [] });
+        assert.deepEqual(
+          page.revisions.map(({ seq, restoredFrom }) => [seq, restoredFrom?.seq]),
+          [
+            [4, 2],
+            [3, 1],
+            [2, undefined],
+            [1, undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a revision of a plan that is one document reads as its text, beside the template's revision before it, and a plan of fields does not take it back",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -2296,7 +2447,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.ok(revision.previous?.body.includes("Only admins."));
         assert.deepEqual(
           restored,
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
       }),
   );
