@@ -4,6 +4,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
+import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
 import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
 import {
@@ -102,6 +103,18 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     stop: { shown: false, onPress: ignore },
     status: undefined,
     live: false,
+    mainTabs: {
+      tabs: [MAIN_TAB.PLAN],
+      tab: MAIN_TAB.PLAN,
+      openAgents: undefined,
+      newTabAsked: false,
+      onChoose: ignore,
+      onShow: ignore,
+      onClose: ignore,
+      onMove: ignore,
+      onNewTab: ignore,
+      onNewTabAnswered: ignore,
+    },
     sidePanel: {
       open: false,
       fullScreen: false,
@@ -112,7 +125,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       pins: [],
       subagents: [],
       files: [],
-      closedAgents: [],
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,

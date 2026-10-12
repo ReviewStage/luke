@@ -3,28 +3,27 @@ import { CopyIcon, UnpinIcon } from "@sidecar/panel";
 import { ScrollTextIcon } from "lucide-react";
 import { useRef } from "react";
 import { shownFiles } from "../planning/code-pane-model";
+import { isAgentTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { isAgentTab, isFileTab, type PinnedTab } from "../planning/use-side-panel";
+import type { PinnedTab } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
-import {
-  agentTranscriptRead,
-  pinnedTabIcon,
-  type TranscriptCopier,
-  useTranscriptCopier,
-} from "./side-panel";
+import { agentTranscriptRead } from "./main-tabs";
+import { pinnedTabIcon } from "./side-panel";
+import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 
 /**
- * sidebar-pinned-tab.tsx -- a side panel tab pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
+ * sidebar-pinned-tab.tsx -- a tab of the plan's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
  *
- * A fixed tab, an agent's, or a file's pinned from its menu in the side
- * panel stands under Pinned beside the pinned plans, as a row in the plan
- * rows' own shape: the tab's glyph and name, cut short with a fade as a tab
- * is, and its plan's name beneath, muted. A press opens the plan, where it
- * is not the open one, and the side panel on the tab, opening either where
- * it is closed. Its Unpin stands at the row's end while it is hovered or
+ * A fixed tab or a file's pinned from its menu in the side panel, or an
+ * agent's from its menu in the plan's column, stands under Pinned beside
+ * the pinned plans, as a row in the plan rows' own shape: the tab's glyph
+ * and name, cut short with a fade as a tab is, and its plan's name beneath,
+ * muted. A press opens the plan, where it is not the open one, and the tab
+ * in its column: an agent's in the plan's column, any other in the side
+ * panel, opening either where it is closed. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the plan rows' Pin and Archive style, and
  * a right-click offers Unpin, beside an agent's two copies of its
  * transcript while its plan is open.

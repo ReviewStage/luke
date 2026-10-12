@@ -40,6 +40,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS } from "./use-side-panel";
 
@@ -1519,7 +1520,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("main is told which agent's tab is shown, and none once the panel moves off it, the version history covers it, or the tab goes away", async () => {
+test("main is told which agent's tab is shown, and none once the column moves off it, the side panel fills the window over it, the version history covers it, or the tab goes away", async () => {
   const tab = mount(
     { shown: true, planning: OPEN },
     { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
@@ -1527,15 +1528,28 @@ test("main is told which agent's tab is shown, and none once the panel moves off
   await settle();
   assert.deepEqual(tab.shownAgents, [null]);
 
-  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   assert.deepEqual(tab.shownAgents, [null, AGENT_ID]);
 
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.PLAN));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
   act(() => tab.control().history.onOpen(PLAN.id));
   act(() => tab.control().history.onClose());
   tab.stand({ shown: false });
-  assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null, AGENT_ID, null]);
+  assert.deepEqual(tab.shownAgents, [
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+  ]);
 });
 
 /** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */
@@ -1589,17 +1603,62 @@ test("an agent Luke starts in the call is read into the list as its start answer
   assert.equal(listReads(reopened), 1);
 });
 
-test("a notification's click opens its plan on the agent's tab", () => {
-  const other = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const tab = mount({ shown: true, planning: OPEN });
+test("a notification's click opens its plan on the agent's tab in the plan's column once its agents are read, out from under a side panel filling the window, which it leaves shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+    },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
 
-  act(() => tab.control().onShowAgent(other, AGENT_ID));
-  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: { agent: AGENT_ID } });
-
-  // The open plan is not opened again.
   act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
   assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.PLAN, "the plan open until then shows its own");
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(panelOf(tab).open, false);
+
+  // The open plan is not opened again, and a panel filling the window gives way.
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.PLAN));
+  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.fullScreen, false);
+});
+
+test("an agent pinned to the sidebar opens its plan on the agent's tab in the plan's column, its closed tab opened again, and leaves the side panel shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  act(() => tab.control().sidePanel.onPin({ agent: AGENT_ID }, "Invite flow"));
+  act(() => tab.control().mainTabs.onClose({ agent: AGENT_ID }));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(panelOf(tab).open, false);
 });
 
 test("a tab pinned to the sidebar opens its plan and the panel on that tab from another plan, and its tab closed leaves the pin", () => {

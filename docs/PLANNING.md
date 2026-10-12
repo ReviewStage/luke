@@ -325,9 +325,9 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   with the plan's work when the plan opens; `Transcript`, what was said on the
   plan's calls ("Transcript" below); `History`, the plan's versions
   ("History" below), which stands once anyone has written the plan since its
-  history began; and, after them, one tab per coding
-  agent started on the plan, named by its model and wearing its harness's
-  mark for where it stands ("Agent tabs" below). The Work tab, what the planning model wrote
+  history began; and, after them, the subagents opened from the Work tab or
+  an agent's transcript. The coding agents themselves have tabs in the plan's
+  column beside the plan's own ("Agent tabs" below). The Work tab, what the planning model wrote
   and ran on the plan's calls, is told live during a call and read back
   from the plan's conversation when the plan opens
   (`GET /api/plans/{id}/work`, `hosted/plan-work-store.ts`), so a restart
@@ -355,25 +355,36 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for Luke's first drawing on the
   plan's board, the first code he puts up, each once per plan
-  (`planning/use-panel-arrivals.ts`), and an agent just started, whose tab
-  it opens on; an open panel keeps its tab, and an arrival on another tab
+  (`planning/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
-  anything main holds. A kept tab naming an agent the open plan has none of
-  reads as the board, so leaving a plan or opening another never shows a tab
-  with nothing behind it. A fixture run stages its own and keeps nothing.
+  anything main holds. A kept tab the open plan does not have reads as its
+  first, so leaving a plan or opening another never shows a tab with nothing
+  behind it. A fixture run stages its own and keeps nothing.
 
 ### Agent tabs
 
-Each coding agent started on the plan has a tab of its own
-(`planning/agent-tab.tsx`, `planning/use-coding-agents.ts`), opened and
-selected the moment its Start lands.
+Each coding agent started on the plan has a tab of its own in the plan's
+column, after the plan's tab (`desktop/main-tabs.tsx`,
+`planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
+`planning/use-coding-agents.ts`), opened and selected the moment its Start
+lands, and showing its transcript and composer where the document stands.
+The column's strip is the side panel's: tabs drag and step among
+themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
+cards, and pin to the sidebar. The plan's tab stands first for good: it
+never closes or moves, a press chooses it, and its right-click offers Close
+others and Rename. The tab each plan last showed is kept, so a plan opens
+as it was left. ⌘T and ⌘W answer the column holding the focus, the side
+panel's once the pointer goes into it. A subagent's tab stays in the side
+panel.
 
-- **A new agent from the "+".** The side panel's "+" offers New coding
-  agent, unavailable with Start's own reason while Start could not run. It
+- **A new agent from the "+".** The column's "+" offers New coding
+  agent, unavailable with Start's own reason while Start could not run, and
+  each of the plan's agents, picking one opening its tab again. It
   opens a draft tab (`planning/draft-agent-tab.tsx`): no transcript yet,
   the composer focused, and the model chip on the account's default.
   Nothing reaches the service until the first message, which starts the
@@ -879,7 +890,7 @@ message and never the plan, and works in the plan's repository the same way. The
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
 coding-agent routes"; the desktop's Start button ("The Plans tab" above),
-the side panel's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
+the column's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## The journey
@@ -1135,7 +1146,7 @@ the exact shape.
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Start, agent tabs, Settings › Coding agents | The toolbar and the side panel (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
+| Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `planning/tab-strip-model.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:

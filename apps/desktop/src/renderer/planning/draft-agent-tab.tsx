@@ -8,7 +8,7 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
  *
- * Opened from the side panel's "+", it is drawn as an agent's tab is with
+ * Opened from the plan's column's "+", it is drawn as an agent's tab is with
  * nothing yet said: nothing where the transcript would be, since the
  * composer's placeholder is the one prompt, and at the tab's foot the
  * composer, focused as the tab opens, with the model

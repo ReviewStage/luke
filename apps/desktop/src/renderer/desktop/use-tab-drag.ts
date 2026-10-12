@@ -10,7 +10,8 @@
  * Letting go puts it there and chooses it, as Chrome and VS Code choose a
  * tab the developer drags; Escape, or the system taking the pointer away,
  * puts every tab back and changes nothing. Every tab moves, to any place
- * among them all.
+ * among them all, but one anchored at the strip's start, which is pressed
+ * as a click and never moved, nor passed.
  *
  * The drag is drawn on the tabs' own `transform` and nothing else, and the
  * stylesheet (desktop.css) times every slide from the motion tokens, so
@@ -30,8 +31,8 @@ import { flushSync } from "react-dom";
 /** How far the pointer goes along the strip, in CSS pixels, before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
-/** The strip's tabs, each the element that moves: the pill holding the tab and its ×. */
-const TAB_PILL = ":scope > .tab";
+/** The strip's tabs that move, each the pill holding the tab and its ×: all but one anchored at its start. */
+const TAB_PILL = ':scope > .tab:not([data-anchored="true"])';
 
 /** What a tab and its strip wear while a drag lasts; desktop.css lifts the one and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";

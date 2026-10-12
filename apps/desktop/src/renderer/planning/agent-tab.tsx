@@ -66,7 +66,7 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the side panel: its transcript live, and the message box under it wearing what it runs on and what it published.
+ * agent-tab.tsx -- one coding agent's tab in the plan's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Transcript and Work tabs alike, from the
@@ -79,7 +79,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * an error marked in red, each delegation to a worker a subagent's row on
  * a line of its own, as the Work tab draws its worker's, saying the task
  * and the model and effort the worker runs on, the whole line the one
- * button that opens the worker's own tab (`AgentSubagentTab`), and its
+ * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), and its
  * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
@@ -107,7 +107,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * worker's transcript the same way, under the agent and the call that
  * started it, with the task it was handed in the plan card's place and no
  * composer, since nothing is sent to a worker. Either tab says what it
- * holds to the panel each time it moves (`onHeld`), which its tab's hover
+ * holds to the plan's page each time it moves (`onHeld`), which its tab's hover
  * card previews (`agent-tab-card.tsx`).
  */
 
@@ -551,9 +551,9 @@ export function AgentTab({
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
-  /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
+  /** Whether the tab is on screen: the plan's column showing it, on the Plans tab. */
   shown: boolean;
-  /** Opens one of the agent's workers in a tab of the panel's own, by the call that started it. */
+  /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
@@ -622,7 +622,7 @@ export function AgentTab({
 }
 
 /**
- * One of an agent's workers in a tab of the panel's own: its transcript,
+ * One of an agent's workers in a tab of the side panel's own: its transcript,
  * read under the agent and the call that started it and followed while
  * the worker runs, drawn as the agent's is with the task it was handed in
  * the plan's place, a working line at its end while it runs, counting

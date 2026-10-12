@@ -29,7 +29,10 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * A strip whose owner keeps the tabs' order lets them be moved: dragged
  * along it (use-tab-drag.ts), or the focused one stepped left or right by
  * ⇧⌘← and ⇧⌘→, as VS Code moves an editor, with focus kept on it. Either
- * way the strip says where the tab now stands to whoever reads it aloud.
+ * way the strip says where the tab now stands to whoever reads it aloud. A
+ * tab anchored at the strip's start, as the plan's tab is in its column,
+ * stands there for good, as a browser's pinned tab does: it is not moved,
+ * and no tab is moved before it.
  *
  * A tab something arrived on while another was chosen reads in semibold
  * until it is chosen, the sidebar's convention for a plan saved unseen,
@@ -56,6 +59,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  */
 
 const TAB = '[role="tab"]';
+
+/** A tab that moves: every one but those anchored at the strip's start. */
+const MOVABLE_TAB = `.tab:not([data-anchored="true"]) ${TAB}`;
 
 /** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
 const WHEEL_DELTA = {
@@ -244,11 +250,13 @@ export function TabStrip({
     if (strip.current !== null) markOverflow(strip.current);
   });
 
+  // Note that a move's places count the tabs that move alone, as the drag
+  // does, so a tab anchored at the start is no place of theirs.
   const move =
     onMove === undefined
       ? undefined
       : (from: number, to: number) => {
-          const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+          const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
           setMovedSaid(movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
@@ -256,7 +264,7 @@ export function TabStrip({
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
-    const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(TAB) ?? [])];
+    const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
     const tab = tabs.find((each) => each === document.activeElement);
     const at = tab === undefined ? -1 : tabs.indexOf(tab);
     if (tab === undefined || move === undefined || at + by < 0 || at + by >= tabs.length) return;
@@ -339,7 +347,8 @@ export function TabStrip({
  * name itself. `onMenu` opens the tab's own actions where it says, from a
  * right-click or the keyboard's menu keys. A `quiet` tab draws no fill at
  * rest, chosen or not, and the hover fill under the pointer: a lone tab,
- * always the chosen one, need not be told from the others.
+ * always the chosen one, need not be told from the others. An `anchored`
+ * tab stands at the strip's start for good, never moved.
  */
 export function Tab({
   icon,
@@ -352,6 +361,7 @@ export function Tab({
   editor,
   tabRef,
   quiet = false,
+  anchored = false,
   onSelect,
   onClose,
   onMenu,
@@ -369,6 +379,7 @@ export function Tab({
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
   quiet?: boolean;
+  anchored?: boolean;
   onSelect: () => void;
   onClose?: (() => void) | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
@@ -423,6 +434,7 @@ export function Tab({
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
       data-quiet={String(quiet)}
+      data-anchored={String(anchored)}
       data-unread={String(unread)}
     >
       {editor === undefined ? (
