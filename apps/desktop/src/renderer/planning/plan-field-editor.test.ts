@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
-import { EMPTY_PLAN_FIELDS, PLAN_FIELD, planBody } from "@sidecar/hosted/plan-template";
-import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD, type Plan, type PlanFields } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

@@ -8,6 +8,7 @@ import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
+import { usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { VersionView } from "../planning/version-view";
@@ -164,6 +165,7 @@ function PlanDocument({
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const rename = usePlanRename(planId, plans.onRenamePlan);
+  const looks = usePlanLooks(region.kind === DOCUMENT_REGION.READY ? region.plan : undefined);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
   // a plan opened from the list is drawn reading before its read lands, and
@@ -263,6 +265,7 @@ function PlanDocument({
               live={plans.live}
               onShowHistory={() => sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY)}
               onEdit={(request) => plans.edit(plan.id, request)}
+              looks={looks}
             />
           ) : (
             <VersionView

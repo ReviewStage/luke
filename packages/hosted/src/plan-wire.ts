@@ -117,6 +117,28 @@ export const planFieldsSchema = EffectSchema.Struct({
 });
 
 export type PlanFields = typeof planFieldsSchema.Type;
+
+/** Every field a note may be taken under, in the template's order: the fields above, then the assumptions. */
+export const PLAN_FIELD = {
+  PROBLEM: "problem",
+  OUTCOME: "outcome",
+  INCLUDED: "included",
+  EXCLUDED: "excluded",
+  CONSTRAINTS: "constraints",
+  RULES: "rules",
+  CHANGE_MAP: "changeMap",
+  CONTRACTS: "contracts",
+  PATTERNS: "patterns",
+  ORDER: "order",
+  DECISIONS: "decisions",
+  VERIFICATION: "verification",
+  LEFT_TO_AGENT: "leftToAgent",
+  OPEN_QUESTIONS: "openQuestions",
+  DATA_AND_MIGRATION: "dataAndMigration",
+  ASSUMPTIONS: "assumptions",
+} as const;
+
+export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 export type PlanRule = typeof ruleSchema.Type;
 export type PlanExample = typeof exampleSchema.Type;
 
@@ -259,7 +281,15 @@ export const planLastEditSchema = EffectSchema.Struct({
 
 export type PlanLastEdit = typeof planLastEditSchema.Type;
 
-/** One plan with its saved document, its newest revision, and the saves coding agents made on it, oldest first. */
+/** The save that last changed one field of a plan, as the section's "Edited by" line reads it. */
+export const planFieldEditSchema = EffectSchema.Struct({
+  field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
+  ...planLastEditSchema.fields,
+});
+
+export type PlanFieldEdit = typeof planFieldEditSchema.Type;
+
+/** One plan with its saved document, its newest revision, who last changed each field, and the saves coding agents made on it, oldest first. */
 export const planSchema = EffectSchema.Struct({
   ...planSummaryFields,
   document: planDocumentSchema,
@@ -271,6 +301,15 @@ export const planSchema = EffectSchema.Struct({
   lastEdit: EffectSchema.optionalKey(planLastEditSchema),
   /** The fields the body was formatted from, which the window edits a field of; absent from a service before editing. */
   fields: EffectSchema.optionalKey(planFieldsSchema),
+  /**
+   * The save that last changed each field, for the fields a save has changed
+   * since the service began keeping it; absent from a service before it.
+   */
+  fieldEdits: EffectSchema.optionalKey(
+    EffectSchema.Array(planFieldEditSchema).check(
+      EffectSchema.isMaxLength(Object.values(PLAN_FIELD).length),
+    ),
+  ),
 });
 
 export type Plan = typeof planSchema.Type;

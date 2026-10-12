@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  EMPTY_PLAN_FIELDS,
-  NOTE_KIND,
-  PLAN_FIELD,
-  type PlanField,
-  planBody,
-} from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, NOTE_KIND, planBody } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD,
   PLAN_HISTORY_BOUNDS,
+  type PlanField,
   type PlanLastEdit,
   type PlanRevisionLine,
 } from "@sidecar/hosted/plan-wire";
@@ -25,6 +21,7 @@ import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   restoreRevision,
+  saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { listRevisions, PLAN_REVISION, type PlanWriter } from "../server/hosted/plan-revisions";
@@ -332,6 +329,55 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           label: AGENT_MODEL,
           at: journaledAt,
           duringCall: false,
+        });
+      }),
+  );
+
+  it.effect(
+    "each field names the save that last changed it: Luke on a call, a coding agent by its label, or the developer",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const start = yield* Clock.currentTimeMillis;
+        yield* saveNotes(
+          { userId, planId },
+          [
+            added(PLAN_FIELD.PROBLEM, "Only admins can invite."),
+            added(PLAN_FIELD.DECISIONS, "Invites expire."),
+          ],
+          ON_CALL,
+        );
+        yield* TestClock.adjust(Duration.minutes(3));
+        const agentId = yield* startAgent(userId, planId);
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_FIELD.DECISIONS, "Links are single use.")],
+          {
+            actor: PLAN_ACTOR.AGENT,
+            agentId,
+          },
+        );
+        yield* TestClock.adjust(Duration.minutes(3));
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.OUTCOME, base: null, value: "An invited teammate can sign in." },
+        );
+
+        const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+        const byField = new Map(stored.plan.fieldEdits?.map(({ field, ...edit }) => [field, edit]));
+        assert.deepEqual(Object.fromEntries(byField), {
+          [PLAN_FIELD.PROBLEM]: { actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
+          [PLAN_FIELD.DECISIONS]: {
+            actor: PLAN_ACTOR.AGENT,
+            label: AGENT_MODEL,
+            at: start + Duration.toMillis(Duration.minutes(3)),
+            duringCall: false,
+          },
+          [PLAN_FIELD.OUTCOME]: {
+            actor: PLAN_ACTOR.DEVELOPER,
+            at: start + Duration.toMillis(Duration.minutes(6)),
+            duringCall: false,
+          },
         });
       }),
   );

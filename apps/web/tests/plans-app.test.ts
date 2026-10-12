@@ -4,9 +4,9 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
   PLAN_FILE_REFUSAL,
   planAnswerSchema,

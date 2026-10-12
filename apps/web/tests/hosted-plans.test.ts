@@ -4,12 +4,15 @@ import { it } from "@effect/vitest";
 import {
   EMPTY_PLAN_FIELDS,
   NOTE_KIND,
-  PLAN_FIELD,
-  type PlanField,
   type PlanNote,
   planBody,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_BOUNDS,
+  PLAN_FIELD,
+  type PlanDocument,
+  type PlanField,
+} from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";

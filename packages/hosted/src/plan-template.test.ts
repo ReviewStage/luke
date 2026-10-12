@@ -9,13 +9,12 @@ import {
   notesInProgress,
   PLAN_AGENT_EDITS_KEPT,
   PLAN_EMPTY_TEXT,
-  PLAN_FIELD,
   type PlanContent,
-  type PlanField,
   type PlanNote,
   planBody,
   withAgentEdit,
 } from "./plan-template.js";
+import { PLAN_FIELD, type PlanField } from "./plan-wire.js";
 
 const HEADER = { name: "Teammate invitations" } as const;
 

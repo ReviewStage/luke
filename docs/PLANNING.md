@@ -237,6 +237,21 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   on the open plan's call moves the line as it lands. A plan nobody has
   written since it started shows no line. A press on the line opens the
   plan's History tab.
+- Each section says the same of the save that last changed it, in a quiet
+  line at the end of its heading's row while the pointer or the keyboard is
+  on the section, from the writer the plan keeps for each field (`fieldEdits`
+  on the wire, `plan.field_writers` on the service). A rule shares the rules'
+  line, which stands on their heading; a section no save has changed since
+  the service began keeping writers says nothing.
+- The sections someone other than the developer changed since they last
+  looked at the plan on this Mac wear a still tint of Luke's accent, counted
+  under the "Edited by" line ("Changed since you last looked · 3 sections ·
+  Dismiss") until Dismiss or leaving the plan (`planning/use-plan-looks.ts`).
+  A look is the plan held open three seconds: from then on every save while
+  it stays open counts as seen, so the notetaker typing in on a call never
+  lights anything. What is kept is the newest save's instant, on the
+  service's clock, by plan id in the renderer's own storage; a plan never
+  looked at on this Mac lights nothing.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
@@ -593,7 +608,10 @@ starts there: nothing before it is reconstructed. Revisions go when their plan
 is deleted, and there is no cap on how many a plan keeps.
 
 The plan names its newest revision as its last edit, which the document's
-"Edited by" line reads ("Document" above).
+"Edited by" line reads ("Document" above), and each field the writer of the
+save that last changed it: the actor, the coding agent, and whether on a
+call, kept beside the revision by the same locked save, which each section's
+line reads.
 
 The History tab (`planning/history-tab.tsx`, ⌥⌘5) lists the revisions
 newest first, fifty a page (`GET /api/plans/{id}/revisions`), each as who

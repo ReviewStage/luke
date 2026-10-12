@@ -9,10 +9,11 @@ import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
-  type PlanActor,
   type PlanAssumption,
   type PlanExample,
+  type PlanField,
   type PlanFields,
   type PlanRule,
   planExamplePartSchema,
@@ -303,28 +304,6 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
   return `${blocks.join("\n\n")}\n`;
 }
 
-/** Every field a note may be taken under, in the template's order. */
-export const PLAN_FIELD = {
-  PROBLEM: "problem",
-  OUTCOME: "outcome",
-  INCLUDED: "included",
-  EXCLUDED: "excluded",
-  CONSTRAINTS: "constraints",
-  RULES: "rules",
-  CHANGE_MAP: "changeMap",
-  CONTRACTS: "contracts",
-  PATTERNS: "patterns",
-  ORDER: "order",
-  DECISIONS: "decisions",
-  VERIFICATION: "verification",
-  LEFT_TO_AGENT: "leftToAgent",
-  OPEN_QUESTIONS: "openQuestions",
-  DATA_AND_MIGRATION: "dataAndMigration",
-  ASSUMPTIONS: "assumptions",
-} as const;
-
-export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
-
 /** The fields that hold one Markdown answer, as against the rules and the two lists. */
 export type PlanTextField = Exclude<
   PlanField,
@@ -486,33 +465,42 @@ export type PlanAgentEdit = typeof planAgentEditSchema.Type;
 /**
  * Who last changed one field of a plan, and when: kept for every field a save
  * changes, so the planning model and the notetaker know which fields hold the
- * developer's own words. A field no save has changed since this was first
- * kept has none.
+ * developer's own words, and the window can say who wrote each section. A
+ * field no save has changed since this was first kept has none. The agent and
+ * the call were kept from later on, so a writer kept before them names
+ * neither.
  */
 export const planFieldWriterSchema = EffectSchema.Struct({
   field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  /** The coding agent's id, where a coding agent made the save. */
+  agentId: EffectSchema.optionalKey(EffectSchema.String),
+  /** Present, and true, where the notetaker made the save on one of the plan's calls. */
+  duringCall: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Epoch milliseconds of the save. */
   at: EffectSchema.Number,
 });
 
 export type PlanFieldWriter = typeof planFieldWriterSchema.Type;
 
+/** Who made a save, as each field it changed keeps them. */
+export type PlanFieldWriterWho = Omit<PlanFieldWriter, "field" | "at">;
+
 /**
- * The fields' writers after a save by `actor` at `at` that took the content
+ * The fields' writers after a save by `who` at `at` that took the content
  * from `before` to `after`: each field it changed now names it, and every
  * other field keeps the writer it had.
  */
 export function withFieldWriters(
   writers: readonly PlanFieldWriter[],
   change: { readonly before: PlanContent; readonly after: PlanContent },
-  actor: PlanActor,
+  who: PlanFieldWriterWho,
   at: number,
 ): readonly PlanFieldWriter[] {
   const changed = changedFields(change.before, change.after);
   if (changed.length === 0) return writers;
   const kept = writers.filter((writer) => !changed.includes(writer.field));
-  return [...kept, ...changed.map((field) => ({ field, actor, at }))];
+  return [...kept, ...changed.map((field) => ({ field, ...who, at }))];
 }
 
 /** The journal with one more save on its end, the oldest let go past the bound. */

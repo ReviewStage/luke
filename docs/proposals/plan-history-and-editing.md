@@ -212,6 +212,23 @@ Edited by Luke during your call · 2h ago
 - The diff renders in the main area rather than the narrow panel, the way
   Google Docs does it.
 
+### Who wrote what (C and D), as shipped in PR 5
+
+- **Per-section attribution** reads `plan.field_writers` (PR 3) rather than
+  diffing successive snapshots on every read. Each writer now also keeps the
+  coding agent's id and whether the save was on a call, two optional keys in
+  the same `jsonb` and no migration, because without them a section could
+  say "Luke" but not "during your call", nor which agent. The plan answers
+  them as `fieldEdits`, an agent named by its row as `lastEdit` is. The line
+  sits at the end of the section's heading row on hover or focus and does
+  not open the History tab at a revision: finding the revision would mean
+  reading the history on every hover.
+- **Changes since you last looked** keep the newest save's instant per plan
+  in the renderer's storage, not a revision number, and light whole sections
+  from the same field writers, so no snapshot is read and no diff is run. A
+  look is the plan open for three seconds; saves landing while it is open
+  are seen, so the live chase lights nothing.
+
 ## 3. Developer editing
 
 ### Options

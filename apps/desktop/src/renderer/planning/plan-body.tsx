@@ -1,8 +1,11 @@
-import { PLAN_FIELD, PLAN_FIELD_HEADING, planTextFieldValue } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD_HEADING, planTextFieldValue } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD,
   type Plan,
   type PlanAssumption,
+  type PlanField,
+  type PlanFieldEdit,
   type PlanFields,
   type PlanLastEdit,
 } from "@sidecar/hosted/plan-wire";
@@ -31,6 +34,7 @@ import {
 } from "./plan-reveal";
 import { useMinute } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
+import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
 /**
  * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -46,7 +50,11 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * says who last did in one muted line above the document: the developer,
  * Luke (the notetaker), or a coding agent named as its row names it now,
  * whether it was on a call, and how long ago, moved on once a minute. The
- * line opens the plan's History tab, where each earlier version is.
+ * line opens the plan's History tab, where each earlier version is. Each
+ * section says the same of the save that last changed it, quietly, while the
+ * pointer or the keyboard is on it. The sections changed since the developer
+ * last looked at the plan on this Mac wear a still tint, counted under that
+ * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
  */
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
@@ -107,7 +115,7 @@ function editorOf(edit: PlanLastEdit): string | undefined {
   }
 }
 
-/** The line over the document: "Edited by Luke during your call · 2h ago". */
+/** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
 export function editedLine(edit: PlanLastEdit, now: number): string {
   const editor = editorOf(edit);
   const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
@@ -140,6 +148,39 @@ function EditedLine({
   );
 }
 
+/** How many sections changed since the last look, as the line under "Edited by" counts them. */
+function changedLine(count: number): string {
+  return `Changed since you last looked · ${count} ${count === 1 ? "section" : "sections"}`;
+}
+
+/** The line under "Edited by" while sections changed since the last look stand lit, with their dismissal. */
+function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null {
+  if (looks.changed.size === 0) return null;
+  return (
+    <p className="plan-changed-note">
+      <span>{changedLine(looks.changed.size)}</span>
+      <span aria-hidden="true">·</span>
+      <button type="button" className="link-button" onClick={looks.dismiss}>
+        Dismiss
+      </button>
+    </p>
+  );
+}
+
+/** What each unit says of its field: the save that last changed each, which changed since the last look, and the minute it counts from. */
+interface FieldMarks {
+  readonly edits: ReadonlyMap<PlanField, PlanFieldEdit>;
+  readonly changed: ReadonlySet<PlanField>;
+  readonly now: number;
+}
+
+/** The section's quiet line: who last changed it, and when, shown while the pointer or the keyboard is on it; none where no save has. */
+function bylineOf(marks: FieldMarks, field: PlanField): React.JSX.Element | null {
+  const edit = marks.edits.get(field);
+  if (edit === undefined) return null;
+  return <span className="plan-unit-byline">{editedLine(edit, marks.now)}</span>;
+}
+
 /** The class of a unit or assumption lit as it settles. */
 const FRESH_CLASS = "plan-fresh";
 
@@ -148,6 +189,9 @@ const WRITING_CLASS = "plan-writing";
 
 /** The class of the unit the caret waits at the end of, where it blinks. */
 const RESTING_CLASS = "plan-caret-resting";
+
+/** The class of a section changed since the developer last looked, tinted until they dismiss it. */
+const CHANGED_CLASS = "plan-changed";
 
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
@@ -224,10 +268,11 @@ function usePlanChase(plan: Plan, live: boolean): PlanChase {
   };
 }
 
-function unitClass(view: UnitView): string {
-  if (view.writing) return `plan-unit ${WRITING_CLASS}`;
-  if (view.resting) return `plan-unit ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}`;
-  return view.fresh ? `plan-unit ${FRESH_CLASS}` : "plan-unit";
+function unitClass(view: UnitView, changed: boolean): string {
+  const lit = changed ? ` ${CHANGED_CLASS}` : "";
+  if (view.writing) return `plan-unit ${WRITING_CLASS}${lit}`;
+  if (view.resting) return `plan-unit ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}${lit}`;
+  return view.fresh ? `plan-unit ${FRESH_CLASS}${lit}` : `plan-unit${lit}`;
 }
 
 /** One assumption, its text as stored. */
@@ -267,24 +312,45 @@ function draftedOnly(target: EditTarget, words: string, ruleCount: number): bool
 }
 
 /**
- * One unit of the body: drawn as the chase has it, the editor where it is
- * the one the editor opened from, nothing where it is the field an editor
- * holds elsewhere, and the way into its editor where it can be edited.
+ * One unit of the body: drawn as the chase has it, tinted where its field
+ * changed since the last look, the editor where it is the one the editor
+ * opened from, nothing where it is the field an editor holds elsewhere, and
+ * the way into its editor where it can be edited. A unit that opens its
+ * field, every one but a rule under the rules' heading, carries the field's
+ * byline.
  */
 function BodyUnit({
   view,
   editable,
   editing,
   ruleCount,
+  marks,
 }: {
   view: UnitView;
   editable: boolean;
   editing: FieldEditing;
   ruleCount: number;
+  marks: FieldMarks;
 }): React.JSX.Element | null {
-  const drawn = <MarkdownMessage words={view.words} className={unitClass(view)} edit={view.edit} />;
-  const target = editable ? editTargetOfUnit(view.words, ruleCount) : undefined;
-  if (target === undefined || draftedOnly(target, view.words, ruleCount)) return drawn;
+  const target = editTargetOfUnit(view.words, ruleCount);
+  const changed = target !== undefined && marks.changed.has(target.field);
+  const drawn = (
+    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+  );
+  if (target === undefined) return drawn;
+  // A rule shares the rules' line, which stands on their heading.
+  const opensField = !("rule" in target) || view.words.startsWith("## ");
+  const byline = opensField ? bylineOf(marks, target.field) : null;
+  if (!editable || draftedOnly(target, view.words, ruleCount)) {
+    return byline === null ? (
+      drawn
+    ) : (
+      <div className="plan-unit-attributed">
+        {drawn}
+        {byline}
+      </div>
+    );
+  }
   const { editor, host } = editing;
   if (editor !== undefined && host === view.id) {
     const heading = editorHeading(editor.target, view.words, ruleCount);
@@ -303,6 +369,7 @@ function BodyUnit({
       editing={editing}
     >
       {drawn}
+      {byline}
     </EditableUnit>
   );
 }
@@ -338,18 +405,22 @@ function AddSections({
 
 /**
  * The assumptions' section, standing even while the list is empty: the
- * list, the way into its editor where it can be edited, or the editor.
+ * list, the way into its editor where it can be edited, or the editor, under
+ * the section's byline and tinted, as a unit is, where it changed since the
+ * last look.
  */
 function PlanAssumptions({
   assumptions,
   fresh,
   editable,
   editing,
+  marks,
 }: {
   assumptions: readonly PlanAssumption[];
   fresh: ReadonlySet<number>;
   editable: boolean;
   editing: FieldEditing;
+  marks: FieldMarks;
 }): React.JSX.Element {
   const list =
     assumptions.length === 0 ? (
@@ -381,9 +452,14 @@ function PlanAssumptions({
     ) : (
       list
     );
+  const changed = marks.changed.has(PLAN_FIELD.ASSUMPTIONS);
   return (
-    <section className="plan-assumptions" aria-label="Assumptions">
+    <section
+      className={changed ? `plan-assumptions ${CHANGED_CLASS}` : "plan-assumptions"}
+      aria-label="Assumptions"
+    >
       <h2 className="plan-assumptions-heading">Assumptions</h2>
+      {bylineOf(marks, PLAN_FIELD.ASSUMPTIONS)}
       {body}
     </section>
   );
@@ -395,17 +471,21 @@ function PlanAssumptions({
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
  * plan's History tab from the "Edited by" line. With `onEdit`, and fields
  * from a service that sends them, each field opens in an editor in place.
+ * `looks` are the sections changed since the developer last looked, which
+ * the plan's region keeps (`use-plan-looks.ts`); without them none are.
  */
 export function PlanBody({
   plan,
   live,
   onShowHistory,
   onEdit,
+  looks = NO_LOOKS,
 }: {
   plan: Plan;
   live: boolean;
   onShowHistory?: () => void;
   onEdit?: PlanEditDoor;
+  looks?: PlanLooks;
 }): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
   const { fields } = plan;
@@ -416,6 +496,12 @@ export function PlanBody({
   const editable = content !== undefined;
   const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
   const ruleCount = fields?.rules?.length ?? 0;
+  const now = useMinute();
+  const marks: FieldMarks = {
+    edits: new Map(plan.fieldEdits?.map((edit) => [edit.field, edit])),
+    changed: looks.changed,
+    now,
+  };
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
@@ -456,6 +542,7 @@ export function PlanBody({
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
+      <ChangedLine looks={looks} />
       <div className="plan-body">
         {views.map((view) => (
           <BodyUnit
@@ -464,6 +551,7 @@ export function PlanBody({
             editable={editable}
             editing={editing}
             ruleCount={ruleCount}
+            marks={marks}
           />
         ))}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
@@ -481,6 +569,7 @@ export function PlanBody({
         fresh={freshAssumptions}
         editable={editable}
         editing={editing}
+        marks={marks}
       />
     </div>
   );

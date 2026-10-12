@@ -69,7 +69,11 @@ plan's history: the plan's content as it stood after each revision, who
 wrote it (you, editing a section or restoring an earlier version, with which
 one; the notetaker, on which call; or which coding agent), and when,
 stored and readable the same way as the document, with no limit on how many
-revisions a plan keeps. A coding agent's saves are also kept as the notes it
+revisions a plan keeps, and who last changed each section of the plan, and
+when, so Luke can say so beside it. Luke on your Mac remembers, for each plan,
+the time of its newest save when you last had it open, in its own storage on
+your Mac and nothing of the plan's words, to show which sections changed
+since. A coding agent's saves are also kept as the notes it
 took, the last fifty, so Luke can tell you what an agent changed. Deleting a
 plan removes it at once, with its history, the record of each coding agent
 started on it and the copy of the plan, or the task you wrote in its place,

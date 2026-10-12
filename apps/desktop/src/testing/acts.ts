@@ -1,4 +1,4 @@
-import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 
 /**

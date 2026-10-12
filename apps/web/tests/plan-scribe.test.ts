@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  NOTE_KIND,
-  PLAN_EMPTY_TEXT,
-  PLAN_FIELD,
-  type PlanNote,
-} from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND, PLAN_EMPTY_TEXT, type PlanNote } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -229,7 +224,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect(
-    "each draft names the save the run read, and the saved one carries the fields it was formatted from",
+    "each draft names the save the run read, and the saved one carries the fields it was formatted from and who last changed each",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -249,6 +244,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const stored = Option.getOrThrow(yield* readPlan(userId, planId));
           assert.ok(drafts.every((draft) => draft.readAt === read.plan.updatedAt));
           assert.deepEqual(saved?.fields, stored.fields);
+          assert.deepEqual(saved?.fieldEdits, stored.plan.fieldEdits);
+          assert.deepEqual(
+            saved?.fieldEdits?.find((edit) => edit.field === PLAN_FIELD.OUTCOME),
+            {
+              field: PLAN_FIELD.OUTCOME,
+              actor: PLAN_ACTOR.NOTETAKER,
+              at: saved?.savedAt,
+              duringCall: true,
+            },
+          );
         }),
       ),
   );

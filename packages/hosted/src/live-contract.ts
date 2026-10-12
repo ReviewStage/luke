@@ -9,7 +9,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema, planFieldsSchema } from "./plan-wire.js";
+import { planDocumentSchema, planFieldEditSchema, planFieldsSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -360,7 +360,8 @@ export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
  * the save lands, or the document as it stood where the run saved nothing.
  * Each names the save it was drawn over, so a window that saved an edit of
  * its own since can drop a draft that does not hold it; the saved one
- * carries the fields it was formatted from, which an editor opens on.
+ * carries the fields it was formatted from, which an editor opens on, and
+ * who last changed each, which each section's line reads.
  */
 export const planDraftFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
@@ -372,6 +373,8 @@ export const planDraftFrameSchema = Schema.Struct({
   fields: Schema.optionalKey(planFieldsSchema),
   /** Epoch milliseconds of the save the notetaker read before it wrote; absent from a service before editing. */
   readAt: Schema.optionalKey(Schema.Number),
+  /** The save that last changed each field, as the plan names them after the save; absent while it is a draft, and from a service before them. */
+  fieldEdits: Schema.optionalKey(Schema.Array(planFieldEditSchema)),
 });
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
