@@ -200,3 +200,55 @@ test("a pill hangs below its control, and above it where the window ends", () =>
   hover("Plan actions");
   assert.equal(pill()?.dataset.side, "above");
 });
+
+test("a card hangs in the pill's place from its control's start, describes it, and is left out of the recording", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      createElement(Tooltip, {
+        label: "Sign-out button",
+        card: createElement("p", null, "Sign-out button in account menu"),
+        children: button({}, "Sign-out button"),
+      }),
+    );
+  });
+  const anchor = control("Sign-out button");
+  vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(200, 10, 120, 30));
+
+  hover("Sign-out button");
+  const card = pill();
+  assert.ok(card);
+  assert.equal(card.textContent, "Sign-out button in account menu");
+  assert.ok(card.classList.contains("ph-no-capture"));
+  assert.equal(anchor.getAttribute("aria-describedby"), card.id);
+  // jsdom draws the card no wider than nothing, so a centred pill would stand at the control's middle.
+  assert.equal(card.style.left, "200px");
+});
+
+test("a card too wide for the room past its control's start is drawn whole inside the window, by its size before its fade", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      createElement(Tooltip, {
+        label: "Fix the flaky test",
+        card: createElement("p", null, "Fix the flaky test"),
+        children: button({}, "Fix the flaky test"),
+      }),
+    );
+  });
+  const anchor = control("Fix the flaky test");
+  vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(window.innerWidth - 120, 10, 120, 30),
+  );
+  // Its fade starts it scaled short, which its box would say and its layout does not.
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "tooltip" ? 280 : 0;
+  });
+
+  hover("Fix the flaky test");
+  assert.equal(pill()?.style.left, `${window.innerWidth - 280 - 6}px`);
+});

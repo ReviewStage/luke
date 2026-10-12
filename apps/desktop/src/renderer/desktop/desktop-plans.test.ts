@@ -231,6 +231,27 @@ function tabUnread(tab: HTMLElement): boolean {
   return marked;
 }
 
+/** The pointer leaving a control for nowhere in particular, taking its hint down. */
+function unhover(control: HTMLElement): void {
+  act(() => {
+    control.dispatchEvent(
+      new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+    );
+  });
+}
+
+/** What the hover card standing says: its name, its model where known, its corner where it has one, and its step where it has one. */
+function cardParts(): string[] {
+  const card = document.body.querySelector('[role="tooltip"] [data-tab-card]');
+  assert.ok(card, "no card hangs");
+  return [".tab-card-name", ".tab-card-model", ".tab-card-time", ".tab-card-preview"].flatMap(
+    (part) => {
+      const said = card.querySelector(part)?.textContent;
+      return said === undefined ? [] : [said];
+    },
+  );
+}
+
 function documentShown(page: HTMLElement): boolean {
   const body = page.querySelector(`.desktop-document[aria-label="${PLAN.name}"] .plan-body`);
   return body !== null && body.closest("[hidden]") === null;
@@ -776,7 +797,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   assert.equal(chosenTab(page), "Opus 5.5");
 });
 
-test("a subagent's tab cuts a long job short and says the whole of it in its hint, while a tab shown whole hangs none", () => {
+test("a subagent's tab cuts a long job short and says the whole of it in its card, with the session's latest step, while a fixed tab hangs none", () => {
   const job =
     "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";
   vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
@@ -792,7 +813,8 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   act(() => relayout());
 
   assert.equal(hover(tabNamed(page, "Work")), undefined);
-  assert.equal(hover(tabNamed(page, job)), `${job} · Working`);
+  hover(tabNamed(page, job));
+  assert.deepEqual(cardParts(), [job, "Working…", "Queue A lets an admin revoke."]);
 });
 
 test("a planning worker whose call ended under it wears its glyph at rest and says it stopped, as its transcript does, with no failure alert", () => {
@@ -820,7 +842,8 @@ test("a planning worker whose call ended under it wears its glyph at rest and sa
 
   assert.equal(tabState(tab), undefined, "no alert");
   assert.ok(tab.querySelector("svg.lucide-bot"), "the worker's glyph");
-  assert.equal(hover(tab), "Stopped");
+  hover(tab);
+  assert.deepEqual(cardParts(), [job, "Stopped", "Queue A lets an admin revoke."]);
 });
 
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
@@ -1630,7 +1653,7 @@ function mountAgentTabs(
   return container;
 }
 
-test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by title or else by model, wearing their harness's mark, a ring while working, and a semibold label for an end unseen, with the model and the state in the hint, each with an × and no shortcut", () => {
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by title or else by model, wearing their harness's mark, a ring while working, and a semibold label for an end unseen, with the model and the state in its card, each with an × and no shortcut", () => {
   const running = TITLED_AGENT;
   const chosen: SidePanelTab[] = [];
   const container = mountAgentTabs({}, chosen);
@@ -1644,7 +1667,8 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
   assert.equal(chosenTab(container), "GPT 5.6 Sol");
   const claude = tabNamed(container, "Sign-out button in account menu");
   const sol = tabNamed(container, "GPT 5.6 Sol");
-  assert.equal(hover(claude), "Opus 5.5 · Working · New result");
+  // A tab never shown holds no transcript, so its card says its name, model, and that it works, and no step.
+  assert.equal(hover(claude), "Sign-out button in account menuOpus 5.5 HighWorking…");
   assert.equal(tabState(claude), "Working");
   assert.ok(claude.querySelector(".state-glyph-ring"), "a ring turns while it works");
   assert.ok(claude.querySelector("svg.provider-mark"), "Claude Code's mark");
@@ -1665,7 +1689,7 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
   assert.deepEqual(chosen, [{ agent: running.id }]);
 });
 
-test("an agent whose turn failed wears an alert in its mark's place and says so in its hint, and one stopped by hand wears its mark alone and says it stopped", () => {
+test("an agent whose turn failed wears an alert in its mark's place and says so in its card, and one stopped by hand wears its mark alone and says it stopped", () => {
   const container = mountAgentTabs({
     agents: [
       { ...TITLED_AGENT, status: CODING_AGENT_STATUS.FAILED },
@@ -1678,7 +1702,9 @@ test("an agent whose turn failed wears an alert in its mark's place and says so 
   assert.equal(tabState(failed), "Failed");
   assert.ok(failed.querySelector("svg.lucide-circle-alert"), "the alert glyph");
   assert.equal(failed.querySelector(".provider-mark"), null, "in the mark's place");
-  assert.equal(hover(failed), "Opus 5.5 · Failed · New result");
+  // The card says how it ended before how long ago, which this page's clock leaves unread.
+  hover(failed);
+  assert.match(cardParts()[2] ?? "", /^Failed · /u);
   act(() => {
     failed.dispatchEvent(
       new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
@@ -1686,7 +1712,8 @@ test("an agent whose turn failed wears an alert in its mark's place and says so 
   });
   assert.equal(tabState(stopped), undefined);
   assert.ok(stopped.querySelector("img.provider-mark"));
-  assert.equal(hover(stopped), "GPT 5.6 Sol · Stopped");
+  hover(stopped);
+  assert.match(cardParts()[2] ?? "", /^Stopped · /u);
 });
 
 test("a right-click on an agent's tab offers Rename where the pointer is, and Rename turns the tab into a field whose Return renames the agent and hands focus back", async () => {
@@ -2707,16 +2734,31 @@ let transcripts: ReadonlyMap<string, readonly CodingAgentMessage[]> = new Map();
 /** Whether the service answers no read of a transcript on the page below. */
 let transcriptsUnread = false;
 
-/** A read of a transcript on the page below: the agent's messages whole, or the delegated worker's under its call, as the service would answer. */
-const readListed: TranscriptReader = (params) =>
-  transcriptsUnread
+/** Each agent a transcript was read for on the page below, in order. */
+let transcriptReads: string[] = [];
+
+/** Each titled worker's title on the page below, by the call that started it, as the service names it on its agent's page and its own. */
+let workerTitles: ReadonlyMap<string, string> = new Map();
+
+/** A read of a transcript on the page below: the agent's messages whole, or the delegated worker's under its call, and nothing past the cursor that page left, with the agent's run as it is listed, as the service would answer. */
+const readListed: TranscriptReader = (params) => {
+  transcriptReads.push(params.agentId);
+  const fromStart = params.after === CODING_AGENT_CURSOR_START;
+  const run = listed.find((agent) => agent.id === params.agentId)?.runStartedAt;
+  const titles = [...workerTitles].map(([callId, title]) => ({ callId, title }));
+  return transcriptsUnread
     ? Promise.reject(new Error("Not answered."))
     : Promise.resolve({
-        messages: transcripts.get(params.callId ?? params.agentId) ?? [],
+        messages: fromStart ? (transcripts.get(params.callId ?? params.agentId) ?? []) : [],
         cursor: "1:1",
         status: CODING_AGENT_STATUS.COMPLETED,
-        title: null,
+        title: params.callId === undefined ? null : (workerTitles.get(params.callId) ?? null),
+        ...(params.callId === undefined && run !== undefined ? { runStartedAt: run } : undefined),
+        ...(params.callId === undefined && titles.length > 0
+          ? { subagentTitles: titles }
+          : undefined),
       });
+};
 
 /**
  * The open plan's page over the real side panel with the plan's coding
@@ -2762,12 +2804,18 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
 }
 
 /** Mounts the plan's page with its agents and the panel shown, its atoms on `registry` where given. */
-function mountAgents(work?: PlansControl["work"], registry?: AtomRegistry): HTMLElement {
+function mountAgents(
+  work?: PlansControl["work"],
+  registry?: AtomRegistry,
+  agents: readonly CodingAgentSummary[] = [RUNNING_AGENT, DONE_AGENT],
+): HTMLElement {
   installScrollIntoView();
   stops = [];
-  listed = [RUNNING_AGENT, DONE_AGENT];
+  listed = agents;
   transcripts = new Map();
   transcriptsUnread = false;
+  transcriptReads = [];
+  workerTitles = new Map();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -3489,4 +3537,347 @@ test("with nothing to close, Command-W is left unclaimed: the panel hidden, or o
   assert.equal(keydown({ key: "w", metaKey: true }), false, "no tab open");
   assert.ok(panelShown(page));
   assert.equal(page.querySelector('.desktop-toolbar [role="tab"]')?.textContent, PLAN.name);
+});
+
+/** A finished agent whose title runs long, its newest run begun a minute after the test clock's start. */
+const LONG_TITLED_AGENT: CodingAgentSummary = {
+  ...DONE_AGENT,
+  title: "Add a sign-out button to the account menu and cover it with a test",
+  runStartedAt: 60_000,
+};
+
+/** A running agent whose run began 72 seconds before the test clock's sixth minute. */
+const COUNTED_AGENT: CodingAgentSummary = { ...RUNNING_AGENT, runStartedAt: 288_000 };
+
+/** The plan the agents were handed, as the first message of each transcript below. */
+const HANDED_PLAN: CodingAgentMessage = {
+  id: "m-plan",
+  role: "user",
+  parts: [{ type: "text", text: "# Sign out\n\nAdd a sign-out button." }],
+};
+
+it.effect(
+  "hovering an agent's tab hangs a card with its whole name, how long ago its last turn finished, and one line of its last words as plain text, read from its own tab and kept once another is chosen, while a tab never shown says it works and reads nothing, and a fixed tab hangs none",
+  () =>
+    Effect.gen(function* () {
+      const landed = Effect.promise(settle);
+      const page = mountAgents(undefined, yield* registryOnTestClock, [
+        COUNTED_AGENT,
+        LONG_TITLED_AGENT,
+      ]);
+      transcripts = new Map([
+        [
+          LONG_TITLED_AGENT.id,
+          [
+            HANDED_PLAN,
+            {
+              id: "m-done",
+              role: "assistant",
+              startedAt: 60_000,
+              finishedAt: 180_000,
+              parts: [
+                { type: "reasoning", text: "Check the menu.", state: "done" },
+                { type: "text", text: "## Done\n\nThe **sign-out** button now ends the session." },
+              ],
+            },
+          ],
+        ],
+      ]);
+      act(() => tabNamed(page, LONG_TITLED_AGENT.title ?? "").click());
+      yield* landed;
+      yield* TestClock.adjust(Duration.minutes(6));
+
+      const done = tabNamed(page, LONG_TITLED_AGENT.title ?? "");
+      hover(done);
+      yield* landed;
+      assert.deepEqual(cardParts(), [
+        "Add a sign-out button to the account menu and cover it with a test",
+        "GPT 5.6 Sol High",
+        "3m",
+        "Done The sign-out button now ends the session.",
+      ]);
+      const card = document.body.querySelector('[role="tooltip"]');
+      assert.ok(card?.classList.contains("ph-no-capture"), "the recording leaves the card out");
+      assert.equal(done.getAttribute("aria-describedby"), card?.id);
+      unhover(done);
+
+      act(() => tabNamed(page, "Board").click());
+      hover(done);
+      yield* landed;
+      assert.equal(cardParts()[3], "Done The sign-out button now ends the session.");
+      unhover(done);
+
+      const running = tabNamed(page, "Opus 5.5");
+      hover(running);
+      yield* landed;
+      assert.deepEqual(cardParts(), ["Opus 5.5", "Opus 5.5 High", "Working…1m 12s"]);
+      assert.ok(!transcriptReads.includes(COUNTED_AGENT.id), "hovering reads no transcript");
+      unhover(running);
+
+      assert.equal(hover(tabNamed(page, "Board")), undefined);
+    }),
+);
+
+it.effect(
+  "an agent whose latest step is a call previews it in the transcript's own words, its subject as code",
+  () =>
+    Effect.gen(function* () {
+      const page = mountAgents(undefined, yield* registryOnTestClock);
+      transcripts = new Map([
+        [
+          DONE_AGENT.id,
+          [
+            HANDED_PLAN,
+            {
+              id: "m-run",
+              role: "assistant",
+              parts: [
+                { type: "text", text: "Running the tests." },
+                {
+                  type: "tool-bash",
+                  toolCallId: "call_test",
+                  state: "output-available",
+                  input: { command: "pnpm test" },
+                  output: { exitCode: 0, stdout: "12 passed\n", stderr: "", truncated: false },
+                },
+              ],
+            },
+          ],
+        ],
+      ]);
+      act(() => tabNamed(page, "GPT 5.6 Sol").click());
+      yield* Effect.promise(settle);
+
+      hover(tabNamed(page, "GPT 5.6 Sol"));
+      assert.equal(cardParts()[3], "Ran pnpm test");
+      assert.equal(
+        document.body.querySelector('[role="tooltip"] .tab-card-preview code')?.textContent,
+        "pnpm test",
+      );
+    }),
+);
+
+/** The plan's work with one subagent whose session began at the test clock's first minute, still running, or ended at its fourth. */
+function timedWorkerWork(job: string, ended: boolean): PlansControl["work"] {
+  const work = workerWork(job);
+  const state = ended ? PLAN_WORK_STATE.DONE : PLAN_WORK_STATE.RUNNING;
+  const timed = { startedAt: 60_000, ...(ended ? { endedAt: 240_000 } : undefined) };
+  return {
+    ...work,
+    turns: work.turns?.map((turn) => ({
+      ...turn,
+      state,
+      parts: turn.parts.map((part) =>
+        part.type === PLAN_WORK_PART.TOOL && part.session !== undefined
+          ? { ...part, state, session: { ...part.session, ...timed } }
+          : part,
+      ),
+    })),
+  };
+}
+
+it.effect(
+  "a subagent's card counts how long its session has run while it works, and says how long ago it ended once it has",
+  () =>
+    Effect.gen(function* () {
+      const job = "Compare the two queue libraries.";
+      const registry = yield* registryOnTestClock;
+      yield* TestClock.adjust(Duration.minutes(6));
+      const subagentCard = function* (ended: boolean) {
+        const page = mountAgents(timedWorkerWork(job, ended), registry);
+        act(() => tabNamed(page, "Work").click());
+        press(page, "[data-subagent-row]");
+        act(() => tabNamed(page, "Board").click());
+        hover(tabNamed(page, job));
+        yield* Effect.promise(settle);
+        const parts = cardParts();
+        // The next page opens as a first launch would, its panel shut.
+        unmountAll();
+        window.localStorage.clear();
+        return parts;
+      };
+
+      assert.deepEqual(yield* subagentCard(false), [
+        job,
+        "Working…5m 0s",
+        "Queue A lets an admin revoke.",
+      ]);
+      assert.deepEqual(yield* subagentCard(true), [job, "2m", "Queue A lets an admin revoke."]);
+    }),
+);
+
+it.effect(
+  "an agent that starts a new turn previews nothing of the turn before, even on its chosen tab whose read of the new turn did not answer",
+  () =>
+    Effect.gen(function* () {
+      const landed = Effect.promise(settle);
+      const page = mountAgents(undefined, yield* registryOnTestClock, [LONG_TITLED_AGENT]);
+      const name = LONG_TITLED_AGENT.title ?? "";
+      transcripts = new Map([
+        [
+          LONG_TITLED_AGENT.id,
+          [
+            HANDED_PLAN,
+            {
+              id: "m-done",
+              role: "assistant",
+              finishedAt: 180_000,
+              parts: [{ type: "text", text: "The sign-out button ends the session." }],
+            },
+          ],
+        ],
+      ]);
+      act(() => tabNamed(page, name).click());
+      yield* landed;
+      hover(tabNamed(page, name));
+      assert.equal(cardParts()[3], "The sign-out button ends the session.");
+      unhover(tabNamed(page, name));
+
+      // A message opened a new turn, which the list says before any page of it lands.
+      listed = [
+        { ...LONG_TITLED_AGENT, status: CODING_AGENT_STATUS.RUNNING, runStartedAt: 300_000 },
+      ];
+      transcriptsUnread = true;
+      act(() => addButton(page).click());
+      keydown({ key: "Escape" });
+      yield* landed;
+      yield* TestClock.adjust(Duration.minutes(6));
+
+      hover(tabNamed(page, name));
+      yield* landed;
+      assert.deepEqual(cardParts(), [name, "GPT 5.6 Sol High", "Working…1m 0s"]);
+    }),
+);
+
+it.effect(
+  "a delegated worker's card is laid out as its agent's: its task as its name on one line until it has a title, the model and effort its call started it on, and its latest step",
+  () =>
+    Effect.gen(function* () {
+      const landed = Effect.promise(settle);
+      const page = mountAgents(undefined, yield* registryOnTestClock, [DONE_AGENT]);
+      const job = "Count the routes under the server.";
+      const task = `${job}\n\nList every file under apps/web/server/routes.`;
+      transcripts = new Map([
+        [
+          DONE_AGENT.id,
+          [
+            HANDED_PLAN,
+            {
+              id: "m-delegate",
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-delegate",
+                  toolCallId: "call_routes",
+                  state: "output-available",
+                  input: { task, model: "anthropic/claude-sonnet-5.5", effort: "low" },
+                  output: { model: "anthropic/claude-sonnet-5.5", effort: "low", result: "Three." },
+                },
+              ],
+            },
+          ],
+        ],
+        [
+          "call_routes",
+          [
+            { id: "w-task", role: "user", parts: [{ type: "text", text: task }] },
+            { id: "w-1", role: "assistant", parts: [{ type: "text", text: "Three routes." }] },
+          ],
+        ],
+      ]);
+      act(() => tabNamed(page, "GPT 5.6 Sol").click());
+      yield* landed;
+      press(page, '[data-subagent-row][data-call-id="call_routes"]');
+      yield* landed;
+
+      hover(tabNamed(page, job));
+      yield* landed;
+      assert.deepEqual(cardParts(), [job, "Sonnet 5.5 Low", "Three routes."]);
+      const name = document.body.querySelector('[role="tooltip"] .tab-card-name');
+      assert.ok(
+        name?.hasAttribute("data-untitled"),
+        "a task standing in for a title keeps to one line",
+      );
+      unhover(tabNamed(page, job));
+
+      hover(tabNamed(page, "GPT 5.6 Sol"));
+      assert.equal(cardParts()[1], "GPT 5.6 Sol High");
+      const card = document.body.querySelector('[role="tooltip"] [data-tab-card]');
+      assert.ok(
+        card?.querySelector(".tab-card-title > .tab-card-model"),
+        "the model under the name",
+      );
+    }),
+);
+
+it.effect(
+  "a delegated worker its agent's page names is drawn by that title, on its tab and as its card's whole name, rather than its task",
+  () =>
+    Effect.gen(function* () {
+      const landed = Effect.promise(settle);
+      const page = mountAgents(undefined, yield* registryOnTestClock, [DONE_AGENT]);
+      const task =
+        "Count the routes under the server.\n\nList every file under apps/web/server/routes.";
+      workerTitles = new Map([["call_routes", "Server route count"]]);
+      transcripts = new Map([
+        [
+          DONE_AGENT.id,
+          [
+            HANDED_PLAN,
+            {
+              id: "m-delegate",
+              role: "assistant",
+              parts: [
+                {
+                  type: "tool-delegate",
+                  toolCallId: "call_routes",
+                  state: "output-available",
+                  input: { task },
+                  output: { model: "anthropic/claude-sonnet-5.5", effort: "low", result: "Three." },
+                },
+              ],
+            },
+          ],
+        ],
+      ]);
+      act(() => tabNamed(page, "GPT 5.6 Sol").click());
+      yield* landed;
+      press(page, '[data-subagent-row][data-call-id="call_routes"]');
+      yield* landed;
+      act(() => tabNamed(page, "GPT 5.6 Sol").click());
+
+      const worker = tabNamed(page, "Server route count");
+      hover(worker);
+      yield* landed;
+      assert.equal(cardParts()[0], "Server route count");
+      const name = document.body.querySelector('[role="tooltip"] .tab-card-name');
+      assert.ok(!name?.hasAttribute("data-untitled"), "a title wraps as an agent's does");
+    }),
+);
+
+test("a planning worker whose session carries a title is drawn by it, on its tab and its card, rather than its job", () => {
+  const job = "Compare the two queue libraries on revocation, retries, and cost.";
+  const work = workerWork(job);
+  const titled: PlansControl["work"] = {
+    ...work,
+    turns: work.turns?.map((turn) => ({
+      ...turn,
+      parts: turn.parts.map((part) =>
+        part.type === PLAN_WORK_PART.TOOL && part.session !== undefined
+          ? { ...part, session: { ...part.session, title: "Queue library comparison" } }
+          : part,
+      ),
+    })),
+  };
+  const page = mountOpenPlan({ work: titled });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+
+  hover(tabNamed(page, "Queue library comparison"));
+  assert.deepEqual(cardParts(), [
+    "Queue library comparison",
+    "Working…",
+    "Queue A lets an admin revoke.",
+  ]);
 });

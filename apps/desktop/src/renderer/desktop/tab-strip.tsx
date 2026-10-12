@@ -34,7 +34,8 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * the tab.
  *
  * Every tab stands whole, its glyph and its label, a long label cut short
- * and said whole in its hint. A label measured cut short wears
+ * and said whole in its hint, or in the card a tab with more to say hangs
+ * in its hint's place. A label measured cut short wears
  * `data-overflow`, which desktop.css fades out at its end, as Chrome's and
  * Arc's tabs do, rather than ending it in an ellipsis. Past holding them all,
  * the strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
@@ -325,11 +326,12 @@ export function TabStrip({
  * one that always stands. `editor`, while given, is drawn in the label's
  * place as a field of its own, outside the tab's role, so a reader reaches
  * it. A label cut short is said whole in the tab's hint, before what
- * `tooltip` adds and an unread tab's news. `onMenu` opens the tab's own
- * actions where it says, from a right-click or the keyboard's menu keys.
- * A `quiet` tab draws no fill at rest, chosen or not, and the hover fill
- * under the pointer: a lone tab, always the chosen one, need not be told
- * from the others.
+ * `tooltip` adds and an unread tab's news; `card`, while given, hangs in the
+ * hint's place whether or not the label is cut short, and says the whole
+ * name itself. `onMenu` opens the tab's own actions where it says, from a
+ * right-click or the keyboard's menu keys. A `quiet` tab draws no fill at
+ * rest, chosen or not, and the hover fill under the pointer: a lone tab,
+ * always the chosen one, need not be told from the others.
  */
 export function Tab({
   icon,
@@ -337,6 +339,7 @@ export function Tab({
   selected,
   unread = false,
   tooltip,
+  card,
   keyshortcuts,
   editor,
   tabRef,
@@ -352,6 +355,8 @@ export function Tab({
   unread?: boolean;
   /** What the pointer resting on the tab says beyond its label. */
   tooltip?: string | undefined;
+  /** What the pointer resting on the tab shows in its hint's place: a card naming it whole and saying what it last did. */
+  card?: React.ReactNode;
   keyshortcuts?: string | undefined;
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
@@ -413,7 +418,9 @@ export function Tab({
       data-unread={String(unread)}
     >
       {editor === undefined ? (
-        <Tooltip label={hint}>{tab}</Tooltip>
+        <Tooltip label={card === undefined ? hint : label} card={card}>
+          {tab}
+        </Tooltip>
       ) : (
         <span className="tab-button" data-editing="true">
           {glyph}

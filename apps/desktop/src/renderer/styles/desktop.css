@@ -2957,8 +2957,91 @@ body,
 .searchable-menu .plan-compose-menu-name[data-overflow="true"],
 .searchable-menu .plan-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"],
-.agent-published-title[data-overflow="true"] {
+.agent-published-title[data-overflow="true"],
+.tab-card-name[data-untitled][data-overflow="true"],
+.tab-card-preview[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+/* An agent's or a subagent's tab hangs a card in its hint's place, as a
+   browser's tab hover card hangs: a small panel of the window's own, light in
+   the light, hung from the tab's start. Its head is the name, wrapped to two
+   lines, or a task standing in for one on a single line faded at its end,
+   with the model under it and the time muted at its right; under the head,
+   one line of the latest step, faded where it is cut short as a tab's
+   label is. */
+.tooltip-card {
+  display: flex;
+  width: 280px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--row-inset);
+  border-color: var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface-popover);
+  box-shadow: 0 12px 32px var(--shadow);
+  color: var(--text-primary);
+  font-weight: 400;
+  white-space: normal;
+}
+
+.tooltip-card[data-side="below"] {
+  transform-origin: top left;
+}
+
+.tab-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.tab-card-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tab-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tab-card-name[data-untitled] {
+  display: block;
+  white-space: nowrap;
+}
+
+/* The pair in the shared label's own inks, its effort dimmed, a size under the name. */
+.tab-card-model {
+  font-size: 11.5px;
+}
+
+.tab-card-time {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tab-card-preview {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tab-card-preview code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
 }
 
 /* Renamed in place, the label gives way to a field in the same type,

@@ -58,6 +58,12 @@ export interface AgentTranscriptControl {
   context: CodingAgentContext | undefined;
   /** When the run under way began, as the last page said; nothing where it did not, which is where a worker's tab counts from. */
   runStartedAt: number | undefined;
+  /** Where the agent, or the worker, stood as the last page said; nothing before one landed. */
+  pageStatus: CodingAgentStatus | undefined;
+  /** What the agent, or the worker, is titled as the last page said; nothing before one landed or a title did. */
+  pageTitle: string | undefined;
+  /** The title of each of the agent's workers that has one, by the call that started it, as the last page said; none on a worker's. */
+  subagentTitles: ReadonlyMap<string, string>;
   /** When each worker the agent's newest turn still waits on began, by the call that started it, as the last page said; none on a worker's. */
   delegations: ReadonlyMap<string, number>;
   /** Whether a read is out, with nothing held yet to draw. */
@@ -76,6 +82,9 @@ interface Held {
   turnUsage: CodingAgentUsage | undefined;
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
+  pageStatus: CodingAgentStatus | undefined;
+  pageTitle: string | undefined;
+  subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
   failed: boolean;
 }
@@ -90,6 +99,9 @@ function fresh(agentId: string): Held {
     turnUsage: undefined,
     context: undefined,
     runStartedAt: undefined,
+    pageStatus: undefined,
+    pageTitle: undefined,
+    subagentTitles: new Map(),
     delegations: new Map(),
     failed: false,
   };
@@ -157,6 +169,11 @@ export function useAgentTranscript(input: {
           turnUsage: answer.turnUsage,
           context: answer.context,
           runStartedAt: answer.runStartedAt,
+          pageStatus: answer.status,
+          pageTitle: answer.title ?? undefined,
+          subagentTitles: new Map(
+            (answer.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
+          ),
           delegations: new Map(
             (answer.delegations ?? []).map((started) => [started.callId, started.startedAt]),
           ),
@@ -190,6 +207,9 @@ export function useAgentTranscript(input: {
     turnUsage: held.turnUsage,
     context: held.context,
     runStartedAt: held.runStartedAt,
+    pageStatus: held.pageStatus,
+    pageTitle: held.pageTitle,
+    subagentTitles: held.subagentTitles,
     delegations: held.delegations,
     reading: active && held.messages.length === 0,
     failed: held.failed,

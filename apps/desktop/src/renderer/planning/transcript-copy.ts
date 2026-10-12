@@ -17,7 +17,7 @@ import {
   messageWords,
   workerLines,
 } from "./coding-agent-model";
-import { cardTitle, delegationView, toolCallView } from "./tool-call-model";
+import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
 import { CALL_KIND, CALL_WORDS, type CallKind, TURN_ROW, type TurnRow } from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { WORK_BLOCK, type WorkBlock, type WorkWorkerBlock, workerJob } from "./work-model";
@@ -34,7 +34,10 @@ import { WORK_BLOCK, type WorkBlock, type WorkWorkerBlock, workerJob } from "./w
  * and every call's input and answer are left out. The full copy is all the
  * tab opens onto, in order: words, reasoning, and every call with its input
  * and its answer, an answer past `OUTPUT_LIMIT` cut there with a note
- * saying so. Nothing is copied that the tab does not draw.
+ * saying so. Nothing is copied that the tab does not draw. A tab's hover
+ * card previews the same reading's latest step (`latestActivity`): the
+ * agent's last words as plain text, or its last call as the concise copy's
+ * line says it.
  */
 
 /** The two copies a transcript's menu offers. */
@@ -44,6 +47,23 @@ export const TRANSCRIPT_COPY = {
 } as const;
 
 export type TranscriptCopy = (typeof TRANSCRIPT_COPY)[keyof typeof TRANSCRIPT_COPY];
+
+/** What a transcript's latest step was, as a tab's hover card previews it. */
+export const LATEST_ACTIVITY = {
+  WORDS: "words",
+  CALL: "call",
+} as const;
+
+export type LatestActivity =
+  | { readonly kind: typeof LATEST_ACTIVITY.WORDS; readonly text: string }
+  | {
+      readonly kind: typeof LATEST_ACTIVITY.CALL;
+      /** The kind's verb, as the concise copy's line says it, before the subject. */
+      readonly verb: string;
+      readonly subject: string;
+      /** Whether the subject is code, a command or a path, rather than words. */
+      readonly code: boolean;
+    };
 
 /** Who a turn of the copy is, as its heading names them. */
 const SPEAKER = {
@@ -100,6 +120,8 @@ type CopiedBlock =
       /** The error's own text, on a call that ended in one. */
       readonly error: string | undefined;
     };
+
+type CopiedCall = Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>;
 
 interface CopiedTurn {
   readonly speaker: Speaker;
@@ -250,13 +272,21 @@ function oneLine(text: string): string {
   return line.length <= SUBJECT_LIMIT ? line : `${line.slice(0, SUBJECT_LIMIT).trimEnd()}…`;
 }
 
+/** How a call's line is put together: its subject on one line, what stands between the verb and it, and whether it is code. */
+function callParts(call: CopiedCall) {
+  const worker = call.call === CALL_KIND.WORKER;
+  return {
+    subject: oneLine(call.subject),
+    joiner: worker ? ": " : " ",
+    code: !worker && CALL_WORDS[call.call].code,
+  };
+}
+
 /** What a call did, its kind's verb then its subject, as code where the subject is; a worker's task follows a colon, since its subject is words. */
-function callSaid(call: Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>, verb: string) {
-  const words = CALL_WORDS[call.call];
-  const subject = oneLine(call.subject);
+function callSaid(call: CopiedCall, verb: string) {
+  const { subject, joiner, code } = callParts(call);
   if (subject === "") return verb.replace(/:$/u, "");
-  if (call.call === CALL_KIND.WORKER) return `${verb}: ${subject}`;
-  return `${verb} ${words.code ? inlineCode(subject) : subject}`;
+  return `${verb}${joiner}${code ? inlineCode(subject) : subject}`;
 }
 
 /** A turn as the concise copy reads it: the developer's words; or the agent's calls one line each, a run of them one list, and its last words where they stand. */
@@ -283,6 +313,35 @@ function conciseTurn(turn: CopiedTurn): string[] {
   return said.filter((each) => each.length > 0);
 }
 
+/** Whether a block is a step a preview can say: a call, or words that say something. */
+function previewed(block: CopiedBlock): boolean {
+  if (block.kind === COPIED_BLOCK.CALL) return true;
+  return block.kind === COPIED_BLOCK.WORDS && plainWords(block.text) !== "";
+}
+
+/**
+ * The latest step of the agent's, or the subagent's, own turns: its last
+ * words as plain text on one line, or its last call in its kind's verb and
+ * subject, as the concise copy's line says it. Reasoning is passed over, as
+ * the concise copy passes it, and so are the developer's own messages;
+ * nothing where the agent has said and run nothing yet.
+ */
+export function latestActivity(transcript: CopiedTranscript): LatestActivity | undefined {
+  const turn = transcript.turns.findLast(
+    (each) => each.speaker !== SPEAKER.DEVELOPER && each.blocks.some(previewed),
+  );
+  const block = turn?.blocks.findLast(previewed);
+  if (block === undefined || block.kind === COPIED_BLOCK.REASONING) return undefined;
+  if (block.kind === COPIED_BLOCK.WORDS) {
+    return { kind: LATEST_ACTIVITY.WORDS, text: plainWords(block.text) };
+  }
+  // The verb and its joiner as the concise copy's line puts them, the subject drawn apart.
+  const { subject, joiner, code } = callParts(block);
+  const { verb } = CALL_WORDS[block.call];
+  const lead = subject === "" ? verb.replace(/:$/u, "") : `${verb}${joiner.trimEnd()}`;
+  return { kind: LATEST_ACTIVITY.CALL, verb: lead, subject, code };
+}
+
 /** A reasoning block as the full copy reads it: under a bold word, quoted. */
 function reasoningSaid(text: string): string {
   const quoted = text
@@ -294,7 +353,7 @@ function reasoningSaid(text: string): string {
 }
 
 /** A call as the full copy reads it: what it did in bold, its input, and its answer or its error. */
-function callBlockSaid(call: Extract<CopiedBlock, { kind: typeof COPIED_BLOCK.CALL }>): string {
+function callBlockSaid(call: CopiedCall): string {
   const head = callSaid(call, `**${CALL_WORDS[call.call].verb}**`);
   const { input, output, error } = call;
   return [
