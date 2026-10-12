@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_REPLY, inboxAnswerMessage } from "@sidecar/hosted/inbox-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -19,6 +20,7 @@ import {
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
+import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
 import {
   CODER_TOOL,
@@ -239,6 +241,31 @@ test("the session is told to keep its to-dos for multi-step work, exactly one in
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
   }
+});
+
+test("the session is told to put what it needs from the developer in their inbox, keep each item current under its key, close it when done, and never restate it in a message", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief, false);
+    for (const kept of [
+      `\`${CODER_TOOL.POST_TO_INBOX}\``,
+      `\`${CODER_TOOL.CLOSE_INBOX_ITEM}\``,
+      `\`${CODER_TOOL.READ_INBOX}\``,
+      "never in a message",
+      "never to remind",
+      "Never restate an open item in a message",
+    ]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
+  }
+});
+
+test("the post tool tells the model how an answer it needs opens, as the service writes it", () => {
+  const message = inboxAnswerMessage(
+    { key: "branch-protection", title: "Turn on branch protection" },
+    { reply: INBOX_REPLY.DONE },
+  );
+  const lead = message.slice(0, message.indexOf(" on "));
+  assert.ok(INBOX_TOOLS.POST.description.includes(`"${lead}"`));
 });
 
 test("the session is told to write a worker's task as Markdown the developer can read, its goal one plain sentence on the first line, which the worker's row and tab are named by", () => {

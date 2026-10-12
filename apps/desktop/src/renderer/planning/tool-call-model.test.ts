@@ -202,3 +202,34 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
     "",
   );
 });
+
+test("a post to the inbox is a row naming its item, its context and options as the body, the recommended one saying so; a close names the key and says why", () => {
+  const view = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "invite-queue",
+      title: "Which queue backs the invitations?",
+      kind: "choice",
+      details: "Both work.",
+      options: [{ label: "Postgres", detail: "One database." }, { label: "Redis" }],
+      recommended: "Postgres",
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(view.kind, CALL_KIND.INBOX_POST);
+  assert.equal(view.subject, "Which queue backs the invitations?");
+  assert.deepEqual(view.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Both work.\n- Postgres (recommended) -- One database.\n- Redis",
+  });
+  assert.equal(view.output, undefined);
+
+  const closed = toolCallView({
+    tool: "close_inbox_item",
+    input: { key: "invite-queue", reason: "Found it in the README." },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(closed.kind, CALL_KIND.INBOX_CLOSE);
+  assert.equal(closed.subject, "invite-queue");
+  assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Found it in the README." });
+});
