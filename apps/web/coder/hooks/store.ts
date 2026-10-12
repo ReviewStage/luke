@@ -7,7 +7,7 @@ import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import { CODER } from "../../server/hosted/coder-host/bounds.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
-import { SANDBOX_TOOLS } from "../../server/hosted/coder-host/tool-set.js";
+import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
 import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
@@ -21,11 +21,12 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * the agent's own event through the relay the planning brain shares
  * (`server/hosted/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
- * a sandbox tool is when the sandbox opened and its checkout set the
- * repository credential at the firewall, a step that starts past the
- * credential's age renews it there, and a turn's end, however it ended,
- * writes the branch checked out in the sandbox on the agent's row, which
- * is where its pull request is read from, then stops the sandbox at once
+ * a sandbox tool, or a message received with files eve staged there, is
+ * when the sandbox opened and its checkout set the repository credential
+ * at the firewall, a step that starts past the credential's age renews it
+ * there, and a turn's end, however it ended, writes the branch checked out
+ * in the sandbox on the agent's row, which is where its pull request is
+ * read from, then stops the sandbox at once
  * rather than waiting out its timeout, with its filesystem kept for a later
  * turn to resume. Note that the branch is written before the end is
  * relayed, because a tab reads the pull request the moment it hears the
@@ -44,16 +45,6 @@ const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
   "turn.failed",
   "turn.cancelled",
 ]);
-
-/** Whether the event is a request for a tool whose every call runs in the sandbox. */
-function opensSandbox(event: MessageStreamEvent): boolean {
-  return (
-    event.type === "actions.requested" &&
-    event.data.actions.some(
-      (action) => action.kind === "tool-call" && SANDBOX_TOOLS.has(action.toolName),
-    )
-  );
-}
 
 /** Whether the credential set at the firewall is old enough to renew: set when the sandbox opened, or when the hook last renewed it. */
 function credentialIsOld(record: SandboxRecord, now: number): boolean {
@@ -139,7 +130,7 @@ export default defineHook({
             if (Result.isFailure(starting)) return;
             if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
             // The title fills in beside the turn rather than ahead of it; the fiber outlives this hook and ends on its own.
-            yield* Effect.forkDetach(host.title(starting.success));
+            yield* Effect.forkDetach(host.title(starting.success, ctx.session.id));
           }
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;

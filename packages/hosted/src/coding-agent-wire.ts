@@ -124,6 +124,8 @@ export const CODING_AGENT_FAILURE = {
   ABANDONED: "abandoned",
   /** The account's own API key for the model's provider was refused, out of quota, or can no longer be read; it is replaced in Settings. */
   PROVIDER_KEY: "provider_key",
+  /** The agent's session never started, so no turn ran; a new agent is the way on. */
+  NOT_STARTED: "not_started",
   OTHER: "other",
 } as const;
 

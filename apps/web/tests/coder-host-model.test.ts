@@ -210,7 +210,10 @@ test.for([
   [failed(ABANDONED), CODING_AGENT_FAILURE.ABANDONED],
   [failed(PERSISTENCE), CODING_AGENT_FAILURE.OTHER],
   [{ status: TURN_STATUS.CANCELLED, failure: MODEL, failureDetail: null }, undefined],
-  [undefined, undefined],
-] as const)("a failed turn's reason is the wire's one word: %o", ([turn, word]) => {
-  assert.equal(codingAgentFailureOf(turn), word);
-});
+  [undefined, CODING_AGENT_FAILURE.NOT_STARTED],
+] as const)(
+  "a failed agent's reason is the wire's one word, a turnless one's that it never started: %o",
+  ([turn, word]) => {
+    assert.equal(codingAgentFailureOf(turn), word);
+  },
+);

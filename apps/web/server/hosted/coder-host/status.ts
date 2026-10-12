@@ -24,8 +24,8 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * reads as cancelled already, since the Stop is on its way to eve and
  * nothing the turn still does changes where it ends. An agent with no turn
  * row long past its Start (`CODER.STARTING_GRACE`) reads as failed rather
- * than starting forever: eve took the session, and its first turn lands in
- * seconds or not at all. A line that awaits its turn reads as running
+ * than starting forever, as one that never started: eve took the session,
+ * and its first turn lands in seconds or not at all. A line that awaits its turn reads as running
  * whatever the newest turn says, because the session took the message and
  * the turn it opens is on its way (`store/message-reads.ts`'s
  * `awaitingLinesOf` is where a line is counted as waiting). A failed turn
@@ -115,11 +115,12 @@ const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])
   ],
 ];
 
-/** Why the newest turn failed, as the wire's word; nothing for a turn that did not fail. */
+/** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */
 export function codingAgentFailureOf(
   turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): CodingAgentFailure | undefined {
-  if (turn === undefined || turn.status !== TURN_STATUS.FAILED) return undefined;
+  if (turn === undefined) return CODING_AGENT_FAILURE.NOT_STARTED;
+  if (turn.status !== TURN_STATUS.FAILED) return undefined;
   if (turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED) return CODING_AGENT_FAILURE.ABANDONED;
   if (turn.failure !== BRAIN_REQUEST_FAILURE.MODEL) return CODING_AGENT_FAILURE.OTHER;
   const detail = turn.failureDetail ?? "";

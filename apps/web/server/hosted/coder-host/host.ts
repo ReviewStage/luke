@@ -120,6 +120,14 @@ export interface CoderHost {
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
+  /**
+   * The admission the session's sandbox takes as it opens, claiming the
+   * record as the start does: eve stages a message's files in the sandbox
+   * before the turn opens, so an opening message that carries files opens
+   * the sandbox ahead of `session.started`, when nothing has claimed the
+   * record yet. A session that cannot claim it is refused as `admit` refuses.
+   */
+  admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The admission a worker's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
   admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
@@ -192,7 +200,7 @@ export interface CoderHost {
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
   /** The agent's title generated from its plan and written where none stands, for the first session of the conversation alone; a later session, a failed call, and a title already standing each leave the row as it is. */
-  title(starting: AdmittedConversation): HostEffect<void>;
+  title(starting: AdmittedConversation, sessionId: string): HostEffect<void>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
   delegationTitle(admitted: AdmittedConversation, callId: string, task: string): HostEffect<void>;
   /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
@@ -327,6 +335,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
     admitStarting: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
+    admitSandbox: (auth, sessionId) =>
+      Effect.gen(function* () {
+        const starting = yield* admitConversation(auth, {
+          id: sessionId,
+          standing: SESSION_STANDING.CLAIMING,
+        });
+        if (Result.isFailure(starting)) return starting;
+        yield* claimRuntimeSession(starting.success.target, sessionId, new Date(seams.now()));
+        return yield* admitConversation(auth, {
+          id: sessionId,
+          standing: SESSION_STANDING.CURRENT,
+        });
+      }),
     admitDelegated: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.DELEGATED }),
 
@@ -455,10 +476,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
       ),
 
-    title: (starting) =>
+    title: (starting, sessionId) =>
       Effect.gen(function* () {
-        // A session the conversation already ran one before is a restart, not the agent's start.
-        if (starting.runtimeSessionId !== undefined) return;
+        // A session the conversation already ran one before is a restart, not the agent's start;
+        // the record may already be this session's, where its sandbox opened first to stage files.
+        const recorded = starting.runtimeSessionId;
+        if (recorded !== undefined && recorded !== sessionId) return;
         const model = seams.titleModel();
         if (model === undefined) return;
         const found = yield* agentOf(starting);

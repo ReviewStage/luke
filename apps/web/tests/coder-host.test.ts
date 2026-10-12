@@ -31,7 +31,11 @@ import {
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { CI_READ_PERMISSIONS } from "../server/github/github-app";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
+} from "../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
@@ -47,7 +51,7 @@ import {
 } from "../server/hosted/coder-host/plan-edit";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
-import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+import { CODER_TOOL, CODER_TOOL_SET, opensSandbox } from "../server/hosted/coder-host/tool-set";
 import {
   CURSOR_START,
   cursorOfWire,
@@ -176,9 +180,8 @@ function mintSession(): string {
   return `wrun_01M${String(minted).padStart(22, "0")}`;
 }
 
-/** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
-const openAgent = (
-  host: CoderHost,
+/** An account with one agent started on a plan, on the model given, whose session nothing has claimed yet. */
+const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
   brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
@@ -200,7 +203,18 @@ const openAgent = (
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
     const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-    const auth = ownSeat(userId, agent.conversationId);
+    return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
+  });
+
+/** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
+const openAgent = (
+  host: CoderHost,
+  model = "anthropic/claude-opus-5.5",
+  effort = "high",
+  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+) =>
+  Effect.gen(function* () {
+    const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
     assert.ok(Result.isSuccess(starting));
@@ -689,8 +703,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
       Effect.gen(function* () {
         const model = titleModelAnswering(['"Teammate invitations by email."', "Second title"]);
         const host = yield* hostOverStore(model);
-        const { userId, agent, auth, starting } = yield* openAgent(host);
-        yield* host.title(starting);
+        const { userId, agent, auth, sessionId, starting } = yield* openAgent(host);
+        yield* host.title(starting, sessionId);
         const titled = yield* readCodingAgent(userId, agent.id);
         assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
         const [asked] = model.doGenerateCalls;
@@ -701,9 +715,10 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         );
 
         // A later session of the same conversation finds the first recorded, and is no start.
-        const restarted = yield* host.admitStarting(auth, mintSession());
+        const restartedId = mintSession();
+        const restarted = yield* host.admitStarting(auth, restartedId);
         assert.ok(Result.isSuccess(restarted));
-        yield* host.title(restarted.success);
+        yield* host.title(restarted.success, restartedId);
         assert.equal(model.doGenerateCalls.length, 1);
 
         // The developer's own name is the last word: a generated title lands only where none stands.
@@ -714,11 +729,79 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
       }),
   );
 
+  it.effect(
+    "an agent handed files with its task opens its sandbox before its session starts, to stage them: the sandbox's admission claims the record, so the checkout is let in, the start that follows still titles the agent, and a session older than the one recorded is refused",
+    () =>
+      Effect.gen(function* () {
+        const model = titleModelAnswering(["Login screen redesign"]);
+        const host = yield* hostOverStore(model);
+        const stale = mintSession();
+        const { userId, agent, auth } = yield* unclaimedAgent(undefined, undefined, {
+          planSnapshot: null,
+          task: "Match this mock",
+        });
+        const sessionId = mintSession();
+        // Nothing has claimed the record yet, so the session is not yet the one it runs in.
+        assert.ok(Result.isFailure(yield* host.admit(auth, sessionId)));
+
+        const opening = yield* host.admitSandbox(auth, sessionId);
+        assert.ok(Result.isSuccess(opening));
+        assert.ok(Result.isSuccess(yield* host.admit(auth, sessionId)));
+
+        // The session's start finds the record already its own: still the agent's start.
+        const starting = yield* host.admitStarting(auth, sessionId);
+        assert.ok(Result.isSuccess(starting));
+        assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
+        yield* host.title(starting.success, sessionId);
+        const titled = yield* readCodingAgent(userId, agent.id);
+        assert.equal(Option.getOrThrow(titled).title, "Login screen redesign");
+
+        const refused = yield* host.admitSandbox(auth, stale);
+        assert.ok(Result.isFailure(refused));
+        assert.equal(refused.failure, BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION);
+      }),
+  );
+
+  it("a sandbox counts as opened by a sandbox tool's call or a message received with files, and by no words alone or other call", () => {
+    const turnId = "turn_0";
+    const sequence = 0;
+    const received = (
+      parts: Extract<MessageStreamEvent, { type: "message.received" }>["data"]["parts"],
+    ) =>
+      stamped({
+        type: "message.received",
+        data: { turnId, sequence, message: "Match this mock", parts },
+      });
+    const requested = (toolName: string) =>
+      stamped({
+        type: "actions.requested",
+        data: {
+          turnId,
+          sequence,
+          stepIndex: 0,
+          actions: [{ kind: "tool-call", callId: "call-1", toolName, input: {} }],
+        },
+      });
+    assert.equal(
+      opensSandbox(
+        received([
+          { type: "text", text: "Match this mock" },
+          { type: "file", mediaType: "image/png", filename: "mock.png" },
+        ]),
+      ),
+      true,
+    );
+    assert.equal(opensSandbox(requested(CODER_TOOL.READ_FILE)), true);
+    assert.equal(opensSandbox(received([{ type: "text", text: "Match this mock" }])), false);
+    assert.equal(opensSandbox(received(undefined)), false);
+    assert.equal(opensSandbox(requested(CODER_TOOL.WEB_SEARCH)), false);
+  });
+
   it.effect("a title call that fails leaves the agent untitled", () =>
     Effect.gen(function* () {
       const host = yield* hostOverStore(titleModelAnswering([new Error("fixture: provider down")]));
-      const { userId, agent, starting } = yield* openAgent(host);
-      yield* host.title(starting);
+      const { userId, agent, sessionId, starting } = yield* openAgent(host);
+      yield* host.title(starting, sessionId);
       assert.equal(Option.getOrThrow(yield* readCodingAgent(userId, agent.id)).title, null);
     }),
   );
