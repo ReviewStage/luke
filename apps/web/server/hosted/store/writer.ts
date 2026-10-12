@@ -59,6 +59,7 @@ import {
   nullable,
   TurnUsageColumnSchema,
 } from "./database.js";
+import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -325,14 +326,6 @@ const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
 /** The rows the turn took, by id, oldest first; none where no run of lines with those words awaited; or the turn does not stand. */
 type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION | typeof NO_TURN>;
-
-/**
- * What eve puts between two messages it hands a turn as one: steers that
- * arrive while a step is under way are coalesced into the next step's input,
- * their words joined by a blank line (eve's `appendUserContent`), and the
- * turn receives the joined words as a single message.
- */
-const COALESCED_LINE_SEPARATOR = "\n\n";
 
 /**
  * The one path by which a conversation's rows are written, each method an
@@ -1822,7 +1815,8 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
  * the user rows no turn owns, of a coding agent's conversation, which is
  * the one kind whose developer lines are written ahead of their turn; a
  * planning conversation's turnless user rows are its spoken asks, attached
- * by their own writer, and never match here.
+ * by their own writer, and never match here. A line a turn already received
+ * under another row awaits nothing and is not offered (`noReceiptOfLine`).
  */
 const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -1838,6 +1832,7 @@ const findAwaitingLines = SqlSchema.findAll({
           eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
           isNull(messages.turnId),
+          noReceiptOfLine(),
         ),
       )
       .orderBy(asc(messages.seq)),

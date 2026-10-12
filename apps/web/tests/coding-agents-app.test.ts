@@ -1508,7 +1508,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "lines a turn already received coalesced into one row of its own, as the relay wrote them before it took a coalesced run, await nothing: the agent reads as completed once the turn ends, and a line no turn has received still reads it as running",
+    "lines a turn already received coalesced into one row of its own, as the relay wrote them before it took a coalesced run, await nothing: the agent reads as completed once the turn ends, and the same words sent again are a new line the next turn takes in their place",
     () =>
       Effect.gen(function* () {
         const { owner, plan, ask, target, writer, turnId, sent, transcript } = yield* startedAgent(
@@ -1551,8 +1551,62 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.equal(yield* listed(), CODING_AGENT_STATUS.COMPLETED);
         assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.COMPLETED);
 
-        yield* sent("Now add the tests.");
+        // The same words sent again are a new line, which the next turn takes in the old one's place.
+        yield* sent(lines[0] ?? "");
         assert.equal(yield* listed(), CODING_AGENT_STATUS.RUNNING);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
+        const nextTurn = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId: nextTurn,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_1",
+        });
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: lines[0] ?? "",
+          turnId: nextTurn,
+        });
+        assert.ok(Result.isSuccess(taken) && taken.success.length === 1);
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId: nextTurn,
+          sequence: 1,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
+        assert.equal(yield* listed(), CODING_AGENT_STATUS.COMPLETED);
+      }),
+  );
+
+  it.effect(
+    "a line whose words are only a fragment of what a turn later received is no receipt of it, so the agent still reads as running once that turn ends",
+    () =>
+      Effect.gen(function* () {
+        const { target, writer, turnId, sent, transcript } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* sent("the plan.");
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 3,
+          message: userMessage(
+            randomUUID(),
+            "See if you disagree with the plan.",
+            userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+          ),
+        });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 4,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
         assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
       }),
   );
