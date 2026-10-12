@@ -41,6 +41,7 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
+import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -130,6 +131,11 @@ export function App(): React.JSX.Element {
       updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
     [],
   );
+
+  // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
+  useWindowZoom(settings?.zoom, (zoom) => {
+    void updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom);
+  });
 
   // The stop key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.

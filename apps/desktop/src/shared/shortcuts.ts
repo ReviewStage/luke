@@ -26,6 +26,9 @@ export const APP_COMMAND = {
   TOGGLE_SIDE_PANEL: "toggle-side-panel",
   TOGGLE_FULL_SCREEN: "toggle-full-screen",
   EXIT_FULL_SCREEN: "exit-full-screen",
+  ACTUAL_SIZE: "actual-size",
+  ZOOM_IN: "zoom-in",
+  ZOOM_OUT: "zoom-out",
   SHOW_BOARD: "show-board",
   SHOW_CODE: "show-code",
   SHOW_TRANSCRIPT: "show-transcript",
@@ -70,7 +73,10 @@ export type KeyedCommand = Exclude<AppCommand, MenuCommand>;
  * the glyph drawn for it, `KeyboardEvent.key` without Option, and the
  * physical `code` with Option, which turns a letter into some other character
  * on a Mac keyboard. `editsText` marks a key a text field already answers
- * with Command held, which the keymap leaves to the field.
+ * with Command held, which the keymap leaves to the field. `unshifted` is the
+ * character the same key types without Shift where `key` needs it on a US
+ * keyboard, and `aria` the key's name where `aria-keyshortcuts` cannot spell
+ * it as its character.
  */
 interface ShortcutKey {
   accelerator: string;
@@ -78,6 +84,8 @@ interface ShortcutKey {
   key: string;
   code: string;
   editsText?: true;
+  unshifted?: string;
+  aria?: string;
 }
 
 const SHORTCUT_KEY = {
@@ -96,6 +104,11 @@ const SHORTCUT_KEY = {
   TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
   THREE: { accelerator: "3", glyph: "3", key: "3", code: "Digit3" },
   FOUR: { accelerator: "4", glyph: "4", key: "4", code: "Digit4" },
+  ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
+  // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
+  // VS Code.
+  PLUS: { accelerator: "Plus", glyph: "+", key: "+", code: "Equal", unshifted: "=", aria: "Plus" },
+  MINUS: { accelerator: "-", glyph: "−", key: "-", code: "Minus" },
   UP: { accelerator: "Up", glyph: "↑", key: "ArrowUp", code: "ArrowUp" },
   DOWN: { accelerator: "Down", glyph: "↓", key: "ArrowDown", code: "ArrowDown" },
   LEFT: { accelerator: "Left", glyph: "←", key: "ArrowLeft", code: "ArrowLeft", editsText: true },
@@ -150,8 +163,8 @@ export interface AppShortcut {
  * to close the tab chosen, and ⇧⌘W to close the window as Chrome and VS
  * Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
- * speaker beside it, and ⌘K for the command palette as Linear, Slack, and
- * Raycast have it.
+ * speaker beside it, ⌘K for the command palette as Linear, Slack, and
+ * Raycast have it, and ⌘+, ⌘−, and ⌘0 to zoom as every browser has them.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -182,6 +195,9 @@ export const APP_SHORTCUTS = {
     label: "Exit full screen",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.ACTUAL_SIZE]: { label: "Actual size", chord: { key: SHORTCUT_KEY.ZERO } },
+  [APP_COMMAND.ZOOM_IN]: { label: "Zoom in", chord: { key: SHORTCUT_KEY.PLUS } },
+  [APP_COMMAND.ZOOM_OUT]: { label: "Zoom out", chord: { key: SHORTCUT_KEY.MINUS } },
   [APP_COMMAND.SHOW_BOARD]: { label: "Show board", chord: { key: SHORTCUT_KEY.ONE, option: true } },
   [APP_COMMAND.SHOW_CODE]: { label: "Show code", chord: { key: SHORTCUT_KEY.TWO, option: true } },
   [APP_COMMAND.SHOW_TRANSCRIPT]: {
@@ -289,6 +305,9 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.TOGGLE_FULL_SCREEN,
       APP_COMMAND.EXIT_FULL_SCREEN,
+      APP_COMMAND.ZOOM_IN,
+      APP_COMMAND.ZOOM_OUT,
+      APP_COMMAND.ACTUAL_SIZE,
       APP_COMMAND.CLOSE_WINDOW,
     ],
   },
@@ -343,7 +362,7 @@ export function shortcutAria(chord: ShortcutChord): string {
     chord.bare ? undefined : "Meta",
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
-    chord.key.key.length === 1 ? chord.key.key.toUpperCase() : chord.key.key,
+    chord.key.aria ?? (chord.key.key.length === 1 ? chord.key.key.toUpperCase() : chord.key.key),
   ]
     .filter((part) => part !== undefined)
     .join("+");
@@ -354,15 +373,18 @@ export function shortcutAria(chord: ShortcutChord): string {
  * modifiers, and the key. Control never joins, because Control chords are a
  * text field's own caret moves. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
- * has changed the character.
+ * has changed the character. A key with an unshifted character answers
+ * either character, Shift held or not, because which of the two needs Shift
+ * is the keyboard layout's to say.
  */
 function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
   if (event.metaKey === (chord.bare === true) || event.ctrlKey) return false;
-  if (event.altKey !== (chord.option === true) || event.shiftKey !== (chord.shift === true)) {
-    return false;
-  }
+  const shiftFree = chord.key.unshifted !== undefined;
+  if (event.altKey !== (chord.option === true)) return false;
+  if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;
   if (event.altKey) return event.code === chord.key.code;
-  return event.key.toLowerCase() === chord.key.key.toLowerCase();
+  const pressed = event.key.toLowerCase();
+  return pressed === chord.key.key.toLowerCase() || pressed === chord.key.unshifted;
 }
 
 /** The command whose chord a key press is, among those given, or nothing. */

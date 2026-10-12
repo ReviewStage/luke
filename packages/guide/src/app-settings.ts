@@ -23,6 +23,7 @@ export const APP_SETTING_ID = {
   STOP_HOTKEY: "stop_hotkey",
   CALENDAR_SELECTED: "calendar_selected",
   THEME: "theme",
+  ZOOM: "zoom",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];

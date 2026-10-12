@@ -85,9 +85,10 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, with New Tab,
  * Close Tab, and Close Window as Chrome's File keeps them, the window's
- * columns are View's, the call's microphone and speaker are Call's, back and forward are Go's as Finder and Safari keep
- * them, and the shortcuts and the notes to the people who make Luke are
- * Help's.
+ * columns and its zoom are View's, the zoom in the order Chrome's View keeps
+ * it, the call's microphone and speaker are Call's, back and forward are
+ * Go's as Finder and Safari keep them, and the shortcuts and the notes to the
+ * people who make Luke are Help's.
  */
 export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
   return [
@@ -132,6 +133,12 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.TOGGLE_SIDE_PANEL),
         commandItem(APP_COMMAND.TOGGLE_FULL_SCREEN),
         commandItem(APP_COMMAND.EXIT_FULL_SCREEN),
+        SEPARATOR,
+        commandItem(APP_COMMAND.ACTUAL_SIZE),
+        // "In" is a particle here rather than the preposition a title leaves
+        // lower case, so the item reads as every Mac app's Zoom In.
+        { ...commandItem(APP_COMMAND.ZOOM_IN), label: "Zoom In" },
+        commandItem(APP_COMMAND.ZOOM_OUT),
         SEPARATOR,
         commandItem(APP_COMMAND.SHOW_BOARD),
         commandItem(APP_COMMAND.SHOW_CODE),

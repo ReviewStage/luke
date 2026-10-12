@@ -291,6 +291,7 @@ const SAMPLE_VALUE = {
   // System is what an absent theme falls back to, so Dark is the explicit
   // choice that has to survive a reopen as itself.
   theme: THEME.DARK,
+  zoom: 150,
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
@@ -847,6 +848,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.theme.field, THEME.DARK);
+  await store.set(APP_SETTING_SCHEMA.zoom.field, 175);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
@@ -855,6 +857,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(appSettingsView(settings).openAtLogin, true);
   // The reset forgets the choice, so the windows follow the Mac again.
   assert.equal(appSettingsView(settings).theme, THEME.SYSTEM);
+  assert.equal(appSettingsView(settings).zoom, 100);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
   // One scope's reset is that scope's alone.
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);

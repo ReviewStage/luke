@@ -120,3 +120,33 @@ test("File's New Tab and Close Tab hand the window their commands on a click, le
   assert.equal(window.closes, 2);
   assert.equal(window.sent.length, 2, "Close Window hands the page nothing");
 });
+
+test("View holds Actual Size, Zoom In, and Zoom Out as Chrome orders them, each handed to the window it was chosen over", () => {
+  const view = appMenuTemplate("Luke").find((menu) => menu.label === "View");
+  assert.ok(Array.isArray(view?.submenu));
+  assert.deepEqual(
+    view.submenu
+      .filter((each) => each.label === "Actual Size" || each.label?.startsWith("Zoom"))
+      .map((each) => [each.label, each.accelerator]),
+    [
+      ["Actual Size", "Command+0"],
+      ["Zoom In", "Command+Plus"],
+      ["Zoom Out", "Command+-"],
+    ],
+  );
+  const window = new FakeBrowserWindow();
+  choose("Zoom In", window, true);
+  assert.deepEqual(
+    window.sent,
+    [],
+    "a ⌘+ the window left unclaimed, at the largest size, does nothing",
+  );
+  choose("Zoom In", window, false);
+  choose("Zoom Out", window, false);
+  choose("Actual Size", window, false);
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.ZOOM_IN],
+    [channels.onMenuCommand, APP_COMMAND.ZOOM_OUT],
+    [channels.onMenuCommand, APP_COMMAND.ACTUAL_SIZE],
+  ]);
+});

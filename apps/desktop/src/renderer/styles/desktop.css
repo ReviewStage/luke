@@ -54,10 +54,16 @@
   --menu-inset: var(--space-4);
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
-  /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
-     where the green one ends, its x plus the three lights' 61px on macOS 26,
-     and the height their middle sits at, its y plus half a 14px light. */
-  --traffic-lights-end: 79px;
+  /* The window's zoom as a factor, which the page draws every pixel at and
+     the renderer keeps here (`window-zoom.ts`). */
+  --zoom: 1;
+  /* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
+     `main/window/zoom.ts`): where the green one ends, its x plus the three
+     lights' 61px on macOS 26, and the height their middle sits at, its y plus
+     half a 14px light. The lights never scale with the page, so their width
+     is divided by the zoom; main moves them down with it instead, so their
+     middle stays where it is drawn here. */
+  --traffic-lights-end: calc(79px / var(--zoom));
   --traffic-lights-middle: 25px;
   /* The title bar's own buttons beside them, each a toolbar icon button and
      the first this far past the green light: about what the lights leave

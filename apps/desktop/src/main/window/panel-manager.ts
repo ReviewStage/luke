@@ -10,6 +10,7 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import { trafficLightsAt } from "./zoom";
 
 interface PanelDuck {
   setExchangeActive(active: boolean): void;
@@ -21,6 +22,8 @@ interface PanelManagerOptions {
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
+  /** The zoom factor a window is created at: the stored size as it stands. */
+  zoomFactor: () => number;
   /**
    * The last panel window went down on its own. All panels closed is how
    * this process decides it is done, and `window-all-closed` can no longer
@@ -47,9 +50,6 @@ const DESKTOP_WINDOW = {
   // is desktop.css's `--desktop-ground` for that appearance, which
   // design/check-design-contract.mjs holds them to.
   BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
-  // Where the close button's corner sits. desktop.css's `--traffic-lights-*`
-  // are measured from it, so the title bar's own buttons clear the lights.
-  TRAFFIC_LIGHTS: { x: 18, y: 18 },
 } as const;
 
 /** The first frame of the window, centred in the display's work area. */
@@ -79,6 +79,7 @@ export class PanelManager {
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
+  readonly #zoomFactor: () => number;
   readonly #onAllClosed: (() => void) | undefined;
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
@@ -97,6 +98,7 @@ export class PanelManager {
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
+    this.#zoomFactor = options.zoomFactor;
     this.#onAllClosed = options.onAllClosed;
     app.on("before-quit", () => {
       this.#quitting = true;
@@ -135,6 +137,11 @@ export class PanelManager {
       if (!window.isDestroyed()) return window;
     }
     return undefined;
+  }
+
+  /** Every living panel window, for what each one applies itself: the zoom. */
+  windows(): readonly BrowserWindow[] {
+    return [...this.#windows.values()].filter((window) => !window.isDestroyed());
   }
 
   /** Every living panel's renderer, for a payload composed per window. */
@@ -238,6 +245,9 @@ export class PanelManager {
     const display = this.display(displayId);
     if (!display) return;
     const bounds = desktopBounds(display);
+    // Created at the stored zoom, so the first frame is drawn at the size it
+    // keeps rather than jumping to it once the page has loaded.
+    const zoomFactor = this.#zoomFactor();
 
     const windowOptions: BrowserWindowConstructorOptions = {
       ...bounds,
@@ -249,11 +259,11 @@ export class PanelManager {
       // The renderer draws its own title bar under the traffic lights, so the
       // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: DESKTOP_WINDOW.TRAFFIC_LIGHTS,
-      webPreferences: hardenedWebPreferences({
-        preloadPath: this.#preloadPath,
-        runMode: this.#runMode,
-      }),
+      trafficLightPosition: trafficLightsAt(zoomFactor),
+      webPreferences: {
+        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
+        zoomFactor,
+      },
     };
     const window = new BrowserWindow(windowOptions);
     this.#windows.set(displayId, window);

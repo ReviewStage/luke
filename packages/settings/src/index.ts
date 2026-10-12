@@ -46,3 +46,13 @@ export {
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
 } from "./voice-hotkey.js";
+export {
+  isZoomPercent,
+  ZOOM_ACTUAL_SIZE,
+  ZOOM_PERCENTS,
+  ZOOM_STEP,
+  type ZoomPercent,
+  type ZoomStep,
+  zoomFactor,
+  zoomStepped,
+} from "./zoom.js";
