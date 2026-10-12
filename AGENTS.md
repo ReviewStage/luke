@@ -299,7 +299,8 @@ reads it: `apps/desktop/src/shared/messages/acts.ts`,
   one way a boundary value is declared. A statement is an `Effect` on the
   fiber's `SqlClient` through the bridge
   (`packages/database/src/core/drizzle.ts`) rather than a promise, until
-  Drizzle's own `drizzle-orm/effect-postgres` supports Effect v4.
+  Drizzle's own `drizzle-orm/effect-postgres` supports Effect v4; it is
+  yielded, and `anti-slop/no-await-drizzle-statement` refuses one awaited.
   `apps/web/server/README.md`'s "The data layer" is the rest.
 - Runtime only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
