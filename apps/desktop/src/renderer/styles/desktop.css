@@ -2557,20 +2557,18 @@ body,
 /* What the column shows, beside the plan's summary: under the toolbar and
    over the call bar, which both span the column. The room the summary takes
    is said once here, so the call bar's row below centres on the room the
-   document above it is centred in. A summary on its way out takes none. */
+   document above it is centred in. */
 .desktop-plan-main {
   --summary-width: 240px;
   --summary-rail-width: calc(var(--control-height) + 2 * var(--space-8));
   --summary-room: 0px;
 }
 
-.desktop-plan-main:has(
-  > .desktop-plan-body > .plan-summary[data-mode="column"]:not([data-leaving])
-) {
+.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="column"]) {
   --summary-room: var(--summary-width);
 }
 
-.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="rail"]:not([data-leaving])) {
+.desktop-plan-main:has(> .desktop-plan-body > .plan-summary[data-mode="rail"]) {
   --summary-room: var(--summary-rail-width);
 }
 
@@ -2604,43 +2602,90 @@ body,
   background: var(--desktop-ground);
 }
 
-/* Folded, the glyphs alone in a rail, under the chevron that hangs the card. */
+/* Collapsed, the panel's kinds alone in a rail under the chevron that
+   expands it, one glyph after the next at one even step. */
+.plan-summary[data-mode="rail"],
+.plan-summary[data-mode="rail"] > .plan-summary-rows {
+  align-items: center;
+  gap: var(--list-gap);
+}
+
 .plan-summary[data-mode="rail"] {
   width: var(--summary-rail-width);
-  align-items: center;
-  gap: var(--space-12);
   padding: var(--space-8);
 }
 
-/* Leaving, it gives the column its room back at once and slides out over it. */
-.plan-summary[data-leaving] {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+/* The toolbar's button is drawn on while the summary is pinned, as it is
+   while the card it hangs stands. */
+.summary-toggle[aria-pressed="true"] {
+  background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
+  color: var(--text-primary);
 }
 
-/* Over an open panel, or hung from the rail's chevron, the whole summary
-   stands in a card under the toolbar's button, drawn as a menu is. */
+/* Expanded where it cannot be pinned, the whole summary stands in a card
+   over the rail's own footprint, its top and right edges the rail's, drawn
+   as a menu is, and its chevron, shown while the pointer is on it, stands
+   on the very spot of the rail's: as far in from the card's outer edges as
+   the rail's padding, less the card's border. Its first line is that
+   chevron's height, so the heading on it stands level with it. */
 .plan-summary-card {
+  --card-edge: 1px;
   position: absolute;
   z-index: 2;
-  top: var(--space-4);
-  right: var(--column-inset);
+  top: 0;
+  right: 0;
   display: flex;
   box-sizing: border-box;
   width: var(--summary-width);
-  max-height: calc(100% - var(--space-16));
+  max-height: 100%;
   flex-direction: column;
   gap: var(--section-gap);
-  padding: var(--space-12) var(--menu-inset);
+  padding: calc(var(--space-8) - var(--card-edge)) var(--menu-inset) var(--space-12);
   overflow-y: auto;
-  border: 1px solid var(--hairline);
+  border: var(--card-edge) solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
   box-shadow: 0 16px 40px var(--shadow);
   outline: none;
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  transform-origin: top right;
+  animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.plan-summary-collapse {
+  position: absolute;
+  top: calc(var(--space-8) - var(--card-edge));
+  right: calc(var(--space-8) - var(--card-edge));
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.plan-summary-card:hover .plan-summary-collapse,
+.plan-summary-collapse:focus-visible {
+  opacity: 1;
+}
+
+.plan-summary-card > .plan-summary-section:first-of-type > .plan-summary-heading {
+  display: flex;
+  min-height: var(--control-height);
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.plan-summary-card > .plan-summary-empty {
+  padding-top: var(--space-8);
+  padding-right: var(--control-height);
+}
+
+/* It grows out of the rail it stands over rather than dropping as a menu
+   does, so its chevron never leaves the spot it shares with the rail's. */
+@keyframes summary-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }
 
 .plan-summary-heading {

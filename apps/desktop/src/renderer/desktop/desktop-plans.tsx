@@ -125,7 +125,8 @@ function PlanDocument({
   const views = useTabViews();
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, plans.sidePanel.open, area);
+  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
   const summaryCard = useId();
   // The column the pointer or the focus last went into holds the keys. Note
   // that it is heard on the plan's area as it bubbles, because the columns
@@ -226,7 +227,7 @@ function PlanDocument({
       {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-      <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
+      <div ref={setColumn} className="desktop-plan-main" hidden={sidePanel.fullScreen}>
         <Toolbar
           heading={
             <MainTabStrip
@@ -277,12 +278,7 @@ function PlanDocument({
             )}
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
-          <SummaryButton
-            layout={summaryLayout}
-            pinned={summary.pinned}
-            panelOpen={sidePanel.open}
-            cardId={summaryCard}
-          />
+          <SummaryButton layout={summaryLayout} cardId={summaryCard} />
         </Toolbar>
         {/* The summary stands beside what the column shows, under the
             toolbar and over the call bar, which both span the column. */}
@@ -372,7 +368,7 @@ export function DesktopPlans({
   looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
-  /** Whether the plan's summary stands pinned beside its column, held by the shell, whose panes glide as it turns. */
+  /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
 }): React.JSX.Element {
   switch (plans.page) {
