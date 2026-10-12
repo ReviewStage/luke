@@ -708,6 +708,81 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
       }),
   );
 
+  it.effect(
+    "a Start at a rollout position a live worker holds is refused as position-taken and opens nothing, though its own retry still answers it; once that worker's turn fails, the position starts again",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const key = randomUUID();
+        const worker = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, position: 1 })),
+        ).agent;
+        assert.equal(worker.position, 1);
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.POSITION_TAKEN),
+        );
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key, position: 1 })),
+        );
+        assert.equal(again.agent.id, worker.id);
+        assert.equal(eve.opened.length, 1);
+        // Another position, and an agent outside the rollout, start beside the worker.
+        const second = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              position: 2,
+              baseBranch: "luke/invitations/1-schema",
+            }),
+          ),
+        ).agent;
+        assert.equal(second.position, 2);
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+
+        // The worker's turn fails, which ends it and frees its position.
+        const stored = yield* readCodingAgent(owner, worker.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 1,
+          status: BRAIN_REQUEST_STATUS.FAILED,
+          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          responseIds: [],
+          at: 0,
+        });
+        const restarted = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), position: 1 })),
+        ).agent;
+        assert.notEqual(restarted.id, worker.id);
+        assert.equal(restarted.position, 1);
+        assert.equal(eve.opened.length, 4);
+      }),
+  );
+
   it.effect("a retry under the same key is the same agent, and opens no second session", () =>
     Effect.gen(function* () {
       const { owner, plan, eve, ask } = yield* openPlan();

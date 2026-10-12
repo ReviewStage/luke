@@ -3,6 +3,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
+import type { PositionTaken } from "./coding-agent-store.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import type { PlanArchived } from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
@@ -38,6 +39,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.POSITION_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -66,6 +68,7 @@ export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_
 export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
 export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
 export const PlanArchivedRefusal = refusalSchema(HOSTED_API_ERROR.PLAN_ARCHIVED);
+export const PositionTakenRefusal = refusalSchema(HOSTED_API_ERROR.POSITION_TAKEN);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -108,6 +111,8 @@ export const HOSTED_REFUSAL = {
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
   /** The plan is archived, so it takes nothing until it is brought back; nothing was written. */
   PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
+  /** A live worker already holds the rollout position a Start named; nothing was written. */
+  POSITION_TAKEN: { error: HOSTED_API_ERROR.POSITION_TAKEN },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
@@ -127,17 +132,18 @@ export function hostedStoreOrUnavailable<A, R>(
 }
 
 /**
- * A plan write an archive may refuse: the archive answered as its own
- * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
+ * A plan write the store may refuse on its own terms, an archive or a
+ * rollout position a live worker holds: each answered as its own refusal,
+ * and a store failure as `hostedStoreOrUnavailable` answers one.
  */
 export function hostedStoreOrArchived<A, R>(
-  effect: Effect.Effect<A, StoreFailure | PlanArchived, R>,
+  effect: Effect.Effect<A, StoreFailure | PlanArchived | PositionTaken, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(effect, (failure) =>
-    "_tag" in failure && failure._tag === "PlanArchived"
-      ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
-      : hostedStoreOrUnavailable(Effect.fail(failure)),
-  );
+  return Effect.catch(effect, (failure) => {
+    if (failure._tag === "PlanArchived") return Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+    if (failure._tag === "PositionTaken") return Effect.fail(HOSTED_REFUSAL.POSITION_TAKEN);
+    return hostedStoreOrUnavailable(Effect.fail(failure));
+  });
 }
 
 /** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */

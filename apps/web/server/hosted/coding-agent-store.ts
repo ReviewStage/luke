@@ -8,7 +8,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
@@ -87,6 +87,9 @@ import {
  */
 
 type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
+
+/** A Start at a position of the plan's rollout a live worker already holds; nothing was written. */
+export class PositionTaken extends Data.TaggedError("PositionTaken") {}
 
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type CodingAgentStoreEffect<A> = Effect.Effect<
@@ -536,14 +539,16 @@ const deleteConversationRow = SqlSchema.void({
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account owns no such plan. An archived plan starts no
  * agent, read under the same lock, though a retry still answers the agent
- * its Start made before the archive.
+ * its Start made before the archive. A Start at a position of the plan's
+ * rollout is refused where a live worker holds it (`liveWorkerAtPosition`),
+ * read under the same lock, so two Starts at one position make one worker.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
 ): Effect.Effect<
   Option.Option<CodingAgentStarted>,
-  CodingAgentStoreFailure | PlanArchived,
+  CodingAgentStoreFailure | PlanArchived | PositionTaken,
   SqlClient.SqlClient
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -559,6 +564,10 @@ export function createCodingAgent(
           return Option.some({ agent: existing.value, created: false });
         }
         if (owned.value.archived) return yield* new PlanArchived();
+        if (started.position !== undefined) {
+          const holder = yield* liveWorkerAtPosition(userId, started.planId, started.position);
+          if (Option.isSome(holder)) return yield* new PositionTaken();
+        }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.

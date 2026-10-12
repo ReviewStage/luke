@@ -64,6 +64,15 @@
         "additionalProperties": false
       },
       "maxItems": 10
+    },
+    "position": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "baseBranch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
     }
   },
   "required": [

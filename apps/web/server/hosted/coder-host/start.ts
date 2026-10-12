@@ -44,6 +44,10 @@ import { readPlan } from "../plan-store.js";
  * agent's eve session opens with the plan's document as the Markdown Copy
  * would put on the clipboard, or with the ask's task in the plan's place
  * and the files attached to it, which only a task carries.
+ * A Start at a position of the plan's rollout makes that pull request's
+ * worker, on the base branch the ask names, and is refused as
+ * `position-taken` where a live worker already holds the position; a retry
+ * under the same key still answers the worker it made.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -60,6 +64,10 @@ export interface StartAsk {
   readonly choice: ModelChoice | undefined;
   readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  /** The pull request of the plan's rollout the agent works, counted from one, where it is that pull request's worker. */
+  readonly position?: number | undefined;
+  /** The branch the agent's work bases on, where it is not the repository's default. */
+  readonly baseBranch?: string | undefined;
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -124,6 +132,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       ...brief,
       repository,
+      position: ask.position,
+      baseBranch: ask.baseBranch,
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

@@ -70,6 +70,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TEXT_BYTES: 100_000,
   /** The most bytes every file of one message holds together, which base64 grows by a third and which stays under a function's request body limit. */
   MAX_ATTACHMENTS_BYTES: 3_000_000,
+  /** The most characters a Start's base branch may spell; Git refuses a ref name past a filesystem's own limit long before. */
+  MAX_BRANCH_CHARS: 255,
 } as const;
 
 /**
@@ -256,7 +258,10 @@ export function hasWordsOrFiles(
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
- * with a task.
+ * with a task. A position names the pull request of the plan's rollout the
+ * agent works, counted from one, which a live worker must not already hold;
+ * a base branch is the one its work bases on, the repository's default
+ * where none is named.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -265,6 +270,10 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  position: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  baseBranch: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_BRANCH_CHARS)),
 }).check(
   EffectSchema.makeFilter(({ task, attachments }) =>
     task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),

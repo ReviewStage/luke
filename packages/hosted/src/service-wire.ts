@@ -74,6 +74,12 @@ export const HOSTED_API_ERROR = {
    * was written.
    */
   PLAN_ARCHIVED: "plan-archived",
+  /**
+   * A live worker already holds the pull request of the plan's rollout the
+   * Start named: its newest turn neither failed nor was stopped. Nothing was
+   * written; a Start at that position is taken once that worker has ended.
+   */
+  POSITION_TAKEN: "position-taken",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
