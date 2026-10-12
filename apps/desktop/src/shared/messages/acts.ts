@@ -228,6 +228,12 @@ export const ACT_KIND = {
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
+  /**
+   * SPIKE (composer dictation): asks macOS to start its own dictation in the
+   * field that holds the caret, as Edit › Start Dictation… does. Nothing is
+   * captured or heard by Luke: the system listens and types.
+   */
+  WINDOW_START_DICTATION: "window.startDictation",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -703,6 +709,7 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not copy that to the clipboard on this system.",
   },
+  [ACT_KIND.WINDOW_START_DICTATION]: press("Could not start dictation on this system."),
   [ACT_KIND.FEEDBACK_SEND]: {
     payload: fields<{ submission: FeedbackSubmission }>({
       submission: (value) => feedbackSubmission(value) !== undefined,

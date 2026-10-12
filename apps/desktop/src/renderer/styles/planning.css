@@ -994,6 +994,21 @@ button.file-breadcrumb:hover,
   padding: 0 16px 12px;
 }
 
+/* The presses at the card's foot's right, Send or Stop last. */
+.agent-composer-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+/* SPIKE (composer dictation): a square glyph button in the chips' ink. */
+.agent-composer-dictate {
+  width: var(--control-height);
+  padding: 0;
+  color: var(--text-body);
+}
+
 .agent-composer-note {
   display: flex;
   align-items: center;

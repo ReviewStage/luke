@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { highlightSnippet } from "@sidecar/host";
-import { BrowserWindow, clipboard, ipcMain } from "electron";
+import { BrowserWindow, clipboard, ipcMain, Menu } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -72,6 +72,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
       openExternal: config.openExternal,
+      // SPIKE: the selector Edit › Start Dictation… sends, which AppKit adds to
+      // every Edit menu; it walks the responder chain from the focused field.
+      startDictation: () => {
+        if (process.platform === "darwin") Menu.sendActionToFirstResponder("startDictation:");
+      },
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({

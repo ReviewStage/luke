@@ -8,7 +8,10 @@ import {
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import { MicrophoneIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { useAct } from "../act";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -62,7 +65,23 @@ import type { AgentModelControl } from "./use-agent-model";
 const PLACEHOLDER = { FIRST: "Ask to make changes", FOLLOW_UP: "Send a follow up" } as const;
 
 /** The one button's names, which are its tooltips too. */
-const BUTTON = { SEND: "Send", STOP: "Stop", STOPPING: "Stopping…" } as const;
+const BUTTON = { SEND: "Send", STOP: "Stop", STOPPING: "Stopping…", DICTATE: "Dictate" } as const;
+
+/**
+ * SPIKE (composer dictation, docs/spikes/composer-dictation.md): the
+ * microphone button stands only where this window's storage says so, set
+ * from the developer tools with
+ * `localStorage.setItem("luke.spike.composerDictation", "on")`.
+ */
+const DICTATION_SPIKE = { KEY: "luke.spike.composerDictation", ON: "on" } as const;
+
+function dictationSpikeOn(): boolean {
+  try {
+    return window.localStorage.getItem(DICTATION_SPIKE.KEY) === DICTATION_SPIKE.ON;
+  } catch {
+    return false;
+  }
+}
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
 function typingElsewhere(): boolean {
@@ -112,6 +131,8 @@ export function AgentComposer({
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const [stopping, setStopping] = useState(false);
+  const [dictates] = useState(dictationSpikeOn);
+  const { tell } = useAct();
   // Note that Stop stands only once a turn runs, because the service cancels
   // the turn under way and a starting agent has none yet to cancel.
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
@@ -129,10 +150,19 @@ export function AgentComposer({
   }, []);
 
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
+    // Note that an input method still composing, the system's dictation
+    // among them, takes its own Escape, so the box keeps the caret it types into.
+    if (event.key === "Escape" && !event.nativeEvent.isComposing) {
       event.stopPropagation();
       event.currentTarget.blur();
     }
+  };
+
+  // Note that the field takes the caret before the system is asked, because
+  // dictation types into whatever holds it when it starts.
+  const dictate = () => {
+    field.current?.focus();
+    tell(ACT_KIND.WINDOW_START_DICTATION);
   };
 
   const stop = () => {
@@ -162,27 +192,44 @@ export function AgentComposer({
             <AgentContextRing context={context} brief={brief} />
             <PublishedChip published={published} doors={doors} />
           </PromptInputTools>
-          {showsStop ? (
-            <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
-              <PromptInputSubmit
-                type="button"
-                status={stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING}
-                aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
-                disabled={stopping}
-                onClick={stop}
-              />
-            </Tooltip>
-          ) : (
-            <Tooltip label={BUTTON.SEND}>
-              <PromptInputSubmit
-                aria-label={BUTTON.SEND}
-                status={
-                  composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
-                }
-                disabled={held || empty}
-              />
-            </Tooltip>
-          )}
+          <div className="agent-composer-actions">
+            {dictates ? (
+              <Tooltip label={BUTTON.DICTATE}>
+                <button
+                  type="button"
+                  className="icon-button agent-composer-dictate"
+                  aria-label={BUTTON.DICTATE}
+                  disabled={held}
+                  // A press that took focus would hand the system a button to type into.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={dictate}
+                >
+                  <MicrophoneIcon />
+                </button>
+              </Tooltip>
+            ) : null}
+            {showsStop ? (
+              <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
+                <PromptInputSubmit
+                  type="button"
+                  status={stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING}
+                  aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
+                  disabled={stopping}
+                  onClick={stop}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip label={BUTTON.SEND}>
+                <PromptInputSubmit
+                  aria-label={BUTTON.SEND}
+                  status={
+                    composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
+                  }
+                  disabled={held || empty}
+                />
+              </Tooltip>
+            )}
+          </div>
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (

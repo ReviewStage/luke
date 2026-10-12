@@ -19,6 +19,7 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/ho
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -873,5 +874,49 @@ test("in a full-screen panel whose composer keeps to a centred column, each popo
   } finally {
     restore();
     sheet.remove();
+  }
+});
+
+test("SPIKE: with the dictation spike on, a microphone stands just left of Send, and its press keeps the caret in the box and asks the system to dictate into it; an input method still composing takes its own Escape, so the box keeps the caret", () => {
+  const acts: Act[] = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      act: (request: Act) => {
+        acts.push(request);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
+  window.localStorage.setItem("luke.spike.composerDictation", "on");
+  try {
+    const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+    const presses = [...tab.container.querySelectorAll(".agent-composer-actions button")];
+    assert.deepEqual(
+      presses.map((each) => each.getAttribute("aria-label")),
+      ["Dictate", "Send"],
+    );
+    const dictate = presses[0];
+    assert.ok(dictate instanceof HTMLButtonElement);
+    tab.field().blur();
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    act(() => {
+      dictate.dispatchEvent(down);
+      dictate.click();
+    });
+    assert.equal(down.defaultPrevented, true);
+    assert.equal(document.activeElement, tab.field());
+    assert.deepEqual(
+      acts.map((each) => each.kind),
+      [ACT_KIND.WINDOW_START_DICTATION],
+    );
+
+    tab.key({ key: "Escape", isComposing: true });
+    assert.equal(document.activeElement, tab.field());
+    tab.key({ key: "Escape" });
+    assert.notEqual(document.activeElement, tab.field());
+  } finally {
+    window.localStorage.removeItem("luke.spike.composerDictation");
+    Reflect.deleteProperty(window, "sidecar");
   }
 });

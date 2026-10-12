@@ -39,13 +39,16 @@ interface WindowSurfaceDependencies {
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
   openExternal: (url: string) => Promise<void>;
+  /** SPIKE: hands the system's Start Dictation to the focused field; nothing off a Mac. */
+  startDictation: () => void;
 }
 
 type WindowSurfaceActKind =
   | typeof ACT_KIND.WINDOW_FOCUS_PANEL
   | typeof ACT_KIND.MICROPHONE_REQUEST
   | typeof ACT_KIND.MICROPHONE_ROUTE
-  | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS;
+  | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
+  | typeof ACT_KIND.WINDOW_START_DICTATION;
 
 /**
  * What the panel asks of the window it is drawn in. The focus is a panel's
@@ -89,6 +92,14 @@ export function windowSurfaceActRows(
     // The pane that lists every app's notifications, Luke's among them.
     [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: () =>
       dependencies.openExternal("x-apple.systempreferences:com.apple.preference.notifications"),
+    // SPIKE: the composer's microphone button. A panel's own act, because the
+    // field the system types into is the one holding the panel's caret.
+    [ACT_KIND.WINDOW_START_DICTATION]: (_payload, sender) => {
+      if (!sender.panel) {
+        throw new ActRefused({ message: ACT[ACT_KIND.WINDOW_START_DICTATION].refusal });
+      }
+      dependencies.startDictation();
+    },
   };
 }
 
