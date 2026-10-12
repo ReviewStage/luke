@@ -22,7 +22,6 @@ import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
-  PLAN_FIELD,
   PLAN_FILE_REFUSAL,
   PLAN_TREE_ENTRY,
   type Plan,
@@ -62,6 +61,8 @@ import { TestClock } from "effect/testing";
 import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+/** The text the edit tests' plan opens on. */
+const INVITES_TEXT = "# Teammate invitations";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const STARTED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
@@ -86,8 +87,6 @@ function summary({
   document: _document,
   agentEdits: _agentEdits,
   lastEdit: _lastEdit,
-  fields: _fields,
-  fieldEdits: _fieldEdits,
   ...rest
 }: Plan): PlanSummary {
   return rest;
@@ -496,40 +495,6 @@ it.effect(
 );
 
 it.effect(
-  "a saved draft carries who last changed each field as the service names them, and the open plan takes them",
-  () =>
-    Effect.gen(function* () {
-      const yours = { actor: PLAN_ACTOR.DEVELOPER, at: 5, duringCall: false } as const;
-      const invites: Plan = {
-        ...plan(INVITES, "Teammate invitations", "# Teammate invitations", 10),
-        fieldEdits: [{ field: PLAN_FIELD.CONTEXT, ...yours }],
-      };
-      const { call, last, planning } = yield* subject(fakeService([invites]));
-      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-
-      const named = [
-        {
-          field: PLAN_FIELD.APPROACH,
-          label: "Command K board",
-          ...yours,
-          actor: PLAN_ACTOR.AGENT,
-        },
-        { field: PLAN_FIELD.CONTEXT, actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
-      ];
-      planning.showDraft({
-        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
-        planId: INVITES,
-        document: { ...invites.document, body: "# Teammate invitations\n\nOnly admins invite." },
-        savedAt: 11,
-        fieldEdits: named,
-      });
-
-      assert.deepEqual(last()?.document.plan?.fieldEdits, named);
-    }),
-);
-
-it.effect(
   "a saved draft of a document plan carries who last changed each section, and the open plan takes them",
   () =>
     Effect.gen(function* () {
@@ -548,7 +513,6 @@ it.effect(
       });
 
       assert.deepEqual(last()?.document.plan?.sectionEdits, named);
-      assert.equal(last()?.document.plan?.fields, undefined);
     }),
 );
 
@@ -564,7 +528,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
+        edit: { document: { base: INVITES_TEXT, value: `${INVITES_TEXT}\n\nInvites expire.` } },
       });
 
       assert.deepEqual(answer, { saved: true });
@@ -576,7 +540,7 @@ it.effect(
 );
 
 it.effect(
-  "an edit the field no longer takes answers what the field holds and leaves the document as it stood",
+  "an edit the text no longer takes answers what the text holds and leaves the document as it stood",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
@@ -588,7 +552,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
+        edit: { document: { base: INVITES_TEXT, value: "- Mine." } },
       });
 
       assert.deepEqual(answer, { conflict: { current: "- Luke's words." } });
@@ -607,7 +571,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
+        edit: { document: { base: INVITES_TEXT, value: `${INVITES_TEXT}\n\nInvites expire.` } },
       });
       const edited = last()?.document;
 

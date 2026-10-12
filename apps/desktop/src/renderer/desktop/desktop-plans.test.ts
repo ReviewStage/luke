@@ -20,8 +20,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import {
   PLAN_WORK_PART,
@@ -1875,16 +1874,11 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
   assert.equal(document.activeElement, tabNamed(container, "GPT 5.6 Sol"));
 });
 
-/** An archived plan, its sections written so the document offers its editors where it may. */
-const ARCHIVED_FIELDS: PlanFields = {
-  ...EMPTY_PLAN_FIELDS,
-  context: "- Only an admin can add a member.",
-};
+/** An archived plan, its text written so the document offers its editor where it may. */
 const ARCHIVED_PLAN: Plan = {
   ...PLAN,
   repository: "acme/relay",
-  document: { body: planBody({ name: PLAN.name }, ARCHIVED_FIELDS), assumptions: [] },
-  fields: ARCHIVED_FIELDS,
+  document: DOCUMENT_PLAN.document,
   archivedAt: 5,
 };
 
@@ -1962,7 +1956,7 @@ function menuLabels(): string[] {
   );
 }
 
-test("a plan that is one document renamed at its title renames the plan, and a refusal is said beside the toolbar as the name field's is", async () => {
+test("a plan renamed at its title renames the plan, and a refusal is said beside the toolbar as the name field's is", async () => {
   const renamed: [string, string][] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -2006,8 +2000,11 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
     banner.textContent ?? "",
     /Unarchive it to edit, talk with Luke, or start agents\./u,
   );
-  assert.equal(container.querySelector(".plan-unit-edit"), null, "no section opens an editor");
-  assert.equal(container.querySelector(".plan-add-sections"), null, "no section is added");
+  assert.equal(
+    container.querySelector(".plan-document-block"),
+    null,
+    "no section opens the editor",
+  );
   assert.equal(container.querySelector(".call-start"), null, "no call is started");
   assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
   assert.equal(container.querySelector('[aria-label="Message to the agent"]'), null);
@@ -2062,21 +2059,21 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
   render(false);
 
   assert.equal(container.querySelector('[aria-label="This plan is archived"]'), null);
-  assert.ok(container.querySelector(".plan-unit-edit"), "the sections open their editors");
+  assert.ok(container.querySelector(".plan-document-block"), "the sections open the editor");
   assert.ok(container.querySelector(".call-start"), "the call starts");
   assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
   assert.ok(container.querySelector('[aria-label="Message to the agent"]'));
   assert.equal(container.querySelector(".archived-composer"), null);
 });
 
-test("a section editor still open when the plan is archived elsewhere is let go", () => {
+test("the editor still open when the plan is archived elsewhere is let go", () => {
   const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
-  press(container, ".plan-unit-edit");
-  assert.ok(container.querySelector(".plan-field-editor"), "a section editor is open");
+  press(container, `.plan-document-block[aria-label="Goal"]`);
+  assert.ok(container.querySelector(".plan-document-editor"), "the editor is open");
 
   render(true);
 
-  assert.equal(container.querySelector(".plan-field-editor"), null);
+  assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
 test("an agent's rename still open when the plan is archived elsewhere is let go", () => {

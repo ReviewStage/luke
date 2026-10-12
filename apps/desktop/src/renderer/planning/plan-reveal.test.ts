@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { planSections } from "@sidecar/hosted/plan-document";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import type { PlanFields } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
 import {
   CHASE_CHARS_PER_SECOND,
@@ -15,11 +13,8 @@ import {
   type UnitView,
 } from "./plan-reveal";
 
-const HEADER = {
-  name: "Teammate invitations",
-} as const;
-
-const NO_ASSUMPTIONS = { before: [], after: [] } as const;
+/** The words before the text's first heading, a unit of their own. */
+const INTRO = "Started from the team's template.";
 
 /** The context section's unit, where every test below edits. */
 const CONTEXT = 1;
@@ -27,18 +22,25 @@ const CONTEXT = 1;
 /** A frame at sixty a second. */
 const FRAME_MS = 16;
 
-function body(context: string | null, goal: string | null = null): string {
-  return planBody(HEADER, { ...EMPTY_PLAN_FIELDS, context, goal });
+/** A section: its heading alone while it holds nothing. */
+function section(heading: string, words: string): string {
+  return words === "" ? heading : `${heading}\n\n${words}`;
 }
 
-/** A body holding a context and an approach, the units an optional section joining or leaving sits among. */
-function sectioned(fields: Partial<PlanFields> = {}): string {
-  return planBody(HEADER, {
-    ...EMPTY_PLAN_FIELDS,
-    context: "Only an admin can invite.",
-    approach: "- `invites.ts` sends it.",
-    ...fields,
-  });
+/** A plan's text: the words before its first heading, then a context and a goal. */
+function body(context = "", goal = ""): string {
+  return `${[INTRO, section("## Context", context), section("## Goal", goal)].join("\n\n")}\n`;
+}
+
+/** A text holding a context, an approach, and a testing section, with `between` after the approach. */
+function sectioned(between = ""): string {
+  const sections = [
+    "## Context\n\nOnly an admin can invite.",
+    "## Approach\n\n- `invites.ts` sends it.",
+    ...(between === "" ? [] : [between]),
+    "## Testing",
+  ];
+  return `${sections.join("\n\n")}\n`;
 }
 
 /** The words of each unit a body is cut into, a unit to each section. */
@@ -65,7 +67,7 @@ function drawn(state: ChaseState): readonly string[] {
 }
 
 function retarget(state: ChaseState, words: string): ChaseState {
-  return chaseRetargeted(state, words, NO_ASSUMPTIONS, { reduced: false });
+  return chaseRetargeted(state, words, { reduced: false });
 }
 
 /** Every frame's views until the caret has nothing left, and the state it ends in. */
@@ -82,19 +84,10 @@ function played(state: ChaseState) {
 test("the body is cut before each section heading, and joined back it is the body", () => {
   const words = body("Only an admin can add a member.");
   const units = drawn(chaseOpened(words));
-  assert.equal(units[0], "# Teammate invitations");
+  assert.equal(units[0], INTRO);
   assert.equal(units[CONTEXT], "## Context\n\nOnly an admin can add a member.");
-  assert.equal(units[CONTEXT + 1], "## Goal\n\n_Unanswered_");
+  assert.equal(units[CONTEXT + 1], "## Goal");
   assert.equal(units.join("\n\n"), words.trimEnd());
-});
-
-test("a heading the model wrote is escaped by the formatter, and one inside a fence is code; neither cuts a unit", () => {
-  const units = (words: string) => drawn(chaseOpened(words));
-  const plain = units(body("One line."));
-  assert.equal(units(body("## Not a section\n\nStill the context.")).length, plain.length);
-  const fenced = units(body("```\n## also code\n```"));
-  assert.equal(fenced.length, plain.length);
-  assert.equal(fenced[CONTEXT], "## Context\n\n```\n## also code\n```");
 });
 
 test("an opened plan is drawn whole, and a document that changed nothing types nothing", () => {
@@ -121,7 +114,7 @@ test("added words type in after the caret travels to them, at the streaming pace
 
 test("a newer document mid-typing carries on from what is shown, with no jump and no restart", () => {
   const first = chaseStepped(
-    retarget(chaseOpened(body(null)), body("Only an admin can")),
+    retarget(chaseOpened(body()), body("Only an admin can")),
     CHASE_PACE.TRAVEL_MS + 1_000,
   );
   const shown = drawn(first)[CONTEXT] ?? "";
@@ -157,7 +150,7 @@ test("a longer stretch is selected, held a beat, and erased at once", () => {
   assert.equal(drawn(end)[CONTEXT], "## Context\n\nMembers invite by email.");
 });
 
-test("a field growing mid-stream is typed as it arrives", () => {
+test("a section growing mid-stream is typed as it arrives", () => {
   const before = body("- Only an admin can invite.");
   const streaming = retarget(
     chaseOpened(before),
@@ -168,7 +161,7 @@ test("a field growing mid-stream is typed as it arrives", () => {
 });
 
 test("one caret works through the document in order, and only one unit is written at a time", () => {
-  const typing = retarget(chaseOpened(body(null)), body("Only an admin.", "Members."));
+  const typing = retarget(chaseOpened(body()), body("Only an admin.", "Members."));
   const { frames, end } = played(typing);
   for (const views of frames) {
     assert.ok(views.filter((view) => view.writing).length <= 1);
@@ -193,7 +186,7 @@ test("a hand pauses at the end of a sentence", () => {
 
 test("far behind, the pace speeds up so a long document lands in seconds", () => {
   const long = "word ".repeat(2_000).trim();
-  const typing = retarget(chaseOpened(body(null)), body(long));
+  const typing = retarget(chaseOpened(body()), body(long));
   let state = typing;
   let elapsed = 0;
   while (chaseBehind(state) && elapsed < 60_000) {
@@ -206,31 +199,19 @@ test("far behind, the pace speeds up so a long document lands in seconds", () =>
 });
 
 test("a unit is lit as it catches up, and reduced motion shows and lights a change at once", () => {
-  const before = chaseOpened(body(null));
+  const before = chaseOpened(body());
   const settled = played(retarget(before, body("Only an admin."))).end;
   assert.equal(chaseView(settled, false)[CONTEXT]?.fresh, true);
   assert.equal(chaseView(settled, false)[CONTEXT + 1]?.fresh, false);
 
-  const reduced = chaseRetargeted(before, body("Only an admin."), NO_ASSUMPTIONS, {
-    reduced: true,
-  });
+  const reduced = chaseRetargeted(before, body("Only an admin."), { reduced: true });
   assert.equal(chaseBehind(reduced), false);
   assert.equal(chaseView(reduced, false)[CONTEXT]?.fresh, true);
   assert.equal(drawn(reduced)[CONTEXT], "## Context\n\nOnly an admin.");
 });
 
-test("only an assumption the newer document added is lit", () => {
-  const state = chaseRetargeted(
-    chaseOpened(body(null)),
-    body(null),
-    { before: ["Members can invite."], after: ["Members can invite.", "Invites expire."] },
-    { reduced: false },
-  );
-  assert.deepEqual([...state.freshAssumptions], [1]);
-});
-
 test("once the work catches up on a live call, the caret waits where the last edit ended", () => {
-  const caught = played(retarget(chaseOpened(body(null)), body("Only an admin.", "Members."))).end;
+  const caught = played(retarget(chaseOpened(body()), body("Only an admin.", "Members."))).end;
   const waiting = chaseView(caught, true);
   assert.deepEqual(
     waiting.map((view) => view.resting),
@@ -243,30 +224,13 @@ test("once the work catches up on a live call, the caret waits where the last ed
   assert.ok(chaseView(chaseOpened(body("Only an admin.")), true).every((view) => !view.resting));
 });
 
-test("a placeholder gives way to the first words of a note", () => {
-  const streaming = retarget(chaseOpened(body(null)), body("- Members"));
+test("an empty section takes the first words of a note", () => {
+  const streaming = retarget(chaseOpened(body()), body("- Members"));
   assert.equal(drawn(chaseStepped(streaming, 1_000))[CONTEXT], "## Context\n\n- Members");
 });
 
-test("an optional section joining the document types in where it stands, and no other unit is touched", () => {
-  const before = sectioned();
-  const after = sectioned({ alternatives: "- A separate invitations table." });
-  const { frames, end } = played(retarget(chaseOpened(before), after));
-  for (const views of frames) {
-    assert.equal(drawnUnder(views, "## Context"), "## Context\n\nOnly an admin can invite.");
-    assert.equal(drawnUnder(views, "## Approach"), "## Approach\n\n- `invites.ts` sends it.");
-    assert.equal(drawnUnder(views, "## Hard parts"), "## Hard parts\n\n_Unanswered_");
-  }
-  assert.ok(
-    frames.some((views) =>
-      views.some((view) => view.writing && view.words.startsWith("## Alternatives")),
-    ),
-  );
-  assert.deepEqual(drawn(end), planUnits(after));
-});
-
-test("an optional section that leaves is erased where it stands, and the sections after it keep their words", () => {
-  const before = sectioned({ planOfAttack: "1. The schema first." });
+test("a section that leaves is erased where it stands, and the sections after it keep their words", () => {
+  const before = sectioned("## Plan of attack\n\n1. The schema first.");
   const after = sectioned();
   const { frames, end } = played(retarget(chaseOpened(before), after));
   // The leaving section is selected before it goes, rather than vanishing.
@@ -278,7 +242,7 @@ test("an optional section that leaves is erased where it stands, and the section
     ),
   );
   for (const views of frames) {
-    assert.equal(drawnUnder(views, "## Testing"), "## Testing\n\n_Unanswered_");
+    assert.equal(drawnUnder(views, "## Testing"), "## Testing");
   }
   assert.deepEqual(drawn(end), planUnits(after));
 });
@@ -291,7 +255,7 @@ test("only a section's heading cuts a unit: a deeper heading stays inside the se
   ]);
 });
 
-/** A plan that is one document: no title line, words before its first heading, a `#` section, and a fence holding heading-shaped lines. */
+/** A plan's text: words before its first heading, a `#` section, and a fence holding heading-shaped lines. */
 const DOCUMENT_TEXT = [
   "Started from the team's template.",
   "# Goal",
@@ -302,7 +266,7 @@ const DOCUMENT_TEXT = [
   "- Links are single use.",
 ].join("\n\n");
 
-test("a plan that is one document is cut at each `#` or `##` heading outside a fence, each unit known by its heading", () => {
+test("a plan's text is cut at each `#` or `##` heading outside a fence, each unit known by its heading", () => {
   const views = chaseView(chaseOpened(DOCUMENT_TEXT), false);
 
   assert.deepEqual(

@@ -1,12 +1,11 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
-import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
-import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
+import { type WordChange, wordChanges } from "./plan-diff";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
@@ -21,19 +20,15 @@ import { isPlaceholder, type WordChange, wordChanges } from "./plan-diff";
  * unit beside the unit under the same heading in the plan it is compared
  * with: a unit only one of them holds is drawn added or struck whole, and a
  * unit both hold that differs is drawn with its words written in and struck
- * out where they changed, word by word (`plan-diff.ts`). A plan of the
- * template's fields has its assumptions compared as a list. A plan that is
- * one document holds its assumptions in its text, and its versions are
- * drawn under its name; a version from before it was one document is drawn
- * as the document would hold it, so the two compare by what each draws. A
- * section's "Edited by" names the save that last changed it, which is found
+ * out where they changed, word by word (`plan-diff.ts`). A section's
+ * "Edited by" names the save that last changed it, which is found
  * as the revision it moved on. Everything here is pure.
  */
 
 /** A section as a version compares it: its heading and its words, wherever they stood. */
 type SectionWords = Pick<PlanSection, "heading" | "text">;
 
-/** How a unit or an assumption of a version stands against the plan it is compared with. */
+/** How a unit of a version stands against the plan it is compared with. */
 export const VERSION_CHANGE = {
   SAME: "same",
   ADDED: "added",
@@ -51,16 +46,9 @@ interface VersionUnit {
   readonly marks: readonly MarkdownMark[];
 }
 
-/** One assumption of a version as drawn: its words, and whether it is new, struck, or kept. */
-interface VersionAssumption {
-  readonly text: string;
-  readonly change: Exclude<VersionChange, typeof VERSION_CHANGE.CHANGED>;
-}
-
-/** A version drawn against another: its units, its assumptions, and whether anything differs at all. */
+/** A version drawn against another: its units, and whether anything differs at all. */
 export interface VersionDiff {
   readonly units: readonly VersionUnit[];
-  readonly assumptions: readonly VersionAssumption[];
   readonly changed: boolean;
 }
 
@@ -188,9 +176,6 @@ export function revisionOfSave(
   return (revisions[before - 1] ?? revisions[before])?.seq;
 }
 
-/** A run of whitespace, line breaks among it, which a title line and a list item spell as one space. */
-const WHITESPACE_RUN = /\s+/gu;
-
 /** A space between two words that changed, which a reader takes as part of the change around it. */
 const LONE_SPACE = /^[^\S\n]+$/u;
 
@@ -217,24 +202,19 @@ function betweenStruckAndWritten(struck: string, written: string): string {
  * The word changes of a unit cut into runs a reader sees: each stretch of
  * words struck, then the words written in its place, a lone space between
  * two changed words folded into both, so "Only admins" becoming "Any member"
- * reads as one phrase struck and one written rather than word by word. A
- * field's empty placeholder is not the plan's words, so one answered is not
- * drawn struck, and one a field went back to is drawn as it stands.
+ * reads as one phrase struck and one written rather than word by word.
  */
 function readerRuns(changes: readonly WordChange[]): readonly WordChange[] {
   const runs: WordChange[] = [];
   let struck = "";
   let written = "";
   const settle = () => {
-    if (struck !== "" && !isPlaceholder(struck)) {
+    if (struck !== "") {
       runs.push({ words: struck, added: false, removed: true });
       const between = written === "" ? "" : betweenStruckAndWritten(struck, written);
       if (between !== "") runs.push({ words: between, added: false, removed: false });
     }
-    if (written !== "") {
-      const placeholder = isPlaceholder(written);
-      runs.push({ words: written, added: !placeholder, removed: false });
-    }
+    if (written !== "") runs.push({ words: written, added: true, removed: false });
     struck = "";
     written = "";
   };
@@ -263,10 +243,7 @@ function readerRuns(changes: readonly WordChange[]): readonly WordChange[] {
 
 /**
  * One unit both plans hold: the same, or its words merged, struck words
- * before the words that replace them, each stretch marked. Note that a unit
- * left with nothing marked is the same, because its only difference was a
- * field's placeholder giving way to nothing, as a section of the template's
- * fields does when the plan becomes one document.
+ * before the words that replace them, each stretch marked.
  */
 function pairedUnit(base: string, shown: SectionWords): VersionUnit {
   const key = shown.heading;
@@ -341,116 +318,19 @@ function unitsAgainst(
   return units;
 }
 
-/** The assumptions of the version shown against the base's, in reading order, a reworded one struck and written again. */
-function assumptionsAgainst(base: PlanDocument, shown: PlanDocument): VersionAssumption[] {
-  const texts = (document: PlanDocument) => document.assumptions.map(({ text }) => text);
-  return diffArrays(texts(base), texts(shown)).flatMap((run) =>
-    run.value.map(
-      (text): VersionAssumption => ({
-        text,
-        change: run.added
-          ? VERSION_CHANGE.ADDED
-          : run.removed
-            ? VERSION_CHANGE.REMOVED
-            : VERSION_CHANGE.SAME,
-      }),
-    ),
-  );
-}
-
-/** An assumptions list as the section a document holds it in: its heading over one item a line, or its heading alone while it is empty. */
-function assumptionsSection(document: PlanDocument): SectionWords {
-  const heading = PLAN_HEADING.ASSUMPTIONS;
-  const items = document.assumptions.map(({ text }) => `- ${text.replace(WHITESPACE_RUN, " ")}`);
-  const blocks = [`## ${heading}`, ...(items.length === 0 ? [] : [items.join("\n")])];
-  return { heading, text: blocks.join("\n\n") };
-}
-
-/** The headings a body of the template's fields holds under its title line, in its order. */
-const FIELD_BODY_HEADINGS = [
-  PLAN_HEADING.CONTEXT,
-  PLAN_HEADING.GOAL,
-  PLAN_HEADING.APPROACH,
-  PLAN_HEADING.INTERFACES,
-  PLAN_HEADING.ALTERNATIVES,
-  PLAN_HEADING.HARD_PARTS,
-  PLAN_HEADING.NOT_DOING,
-  PLAN_HEADING.PLAN_OF_ATTACK,
-  PLAN_HEADING.TESTING,
-  PLAN_HEADING.OPEN_QUESTIONS,
-] as const;
-
-/** The sections a body of the template's fields leaves out while they hold nothing. */
-const OPTIONAL_FIELD_HEADINGS: ReadonlySet<string> = new Set([
-  PLAN_HEADING.ALTERNATIVES,
-  PLAN_HEADING.PLAN_OF_ATTACK,
-]);
-
-/** Whether a section is the `# title` line a body of the template's fields opens with, alone. */
-function isTitleLine(section: SectionWords | undefined, title: string): boolean {
-  return section?.text === `# ${title.replace(WHITESPACE_RUN, " ").trim()}`;
-}
-
-/**
- * Whether sections are a body of the template's fields as the service
- * formats one under `title`: the `# title` line alone, then the template's
- * sections in its order, the optional ones where answered, and nothing else.
- * Note that we read the whole shape and not the title line alone, because a
- * document may open with a section of its own named as the plan is.
- */
-function isFieldBody(sections: readonly SectionWords[], title: string): boolean {
-  const [first, ...rest] = sections;
-  if (!isTitleLine(first, title)) return false;
-  const headings = rest.map((section) => section.heading);
-  const expected = FIELD_BODY_HEADINGS.filter(
-    (heading) => !OPTIONAL_FIELD_HEADINGS.has(heading) || headings.includes(heading),
-  );
-  return (
-    headings.length === expected.length && headings.every((heading, at) => heading === expected[at])
-  );
-}
-
-/**
- * The sections a version draws under a plan that is one document, titled
- * `title`. Note that a version from before the plan was one document opens
- * with its `# title` line and keeps its assumptions in a list beside its
- * body, because the service formats it under the plan's name as it stands
- * now. That line is the title drawn over every version, and that list is the
- * section the document holds its assumptions in, so it draws what the
- * document would. A document's own revision has no list, so one with no
- * list is read as the fields' only where its whole shape is theirs.
- */
-function documentSections(document: PlanDocument, title: string): readonly SectionWords[] {
-  const sections = planSections(document.body);
-  const fielded = document.assumptions.length > 0 || isFieldBody(sections, title);
-  if (!fielded) return sections;
-  const body = isTitleLine(sections[0], title) ? sections.slice(1) : sections;
-  return [...body, assumptionsSection(document)];
-}
-
 /**
  * A version of the plan drawn against another, or drawn as it is against
- * nothing, as the first version is: every unit and assumption of either,
- * each marked by how it stands. With `title`, the name of a plan that is
- * one document, each version is drawn as that document draws it, its
- * assumptions among its sections, and there is no list to compare.
+ * nothing, as the first version is: every unit of either, each marked by
+ * how it stands.
  */
-export function versionDiff(
-  base: PlanDocument | null,
-  shown: PlanDocument,
-  title?: string,
-): VersionDiff {
-  const sectionsOf = (document: PlanDocument) =>
-    title === undefined ? planSections(document.body) : documentSections(document, title);
+export function versionDiff(base: PlanDocument | null, shown: PlanDocument): VersionDiff {
+  const sectionsOf = (document: PlanDocument) => planSections(document.body);
   const units =
     base === null
       ? sectionsOf(shown).map((section) => pairedUnit(section.text, section))
       : unitsAgainst(sectionsOf(base), sectionsOf(shown));
-  const assumptions = title === undefined ? assumptionsAgainst(base ?? shown, shown) : [];
-  const changed =
-    units.some((unit) => unit.change !== VERSION_CHANGE.SAME) ||
-    assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);
-  return { units, assumptions, changed };
+  const changed = units.some((unit) => unit.change !== VERSION_CHANGE.SAME);
+  return { units, changed };
 }
 
 /** One section a revision changed, as its drill-in lists it: the unit of the version it is, its heading, and how it changed. */
@@ -461,39 +341,20 @@ export interface ChangedSection {
   readonly change: Exclude<VersionChange, typeof VERSION_CHANGE.SAME>;
 }
 
-/** A unit that is a title line alone, the `# name` a body of the template's fields opens with, which no writer wrote. */
-const BARE_TITLE_LINE = /^#[^\S\n]+[^\n]*$/u;
-
 /**
  * The sections a revision changed, in reading order: each unit of its diff
- * that is not the same as before, so the list names what the page marks,
- * and for a plan of the template's fields, its assumptions as one section
- * after them where they changed, drawn by the unit just past the last. A
- * revision with nothing before it, the plan's first, wrote every section
- * it holds but a title line alone, which is the plan's name rather than
- * anything written. Note that a revision is one writer's saves joined, and
+ * that is not the same as before, so the list names what the page marks. A
+ * revision with nothing before it, the plan's first, wrote every section it
+ * holds. Note that a revision is one writer's saves joined, and
  * the store keeps only the text they left, so a section is the finest step
  * a revision can be read in.
  */
 export function changedSections(diff: VersionDiff, first: boolean): readonly ChangedSection[] {
-  const units = diff.units.flatMap((unit, at): ChangedSection[] => {
-    if (first && BARE_TITLE_LINE.test(unit.words.trim())) return [];
+  return diff.units.flatMap((unit, at): ChangedSection[] => {
     const change = first ? VERSION_CHANGE.ADDED : unit.change;
     if (change === VERSION_CHANGE.SAME) return [];
     return [{ unit: at, heading: unit.key, change }];
   });
-  const assumptions = first
-    ? diff.assumptions.length > 0
-    : diff.assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);
-  if (!assumptions) return units;
-  return [
-    ...units,
-    {
-      unit: diff.units.length,
-      heading: PLAN_HEADING.ASSUMPTIONS,
-      change: first ? VERSION_CHANGE.ADDED : VERSION_CHANGE.CHANGED,
-    },
-  ];
 }
 
 /** Whether a revision's row opens the sections it changed: one whose saves made more than one change, never a restore or the plan before history. */

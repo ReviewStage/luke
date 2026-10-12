@@ -1,4 +1,3 @@
-import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 
 /**
@@ -94,7 +93,7 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_EDIT,
     payload: {
       planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-      edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
+      edit: { document: { base: "", value: "Invites expire after 7 days." } },
     },
   },
   [ACT_KIND.GITHUB_OPEN]: {

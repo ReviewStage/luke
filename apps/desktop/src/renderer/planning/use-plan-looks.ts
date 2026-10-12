@@ -18,9 +18,8 @@ import { rendererRuntime } from "../renderer-runtime";
  * newest save the plan names is kept as what they last saw. Opening the plan
  * again reads that mark, and each section a save by anyone but the developer
  * changed after it is a section changed since they last looked, held for the
- * visit until they dismiss it or leave. A section is known by its field in
- * a plan of the template's fields, and by its heading in a plan that is one
- * document. A save that lands while the plan is open is typed in before
+ * visit until they dismiss it or leave. A section is known by its heading.
+ * A save that lands while the plan is open is typed in before
  * their eyes, the notetaker's on a call above all, so it never joins the
  * visit's changes. A plan never looked at on this Mac
  * has no mark and nothing changed: every section would be new.
@@ -145,12 +144,9 @@ const looksAtom = Atom.writable(
 /** The plan the developer is looking at now: open past `PLAN_LOOK`, so every save that lands on it is seen. */
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
-/** The save that last changed each of the plan's sections, each by the field or the heading it is known by. */
-export function sectionSavesOf(plan: Plan): readonly PlanSectionEdit[] {
-  return [
-    ...(plan.fieldEdits ?? []).map(({ field, ...edit }) => ({ section: field, ...edit })),
-    ...(plan.sectionEdits ?? []),
-  ];
+/** The save that last changed each of the plan's sections, each by its heading. */
+function sectionSavesOf(plan: Plan): readonly PlanSectionEdit[] {
+  return plan.sectionEdits ?? [];
 }
 
 /**

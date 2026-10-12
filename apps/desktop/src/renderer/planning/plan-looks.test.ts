@@ -2,15 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import {
-  PLAN_ACTOR,
-  PLAN_FIELD,
-  type Plan,
-  type PlanFieldEdit,
-  type PlanFields,
-  type PlanSectionEdit,
-} from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan, type PlanSectionEdit } from "@sidecar/hosted/plan-wire";
 import { Clock, Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -38,45 +30,27 @@ import { PLAN_LOOK, usePlanLooks } from "./use-plan-looks";
  * it, so a remount is a later visit.
  */
 
-const NAME = "Teammate invitations";
-
-const FIELDS: PlanFields = {
-  ...EMPTY_PLAN_FIELDS,
-  context: "- Only an admin can add a member.",
-  goal: "- Invites land by email.",
-  approach: "- Links are single use.",
-  hardParts: "- An invite expires after 7 days.",
-  notDoing: "- Link invites.",
-};
-
 /** When the developer last looked at the plan, on the service's clock. */
 const LOOKED_AT = 1_000_000;
 
 const PLAN: Plan = {
-  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-  name: NAME,
-  createdAt: 1,
+  ...DOCUMENT_PLAN,
   updatedAt: LOOKED_AT,
-  repository: null,
-  document: {
-    body: planBody({ name: NAME }, FIELDS),
-    assumptions: [{ text: "Members and admins can both invite." }],
-  },
-  fields: FIELDS,
   lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT, duringCall: true },
-  fieldEdits: [],
+  sectionEdits: [],
 };
 
-function edit(field: PlanFieldEdit["field"], actor: PlanFieldEdit["actor"], at: number) {
+/** A save that last changed a section of the plan, by its heading. */
+function edit(section: string, actor: PlanSectionEdit["actor"], at: number): PlanSectionEdit {
   const label = actor === PLAN_ACTOR.AGENT ? { label: "Command K board" } : undefined;
-  return { field, actor, ...label, at, duringCall: actor === PLAN_ACTOR.NOTETAKER };
+  return { section, actor, ...label, at, duringCall: actor === PLAN_ACTOR.NOTETAKER };
 }
 
 /** The plan with these saves since, the newest of them its last edit. */
-function savedSince(edits: readonly PlanFieldEdit[]): Plan {
+function savedSince(edits: readonly PlanSectionEdit[]): Plan {
   const newest = edits.reduce((held, next) => (next.at > held.at ? next : held));
-  const { field: _field, ...lastEdit } = newest;
-  return { ...PLAN, fieldEdits: edits, lastEdit, updatedAt: newest.at };
+  const { section: _section, ...lastEdit } = newest;
+  return { ...PLAN, sectionEdits: edits, lastEdit, updatedAt: newest.at };
 }
 
 const STORAGE_KEY = "luke.planLooks";
@@ -139,7 +113,7 @@ function open(plan: Plan, registry: AtomRegistry) {
 function bylines(container: HTMLElement): readonly (readonly [string, string])[] {
   return [...container.querySelectorAll(".plan-unit-byline")].map((byline) => {
     const section = byline.parentElement;
-    const heading = section?.querySelector(".markdown-heading, .plan-assumptions-heading");
+    const heading = section?.querySelector(".markdown-heading");
     return [heading?.textContent ?? "", byline.textContent ?? ""] as const;
   });
 }
@@ -147,8 +121,7 @@ function bylines(container: HTMLElement): readonly (readonly [string, string])[]
 /** The heading of each section tinted as changed since the last look. */
 function changed(container: HTMLElement): readonly string[] {
   return [...container.querySelectorAll(".plan-changed")].map(
-    (section) =>
-      section.querySelector(".markdown-heading, .plan-assumptions-heading")?.textContent ?? "",
+    (section) => section.querySelector(".markdown-heading")?.textContent ?? "",
   );
 }
 
@@ -164,7 +137,7 @@ const landed = Effect.promise(() =>
 );
 
 it.effect(
-  "each section says who last changed it, and a section no save has changed says nothing",
+  "each section says who last changed it, known by its heading, and a section no save has changed says nothing",
   () =>
     Effect.gen(function* () {
       yield* TestClock.adjust(Duration.days(2));
@@ -173,12 +146,12 @@ it.effect(
       const { container } = open(
         {
           ...PLAN,
-          fieldEdits: [
-            edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
-            edit(PLAN_FIELD.GOAL, PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(5))),
-            edit(PLAN_FIELD.APPROACH, PLAN_ACTOR.AGENT, ago(Duration.hours(26))),
-            edit(PLAN_FIELD.HARD_PARTS, PLAN_ACTOR.NOTETAKER, ago(Duration.minutes(3))),
-            edit(PLAN_FIELD.ASSUMPTIONS, PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(1))),
+          sectionEdits: [
+            edit("Context", PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
+            edit("Goal", PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(5))),
+            edit("Approach", PLAN_ACTOR.AGENT, ago(Duration.hours(26))),
+            edit("Renamed since", PLAN_ACTOR.NOTETAKER, ago(Duration.minutes(3))),
+            edit("Assumptions", PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(1))),
           ],
         },
         yield* registryOnTestClock,
@@ -189,7 +162,6 @@ it.effect(
         ["Context", "Edited by Luke during your call · 2h ago"],
         ["Goal", "Edited by you · 5m ago"],
         ["Approach", "Edited by Command K board · 1d ago"],
-        ["Hard parts", "Edited by Luke during your call · 3m ago"],
         ["Assumptions", "Edited by you · 1m ago"],
       ]);
     }),
@@ -202,24 +174,23 @@ it.effect(
       lookedAt(LOOKED_AT);
       const { container } = open(
         savedSince([
-          edit(PLAN_FIELD.NOT_DOING, PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
-          edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
-          edit(PLAN_FIELD.HARD_PARTS, PLAN_ACTOR.AGENT, LOOKED_AT + 2),
-          edit(PLAN_FIELD.GOAL, PLAN_ACTOR.DEVELOPER, LOOKED_AT + 3),
-          edit(PLAN_FIELD.ASSUMPTIONS, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 4),
+          edit("Approach", PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
+          edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
+          edit("Goal", PLAN_ACTOR.DEVELOPER, LOOKED_AT + 2),
+          edit("Assumptions", PLAN_ACTOR.AGENT, LOOKED_AT + 3),
         ]),
         yield* registryOnTestClock,
       );
 
-      assert.deepEqual(changed(container), ["Context", "Hard parts", "Assumptions"]);
-      assert.equal(changedNote(container), "Changed since you last looked · 3 sections");
+      assert.deepEqual(changed(container), ["Context", "Assumptions"]);
+      assert.equal(changedNote(container), "Changed since you last looked · 2 sections");
     }),
 );
 
 it.effect("Dismiss clears the tint and the count, and the next visit shows nothing changed", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     assert.equal(changedNote(first.container), "Changed since you last looked · 1 section");
 
@@ -238,7 +209,7 @@ it.effect("Dismiss clears the tint and the count, and the next visit shows nothi
 it.effect("a plan never looked at on this Mac shows nothing changed", () =>
   Effect.gen(function* () {
     const { container } = open(
-      savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]),
+      savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]),
       yield* registryOnTestClock,
     );
 
@@ -250,7 +221,7 @@ it.effect("a plan never looked at on this Mac shows nothing changed", () =>
 it.effect("a plan held open for the look is seen: the next visit shows nothing changed", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     yield* landed;
     yield* TestClock.adjust(PLAN_LOOK);
@@ -268,7 +239,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       lookedAt(LOOKED_AT);
-      const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const plan = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       const first = open(plan, yield* registryOnTestClock);
       yield* landed;
       first.redraw(plan, true);
@@ -313,7 +284,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       lookedAt(LOOKED_AT);
-      const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const plan = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       const registry = yield* registryOnTestClock;
       const container = document.createElement("div");
       document.body.append(container);
@@ -342,7 +313,7 @@ it.effect(
 it.effect("a plan left before the look keeps its changes lit for the next visit", () =>
   Effect.gen(function* () {
     lookedAt(LOOKED_AT);
-    const plan = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+    const plan = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
     const first = open(plan, yield* registryOnTestClock);
     yield* landed;
     yield* TestClock.adjust(Duration.subtract(PLAN_LOOK, Duration.millis(1)));
@@ -354,69 +325,8 @@ it.effect("a plan left before the look keeps its changes lit for the next visit"
   }),
 );
 
-/** A save that last changed a section of the plan that is one document, by its heading. */
-function sectionEdit(
-  section: string,
-  actor: PlanSectionEdit["actor"],
-  at: number,
-): PlanSectionEdit {
-  const { field: _field, ...saved } = edit(PLAN_FIELD.CONTEXT, actor, at);
-  return { section, ...saved };
-}
-
-/** The plan that is one document with these saves on its sections, the newest of them its last edit. */
-function documentSavedSince(edits: readonly PlanSectionEdit[]): Plan {
-  const newest = edits.reduce((held, next) => (next.at > held.at ? next : held));
-  const { section: _section, ...lastEdit } = newest;
-  return { ...DOCUMENT_PLAN, sectionEdits: edits, lastEdit, updatedAt: newest.at };
-}
-
 it.effect(
-  "each section of a plan that is one document says who last changed it, known by its heading",
-  () =>
-    Effect.gen(function* () {
-      yield* TestClock.adjust(Duration.days(2));
-      const now = yield* Clock.currentTimeMillis;
-      const ago = (span: Duration.Input) => now - Duration.toMillis(span);
-      const { container } = open(
-        documentSavedSince([
-          sectionEdit("Goal", PLAN_ACTOR.NOTETAKER, ago(Duration.hours(2))),
-          sectionEdit("Assumptions", PLAN_ACTOR.DEVELOPER, ago(Duration.minutes(1))),
-          sectionEdit("Renamed since", PLAN_ACTOR.AGENT, ago(Duration.minutes(3))),
-        ]),
-        yield* registryOnTestClock,
-      );
-      yield* landed;
-
-      assert.deepEqual(bylines(container), [
-        ["Goal", "Edited by Luke during your call · 2h ago"],
-        ["Assumptions", "Edited by you · 1m ago"],
-      ]);
-    }),
-);
-
-it.effect(
-  "the sections of a plan that is one document someone else changed after the last look are tinted by heading and counted",
-  () =>
-    Effect.gen(function* () {
-      lookedAt(LOOKED_AT, DOCUMENT_PLAN.id);
-      const { container } = open(
-        documentSavedSince([
-          sectionEdit("Approach", PLAN_ACTOR.NOTETAKER, LOOKED_AT - 1),
-          sectionEdit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1),
-          sectionEdit("Goal", PLAN_ACTOR.DEVELOPER, LOOKED_AT + 2),
-          sectionEdit("Assumptions", PLAN_ACTOR.AGENT, LOOKED_AT + 3),
-        ]),
-        yield* registryOnTestClock,
-      );
-
-      assert.deepEqual(changed(container), ["Context", "Assumptions"]);
-      assert.equal(changedNote(container), "Changed since you last looked · 2 sections");
-    }),
-);
-
-it.effect(
-  'a section\'s "Edited by" in a plan that is one document opens the version history on the save it names',
+  'a section\'s "Edited by" opens the version history on the save it names, and opens no editor',
   () =>
     Effect.gen(function* () {
       const at = LOOKED_AT + 1;
@@ -425,9 +335,10 @@ it.effect(
       document.body.append(container);
       const root = createRoot(container);
       roots.push(root);
-      const plan = documentSavedSince([sectionEdit("Goal", PLAN_ACTOR.NOTETAKER, at)]);
+      const plan = savedSince([edit("Goal", PLAN_ACTOR.NOTETAKER, at)]);
       const onShowHistory = (save: number | undefined) => shown.push(save);
-      const body = createElement(PlanBody, { plan, live: false, onShowHistory });
+      const onEdit = () => Promise.resolve({ saved: true } as const);
+      const body = createElement(PlanBody, { plan, live: false, onEdit, onShowHistory });
       const registry = yield* registryOnTestClock;
       act(() => root.render(onRegistry(registry, body)));
       const line = container.querySelector<HTMLButtonElement>("button.plan-unit-byline");
@@ -439,6 +350,7 @@ it.effect(
       );
       act(() => line.click());
       assert.deepEqual(shown, [at]);
+      assert.equal(container.querySelector(".plan-document-editor"), null, "no editor opened");
     }),
 );
 
@@ -449,10 +361,10 @@ it.effect(
       lookedAt(LOOKED_AT);
       const first = open(PLAN, yield* registryOnTestClock);
       yield* landed;
-      const live = savedSince([edit(PLAN_FIELD.CONTEXT, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const live = savedSince([edit("Context", PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
       first.redraw({
         ...live,
-        document: { ...live.document, body: planBody({ name: NAME }, FIELDS).concat("\nMore.") },
+        document: { ...live.document, body: `${live.document.body}More.\n` },
       });
       yield* landed;
       assert.deepEqual(changed(first.container), []);

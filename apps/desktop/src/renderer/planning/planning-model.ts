@@ -22,9 +22,6 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  * Copy shows, and the word beside the microphone.
  */
 
-/** What the assumptions' section says while the list is empty, the words Copy writes there. */
-export const NO_ASSUMPTIONS_LINE = "None recorded";
-
 /** How many recent repositories the chip's menu offers. */
 const RECENT_REPOSITORY_LIMIT = 5;
 

@@ -25,7 +25,6 @@ const GLIDERS = [
   ".desktop-toolbar-heading",
   ".desktop-toolbar-actions",
   ".desktop-document .plan-body",
-  ".desktop-document .plan-assumptions",
   ".desktop-agent > *",
   ".desktop-call-bar .call-bar",
   ".desktop-empty > *",

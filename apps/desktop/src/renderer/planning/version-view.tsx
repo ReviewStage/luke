@@ -11,7 +11,6 @@ import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
 import { momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
-import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**
@@ -26,13 +25,11 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its colour alone
- * (`plan-history-model.ts`). A version of a plan that is one document is
- * drawn under the plan's name, as the plan's own tab draws it, with no
- * assumptions' section after it, since its assumptions are a section of
- * its text. The first version has nothing before it, so it is drawn with
- * nothing marked. A section opened from its revision's list is drawn alone,
- * without the plan's name over it, marked as the whole version marks it,
- * and a version still being read stands as
+ * (`plan-history-model.ts`). A version is drawn under the plan's name, as
+ * the plan's own tab draws it. The first version has nothing before it, so
+ * it is drawn with nothing marked. A section opened from its revision's
+ * list is drawn alone, without the plan's name over it, marked as the whole
+ * version marks it, and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
  * in the window's dialog with the accent rather than red, since a restore is
  * itself a version the history keeps and can be undone by restoring the
@@ -67,7 +64,7 @@ function restoreQuestion(at: number): DialogQuestion {
   };
 }
 
-/** The class a unit or an assumption wears by how it stands. */
+/** The class a unit wears by how it stands. */
 const CHANGE_CLASS = {
   [VERSION_CHANGE.SAME]: "",
   [VERSION_CHANGE.ADDED]: " version-added",
@@ -75,32 +72,7 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** The assumptions of a version of a plan of the template's fields, each drawn as it stands against what it is compared with. */
-function VersionAssumptions({ diff }: { diff: VersionDiff }): React.JSX.Element {
-  return (
-    <section className="plan-assumptions" aria-label="Assumptions">
-      <h2 className="plan-assumptions-heading">Assumptions</h2>
-      {diff.assumptions.length === 0 ? (
-        <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
-      ) : (
-        <ul>
-          {diff.assumptions.map((assumption, at) => (
-            // oxlint-disable-next-line react/no-array-index-key -- an assumption has no id of its own.
-            <li key={at} className={`plan-assumption${CHANGE_CLASS[assumption.change]}`}>
-              {assumption.text}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-/**
- * The version's body, each unit drawn as it stands against what it is
- * compared with: under `title` for a plan that is one document, and
- * followed by its assumptions for a plan of the template's fields.
- */
+/** The version's text under the plan's name, each unit drawn as it stands against what it is compared with. */
 function VersionBody({
   diff,
   title,
@@ -110,26 +82,21 @@ function VersionBody({
   title: string | undefined;
   section: number | undefined;
 }): React.JSX.Element {
-  // The unit just past the last is a plan of fields' assumptions, drawn as its list alone.
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
-  const assumptions = section === undefined || section === diff.units.length;
   return (
-    <>
-      <div className="plan-body">
-        {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
-        {units.map((unit, at) => (
-          <MarkdownMessage
-            // A unit's heading may stand twice, struck and written again, so its place keys it.
-            // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
-            key={at}
-            words={unit.words}
-            className={`plan-unit${CHANGE_CLASS[unit.change]}`}
-            edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
-          />
-        ))}
-      </div>
-      {title === undefined && assumptions ? <VersionAssumptions diff={diff} /> : null}
-    </>
+    <div className="plan-body">
+      {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
+      {units.map((unit, at) => (
+        <MarkdownMessage
+          // A unit's heading may stand twice, struck and written again, so its place keys it.
+          // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
+          key={at}
+          words={unit.words}
+          className={`plan-unit${CHANGE_CLASS[unit.change]}`}
+          edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -169,7 +136,7 @@ function VersionContent({
       </p>
     );
   }
-  const diff = versionDiff(read.previous, read.document, title);
+  const diff = versionDiff(read.previous, read.document);
   // Note that the first version is compared with nothing, so it is never said to have changed nothing.
   const unchanged = read.previous !== null && !diff.changed;
   return (
@@ -203,7 +170,7 @@ export function VersionView({
   onRestored: () => void;
   /** Whether the version may be restored: not while the plan is archived. */
   restorable?: boolean;
-  /** The name of a plan that is one document, which every version is drawn under (`documentTitleOf`). */
+  /** The plan's name, which every version is drawn under. */
   title?: string | undefined;
   /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;

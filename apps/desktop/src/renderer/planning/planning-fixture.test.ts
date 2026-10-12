@@ -14,7 +14,7 @@ test("a fixture run under the planning profile draws a saved plan with its assum
   const region = documentRegion(view);
   assert.equal(region.kind, DOCUMENT_REGION.READY);
   if (region.kind !== DOCUMENT_REGION.READY) return;
-  assert.ok(region.plan.document.assumptions.length > 0);
+  assert.match(region.plan.document.body, /^## Assumptions\n\n- /mu);
   assert.ok(view.plans.some((plan) => plan.id === region.plan.id));
 });
 

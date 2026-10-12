@@ -12,16 +12,11 @@ import {
 } from "../plan-editor/contract";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
-import { EDITOR_PLACE, type EditorHost, type FieldEditing } from "./plan-field-editor";
-import {
-  CONFLICT_NOTE,
-  EDIT_SCOPE,
-  FIELD_EDITOR_STATE,
-  type FieldEditor,
-} from "./plan-field-editor-model";
+import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
+import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
- * plan-document-editor.tsx -- a plan that is one document, edited in place: its title, its sections as blocks, and its whole text in one editor.
+ * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
  *
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
@@ -37,8 +32,8 @@ import {
  * the caret stood in. The title is edited where it stands (Return or ↓ goes
  * into the text, ↑ on the text's first line comes back to it, Esc saves and
  * selects it) and saved by renaming the plan, so the name never enters the
- * text. The words save as the developer pauses, through the field editor's
- * model, which merges them with what Luke writes (`plan-field-editor-model.ts`).
+ * text. The words save as the developer pauses (`use-plan-editing.ts`), and
+ * the service merges them with what Luke writes.
  * A save's merged answer is taken into the open editor block by block, and
  * the notetaker's drafts never redraw it. The editor stands under
  * `ph-no-capture`, and its words are document text, which the recording masks.
@@ -92,17 +87,12 @@ function editsOnClick(target: EventTarget): boolean {
 }
 
 /** The block an editor closed from by the keyboard takes the keyboard back, once. */
-function useSelectedOnClose(editing: FieldEditing, key: EditorHost, take: () => void): void {
+function useSelectedOnClose(editing: PlanEditing, key: EditorHost, take: () => void): void {
   useEffect(() => {
     if (editing.editor !== undefined || editing.selecting !== key) return;
     take();
     editing.selected();
   });
-}
-
-/** Opens the whole text in its editor, the caret where `placement` says. */
-function openText(editing: FieldEditing, placement?: PlanEditorProps["placement"]): void {
-  editing.open({ field: EDIT_SCOPE.DOCUMENT }, EDITOR_PLACE.DOCUMENT, placement);
 }
 
 /**
@@ -124,7 +114,7 @@ export function DocumentBlock({
   label: string;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
-  editing: FieldEditing;
+  editing: PlanEditing;
   children: ReactNode;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
@@ -150,14 +140,14 @@ export function DocumentBlock({
         editing.select(host);
       }}
       onClick={(event) => {
-        if (editsOnClick(event.target)) openText(editing, { x: event.clientX, y: event.clientY });
+        if (editsOnClick(event.target)) editing.open({ x: event.clientX, y: event.clientY });
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (steppedByArrow(event)) return;
         if (event.key !== "Enter") return;
         event.preventDefault();
-        openText(editing, { section });
+        editing.open({ section });
       }}
     >
       {children}
@@ -194,7 +184,7 @@ export function EditableTitle({
   name: string;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
-  editing: FieldEditing;
+  editing: PlanEditing;
   onRename: (name: string) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
@@ -269,7 +259,7 @@ export function EditableTitle({
             if (event.key !== "Enter" && event.key !== "ArrowDown") return;
             event.preventDefault();
             save();
-            openText(editing);
+            editing.open();
           }}
         />
       </div>
@@ -294,7 +284,7 @@ interface DraftDoors {
  * goes.
  */
 function useDraftHandOver(
-  editing: FieldEditing,
+  editing: PlanEditing,
   hostOf: (section: number) => EditorHost,
 ): DraftDoors {
   const [pause, restartPause] = useAtom(draftPauseAtom);
@@ -379,19 +369,18 @@ export function MountedPlanEditor({
  * save of Luke's is not the developer's, so neither reaches the editor.
  */
 function useMergedAnswers(
-  editor: FieldEditor,
-  editing: FieldEditing,
+  editor: DocumentEditor,
+  editing: PlanEditing,
   plan: Plan,
   handle: React.RefObject<PlanEditorHandle | undefined>,
 ): void {
-  const seen = useRef({ base: editor.saved.base, updatedAt: plan.updatedAt });
+  const seen = useRef({ base: editor.base, updatedAt: plan.updatedAt });
   const landed = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const { saved, sending, state } = editor;
-    if (saved.field !== EDIT_SCOPE.DOCUMENT) return;
-    const settled = sending === undefined && state.kind === FIELD_EDITOR_STATE.EDITING;
-    if (settled && saved.base !== seen.current.base) landed.current = saved.base;
-    seen.current.base = saved.base;
+    const { base, sending, state } = editor;
+    const settled = sending === undefined && state.kind === DOCUMENT_EDITOR_STATE.EDITING;
+    if (settled && base !== seen.current.base) landed.current = base;
+    seen.current.base = base;
     const sent = landed.current;
     if (sent === undefined || plan.updatedAt === seen.current.updatedAt) return;
     if (plan.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
@@ -409,12 +398,12 @@ function DocumentNote({
   editor,
   editing,
 }: {
-  editor: FieldEditor;
-  editing: FieldEditing;
+  editor: DocumentEditor;
+  editing: PlanEditing;
 }): React.JSX.Element | null {
-  if (editor.state.kind === FIELD_EDITOR_STATE.CONFLICT) {
+  if (editor.state.kind === DOCUMENT_EDITOR_STATE.CONFLICT) {
     return (
-      <div className="plan-field-note" role="alert">
+      <div className="plan-editor-note" role="alert">
         <span>{CONFLICT_NOTE}</span>
         <button type="button" className="toolbar-button" onClick={editing.keepMine}>
           Keep mine
@@ -425,9 +414,9 @@ function DocumentNote({
       </div>
     );
   }
-  if (editor.state.kind === FIELD_EDITOR_STATE.FAILED) {
+  if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
     return (
-      <div className="plan-field-note" role="alert">
+      <div className="plan-editor-note" role="alert">
         <span>{editor.state.note}</span>
         <RetryButton onRetry={editing.retry} />
       </div>
@@ -450,8 +439,8 @@ export function PlanDocumentEditor({
   hostOf,
 }: {
   plan: Plan;
-  editor: FieldEditor;
-  editing: FieldEditing;
+  editor: DocumentEditor;
+  editing: PlanEditing;
   drawn: ReactNode;
   hostOf: (section: number) => EditorHost;
 }): React.JSX.Element {
@@ -461,10 +450,10 @@ export function PlanDocumentEditor({
   const module = useAtomValue(planEditorAtom);
   if (!AsyncResult.isSuccess(module)) {
     return (
-      <section className="plan-field-editor plan-document-editor ph-no-capture" aria-busy="true">
+      <section className="plan-document-editor ph-no-capture" aria-busy="true">
         {drawn}
         {AsyncResult.isFailure(module) ? (
-          <p className="plan-field-note" role="alert">
+          <p className="plan-editor-note" role="alert">
             {EDITOR_LOAD_FAILED}
           </p>
         ) : null}
@@ -483,7 +472,7 @@ export function PlanDocumentEditor({
   };
   return (
     <section
-      className="plan-field-editor plan-document-editor ph-no-capture"
+      className="plan-document-editor ph-no-capture"
       aria-label="Editing the plan"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) doors.onLeave();

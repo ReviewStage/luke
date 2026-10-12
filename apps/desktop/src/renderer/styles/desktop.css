@@ -1614,16 +1614,6 @@ body,
   text-decoration-color: color-mix(in srgb, var(--danger) 60%, transparent);
 }
 
-.plan-assumption.version-added {
-  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
-}
-
-.plan-assumption.version-removed {
-  color: var(--text-secondary);
-  text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--danger) 70%, transparent);
-}
-
 .desktop-document .plan-document-scroll {
   padding: var(--page-inset);
   /* Room for the last line to scroll clear of the captions over the call bar. */
@@ -1641,7 +1631,6 @@ body,
 .desktop-document .plan-body,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
-.desktop-document .plan-assumptions,
 .desktop-document .version-note {
   max-width: var(--reading-width);
   margin-right: auto;
@@ -1678,26 +1667,6 @@ body,
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
-}
-
-.desktop-document .plan-assumptions {
-  margin-top: var(--space-40);
-  padding: var(--space-20) var(--space-24);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--desktop-well);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.desktop-document .plan-assumptions-heading {
-  margin-bottom: 0.6em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-primary);
-  /* The plan body's own h2: 1.3em of its 15px, which this well's 14px would not give. */
-  font-size: 19.5px;
-  letter-spacing: -0.01em;
 }
 
 /* The call bar ------------------------------------------------------------- */

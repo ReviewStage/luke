@@ -357,8 +357,6 @@ export const planFieldEditSchema = EffectSchema.Struct({
   ...planLastEditSchema.fields,
 });
 
-export type PlanFieldEdit = typeof planFieldEditSchema.Type;
-
 /** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
 export const PLAN_SECTION_BOUNDS = {
   /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
