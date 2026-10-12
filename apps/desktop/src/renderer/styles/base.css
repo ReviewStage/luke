@@ -98,18 +98,18 @@
   --code-pointed: rgba(56, 139, 253, 0.16);
   --code-pointed-edge: #388bfd;
 
-  /* A key drawn on screen is a physical thing quoted, so it gets what the
-     hairline deliberately withholds: an edge bright enough to close the shape
-     on its own, a face lifted off the surface, and a lit top and dark underside
-     that put a couple of pixels of depth under it. The edge is the load-bearing
-     one — the caps of a chord sit a few pixels apart, and it is the edge rather
-     than the gap that says where one key ends and the next begins. */
-  --keycap-face: rgba(255, 255, 255, 0.07);
-  --keycap-edge: rgba(255, 255, 255, 0.17);
-  --keycap-relief: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 1px 1px rgba(0, 0, 0, 0.4);
+  /* A key drawn on screen is a physical thing quoted, so it gets a little of
+     what the hairline withholds: an edge that closes the shape on its own, a
+     face just off the surface, and a dark underside a pixel deep. Quiet on
+     purpose — a page lists thirty chords, and caps that each shouted would
+     outweigh the names they belong to — but the edge still says where one key
+     ends and the next begins. */
+  --keycap-face: rgba(255, 255, 255, 0.06);
+  --keycap-edge: rgba(255, 255, 255, 0.12);
+  --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.35);
   /* Squares a lone glyph and lets a word key ride out past it on the padding.
-     Both are set per surface: the settings row draws the chord full size, the
-     composer's hint draws the same keys smaller than the words beside it. */
+     Both are set per surface: the Keyboard shortcuts page draws the chord at a
+     small control's height. */
   --keycap-size: 18px;
   --keycap-text: 10.5px;
 
@@ -204,8 +204,8 @@
     /* A light key is a white cap with a grey edge and a shadow under it, as
        a keyboard drawn on white is. */
     --keycap-face: #fff;
-    --keycap-edge: rgba(0, 0, 0, 0.16);
-    --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.08);
+    --keycap-edge: rgba(0, 0, 0, 0.11);
+    --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.06);
 
     --surface-fill: #fff;
   }

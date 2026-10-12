@@ -503,7 +503,7 @@ test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page
   assert.equal(command("/"), true);
   assert.equal(settingsPage(), "Keyboard shortcuts");
   // The page lists the window's own chords beside the two keys.
-  const rows = [...document.body.querySelectorAll(".settings-row strong")].map(
+  const rows = [...document.body.querySelectorAll(".settings-row .shortcut-name")].map(
     (row) => row.textContent,
   );
   assert.ok(rows.includes("New plan"));

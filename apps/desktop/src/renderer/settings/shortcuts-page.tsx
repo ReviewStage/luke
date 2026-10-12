@@ -1,4 +1,8 @@
-import { CloseIcon, PencilIcon, ResetIcon, TrashIcon } from "@sidecar/panel";
+/**
+ * shortcuts-page.tsx -- Settings' Keyboard shortcuts page: Luke's two system-wide keys, which can be changed, and the window's own, grouped as the menu bar groups them.
+ */
+
+import { ResetIcon, TrashIcon } from "@sidecar/panel";
 import {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
@@ -42,16 +46,18 @@ function windowChordRefusal(command: KeyedCommand): string {
 
 /**
  * How Luke is reached rather than what he can see. The chord is drawn as the
- * keys it is — one cap each, the way a keyboard has them — and is a statement
- * rather than a control; the pencil beside it is what moves it. Pressing it
- * starts a recording — what a chord may be is shown under the controls at
- * once, the next whole chord is stored and registered at once, and Escape (or
- * the pencil, now a cross) keeps the key that was already there. Recording
- * happens in that focused button rather than anywhere global, so a keystroke
- * can only become a shortcut while the user is visibly holding the control
- * that asks for one.
+ * keys it is — one cap each, in the same column every other row's chord
+ * stands in — and is a statement rather than a control; the quiet Change
+ * button beside it is what moves it. Pressing it starts a recording: the
+ * caps give way to a ringed "Press a shortcut…", what a chord may be is said
+ * under the row's own description at once, the next whole chord is stored
+ * and registered at once, and Escape (or the button, now Cancel) keeps the
+ * key that was already there. A chord refused is explained in that same
+ * place, inline, rather than in a toast. Recording happens in that focused
+ * button rather than anywhere global, so a keystroke can only become a
+ * shortcut while the user is visibly holding the control that asks for one.
  *
- * Reset stands beside the chip only while a chosen chord is stored and no
+ * Reset stands beside Change only while a chosen chord is stored and no
  * recording is underway: until a chord is stored it could only offer to
  * change nothing, and during a recording the chord it would return to is
  * exactly what typing nothing already keeps. What the row shows is the
@@ -119,9 +125,9 @@ function ShortcutRow({
   };
 
   return (
-    <div className="settings-row" {...searchAnchorProps(anchor)}>
+    <div className="settings-row shortcut-row" {...searchAnchorProps(anchor)}>
       <span className="settings-copy">
-        <strong>
+        <span className="shortcut-name">
           {title}
           {/* A stored chord is a changed value on the other rows' terms; the
               flag that shows Reset is the flag that earns the mark. */}
@@ -130,116 +136,115 @@ function ShortcutRow({
               missing key: the chord is still shown and still changeable, the
               mark only says pressing it does nothing yet. */}
           {attention ? <AttentionMark note={attention} /> : null}
-        </strong>
-        <small>{detail}</small>
-      </span>
-      <span className="shortcut-controls">
-        <span className="settings-actions">
-          {/* The chord as its own keys while there is one to press, and a
-              sentence when there is not: "Type a shortcut…", "None" and
-              "Unavailable" are things being said about the key, not keys to
-              draw — and the two absences differ: "None" was asked for, where
-              "Unavailable" is another app owning the chord. */}
-          {recording ? (
-            <span className="shortcut-state" data-recording="true">
-              Type a shortcut…
-            </span>
-          ) : off ? (
-            <span className="shortcut-state">None</span>
-          ) : shown ? (
-            <Keycaps className="shortcut-chord" caps={voiceHotkeyKeycaps(shown)} />
-          ) : (
-            <span className="shortcut-state">Unavailable</span>
-          )}
-          {chosen && !recording ? (
-            <Tooltip label={`Back to ${voiceHotkeyLabel(defaultKey)}`}>
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy}
-                aria-label={`Reset the shortcut to ${voiceHotkeyLabel(defaultKey)}`}
-                onClick={() => void apply(undefined)}
-              >
-                <ResetIcon />
-              </button>
-            </Tooltip>
-          ) : null}
-          {!off && !recording ? (
-            <Tooltip label="Remove">
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy}
-                aria-label={`Remove the shortcut for ${title}, leaving no key`}
-                onClick={() => void apply(VOICE_HOTKEY_NONE)}
-              >
-                <TrashIcon />
-              </button>
-            </Tooltip>
-          ) : null}
-          <Tooltip label={recording ? "Cancel" : "Change…"}>
-            <button
-              type="button"
-              className="icon-button"
-              disabled={busy}
-              aria-label={
-                recording
-                  ? "Type the new shortcut, or press Escape to keep this one"
-                  : `Change the shortcut for ${title}`
-              }
-              onClick={() => {
-                if (recording) {
-                  setRecording(false);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(true);
-              }}
-              // Focus leaving takes the recording with it: whatever was pressed
-              // instead is its own action, not a half-formed chord left armed.
-              onBlur={() => setRecording(false)}
-              onKeyDown={(event) => {
-                // A key that repeats is being held through the chord, not
-                // pressed as one; only its first arrival is read.
-                if (!recording || event.repeat) return;
-                // Nothing typed here is typing: not a Space press on the button,
-                // and not the panel's own Escape-to-close behind it.
-                event.preventDefault();
-                event.stopPropagation();
-                if (event.key === "Escape") {
-                  setRecording(false);
-                  return;
-                }
-                // A system-wide key wins over the window's own chord, so a
-                // key that would take one of them is refused rather than
-                // left to silence it.
-                const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
-                if (taken !== undefined) {
-                  setRejection(windowChordRefusal(taken));
-                  return;
-                }
-                const read = capturedVoiceHotkey(event);
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
-                  setRejection(SHORTCUT_HINT);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(false);
-                void apply(read.accelerator);
-              }}
-            >
-              {recording ? <CloseIcon /> : <PencilIcon />}
-            </button>
-          </Tooltip>
         </span>
+        <small>{detail}</small>
         {rejection ? (
           <p className="error-message" role="alert">
             {rejection}
           </p>
         ) : recording ? (
-          <p className="shortcut-hint">{SHORTCUT_HINT}</p>
+          <p className="settings-note">{SHORTCUT_HINT}</p>
         ) : null}
+      </span>
+      <span className="settings-actions">
+        {chosen && !recording ? (
+          <Tooltip label={`Back to ${voiceHotkeyLabel(defaultKey)}`}>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Reset the shortcut to ${voiceHotkeyLabel(defaultKey)}`}
+              onClick={() => void apply(undefined)}
+            >
+              <ResetIcon />
+            </button>
+          </Tooltip>
+        ) : null}
+        {!off && !recording ? (
+          <Tooltip label="Remove">
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Remove the shortcut for ${title}, leaving no key`}
+              onClick={() => void apply(VOICE_HOTKEY_NONE)}
+            >
+              <TrashIcon />
+            </button>
+          </Tooltip>
+        ) : null}
+        <button
+          type="button"
+          className="toolbar-button"
+          disabled={busy}
+          aria-label={
+            recording
+              ? `Cancel, or type the new shortcut for ${title}`
+              : `Change the shortcut for ${title}`
+          }
+          onClick={() => {
+            if (recording) {
+              setRecording(false);
+              return;
+            }
+            setRejection(undefined);
+            setRecording(true);
+          }}
+          // Focus leaving takes the recording with it: whatever was pressed
+          // instead is its own action, not a half-formed chord left armed.
+          onBlur={() => setRecording(false)}
+          onKeyDown={(event) => {
+            // A key that repeats is being held through the chord, not
+            // pressed as one; only its first arrival is read.
+            if (!recording || event.repeat) return;
+            // Nothing typed here is typing: not a Space press on the button,
+            // and not the panel's own Escape-to-close behind it.
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.key === "Escape") {
+              setRecording(false);
+              return;
+            }
+            // A system-wide key wins over the window's own chord, so a
+            // key that would take one of them is refused rather than
+            // left to silence it.
+            const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
+            if (taken !== undefined) {
+              setRejection(windowChordRefusal(taken));
+              return;
+            }
+            const read = capturedVoiceHotkey(event);
+            if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
+            if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
+              setRejection(SHORTCUT_HINT);
+              return;
+            }
+            setRejection(undefined);
+            setRecording(false);
+            void apply(read.accelerator);
+          }}
+        >
+          {recording ? "Cancel" : "Change"}
+        </button>
+        {/* The chord as its own keys while there is one to press, and a
+            sentence when there is not: "Press a shortcut…", "None" and
+            "Unavailable" are things being said about the key, not keys to
+            draw — and the two absences differ: "None" was asked for, where
+            "Unavailable" is another app owning the chord. Last, so the caps
+            end in the one column every row's chord ends in. */}
+        <span className="shortcut-slot">
+          {recording ? (
+            <span className="shortcut-state" data-recording="true">
+              Press a shortcut…
+            </span>
+          ) : off ? (
+            <span className="shortcut-state">None</span>
+          ) : shown ? (
+            <Keycaps caps={voiceHotkeyKeycaps(shown)} />
+          ) : (
+            <span className="shortcut-state">Unavailable</span>
+          )}
+        </span>
       </span>
     </div>
   );
@@ -275,7 +280,8 @@ export function ShortcutSection({
     ? undefined
     : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
   return (
-    <section className="settings-section settings-plain">
+    <section className="settings-section shortcut-section">
+      <h2>Voice</h2>
       <ShortcutRow
         title="Talk to Luke"
         anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
@@ -284,7 +290,7 @@ export function ShortcutSection({
         // presses alone would leave them holding it and wondering.
         detail={
           shortcuts.voiceHotkeyHeld
-            ? "Hold to talk; the microphone is open only while the key is down."
+            ? "Hold to talk from any app; the microphone is open only while the key is down."
             : "Press to start talking, again to stop. Luke's key helper could not start, so the key cannot tell when it is let go of."
         }
         {...(shownTalk ? { shown: shownTalk } : undefined)}
@@ -301,7 +307,7 @@ export function ShortcutSection({
       <ShortcutRow
         title="Stop Luke"
         anchor={SETTINGS_SEARCH_ROW.STOP_KEY}
-        detail="Press to cut off a reply, from any app."
+        detail="Press to cut off a reply from any app."
         {...(shownStop ? { shown: shownStop } : undefined)}
         chosen={shortcuts.stopChosen}
         off={shortcuts.stopOff}
@@ -317,27 +323,23 @@ export function ShortcutSection({
 /**
  * The window's own shortcuts rather than keys taken from the machine: each
  * answers only while Luke's window has the keyboard, so they are fixed and
- * listed here to be found, not chosen, under the groups the table keeps.
+ * listed here to be found, not chosen, under the groups the table keeps —
+ * the menu bar's own — each row the command's name and its chord's caps.
  */
 export function WindowShortcutSections(): React.JSX.Element {
   return (
     <>
       {APP_SHORTCUT_GROUPS.map((group) => (
-        <section key={group.title} className="settings-section">
+        <section key={group.title} className="settings-section shortcut-section">
           <h2>{group.title}</h2>
           {group.commands.map((command) => (
-            <div key={command} className="settings-row" {...searchAnchorProps(command)}>
-              <span className="settings-copy">
-                <strong>{APP_SHORTCUTS[command].label}</strong>
-              </span>
-              <span className="shortcut-controls">
-                <span className="settings-actions">
-                  <Keycaps
-                    className="shortcut-chord"
-                    caps={shortcutGlyphs(APP_SHORTCUTS[command].chord)}
-                  />
-                </span>
-              </span>
+            <div
+              key={command}
+              className="settings-row shortcut-row"
+              {...searchAnchorProps(command)}
+            >
+              <span className="shortcut-name">{APP_SHORTCUTS[command].label}</span>
+              <Keycaps caps={shortcutGlyphs(APP_SHORTCUTS[command].chord)} />
             </div>
           ))}
         </section>
