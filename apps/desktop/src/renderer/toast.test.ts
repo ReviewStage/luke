@@ -8,8 +8,9 @@ import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach } from "vitest";
+import { afterEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { builtStylesheet, cssRules } from "#testing/css-rules";
 import {
   TOAST_HOLD,
   TOAST_TONE,
@@ -347,3 +348,17 @@ it.effect(
       assert.deepEqual(spoken(), { status: "", alert: "" });
     }),
 );
+
+test("the toasts stand in the window's very corner whatever stands at its foot, a call bar included", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const stack = rules.find((rule) => rule.selectors.includes(".toast-stack"));
+  assert.equal(stack?.declarations.get("right"), "var(--space-16)");
+  assert.equal(stack?.declarations.get("bottom"), "var(--space-16)");
+  // Nothing at the window's foot lifts the stack off the corner.
+  const lifts = rules.filter(
+    (rule) =>
+      rule.selectors.some((selector) => selector.endsWith(" .toast-stack")) &&
+      rule.declarations.has("bottom"),
+  );
+  assert.deepEqual(lifts, []);
+});
