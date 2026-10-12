@@ -12,7 +12,8 @@ import { choiceWords } from "./coding-agent-model";
  * the model's whole window ("GPT-5.5 High 272K"), is the muted secondary
  * colour, so no mark and no separator sit between
  * them. A space, not a margin, parts the two, so the pair reads and copies
- * as one line.
+ * as one line. A choice that says nothing after the name, as a planning
+ * worker's, whose effort is not recorded, draws the name alone.
  */
 export function ModelLabel({
   choice,
@@ -25,8 +26,13 @@ export function ModelLabel({
   const words = choiceWords(choice, models);
   return (
     <span className="model-label" data-model-label="">
-      <span className="model-label-name">{words.model}</span>{" "}
-      <span className="model-label-detail">{words.detail}</span>
+      <span className="model-label-name">{words.model}</span>
+      {words.detail === "" ? null : (
+        <>
+          {" "}
+          <span className="model-label-detail">{words.detail}</span>
+        </>
+      )}
     </span>
   );
 }

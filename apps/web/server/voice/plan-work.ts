@@ -1,4 +1,5 @@
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -354,7 +355,10 @@ export function workerSessionCallsOf(
 }
 
 /** One of a subagent's turn journals as its session is read: the message, when it opened, and when it closed. */
-export type SubagentJournal = Pick<StoredMessageRecord, "message" | "createdAt" | "finishedAt">;
+export type SubagentJournal = Pick<
+  StoredMessageRecord,
+  "message" | "createdAt" | "finishedAt" | "turnId"
+>;
 
 /**
  * When a subagent's newest task began and ended, read off that task's
@@ -377,14 +381,17 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
  * them. A call that started a subagent carries the subagent's own session,
  * read from the journals of its child conversation (`subagents`, by the
  * call's id) and drawn by the same walk, its calls running while the
- * subagent does, with when its newest task began and ended, and its title
- * where one landed on that child (`titles`, by the call's id).
+ * subagent does, with when its newest task began and ended, its title
+ * where one landed on that child (`titles`, by the call's id), and the
+ * model its newest task ran on where its turn row named one (`models`, by
+ * the call's id, `hosted/child-models.ts`).
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
+  models: ReadonlyMap<string, string> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
@@ -392,12 +399,16 @@ export function planWorkOf(
     if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
     const messages = journals.map((each) => each.message);
     const title = titles.get(part.id);
+    const model = models.get(part.id);
     return {
       ...part,
       session: {
         ...newest(partsOf(messages, part.state)),
         ...sessionSpanOf(journals),
         ...(title === undefined ? undefined : { title }),
+        ...(model === undefined || model.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
+          ? undefined
+          : { model }),
       },
     };
   });

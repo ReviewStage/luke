@@ -820,6 +820,38 @@ test("a plan's work read back carries each worker's own session from its child c
   });
 });
 
+test("a plan's work read back names the model a worker's newest task ran on, as the catalog names it, and none for a worker whose turn named none", async () => {
+  const sessionOn = async (model: string | undefined) => {
+    const target = await planConversation();
+    const standing = standingFor(target);
+    await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+    const [worker] = (await worked(target, standing)).parts;
+    assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+    const child = {
+      userId: target.userId,
+      conversationId: childConversationId(target.conversationId, worker.id),
+    };
+    await database.run(openChildConversation(target, child.conversationId, "worker"));
+    const { model: _scripted, ...childStanding } = standingFor(child);
+    await play(
+      [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Both libraries revoke.")],
+      {
+        ...childStanding,
+        ...(model === undefined ? undefined : { model }),
+        turn: RELAY_TURN.CHILD,
+      },
+    );
+    const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+    assert.ok(Option.isSome(read));
+    const [drawn] = read.value.turns[0]?.parts ?? [];
+    assert.ok(drawn?.type === PLAN_WORK_PART.TOOL && drawn.session !== undefined);
+    return drawn.session;
+  };
+
+  assert.equal((await sessionOn("gpt-6.1-sol")).model, "openai/gpt-6.1-sol");
+  assert.equal((await sessionOn(undefined)).model, undefined);
+});
+
 test("a plan's work read back carries a worker's title from its child conversation, on the call that started it and on a later call steering the same task; an untitled worker carries none", async () => {
   const target = await planConversation();
   const first = standingFor(target);

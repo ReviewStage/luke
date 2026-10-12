@@ -1,3 +1,4 @@
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
@@ -72,11 +73,12 @@ export type WorkBlock =
 
 export type WorkWorkerBlock = Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
 
-/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, and its title, where the service said. */
+/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, its title, and the catalog id of the model it ran on, where the service said. */
 interface WorkSessionRow {
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
   title?: string;
+  model?: string;
   startedAt?: number;
   endedAt?: number;
 }
@@ -140,6 +142,15 @@ const WORK_READING: RowReading<WorkBlock> = {
 export function workerJob(call: WorkCallRow): string {
   const job = cardTitle(call.subject ?? "");
   return job === "" ? CALL_WORDS[call.kind].verb : job;
+}
+
+/** The effort a worker's pair says: none, because the planning model's turns record none, which the label leaves unsaid. */
+const UNRECORDED_EFFORT = "";
+
+/** What a subagent runs on, as its row and its tab's card name it, an agent's subagent alike: the model its session ran on; none where the service named none. */
+export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
+  const model = worker.session?.model;
+  return model === undefined ? undefined : { model, effort: UNRECORDED_EFFORT };
 }
 
 /**
@@ -263,6 +274,7 @@ function rowsOf(
                 ? undefined
                 : { endedAt: part.session.endedAt }),
               ...(part.session.title === undefined ? undefined : { title: part.session.title }),
+              ...(part.session.model === undefined ? undefined : { model: part.session.model }),
             },
           }),
     };

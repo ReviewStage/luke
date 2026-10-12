@@ -210,7 +210,8 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's, when its newest task began and ended, and its title. Note that it stands one level deep, because the wire shows no
+ * model's, when its newest task began and ended, its title, and the model
+ * it ran on. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
@@ -224,6 +225,10 @@ const planWorkSessionSchema = EffectSchema.Struct({
   /** Its short title, generated from the first task it was handed; absent until that lands, where none could be generated, and from a service older than it. */
   title: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+  ),
+  /** The catalog id of the model its newest task ran on, such as `openai/gpt-6.1-sol`, which its row names as an agent's subagent row names its pair; absent before that task's turn named one, and from a service older than it. */
+  model: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   ),
 });
 
