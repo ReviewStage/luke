@@ -195,6 +195,7 @@ test("a sent line is read back by a developer's row it did not know holding its 
   const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
     id,
     text,
+    attachments: [],
     known: knownDeveloperRows(known),
   });
   // The plan already says the same words: the line is not read back by it.
@@ -220,8 +221,8 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
   const plan = developer("m-plan", "Go on.");
   const taken = developer("m-1", "Taken.");
   const lines: SentLine[] = [
-    { id: "sent-1", text: "Soon.", known: new Set() },
-    { id: "sent-2", text: "Later.", known: new Set() },
+    { id: "sent-1", text: "Soon.", attachments: [], known: new Set() },
+    { id: "sent-2", text: "Later.", attachments: [], known: new Set() },
   ];
   const drawn = agentLines([plan, taken], lines);
   assert.deepEqual(

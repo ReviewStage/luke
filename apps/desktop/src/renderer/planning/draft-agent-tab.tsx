@@ -14,10 +14,12 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words as
- * its task, never the plan, on the model the chip names where the developer
+ * its task, never the plan, with the files attached to them, on the model
+ * the chip names where the developer
  * changed it and else on the account's default, in the plan's repository;
  * the tab then gives way to the agent's own. The words and the choice are
- * the draft's, held by its owner, so they wait while the tab is away. A
+ * the draft's, held by its owner, as are the files, so they wait while the
+ * tab is away. A
  * send that did not start it
  * leaves the words in the box with why under it and Retry, which asks again
  * under the draft's own key. Closing the tab lets the draft go, and since
@@ -64,7 +66,7 @@ export function DraftAgentTab({
     if (task === "" || sending) return;
     setSending(true);
     setNote(undefined);
-    latest.current.startTask(draft.id, task, draft.choice).then((failed) => {
+    latest.current.startTask(draft.id, task, draft.choice, draft.attachments).then((failed) => {
       setSending(false);
       setNote(failed);
     });
@@ -72,6 +74,8 @@ export function DraftAgentTab({
   const composer: AgentComposerControl = {
     draft: draft.task,
     setDraft: (task) => control.onDraftChange({ task }),
+    attachments: draft.attachments,
+    setAttachments: (attachments) => control.onDraftChange({ attachments }),
     sending: sending || control.start.busy,
     note,
     closed: undefined,
