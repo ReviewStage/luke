@@ -31,6 +31,8 @@ export interface DesktopGates {
   /** Whose sign-in the gate is waiting on in the browser. */
   signInWait?: AccountProvider | undefined;
   signInFailure?: string | undefined;
+  /** The provider this Mac last signed in with, which the gate marks. */
+  lastSignIn?: AccountProvider | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;
   onCancelSignIn: () => void;
   /** The signed-out Luke's introduction cycle, walked over the sign-in. */
@@ -191,6 +193,7 @@ export function DesktopShell({
           face={gates.signInFace}
           {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
+          {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
           onBegin={gates.onBeginSignIn}
           onCancel={gates.onCancelSignIn}
         />
