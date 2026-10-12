@@ -4,8 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { NOTE_KIND } from "@sidecar/hosted/plan-template";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -1408,7 +1407,7 @@ it.effect(
         saveNotes({ userId: context.target.userId, planId: saved.id }, [
           {
             kind: NOTE_KIND.ADD,
-            field: PLAN_FIELD.GOAL,
+            section: PLAN_HEADING.GOAL,
             text: "Owners invite teammates by email.",
           },
         ]),

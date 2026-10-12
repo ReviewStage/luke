@@ -11,6 +11,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
+import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -614,8 +615,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
       const saved = yield* saveNotes({ userId: owner, planId }, [
-        added(PLAN_FIELD.CONTEXT, "Only admins can invite."),
-        added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+        added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
+        added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
       ]);
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
@@ -773,7 +774,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         const drafted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+          added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
         ]);
         const base =
           drafted.status === PLAN_SAVE_STATUS.SAVED
@@ -812,7 +813,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         // The archive takes no new work and loses none under way: a call's notes still land.
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.APPROACH, "Invites expire after a week."),
+          added(PLAN_HEADING.APPROACH, "Invites expire after a week."),
         ]);
         assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
         const held = readAnswer(
@@ -2067,9 +2068,11 @@ it.layer(testSqlClient)("the plan routes", (it) => {
    */
   const twoRevisions = (userId: string, planId: string) =>
     Effect.gen(function* () {
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")]);
+      yield* saveNotes({ userId, planId }, [
+        added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
+      ]);
       yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
-      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.GOAL, "Members invite by email.")]);
+      yield* saveNotes({ userId, planId }, [added(PLAN_HEADING.GOAL, "Members invite by email.")]);
     });
 
   it.effect(
@@ -2301,8 +2304,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           }),
         );
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.GOAL, "- Admins can withdraw an invite."),
-          added(PLAN_FIELD.TESTING, "- When an invite expires, then its link says so."),
+          added(PLAN_HEADING.GOAL, "- Admins can withdraw an invite."),
+          added(PLAN_HEADING.TESTING, "- When an invite expires, then its link says so."),
         ]);
         const { plan } = readAnswer(
           planAnswerSchema,
@@ -2447,7 +2450,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
         const noted = yield* saveNotes({ userId: owner, planId }, [
-          added(PLAN_FIELD.CONTEXT, "Only admins."),
+          added(PLAN_HEADING.CONTEXT, "Only admins."),
         ]);
         const notedText =
           noted.status === PLAN_SAVE_STATUS.SAVED

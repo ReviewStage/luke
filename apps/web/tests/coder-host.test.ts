@@ -1700,11 +1700,11 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           notes: [
             {
               kind: "add",
-              field: "openQuestions",
-              text: "Who may withdraw an invite? Going on as: the member who sent it.",
+              section: "Open questions",
+              text: "- Who may withdraw an invite? Going on as: the member who sent it.",
             },
-            { kind: "add", field: "approach", text: "- Invites expire after 7 days." },
-            { kind: "replace", field: "context", find: "an admin", text: "an owner" },
+            { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
+            { kind: "replace", find: "a phrase the plan never held", text: "an owner" },
           ],
         });
 
@@ -1713,7 +1713,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(answer, {
           status: ACTION_RESULT_STATUS.ACCEPTED,
           taken: 2,
-          missed: ["replace context"],
+          missed: ["replace a phrase the plan never held"],
         });
         const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
         const sectionText = (heading: string) =>
@@ -1736,6 +1736,55 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "an agent started before notes named headings still lands its notes under its fields' headings",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const input = unparsedWire({
+          notes: [
+            { kind: "add", field: "openQuestions", text: "Who may withdraw an invite?" },
+            { kind: "add", field: "approach", text: "Invites expire after 7 days." },
+          ],
+        });
+
+        const answer = yield* host.editPlan(admitted, input, 0);
+
+        assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2, missed: [] });
+        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const sectionText = (heading: string) =>
+          planSections(stored.text).find((section) => section.heading === heading)?.text ?? "";
+        assert.ok(sectionText("Open questions").endsWith("\n\n- Who may withdraw an invite?"));
+        assert.ok(sectionText("Approach").endsWith("\n\nInvites expire after 7 days."));
+      }),
+  );
+
+  it.effect(
+    "a call holding one note that does not read is refused whole, and the plan stands",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const input = unparsedWire({
+          notes: [
+            { kind: "add", section: "Approach", text: "- Invites expire after 7 days." },
+            { kind: "add", text: "- A note that names no heading." },
+          ],
+        });
+
+        const answer = yield* host.editPlan(admitted, input, 0);
+
+        assert.deepEqual(answer, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.UNREADABLE,
+        });
+        assert.equal(requestedNotes(input), 0);
+        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.equal(stored.text, DEFAULT_PLAN_TEMPLATE);
+      }),
+  );
+
+  it.effect(
     "notes outside the template or past the turn's cap are refused, and the plan stands",
     () =>
       Effect.gen(function* () {
@@ -1744,8 +1793,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const outside = unparsedWire({ notes: [{ kind: "add", field: "title", text: "x" }] });
         const two = unparsedWire({
           notes: [
-            { kind: "add", field: "approach", text: "One." },
-            { kind: "add", field: "approach", text: "Two." },
+            { kind: "add", section: "Approach", text: "One." },
+            { kind: "add", section: "Approach", text: "Two." },
           ],
         });
 

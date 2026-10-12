@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { NOTE_KIND, type PlanNote } from "@sidecar/hosted/plan-template";
-import { PLAN_FIELD, type PlanDocument, type PlanField } from "@sidecar/hosted/plan-wire";
+import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
+import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -38,8 +38,8 @@ import { testSqlClient } from "./support/sql-client";
 /**
  * The named plans and their one document, through the store's public
  * functions and `saveNotes`, the plan's one write, against a real dialect.
- * Every plan is one Markdown text: each note lands in the section under its
- * field's heading and nowhere else, and what is saved is the text the window
+ * Every plan is one Markdown text: each note lands in the section under the
+ * heading it names and nowhere else, and what is saved is the text the window
  * and the planning model both read (`readPlan`). Nothing but the binding the
  * service built names the account and the plan, so no note can move a save
  * onto another account's plan, bring a deleted plan back, or leave an
@@ -63,10 +63,10 @@ const INVITATIONS_HARD_PART = "- A withdrawn invite's link never grants access."
 
 /** Notes that write an invitations draft into a plan: its context, a hard part, an open question, and an assumption. */
 const INVITATIONS_NOTES: readonly PlanNote[] = [
-  added(PLAN_FIELD.CONTEXT, INVITATIONS_CONTEXT),
-  added(PLAN_FIELD.HARD_PARTS, INVITATIONS_HARD_PART),
-  added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
-  added(PLAN_FIELD.ASSUMPTIONS, "Invites reuse `memberships` with a `pending` state."),
+  added(PLAN_HEADING.CONTEXT, INVITATIONS_CONTEXT),
+  added(PLAN_HEADING.HARD_PARTS, INVITATIONS_HARD_PART),
+  added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
+  added(PLAN_HEADING.ASSUMPTIONS, "- Invites reuse `memberships` with a `pending` state."),
 ];
 
 const EMPTY_STATE_CONTEXT =
@@ -74,8 +74,8 @@ const EMPTY_STATE_CONTEXT =
 
 /** Notes that write a small copy change into a plan: its context and its goal. */
 const EMPTY_STATE_NOTES: readonly PlanNote[] = [
-  added(PLAN_FIELD.CONTEXT, EMPTY_STATE_CONTEXT),
-  added(PLAN_FIELD.GOAL, 'The empty list reads "No plans yet. Start one with New plan."'),
+  added(PLAN_HEADING.CONTEXT, EMPTY_STATE_CONTEXT),
+  added(PLAN_HEADING.GOAL, 'The empty list reads "No plans yet. Start one with New plan."'),
 ];
 
 const openUser = Effect.gen(function* () {
@@ -98,14 +98,14 @@ function bound(userId: string, planId: string): PlanDocumentBinding {
   return { userId, planId };
 }
 
-/** A note correcting a phrase of a field. */
-function replaced(field: PlanField, find: string, text: string): PlanNote {
-  return { kind: NOTE_KIND.REPLACE, field, find, text };
+/** A note correcting a phrase of the plan. */
+function replaced(find: string, text: string): PlanNote {
+  return { kind: NOTE_KIND.REPLACE, find, text };
 }
 
-/** A note striking the line of a field that holds a phrase. */
-function removed(field: PlanField, find: string): PlanNote {
-  return { kind: NOTE_KIND.REMOVE, field, find };
+/** A note striking the line of the plan that holds a phrase. */
+function removed(find: string): PlanNote {
+  return { kind: NOTE_KIND.REMOVE, find };
 }
 
 /** The document a saved result carries, failing the test on any other outcome. */
@@ -151,7 +151,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
   );
 
   it.effect(
-    "notes save, and the window and the resumed model read each at the end of the section its field names",
+    "notes save, and the window and the resumed model read each at the end of the section its heading names",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -184,7 +184,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
 
       const { body } = savedDocument(
         yield* saveNotes(bound(userId, planId), [
-          added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+          added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
         ]),
       );
 
@@ -205,15 +205,15 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const noContract = "Not applicable: no contract outside the app changes.";
 
       yield* saveNotes(binding, [
-        added(PLAN_FIELD.HARD_PARTS, everyMember),
-        added(PLAN_FIELD.ASSUMPTIONS, "Invites expire after a day."),
+        added(PLAN_HEADING.HARD_PARTS, everyMember),
+        added(PLAN_HEADING.ASSUMPTIONS, "- Invites expire after a day."),
       ]);
       const proposed = yield* resumedDocument(userId, planId);
       // Corrected: the hard part is rewritten, the assumption struck, and the interfaces said not to apply.
       yield* saveNotes(binding, [
-        replaced(PLAN_FIELD.HARD_PARTS, everyMember, adminsOnly),
-        removed(PLAN_FIELD.ASSUMPTIONS, "expire after a day"),
-        added(PLAN_FIELD.INTERFACES, noContract),
+        replaced(everyMember, adminsOnly),
+        removed("expire after a day"),
+        added(PLAN_HEADING.INTERFACES, noContract),
       ]);
       const settled = yield* resumedDocument(userId, planId);
 
@@ -240,7 +240,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
 
         const result = yield* saveNotes(bound(userId, planId), [
-          added(PLAN_FIELD.GOAL, "- Pending invites show in settings."),
+          added(PLAN_HEADING.GOAL, "- Pending invites show in settings."),
         ]);
 
         const { body, assumptions } = savedDocument(result);
@@ -276,14 +276,14 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         const outcome = "A member invites a teammate by email.";
         const unheld = [
-          replaced(PLAN_FIELD.CONTEXT, "a phrase nobody said", "Everything."),
-          removed(PLAN_FIELD.ASSUMPTIONS, "Invites expire in a day."),
-          removed(PLAN_FIELD.HARD_PARTS, "a hard part nobody named"),
+          replaced("a phrase nobody said", "Everything."),
+          removed("Invites expire in a day."),
+          removed("a hard part nobody named"),
         ];
 
         const result = yield* saveNotes(bound(userId, planId), [
           ...unheld,
-          added(PLAN_FIELD.GOAL, outcome),
+          added(PLAN_HEADING.GOAL, outcome),
         ]);
 
         const { body } = savedDocument(result);
@@ -301,12 +301,12 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const before = yield* resumedDocument(userId, planId);
       const long = "x".repeat(40_000);
       const oversized = [
-        PLAN_FIELD.GOAL,
-        PLAN_FIELD.APPROACH,
-        PLAN_FIELD.INTERFACES,
-        PLAN_FIELD.NOT_DOING,
-        PLAN_FIELD.TESTING,
-      ].map((field) => added(field, long));
+        PLAN_HEADING.GOAL,
+        PLAN_HEADING.APPROACH,
+        PLAN_HEADING.INTERFACES,
+        PLAN_HEADING.NOT_DOING,
+        PLAN_HEADING.TESTING,
+      ].map((heading) => added(heading, long));
 
       const result = yield* saveNotes(bound(userId, planId), oversized);
 

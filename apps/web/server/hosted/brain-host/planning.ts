@@ -2,6 +2,7 @@ import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
   NOTE_KIND,
+  noteOf,
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
@@ -71,7 +72,7 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * document for meaning and never turns a tool result into a requirement.
  */
 
-/** Each section of the plan as the developer reads it, what it holds, and when it is done, for the planning model. */
+/** Each section of the default template as the developer reads it, what it holds, and when it is done, for the planning model. */
 const PLAN_SECTIONS = Object.values(PLAN_FIELD)
   .map(
     (field) =>
@@ -125,9 +126,11 @@ Luke puts your questions to the user himself, one at a time, while you keep work
 
 The plan is the design doc two engineering teammates would write after talking a task through in a meeting, and it is also the whole spec a coding agent builds from without having heard this conversation. It must be concrete enough that two agents given it would build the same behavior, structure, and interfaces. Talk like a teammate; hold the document to a spec's bar.
 
-Each section answers a question a good teammate asks, and the sections are what you ask about. Each says what it holds and when it is done:
+The document follows the developer's own template: its headings are its sections, and they are what you ask about. A template may hold a line of guidance under a heading; that is the developer's prompt for the section, not an answer. Most plans start from the default template, whose sections each answer a question a good teammate asks, saying what it holds and when it is done:
 
 ${PLAN_SECTIONS}
+
+Where the developer's template names its sections differently, hold each to the bar of the default section it stands for; a section with no counterpart is held to what its heading and guidance ask.
 
 Context and goal come first: don't design an approach for a problem you don't understand yet. Spend your effort where a teammate adds the most: push on the approach, name an alternative the user has not considered and say which you would pick, and hunt for the hard parts before an agent finds them.
 
@@ -139,7 +142,7 @@ The interfaces, the hard parts, and the testing cases are where a spec is won or
 
 A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
 
-The user can also edit the document directly, during the call or between calls. A field named under [fields the developer wrote] holds the user's own words: treat it as what they decided, and raise anything that contradicts it with them rather than working around it.
+The user can also edit the document directly, during the call or between calls. A section named under [sections the developer wrote] holds the user's own words: treat it as what they decided, and raise anything that contradicts it with them rather than working around it.
 
 ## How to plan
 
@@ -170,7 +173,7 @@ The plan is done when the saved document is enough for a separate agent to build
 
 An item attributed to a coding agent was written by an agent implementing the plan: an open question it met with the assumption it went on under, a fact it corrected in the code, or a decision it made. Raise it with the user early, since the answer can be relayed to that agent.
 
-Once it is, queue nothing more and withdraw every question still queued. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
+Once it is, queue nothing more and withdraw every question still queued. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each section still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### The whiteboard
 
@@ -247,9 +250,9 @@ export const PLANNING_EXPLORE_ASK =
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
-/** Each field a note may be taken under, and what it holds, one line apiece for the notetaker. */
-const SCRIBE_FIELDS = Object.values(PLAN_FIELD)
-  .map((field) => `- ${field}: ${PLAN_FIELD_PURPOSE[field]}`)
+/** Each section of the default template and what it holds, one line apiece for the notetaker. */
+const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
+  .map((field) => `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}`)
   .join("\n");
 
 /**
@@ -263,23 +266,24 @@ You are the notetaker on a live voice call between Luke, a senior engineer, and 
 
 The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
-You are handed the saved plan as its fields, the call's latest lines, and Luke's research notes. Answer with the notes the latest lines call for, in the order they were said:
+You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading, and replace or remove any template guidance text in a section once you fill it. Answer with the notes the latest lines call for, in the order they were said:
 
-- add: a new point under a field. In a text field it is one Markdown bullet, a line or two, added after what the field holds. In openQuestions or assumptions it is one item.
-- replace: a correction, where the developer corrected something the plan holds. find is a phrase copied exactly from the saved field, as short as names one place; text is what it becomes.
-- remove: a point the developer retracted or rejected. find is a phrase copied exactly from the line or item to strike.
+- add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown bullet, a line or two, added at the end of that section. A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
+- replace: a correction, where the developer corrected something the plan holds, or a section's template guidance you are filling. find is a phrase copied exactly from the saved text, as short as names one place; text is what it becomes.
+- remove: a point the developer retracted or rejected, or guidance a section no longer needs. find is a phrase copied exactly from the line to strike.
 
+- Never rewrite or strike a heading: the headings are the developer's.
 - Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
-- A decision goes where it answers the question: a choice of how to build under approach, a type or signature under interfaces, the option it beat under alternatives, an edge case's behavior under hardParts.
-- Write each note in the form its field asks for: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result. When a settled point is vaguer than its form, write it as said; never invent the missing detail.
-- The developer also edits the plan directly. A field named under [fields the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
+- A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
+- Write each note in the form its section asks for: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result. When a settled point is vaguer than its form, write it as said; never invent the missing detail.
+- The developer also edits the plan directly. A section named under [sections the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
 - Keep each note as tight as a good design document's line.
 - When the latest lines change nothing, answer with no notes.
 
-The fields:
-${SCRIBE_FIELDS}
+The default template's sections, where the plan uses them:
+${SCRIBE_SECTIONS}
 
 Transcripts can contain mistakes, unfinished phrases, and later corrections. Follow the latest correction.
 `;
@@ -288,8 +292,8 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
-/** The marker the fields the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
-export const DEVELOPER_FIELDS_MARKER = "[fields the developer wrote]";
+/** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
+export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
 /** The most agents' saves the model is told of, the newest; the journal keeps more. */
 const RECENT_AGENT_EDITS = 5;
@@ -308,11 +312,11 @@ function noteWords(words: string): string {
 function agentNoteLine(note: PlanNote): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
-      return `add ${note.field}: ${noteWords(note.text)}`;
+      return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;
     case NOTE_KIND.REPLACE:
-      return `replace ${note.field}: ${noteWords(note.find)} → ${noteWords(note.text)}`;
+      return `replace ${noteWords(note.find)} → ${noteWords(note.text)}`;
     case NOTE_KIND.REMOVE:
-      return `remove ${note.field}: ${noteWords(note.find)}`;
+      return `remove ${noteWords(note.find)}`;
   }
 }
 
@@ -324,7 +328,7 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
     AGENT_EDITS_MARKER,
     ...recent.map(
       (edit) =>
-        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map(agentNoteLine).join("; ")}`,
+        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map((note) => agentNoteLine(noteOf(note))).join("; ")}`,
     ),
   ];
 }
