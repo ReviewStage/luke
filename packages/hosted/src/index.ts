@@ -22,6 +22,7 @@ export {
   githubInstallStatusFromWire,
 } from "./github-install-wire.js";
 export {
+  GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
   githubRepositoriesAnswerSchema,

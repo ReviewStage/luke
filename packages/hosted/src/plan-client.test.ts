@@ -290,6 +290,25 @@ it.effect(
     }),
 );
 
+it.effect("the repositories of one workspace are asked by its id, and every one by none", () =>
+  Effect.gen(function* () {
+    const listed = {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    };
+    const api = fakeCloudApi({ "GET /api/github/repositories": { answer: () => listed } });
+
+    yield* Effect.provide(client().repositories("workspace-acme"), api.layer);
+    yield* Effect.provide(client().repositories(), api.layer);
+
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "GET /api/github/repositories?workspaceId=workspace-acme",
+      "GET /api/github/repositories",
+    ]);
+  }),
+);
+
 it.effect("a plan with no name never travels", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({});
