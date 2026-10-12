@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
+import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -35,7 +36,6 @@ import {
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
   type RelayStanding,

@@ -1,5 +1,6 @@
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { asks, conversations } from "@sidecar/database/schemas/storage";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
@@ -7,7 +8,6 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
-import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 
 /**
  * The ask record: one row per ask from its accept to its turn, written and

@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
+import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
@@ -89,7 +90,6 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
-import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import { fillChildTitle } from "../server/hosted/child-titles";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";

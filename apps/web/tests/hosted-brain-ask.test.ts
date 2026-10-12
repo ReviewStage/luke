@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  conversationOwnedBy,
+  recordedRuntimeSession,
+} from "@sidecar/database/models/recorded-session";
 import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -30,10 +34,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import {
-  conversationOwnedBy,
-  recordedRuntimeSession,
-} from "../server/hosted/brain-host/recorded-session";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import {

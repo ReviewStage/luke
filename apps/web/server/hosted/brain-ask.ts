@@ -1,4 +1,8 @@
 import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  conversationOwnedBy,
+  recordedRuntimeSession,
+} from "@sidecar/database/models/recorded-session";
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import {
   Cause,
@@ -21,7 +25,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
-import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
