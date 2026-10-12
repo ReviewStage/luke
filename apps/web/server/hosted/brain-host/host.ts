@@ -6,7 +6,7 @@ import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/m
 import { readPlanOfConversation } from "@sidecar/database/models/plan-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
-import { isTextUIPart, type LanguageModel } from "ai";
+import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -25,13 +25,15 @@ import {
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
-import type { ModelCatalog } from "../model-catalog.js";
+import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
   BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
   RELAY_TURN,
@@ -46,7 +48,7 @@ import {
   SESSION_STANDING,
 } from "./conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
-import { meteredModel, openAiBrainModel, summarizedReasoningModel } from "./model.js";
+import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -165,8 +167,13 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
-  /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
-  model(admitted: AdmittedConversation): LanguageModel | undefined;
+  /**
+   * The model one inference runs on and the effort it is asked for, as a
+   * coding agent's step is told its own, the meter spent for the account
+   * first; or why none runs: the deployment holds no key, or names a model
+   * outside the providers Luke runs.
+   */
+  model(admitted: AdmittedConversation): Result.Result<CoderModelSelection, string>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /**
@@ -233,14 +240,23 @@ function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> 
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
 
-  /** The account's metered model, or nothing while the deployment holds no key. */
-  const modelFor = (admitted: AdmittedConversation): LanguageModel | undefined => {
+  /** The account's metered model and its effort, or why none runs. */
+  const modelFor = (admitted: AdmittedConversation): Result.Result<CoderModelSelection, string> => {
     const access = seams.openAi();
-    if (!access) return undefined;
-    return meteredModel(summarizedReasoningModel(openAiBrainModel(access.apiKey, access.modelId)), {
+    if (!access) return Result.fail(BRAIN_HOST_REFUSAL.NO_MODEL);
+    return brainModelSelection(access, {
       spend: () => seams.spend(admitted.target.userId),
       report: (message) => console.warn(message),
     });
+  };
+
+  /** The web search's access: Luke's key and the brain's model as OpenAI's own API names it; nothing without a key. */
+  const researchAccess = () => {
+    const access = seams.openAi();
+    const named = access === undefined ? undefined : providerModelOf(access.choice.model);
+    return access === undefined || named === undefined
+      ? undefined
+      : { apiKey: access.apiKey, modelId: named.modelId };
   };
 
   /** The plan a conversation belongs to, as the account owns it now; nothing once it is deleted. */
@@ -259,9 +275,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
   ) =>
     Effect.gen(function* () {
+      // The turn row names the model and effort the inferences are asked for, as a coding
+      // agent's does; the fixture's own id under the scripted model, which is asked no effort.
+      const choice = seams.scriptedModel() ? undefined : seams.openAi()?.choice;
       const model = seams.scriptedModel()
         ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
-        : seams.openAi()?.modelId;
+        : choice?.model;
       // The tool set's hash is taken as each turn starts, from the same
       // declarations the tools resolver hands eve, so the hash names what
       // the model is offered and not a list kept beside it.
@@ -306,6 +325,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       yield* relay.handle(event, {
         ...standing,
         ...(model !== undefined ? { model } : undefined),
+        ...(choice !== undefined ? { reasoningEffort: choice.effort } : undefined),
         ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
       });
     });
@@ -396,7 +416,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,
-                  openAi: seams.openAi(),
+                  openAi: researchAccess(),
                   spend: Effect.tryPromise({
                     try: () => seams.spend(target.userId),
                     catch: (cause) => new MeterUnavailable({ cause }),

@@ -194,7 +194,10 @@ function searchService(answered: boolean) {
   );
 }
 
-const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
+const TEST_OPENAI = () => ({
+  apiKey: Redacted.make("sk-test-planning"),
+  choice: { model: "openai/gpt-test", effort: "medium" },
+});
 
 /** The repository the reading scenarios' plan is about, and the installation the developer reaches it through. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;

@@ -164,13 +164,14 @@ function recordOf({ model, effort, tokens, ending }: TurnRecord): TurnRecord {
   };
 }
 
-/** The effort a worker's pair says: none, because the planning model's turns record none, which the label leaves unsaid. */
+/** The effort a worker's pair says where its session's row recorded none, as a turn recorded before efforts were, which the label leaves unsaid. */
 const UNRECORDED_EFFORT = "";
 
-/** What a subagent runs on, as its row and its tab's card name it, an agent's subagent alike: the model its session ran on; none where the service named none. */
+/** What a subagent runs on, as its row and its tab's card name it, an agent's subagent alike: the model and effort its session ran on; none where the service named no model. */
 export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
-  const model = worker.session?.record.model;
-  return model === undefined ? undefined : { model, effort: UNRECORDED_EFFORT };
+  const record = worker.session?.record;
+  if (record?.model === undefined) return undefined;
+  return { model: record.model, effort: record.effort ?? UNRECORDED_EFFORT };
 }
 
 /**

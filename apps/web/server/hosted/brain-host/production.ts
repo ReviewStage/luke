@@ -1,6 +1,7 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { spendHostedMeter } from "@sidecar/database/models/quota";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
@@ -27,10 +28,11 @@ import { deploymentEveOrigin } from "./eve-origin.js";
  * nothing else.
  */
 
-interface OpenAiAccess {
+export interface OpenAiAccess {
   /** Sealed until the SDK client is built. */
   readonly apiKey: Redacted.Redacted;
-  readonly modelId: string;
+  /** The model, by its catalog id, and the effort every inference runs on, as a coding agent's row names its own. */
+  readonly choice: ModelChoice;
 }
 
 export interface BrainHostSeams {
@@ -90,7 +92,7 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           ? undefined
           : {
               apiKey: environment.openAiKey,
-              modelId: BRAIN_OPENAI_DEFAULTS.MODEL,
+              choice: { model: BRAIN_OPENAI_DEFAULTS.MODEL, effort: BRAIN_OPENAI_DEFAULTS.EFFORT },
             },
       titleModel: () =>
         titleModel({ anthropic: environment.anthropicKey, openAi: environment.openAiKey }),

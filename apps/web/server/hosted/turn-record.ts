@@ -32,10 +32,10 @@ export type RecordedTurn = Pick<
 const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
 
 /**
- * A recorded model as the catalog names it. Note that the brain reaches
- * OpenAI directly (`brain-host/model.ts`), so its turn rows record OpenAI's
- * own id, which the catalog names under its provider; an id that already
- * names one is kept.
+ * A recorded model as the catalog names it. Note that the brain's turn
+ * rows written before it named its model by the catalog's id
+ * (`brain-host/model.ts`) record OpenAI's own id, which the catalog names
+ * under its provider; an id that already names one is kept.
  */
 function catalogIdOf(model: string): string {
   return model.includes(CATALOG_ID_SEPARATOR)
