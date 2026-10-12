@@ -150,6 +150,8 @@ export interface OpenFile {
   readonly back?: readonly FileVisit[];
   /** The files Back walked away from, the latest last, which its Forward walks again. */
   readonly forward?: readonly FileVisit[];
+  /** The calls whose notes on lines this tab folded, kept while the tab stands, whatever file it walks to. */
+  readonly foldedNotes?: readonly string[];
 }
 
 /** A file a File tab showed, as its history holds it to show again. */
@@ -418,6 +420,8 @@ export interface SidePanelControl {
    * own by then is chosen there instead.
    */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
+  /** Folds, or opens, the note of the call that showed lines of the file on the File tab of `path`, which the tab keeps while it stands. */
+  onFoldNote: (path: string, callId: string, folded: boolean) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -634,6 +638,7 @@ function withFileOpened(
     ...(pin === undefined ? undefined : { commit: pin.commit, browsedOn: pin.planId }),
     ...(standing?.back === undefined ? undefined : { back: standing.back }),
     ...(standing?.forward === undefined ? undefined : { forward: standing.forward }),
+    ...(standing?.foldedNotes === undefined ? undefined : { foldedNotes: standing.foldedNotes }),
   };
   const files =
     standing === undefined
@@ -683,6 +688,7 @@ function withFileStepped(held: HeldState, from: OpenFile, step: FileHistoryStep)
     opened: 1,
     back: step === FILE_HISTORY_STEP.BACK ? back.slice(0, -1) : [...back, visitOf(from)],
     forward: step === FILE_HISTORY_STEP.BACK ? [...forward, visitOf(from)] : forward.slice(0, -1),
+    ...(from.foldedNotes === undefined ? undefined : { foldedNotes: from.foldedNotes }),
   };
   const files = held.files.map((each) => (each === from ? stepped : each));
   return { ...held, files, tab: { file: to.path }, open: true };
@@ -705,6 +711,7 @@ function withFileBrowsed(
     opened: 1,
     browsedOn: planId,
     ...(from === undefined ? undefined : { back: [...(from.back ?? []), visitOf(from)] }),
+    ...(from?.foldedNotes === undefined ? undefined : { foldedNotes: from.foldedNotes }),
   };
   const files =
     from === undefined
@@ -851,6 +858,16 @@ function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
   return isAgentTab(tab) ? "Coding agent" : SIDE_PANEL_TAB_KIND[tab].label;
+}
+
+/** The state with the note of `callId` folded, or opened, on the File tab of `path`; as it was where no such tab stands. */
+function withNoteFolded(held: HeldState, path: string, callId: string, folded: boolean): HeldState {
+  const files = held.files.map((each) => {
+    if (each.path !== path) return each;
+    const others = (each.foldedNotes ?? []).filter((call) => call !== callId);
+    return { ...each, foldedNotes: folded ? [...others, callId] : others };
+  });
+  return { ...held, files };
 }
 
 /**
@@ -1163,6 +1180,11 @@ export function useSidePanel(
       }),
     [update, drawn, planId],
   );
+  const onFoldNote = useCallback(
+    (path: string, callId: string, folded: boolean) =>
+      update((held) => withNoteFolded(held, path, callId, folded)),
+    [update],
+  );
   const onMove = useCallback(
     (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
@@ -1215,6 +1237,7 @@ export function useSidePanel(
     onOpenFile,
     onBrowseFile,
     onFileHistory,
+    onFoldNote,
     onResize,
   };
 }

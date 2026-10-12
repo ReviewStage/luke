@@ -2,7 +2,7 @@ import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { AudioLinesIcon, FileInputIcon } from "lucide-react";
-import { type CSSProperties, memo } from "react";
+import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -76,43 +76,48 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
 }
 
-/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's. */
+/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
 export function CodeLineRows({
   firstLine,
   lines,
   pointed,
+  before,
 }: {
   firstLine: number;
   lines: PlanCode["lines"];
   pointed: CodeRef;
+  /** What stands before a line, by its number; nothing where absent. */
+  before?: ((line: number) => ReactNode) | undefined;
 }): React.JSX.Element {
   return (
     <>
       {lines.map((tokens, index) => {
         const line = firstLine + index;
         return (
-          <div
-            // Note that a line's place in the file is its identity: the lines never reorder.
-            key={line}
-            className="code-line"
-            data-pointed={String(isPointed(pointed, line))}
-          >
-            <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-              {line}
-            </span>
-            <code className="code-line-text">
-              {tokens.map((token, at) => (
-                <span key={at} style={runColours(token)}>
-                  {token.text}
-                </span>
-              ))}
-            </code>
-          </div>
+          // Note that a line's place in the file is its identity: the lines never reorder.
+          <Fragment key={line}>
+            {before?.(line)}
+            <div className="code-line" data-pointed={String(isPointed(pointed, line))}>
+              <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+                {line}
+              </span>
+              <code className="code-line-text">
+                {tokens.map((token, at) => (
+                  <span key={at} style={runColours(token)}>
+                    {token.text}
+                  </span>
+                ))}
+              </code>
+            </div>
+          </Fragment>
         );
       })}
     </>
   );
 }
+
+/** How far below the feed's top a card revealed stands, in pixels: clear of the call's checkpoint, which sticks there. */
+const REVEAL_TOP_PX = 44;
 
 /** A card's lines. */
 export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
@@ -217,7 +222,11 @@ function CodeCardContent({
 }): React.JSX.Element {
   const { code } = showing;
   return (
-    <article className="code-card" aria-label={codeCardName(code.ref)}>
+    <article
+      className="code-card"
+      data-call-id={showing.callId}
+      aria-label={codeCardName(code.ref)}
+    >
       <CodeCardHeader
         codeRef={code.ref}
         copied={copiedLines(code)}
@@ -270,21 +279,46 @@ function CodeFeedRun({
   );
 }
 
-/** The tab: every code shown on the plan, under its call, kept scrolled to the newest while the developer has not scrolled away. */
+/**
+ * The tab: every code shown on the plan, under its call, kept scrolled to
+ * the newest while the developer has not scrolled away, or to the card a
+ * File tab's note asked to be shown.
+ */
 export function CodePane({
   shown,
   calls,
   onOpenFile,
+  reveal,
+  onRevealed,
 }: {
   shown: readonly PlanCodeShowing[];
   /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef) => void;
+  /** The call whose card to scroll to, once, as the tab is drawn; none to keep to the newest. */
+  reveal?: string | undefined;
+  /** Says the card asked for was scrolled to, so the tab drawn again later keeps to the newest. */
+  onRevealed?: (() => void) | undefined;
 }): React.JSX.Element {
   const now = Date.now();
+  const pane = useRef<HTMLElement>(null);
+  // Note that this runs after the log has kept to its newest card, and
+  // tells the log it was scrolled at once, because a draw before the
+  // browser's own scroll event would take it back to the newest.
+  useLayoutEffect(() => {
+    if (reveal === undefined) return;
+    const list = pane.current?.querySelector<HTMLElement>("[role='log']");
+    const card = pane.current?.querySelector<HTMLElement>(`[data-call-id="${CSS.escape(reveal)}"]`);
+    if (list != null && card != null) {
+      const top = card.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      list.scrollTop += top - REVEAL_TOP_PX;
+      list.dispatchEvent(new Event("scroll"));
+    }
+    onRevealed?.();
+  }, [reveal, onRevealed]);
   return (
-    <section className="code-pane ph-no-capture" aria-label="Code shown">
+    <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
         {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
         <ConversationContent className="pt-0">

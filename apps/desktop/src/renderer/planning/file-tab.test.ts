@@ -22,6 +22,7 @@ import { installHighlights } from "#testing/find-highlights";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap } from "../app-commands";
 import { FindScope } from "../find-in-tab";
+import type { FileNotes } from "./file-note";
 import { FileTab } from "./file-tab";
 import { FILE_READ, snippetOf, withWindow } from "./file-tab-model";
 import type { OpenFile } from "./use-side-panel";
@@ -44,6 +45,14 @@ function numberedFile(lineCount: number) {
     };
   };
 }
+
+/** A file Luke left no note on. */
+const NO_NOTES: FileNotes = {
+  notes: [],
+  folded: [],
+  onFold: () => undefined,
+  onShow: () => undefined,
+};
 
 const roots: Root[] = [];
 
@@ -104,6 +113,7 @@ function mounted(
       const tab = createElement(FileTab, {
         file,
         snippet,
+        notes: NO_NOTES,
         readFile: (window) => readFile(window),
         onRead: () => undefined,
       });
@@ -339,6 +349,7 @@ test("while a find bar is open over the tab the rest of the file is read a windo
       createElement(FileTab, {
         file: { path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 },
         snippet: undefined,
+        notes: NO_NOTES,
         readFile,
         onRead: () => undefined,
       }),

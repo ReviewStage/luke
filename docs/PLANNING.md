@@ -365,7 +365,12 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   (`hosted/shown-file.ts`); a file changed since is drawn as it is now, and
   one not on that branch, or not read at all, says so over the lines Luke
   showed of it. A File tab opened from a code block of the plan's Inbox is
-  read at the commit the agent named instead. File tabs are kept nowhere. With no code ever shown, the Code tab says so
+  read at the commit the agent named instead. Over the first line of each
+  range of the file Luke showed with a note stands his note, a card a
+  range, the newest note on a range speaking for it: folded to a line or
+  open, as the tab keeps it, and a link back to the range's card in the
+  Code tab; a tab read at a commit draws none, since his lines are his
+  checkout's. File tabs are kept nowhere. With no code ever shown, the Code tab says so
   quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
