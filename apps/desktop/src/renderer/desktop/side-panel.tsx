@@ -36,13 +36,21 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
 import { AgentGlyph, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
+import {
+  AgentTabCard,
+  cardCorner,
+  delegatedChoice,
+  type HeldTranscript,
+  heldLatest,
+  lastFinished,
+} from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
 import {
   agentGlyphState,
   agentStateWords,
+  agentStillWriting,
   agentTabLabel,
-  modelLabel,
 } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { FileTab } from "../planning/file-tab";
@@ -128,7 +136,9 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * the plan's toolbar and never come into the panel. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
- * otherwise.
+ * otherwise. What an agent's or a delegated worker's tab last drew is kept
+ * here too, for as long as the panel is drawn, so its card can preview its
+ * latest step once another tab is shown.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -296,10 +306,10 @@ function addEntries(input: {
     },
     onPick: () => panel.onChoose({ agent: agent.id }),
   }));
-  const subagentRows = workers.map(({ call }) => ({
+  const subagentRows = workers.map(({ call, session }) => ({
     row: {
       id: call.id,
-      label: workerJob(call),
+      label: session?.title ?? workerJob(call),
       icon: <BotIcon />,
       section: ADD_SECTION.SUBAGENTS,
     },
@@ -520,6 +530,7 @@ interface PanelTabLook {
   selected: boolean;
   unread?: boolean;
   tooltip?: string | undefined;
+  card?: React.ReactNode;
   keyshortcuts?: string | undefined;
   onSelect: () => void;
 }
@@ -667,12 +678,21 @@ interface StripTab {
   agent?: CodingAgentSummary | undefined;
 }
 
+/** The transcripts the agents' and the delegated workers' tabs last drew, by agent and by the call that started each worker. */
+interface HeldTranscripts {
+  agents: ReadonlyMap<string, HeldTranscript>;
+  workers: ReadonlyMap<string, HeldTranscript>;
+}
+
 /**
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
  * plan's agents whose tabs are open, its draft, the subagents, and the
  * files. An agent's and a delegated worker's transcript is read whole from
  * the service for a copy, since its tab holds it only while shown; a
- * planning worker's is the session the plan's work already holds.
+ * planning worker's is the session the plan's work already holds. An
+ * agent's and a subagent's tab hang a card on hover, previewing its latest
+ * step from what its tab last held (`heldLatest`) or the plan's work holds,
+ * and never reading the service for it.
  */
 function stripTabs(input: {
   panel: SidePanelControl;
@@ -680,13 +700,16 @@ function stripTabs(input: {
   agents: CodingAgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
+  held: HeldTranscripts;
   copied: TranscriptCopier;
 }): StripTab[] {
-  const { panel, unread, agents, subagents, files, copied } = input;
+  const { panel, unread, agents, subagents, files, held, copied } = input;
+  const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
+  const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<PanelTabLook, "selected" | "onSelect">) => ({
     ...drawn,
     unread: unread.some((each) => sameTab(each, tab)),
-    selected: panel.tab !== undefined && sameTab(tab, panel.tab),
+    selected: chosen(tab),
     onSelect: () => panel.onChoose(tab),
   });
   const fixed = panel.tabs.map((tab) => ({
@@ -703,15 +726,31 @@ function stripTabs(input: {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
     const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
+    // Note that an agent with no turn finished in what its tab holds last
+    // moved when its newest run began, the latest moment its summary knows.
+    const readCard = () => {
+      const writing = agentStillWriting(agent.status);
+      const now = { writing, runStartedAt: agent.runStartedAt };
+      const messages = heldLatest(held.agents.get(agent.id), now, chosen(tab));
+      const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
+      return {
+        corner: cardCorner({
+          writing,
+          startedAt: agent.runStartedAt,
+          movedAt,
+          state: agentStateWords(agent.status),
+        }),
+        choice: { model: agent.model, effort: agent.effort },
+        transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
+      };
+    };
     return {
       tab,
       agent,
       look: look(tab, {
         icon: <AgentGlyph agent={agent} />,
         label,
-        tooltip: [modelLabel(agent.model, agents.models), agentStateWords(agent.status)]
-          .filter((words) => words !== undefined)
-          .join(" · "),
+        card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => panel.onClose(tab),
       copy: copied(read),
@@ -731,8 +770,46 @@ function stripTabs(input: {
             },
           },
         ];
-  const subagentTabs = subagents.map(({ tab, label, state, stateWords, worker }) => {
+  const subagentTabs = subagents.map(({ tab, label, untitled, state, stateWords, worker }) => {
+    const running = state === GLYPH_STATE.WORKING;
     const { delegation } = tab;
+    // A worker runs one turn, so the run its tab last read is its run for good.
+    const readCard = () => {
+      if (delegation === undefined) {
+        const session = worker?.session;
+        return {
+          corner: cardCorner({
+            writing: running,
+            startedAt: session?.startedAt,
+            movedAt: session?.endedAt,
+            state: stateWords,
+          }),
+          choice: undefined,
+          transcript: worker && workerTranscript(worker),
+        };
+      }
+      // Note that the pair is read from the call that started the worker,
+      // among what its agent's tab last held, whatever turn that was, because
+      // the call says it once and for good.
+      const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
+      const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
+      const started = held.agents.get(delegation.agent)?.messages;
+      const drawn = held.workers.get(tab.subagent);
+      const now = { writing: running, runStartedAt: drawn?.runStartedAt };
+      const messages = heldLatest(drawn, now, chosen(tab));
+      return {
+        corner: cardCorner({
+          writing: running,
+          startedAt: drawn?.runStartedAt,
+          movedAt: lastFinished(messages),
+          state: stateWords,
+        }),
+        choice: own && delegatedChoice(started, tab.subagent, own),
+        transcript:
+          messages &&
+          agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
+      };
+    };
     const read = () =>
       delegation === undefined
         ? Promise.resolve(worker === undefined ? undefined : workerTranscript(worker))
@@ -754,7 +831,7 @@ function stripTabs(input: {
       look: look(tab, {
         icon: <StateGlyph glyph={<BotIcon />} state={state} />,
         label,
-        tooltip: stateWords,
+        card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,
       }),
       close: () => panel.onClose(tab),
       copy: copied(read),
@@ -771,8 +848,10 @@ function stripTabs(input: {
 /**
  * The strip of tabs across the panel's top: the open fixed tabs, then one
  * per coding agent of the plan whose tab was not closed, the draft, the
- * subagents, and the files, then the "+". A
- * tab's own word is all it needs to say, so it hangs no pill; a fixed tab's
+ * subagents, and the files, then the "+". A fixed tab's own word is all it
+ * needs to say, so it hangs no pill, while an agent's or a subagent's
+ * hangs a card naming it whole with when it last moved and its latest step
+ * (`agent-tab-card.tsx`); a fixed tab's
  * chord is in the View menu, the "+" menu, and on the Keyboard shortcuts
  * page, and an agent's tab wears its harness's mark, turning a ring while
  * the agent works and giving way to an alert once it failed, with the state
@@ -802,6 +881,7 @@ function PanelTabs({
   workers,
   files,
   shownFiles,
+  held,
 }: {
   panel: SidePanelControl;
   /** The open plan, which a tab's pin is of. */
@@ -818,9 +898,11 @@ function PanelTabs({
   files: readonly OpenFile[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly CodeRef[];
+  /** What the agents' and the delegated workers' tabs last drew, which their hover cards preview. */
+  held: HeldTranscripts;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const kinds = stripTabs({ panel, unread, agents, subagents, files, copied });
+  const kinds = stripTabs({ panel, unread, agents, subagents, files, held, copied });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // is left to fall through to nothing rather than to the window.
@@ -921,7 +1003,9 @@ interface SidePanelWork {
 /** An open subagent tab the plan draws: its tab, what the strip calls it, where its glyph says it stands, and the planning worker's block where it is one. */
 interface DrawnSubagent {
   tab: SubagentSidePanelTab;
+  /** Its title, or its task's first line until it has one. */
   label: string;
+  untitled: boolean;
   state: GlyphState;
   /** What its hint says of where it stands, as its own tab's transcript says it. */
   stateWords: string | undefined;
@@ -951,26 +1035,34 @@ function drawnSubagents(
   tabs: readonly SubagentSidePanelTab[],
   workRows: readonly WorkTurnRow[],
   standings: WorkerStandings,
+  held: HeldTranscripts,
   drawn: Pick<DrawnTabs, "agents" | "subagents">,
 ): readonly DrawnSubagent[] {
   return tabs.flatMap((tab): DrawnSubagent[] => {
     if (!drawsSubagent(tab, drawn)) return [];
-    if (tab.delegation !== undefined) {
-      const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
+    const { delegation, subagent } = tab;
+    if (delegation !== undefined) {
+      const status = standings.get(subagent) ?? CODING_AGENT_STATUS.RUNNING;
+      // Its own page says its title, and its agent's pages say every worker's.
+      const title =
+        held.workers.get(subagent)?.title ??
+        held.agents.get(delegation.agent)?.subagentTitles.get(subagent);
       return [
         {
           tab,
-          label: cardTitle(tab.delegation.task),
+          label: title ?? cardTitle(delegation.task),
+          untitled: title === undefined,
           state: agentGlyphState(status),
           stateWords: agentStateWords(status),
           worker: undefined,
         },
       ];
     }
-    const worker = workerOf(workRows, tab.subagent);
-    return worker === undefined
-      ? []
-      : [{ tab, label: workerJob(worker.call), ...workerStanding(worker), worker }];
+    const worker = workerOf(workRows, subagent);
+    if (worker === undefined) return [];
+    const title = worker.session?.title;
+    const label = title ?? workerJob(worker.call);
+    return [{ tab, label, untitled: title === undefined, ...workerStanding(worker), worker }];
   });
 }
 
@@ -991,6 +1083,8 @@ function TabContent({
   onOpenSubagent,
   onOpenDelegation,
   onWorkerStatus,
+  onAgentHeld,
+  onWorkerHeld,
   onOpenFile,
 }: {
   tab: SidePanelTab;
@@ -1020,6 +1114,10 @@ function TabContent({
   ) => void;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
+  /** An agent's tab drew its transcript anew, which its hover card previews. */
+  onAgentHeld: (agentId: string, held: HeldTranscript) => void;
+  /** A delegated worker's tab drew its transcript anew, by the call that started it. */
+  onWorkerHeld: (callId: string, held: HeldTranscript) => void;
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
@@ -1066,6 +1164,7 @@ function TabContent({
         control={agents}
         shown={shown}
         onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+        onHeld={onAgentHeld}
       />
     );
   }
@@ -1081,6 +1180,7 @@ function TabContent({
           control={agents}
           shown={shown}
           onStatus={(status) => onWorkerStatus(tab.subagent, status)}
+          onHeld={onWorkerHeld}
         />
       );
     }
@@ -1386,10 +1486,14 @@ export function SidePanel({
   };
   const workers = workerCallIds(work.turns).flatMap(held);
   const [standings, setStandings] = useState<WorkerStandings>(() => new Map());
+  const [drawnTranscripts, setDrawnTranscripts] = useState<HeldTranscripts>(() => ({
+    agents: new Map(),
+    workers: new Map(),
+  }));
   const openAgents = agents.agents
     ?.filter((agent) => !panel.closedAgents.includes(agent.id))
     .map((agent) => agent.id);
-  const subagents = drawnSubagents(panel.subagents, workRows, standings, {
+  const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {
     agents: openAgents,
     subagents: workers.map((worker) => worker.call.id),
   });
@@ -1420,6 +1524,18 @@ export function SidePanel({
   );
   const onWorkerStatus = useCallback((callId: string, status: CodingAgentStatus) => {
     setStandings((was) => (was.get(callId) === status ? was : new Map(was).set(callId, status)));
+  }, []);
+  const onAgentHeld = useCallback((agentId: string, transcript: HeldTranscript) => {
+    setDrawnTranscripts((was) => ({
+      ...was,
+      agents: new Map(was.agents).set(agentId, transcript),
+    }));
+  }, []);
+  const onWorkerHeld = useCallback((callId: string, transcript: HeldTranscript) => {
+    setDrawnTranscripts((was) => ({
+      ...was,
+      workers: new Map(was.workers).set(callId, transcript),
+    }));
   }, []);
   const openDelegation = useCallback(
     (agent: string, callId: string, task: string, status: CodingAgentStatus) => {
@@ -1463,6 +1579,7 @@ export function SidePanel({
             workers={workers}
             files={files}
             shownFiles={offered}
+            held={drawnTranscripts}
           />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
@@ -1499,6 +1616,8 @@ export function SidePanel({
               onOpenSubagent={openSubagent}
               onOpenDelegation={openDelegation}
               onWorkerStatus={onWorkerStatus}
+              onAgentHeld={onAgentHeld}
+              onWorkerHeld={onWorkerHeld}
               onOpenFile={panel.onOpenFile}
             />
           </div>

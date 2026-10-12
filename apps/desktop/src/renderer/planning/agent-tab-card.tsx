@@ -1,0 +1,231 @@
+import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { useClipped } from "../use-clipped";
+import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
+import { ModelLabel } from "./model-label";
+import { sinceText, useMinute } from "./plan-time";
+import { delegationView } from "./tool-call-model";
+import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy";
+import { WorkingTime } from "./working-time";
+
+/**
+ * agent-tab-card.tsx -- the card an agent's or a subagent's tab hangs while the pointer rests on it: its whole name, when it last moved, and one line of what it last did.
+ *
+ * The card stands in the tab's hint's place (`tooltip.tsx`), so it waits,
+ * warms, and goes as a hint does, and an agent's and a subagent's are laid
+ * out alike. Its head is the name, wrapped to two lines, or, for a subagent
+ * not yet titled, its task on one line faded where it is cut short, as a
+ * tab's label is; under the name, the model and the effort it runs at as
+ * every place draws the pair (`model-label.tsx`), where they are known; and
+ * the time at the head's right: "Working…" and the run's count while
+ * the agent works, as its transcript's last line says it, and how long ago
+ * it last moved once it has ended, in the sidebar's letters, after how it
+ * ended where it stopped or failed ("Stopped · 3m"): when its
+ * latest turn finished, where the tab holds it, or else when its newest
+ * run began, the latest moment its summary knows. Under
+ * it stands one line of the latest step, faded where it is cut short as a
+ * tab's label is: the agent's last words as plain text, or its last call as
+ * the concise copy says it (`transcript-copy.ts`'s `latestActivity`).
+ *
+ * The step is read from what a tab already holds, never fetched on hover:
+ * the transcript the agent's tab last drew (`HeldTranscript`), while it is
+ * still the agent's latest, or a planning worker's session, which the plan
+ * holds whole. A card with nothing current to read says the name and the
+ * time alone.
+ */
+
+/** What a card's head says at its right. */
+const CARD_CORNER = {
+  /** The agent works: "Working…", and how long its run has gone where its start is known. */
+  WORKING: "working",
+  /** The agent ended: how it ended where its glyph does not say it, a stop or a failure, and how long ago it last moved, where known. */
+  ENDED: "ended",
+  NONE: "none",
+} as const;
+
+export type CardCorner =
+  | { readonly kind: typeof CARD_CORNER.WORKING; readonly startedAt: number | undefined }
+  | {
+      readonly kind: typeof CARD_CORNER.ENDED;
+      readonly state: string | undefined;
+      readonly at: number | undefined;
+    }
+  | { readonly kind: typeof CARD_CORNER.NONE };
+
+/** What parts how an agent ended from how long ago it did. */
+const ENDED_SEPARATOR = " · ";
+
+/** What the corner says before the count while the agent works, as its transcript's last line does. */
+const WORKING_WORD = "Working…";
+
+/** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
+export interface HeldTranscript {
+  readonly messages: readonly CodingAgentMessage[];
+  readonly status: CodingAgentStatus;
+  readonly runStartedAt: number | undefined;
+  /** A worker's own title, on a worker's; an agent's is its summary's. */
+  readonly title: string | undefined;
+  /** Each of an agent's workers' titles, by the call that started it; none on a worker's. */
+  readonly subagentTitles: ReadonlyMap<string, string>;
+}
+
+/** What a card says, read as it is hung: its corner, the model and effort its agent runs on where known, and the transcript its step is read from, or nothing where none is current. */
+export interface CardReading {
+  readonly corner: CardCorner;
+  readonly choice: ModelChoice | undefined;
+  readonly transcript: CopiedTranscript | undefined;
+}
+
+function Since({ at }: { at: number }): React.JSX.Element {
+  const now = useMinute();
+  return <time dateTime={new Date(at).toISOString()}>{sinceText(at, now)}</time>;
+}
+
+function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
+  switch (corner.kind) {
+    case CARD_CORNER.WORKING:
+      return (
+        <span className="tab-card-time">
+          {WORKING_WORD}
+          {corner.startedAt === undefined ? null : <WorkingTime startedAt={corner.startedAt} />}
+        </span>
+      );
+    case CARD_CORNER.ENDED:
+      return (
+        <span className="tab-card-time">
+          {corner.state}
+          {corner.state === undefined || corner.at === undefined ? null : ENDED_SEPARATOR}
+          {corner.at === undefined ? null : <Since at={corner.at} />}
+        </span>
+      );
+    case CARD_CORNER.NONE:
+      return null;
+  }
+}
+
+/** The name: a title wrapped to two lines, or a task standing in for one on a single line, faded where it is cut short. */
+function CardName({ name, untitled }: { name: string; untitled: boolean }): React.JSX.Element {
+  const [line, clipped] = useClipped();
+  return untitled ? (
+    <span ref={line} className="tab-card-name" data-untitled="" data-overflow={String(clipped)}>
+      {name}
+    </span>
+  ) : (
+    <span className="tab-card-name">{name}</span>
+  );
+}
+
+/** The one line of the latest step, faded at its end where it is cut short. */
+function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.JSX.Element | null {
+  const [line, clipped] = useClipped();
+  const activity = latestActivity(transcript);
+  if (activity === undefined) return null;
+  return (
+    <p ref={line} className="tab-card-preview" data-overflow={String(clipped)}>
+      {activity.kind === LATEST_ACTIVITY.WORDS ? (
+        activity.text
+      ) : (
+        <>
+          {activity.verb}
+          {activity.subject === "" ? null : " "}
+          {activity.code ? <code>{activity.subject}</code> : activity.subject}
+        </>
+      )}
+    </p>
+  );
+}
+
+/**
+ * The corner a card wears: working, counted from `startedAt` where it is
+ * known, while the agent may still write; once it has ended, how it ended
+ * where its tab's glyph does not say it (`state`: "Stopped", "Failed"),
+ * as the tab's hint said it, and how long ago it last moved, or nothing
+ * where neither is known.
+ */
+export function cardCorner(input: {
+  writing: boolean;
+  startedAt: number | undefined;
+  movedAt: number | undefined;
+  state: string | undefined;
+}): CardCorner {
+  const { writing, startedAt, movedAt, state } = input;
+  if (writing) return { kind: CARD_CORNER.WORKING, startedAt };
+  return movedAt === undefined && state === undefined
+    ? { kind: CARD_CORNER.NONE }
+    : { kind: CARD_CORNER.ENDED, state, at: movedAt };
+}
+
+/** When the latest of the agent's turns among `messages` answered or ended, where the service said. */
+export function lastFinished(
+  messages: readonly CodingAgentMessage[] | undefined,
+): number | undefined {
+  return messages?.findLast((message) => message.finishedAt !== undefined)?.finishedAt;
+}
+
+/**
+ * The model and effort one of an agent's workers runs on, as the call that
+ * started it says them among the agent's messages, a half it left out
+ * being the agent's own (`own`); nothing where the call is not held.
+ */
+export function delegatedChoice(
+  messages: readonly CodingAgentMessage[] | undefined,
+  callId: string,
+  own: ModelChoice,
+): ModelChoice | undefined {
+  const call = messages
+    ?.flatMap(agentParts)
+    .find((part) => isDelegation(part) && part.callId === callId);
+  return call === undefined || !isDelegation(call) ? undefined : delegationView(call, own).choice;
+}
+
+/**
+ * The messages a tab held, while they are still the agent's latest: read on
+ * the run the agent is on now, which moves with each turn, and either the
+ * tab is the one chosen, whose transcript follows that run, or they were
+ * read after the run ended and it has not moved since. Nothing otherwise,
+ * so a card never says an earlier turn's step as the latest, even while the
+ * chosen tab's first read of a new turn is out or did not answer.
+ */
+export function heldLatest(
+  held: HeldTranscript | undefined,
+  now: { writing: boolean; runStartedAt: number | undefined },
+  chosen: boolean,
+): readonly CodingAgentMessage[] | undefined {
+  if (held === undefined || held.runStartedAt !== now.runStartedAt) return undefined;
+  if (chosen) return held.messages;
+  return !agentStillWriting(held.status) && !now.writing ? held.messages : undefined;
+}
+
+/** The card: the name, its model under it, and its corner, then the latest step where the tab holds one current. */
+export function AgentTabCard({
+  name,
+  untitled = false,
+  models,
+  read,
+}: {
+  name: string;
+  /** Whether the name is a subagent's task standing in until it has a title. */
+  untitled?: boolean;
+  /** The catalog as last read, which names the model. */
+  models: readonly CatalogModel[];
+  /** What the card says, read from what the tab holds as the card is hung. */
+  read: () => CardReading;
+}): React.JSX.Element {
+  const { corner, choice, transcript } = read();
+  return (
+    <div className="tab-card" data-tab-card="">
+      <div className="tab-card-head">
+        <div className="tab-card-title">
+          <CardName name={name} untitled={untitled} />
+          {choice === undefined ? null : (
+            <span className="tab-card-model">
+              <ModelLabel choice={choice} models={models} />
+            </span>
+          )}
+        </div>
+        <Corner corner={corner} />
+      </div>
+      {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
+    </div>
+  );
+}

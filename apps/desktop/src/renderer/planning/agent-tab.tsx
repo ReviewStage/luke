@@ -28,6 +28,7 @@ import { HarnessMark } from "../provider-marks";
 import { StateGlyph } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
+import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-plan";
 import {
   AGENT_PART,
@@ -105,7 +106,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * Stop is the composer's, the one the tab has. A worker's tab draws the
  * worker's transcript the same way, under the agent and the call that
  * started it, with the task it was handed in the plan card's place and no
- * composer, since nothing is sent to a worker.
+ * composer, since nothing is sent to a worker. Either tab says what it
+ * holds to the panel each time it moves (`onHeld`), which its tab's hover
+ * card previews (`agent-tab-card.tsx`).
  */
 
 /** How a transcript opens: what its first row, the developer's, is drawn as, and what stands before any row has landed. */
@@ -544,6 +547,7 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
+  onHeld,
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
@@ -551,6 +555,8 @@ export function AgentTab({
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
+  /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
+  onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   const transcript = useAgentTranscript({
@@ -561,6 +567,15 @@ export function AgentTab({
     onStatus: control.onStatus,
     onTitle: control.onTitle,
   });
+  const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
+  // Note that what is held is dated by the page it was read from, never by
+  // the summary, because the summary moves on to a new turn before its
+  // messages land; and nothing is said before a page has landed.
+  useEffect(() => {
+    if (pageStatus === undefined || messages.length === 0) return;
+    const status = pageStatus;
+    onHeld(agent.id, { messages, status, runStartedAt, title: undefined, subagentTitles });
+  }, [onHeld, agent.id, messages, pageStatus, runStartedAt, subagentTitles]);
   // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
   // the edits already on screen when the tab opened are the plan's as it was read.
   const settledEdits = settledPlanEdits(transcript.messages);
@@ -624,6 +639,7 @@ export function AgentSubagentTab({
   control,
   shown,
   onStatus,
+  onHeld,
 }: {
   agentId: string;
   callId: string;
@@ -633,6 +649,8 @@ export function AgentSubagentTab({
   shown: boolean;
   /** A page said where the worker stands now. */
   onStatus: (status: CodingAgentStatus) => void;
+  /** Hears the transcript the tab holds each time it moves, by the call that started the worker, as an agent's tab says its own. */
+  onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   const transcript = useAgentTranscript({
@@ -645,6 +663,13 @@ export function AgentSubagentTab({
     // A worker's page names the worker's conversation, which is no title of the agent's.
     onTitle: () => undefined,
   });
+  const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
+  // As an agent's: dated by the page it was read from, with the worker's own title.
+  useEffect(() => {
+    if (pageStatus === undefined || messages.length === 0) return;
+    const held = { messages, status: pageStatus, runStartedAt, title: pageTitle };
+    onHeld(callId, { ...held, subagentTitles: new Map() });
+  }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <AgentTranscriptView

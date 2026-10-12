@@ -310,7 +310,26 @@ const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
  */
 export function cardTitle(text: string): string {
   const first = text.split("\n").find((line) => line.trim().length > 0);
-  return first === undefined
-    ? ""
-    : first.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
+  return first === undefined ? "" : plainLine(first);
+}
+
+/** A markdown fence's opening or closing line, which plain words leave out. */
+const FENCE_LINE = /^\s*(?:```|~~~)/u;
+
+function plainLine(line: string): string {
+  return line.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
+}
+
+/**
+ * The whole of a message's markdown as plain words on one line, as a
+ * preview too short to draw markdown reads it: each line as a title reads
+ * its first, fences left out, joined by spaces.
+ */
+export function plainWords(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !FENCE_LINE.test(line))
+    .map(plainLine)
+    .filter((line) => line.length > 0)
+    .join(" ");
 }
