@@ -11,28 +11,17 @@
  */
 
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
-import {
-  CloseIcon,
-  ExternalIcon,
-  MicrophoneIcon,
-  MicrophoneOffIcon,
-  SpeakerIcon,
-  SpeakerOffIcon,
-  WingFace,
-} from "@sidecar/panel";
+import { ExternalIcon } from "@sidecar/panel";
 import { type AnimationEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
-import { APP_COMMAND, type KeyedCommand } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
-import { speechFaceInputs, useFaceMotion } from "../luke-face-mood";
-import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
+import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
-import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { useVoiceView } from "../use-voice-view";
-import { CALL_CARD_TONE, type CallCardModel, callCard } from "./call-card-model";
+import { type CallCardModel, callCard } from "./call-card-model";
 
 /** The way back's name, for a reader and its hover. */
 export const RETURN_TO_PLAN_LABEL = "Return to the plan";
@@ -81,72 +70,14 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
 }
 
 /**
- * One of the card's buttons, in the call bar's own classes. In a Luke window
- * it is hinted by the app's tooltip, chord and all; the floating window is
- * too small to hold a tooltip, so there the system's own hint names it.
- */
-function CardButton({
-  label,
-  className,
-  surface,
-  pressed,
-  command,
-  onPress,
-  children,
-}: {
-  label: string;
-  className: string;
-  surface: CallCardSurface;
-  pressed?: boolean;
-  command?: KeyedCommand;
-  onPress: () => void;
-  children: React.JSX.Element;
-}): React.JSX.Element {
-  const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
-  const button = (
-    <button
-      type="button"
-      className={className}
-      aria-label={label}
-      aria-pressed={pressed}
-      title={inWindow ? label : undefined}
-      onClick={onPress}
-    >
-      {children}
-    </button>
-  );
-  if (inWindow) return button;
-  return (
-    <Tooltip label={label} {...(command ? { command } : undefined)}>
-      {button}
-    </Tooltip>
-  );
-}
-
-/** Luke's mark where a player draws its source's: his face, ringed in the colour of whose turn it is. */
-function CallMark({ card }: { card: CallCardModel }): React.JSX.Element {
-  const face = useFaceMotion(
-    speechFaceInputs({
-      lukeSpeaking: card.status.tone === CALL_CARD_TONE.LUKE,
-      listening: card.status.tone === CALL_CARD_TONE.DEVELOPER,
-    }),
-    usePrefersReducedMotion(),
-  );
-  return (
-    <span className="call-card-mark" aria-hidden="true">
-      <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
-    </span>
-  );
-}
-
-/**
- * The card as drawn from what it is handed. Its first line is the call's
- * plan and status, which is the way back in a Luke window and the drag
- * handle in the floating window, where the way back is a button of its own
- * instead: macOS hands a press on a drag region to the drag, never the page.
- * Its second is Luke's mark and the controls, evenly spaced as a player's.
- * There is no ×: End call is the way to put a call away, and a live call
- * nobody can see is exactly what the card is for.
+ * The card as drawn from what it is handed: the call's plan by name over the
+ * call bar itself, the same component the plan's own page draws, so its
+ * status, its mutes, and its end are the bar's in every word, glyph, and
+ * colour, and restyling the bar restyles the card. The first line is the way
+ * back in a Luke window and the drag handle in the floating window, where
+ * the way back is a button beside it instead: macOS hands a press on a drag
+ * region to the drag, never the page. There is no ×: End call is the way to
+ * put a call away, and a live call nobody can see is what the card is for.
  */
 export function CallCard({
   card,
@@ -163,13 +94,9 @@ export function CallCard({
 }): React.JSX.Element {
   const [title, clipped] = useClipped();
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
-  const words = (
-    <span className="call-card-words" ref={title} data-overflow={clipped}>
-      <span className="call-card-plan">{card.planName}</span>
-      <span className="call-card-status" role="status">
-        {" · "}
-        {card.status.words}
-      </span>
+  const name = (
+    <span className="call-card-plan" ref={title} data-overflow={clipped}>
+      {card.planName}
     </span>
   );
   const left = (event: AnimationEvent<HTMLElement>) => {
@@ -180,63 +107,44 @@ export function CallCard({
       className="call-card"
       aria-label="Call"
       data-surface={surface}
-      data-tone={card.status.tone}
       data-leaving={leaving}
       onAnimationEnd={left}
     >
-      {inWindow ? (
-        <p className="call-card-title">{words}</p>
-      ) : (
-        <Tooltip label={RETURN_TO_PLAN_LABEL}>
-          <button type="button" className="call-card-title" onClick={controls.onReturn}>
-            {words}
-          </button>
-        </Tooltip>
-      )}
-      <div className="call-card-controls">
-        <CallMark card={card} />
-        <CardButton
-          label={
-            card.microphoneMuted
-              ? CALL_CONTROL_LABEL.UNMUTE_MICROPHONE
-              : CALL_CONTROL_LABEL.MUTE_MICROPHONE
-          }
-          className="icon-button call-toggle"
-          surface={surface}
-          pressed={card.microphoneMuted}
-          command={APP_COMMAND.TOGGLE_MICROPHONE}
-          onPress={controls.onToggleMicrophone}
-        >
-          {card.microphoneMuted ? <MicrophoneOffIcon /> : <MicrophoneIcon />}
-        </CardButton>
-        <CardButton
-          label={speakerMuted ? CALL_CONTROL_LABEL.UNMUTE_SPEAKER : CALL_CONTROL_LABEL.MUTE_SPEAKER}
-          className="icon-button call-toggle"
-          surface={surface}
-          pressed={speakerMuted}
-          command={APP_COMMAND.TOGGLE_SPEAKER}
-          onPress={controls.onToggleSpeaker}
-        >
-          {speakerMuted ? <SpeakerOffIcon /> : <SpeakerIcon />}
-        </CardButton>
+      <div className="call-card-head">
         {inWindow ? (
-          <CardButton
-            label={RETURN_TO_PLAN_LABEL}
+          <p className="call-card-title">{name}</p>
+        ) : (
+          <Tooltip label={RETURN_TO_PLAN_LABEL}>
+            <button type="button" className="call-card-title" onClick={controls.onReturn}>
+              {name}
+            </button>
+          </Tooltip>
+        )}
+        {inWindow ? (
+          <button
+            type="button"
             className="icon-button"
-            surface={surface}
-            onPress={controls.onReturn}
+            aria-label={RETURN_TO_PLAN_LABEL}
+            title={RETURN_TO_PLAN_LABEL}
+            onClick={controls.onReturn}
           >
             <ExternalIcon />
-          </CardButton>
+          </button>
         ) : null}
-        <CardButton
-          label={CALL_CONTROL_LABEL.END_CALL}
-          className="call-end"
-          surface={surface}
-          onPress={controls.onEnd}
-        >
-          <CloseIcon />
-        </CardButton>
+      </div>
+      {/* A block of its own, as the plan's page holds it, so the bar spans the card. */}
+      <div>
+        <CallBar
+          status={card.status}
+          microphone={{
+            label: CALL_CONTROL_LABEL.MUTE_MICROPHONE,
+            enabled: true,
+            muted: card.microphoneMuted,
+            onPress: controls.onToggleMicrophone,
+          }}
+          speaker={{ muted: speakerMuted, onPress: controls.onToggleSpeaker }}
+          stop={{ shown: true, onPress: controls.onEnd }}
+        />
       </div>
     </section>
   );

@@ -18,15 +18,15 @@ html.call-window #root {
 
 /* On the ground of what floats over the window, as a toast is, so the card
    reads as the same kind of thing wherever it stands. It rises in on the
-   spring and leaves on the exit's beat, as a toast does. */
+   spring and leaves on the exit's beat, as a toast does. What it holds is
+   the call bar itself (desktop.css), drawn as the plan's page draws it, so
+   the card adds no look of its own to the call. */
 .call-card {
-  --call-ring: transparent;
-  --control-height: 28px;
   display: flex;
   box-sizing: border-box;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-8);
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
   background: var(--surface-popover);
@@ -93,39 +93,30 @@ body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
   animation: none;
 }
 
-/* The ring around Luke's mark and the status say whose turn it is in the
-   meters' colours, a mute in the destructive red, and a call still opening
-   in the warning tint. */
-.call-card[data-tone="luke"],
-.call-card[data-tone="working"] {
-  --call-ring: var(--voice-luke);
-}
-.call-card[data-tone="developer"] {
-  --call-ring: var(--voice-developer);
-}
-.call-card[data-tone="muted"] {
-  --call-ring: var(--danger);
-}
-.call-card[data-tone="opening"] {
-  --call-ring: var(--state-attention);
+/* The plan's name, and in the floating window the way back beside it. */
+.call-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
 }
 
 .call-card-title {
   display: block;
-  width: 100%;
   min-width: 0;
+  flex: 1;
   margin: 0;
-  padding: 0 var(--space-4);
+  padding: 0;
   border: 0;
-  border-radius: 6px;
   background: none;
-  color: inherit;
+  color: var(--text-secondary);
   font: inherit;
+  font-size: 12px;
   text-align: left;
 }
 
 button.call-card-title:hover {
-  background: var(--raised-strong);
+  color: var(--text-primary);
 }
 
 /* In the floating window the title is what the window is dragged by. */
@@ -133,61 +124,12 @@ button.call-card-title:hover {
   -webkit-app-region: drag;
 }
 
-.call-card-words {
+.call-card-plan {
   display: block;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.call-card-words[data-overflow="true"] {
+.call-card-plan[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-}
-
-.call-card-plan {
-  font-weight: 600;
-}
-
-.call-card-status {
-  color: var(--text-secondary);
-}
-
-.call-card[data-tone="luke"] .call-card-status {
-  color: var(--voice-luke);
-}
-.call-card[data-tone="developer"] .call-card-status {
-  color: var(--voice-developer);
-}
-.call-card[data-tone="muted"] .call-card-status {
-  color: var(--danger-text);
-}
-.call-card[data-tone="opening"] .call-card-status {
-  color: var(--state-attention);
-}
-
-/* Luke's mark and the controls, evenly spaced across the card. */
-.call-card-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--space-2);
-}
-
-.call-card-mark {
-  display: grid;
-  width: var(--control-height);
-  height: var(--control-height);
-  place-items: center;
-  border-radius: 50%;
-  background: var(--raised-strong);
-  box-shadow: 0 0 0 2px var(--call-ring);
-  transition: box-shadow var(--duration-quick) var(--motion-exit);
-}
-
-.call-card-mark .luke-face {
-  width: 18px;
-  height: 18px;
-}
-
-.call-card .call-end {
-  margin-left: 0;
 }

@@ -2,6 +2,7 @@ import type { Plan, PlanSummary, RepositoryPin } from "@sidecar/hosted/plan-wire
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
+  type PlanActivity,
   type PlanningView,
   type RepositoryCallFailure,
   VOICE_PHASE,
@@ -485,6 +486,18 @@ export function callStatus(
 ): CallStatus | undefined {
   const { activePlanId, activity } = planning;
   if (activePlanId === undefined || view.callPlanId !== activePlanId) return undefined;
+  return standingCallStatus(view, activity);
+}
+
+/**
+ * The standing call's two lines whichever plan it is about, read off that
+ * call's own activity: the call bar's words, which the call card draws in
+ * the same bar while the call's plan is off screen.
+ */
+export function standingCallStatus(
+  view: Pick<VoiceView, "voiceStatus">,
+  activity: PlanActivity | undefined,
+): CallStatus | undefined {
   const word = STATUS_WORD[view.voiceStatus];
   if (word === undefined) return undefined;
   const phase = VOICE_PHASE_SHOWN.has(view.voiceStatus) ? activity?.voice : undefined;
