@@ -6,6 +6,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { builtStylesheet, cssRules } from "#testing/css-rules";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
@@ -117,14 +118,19 @@ function mountToolbar(plans: PlansControl): HTMLButtonElement {
   return more;
 }
 
-function sidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): ReactElement {
+function sidebarPlan(
+  plans: PlansControl,
+  plan: PlanSummary,
+  asked: Asked,
+  current = false,
+): ReactElement {
   return createElement(
     "ul",
     null,
     createElement(SidebarPlan, {
       plans,
       plan,
-      current: false,
+      current,
       repositoryShown: true,
       now: plan.updatedAt,
       onOpen: () => asked.opened.push(plan.id),
@@ -132,8 +138,13 @@ function sidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): Reac
   );
 }
 
-function mountSidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): HTMLButtonElement {
-  const container = mount(sidebarPlan(plans, plan, asked));
+function mountSidebarPlan(
+  plans: PlansControl,
+  plan: PlanSummary,
+  asked: Asked,
+  current = false,
+): HTMLButtonElement {
+  const container = mount(sidebarPlan(plans, plan, asked, current));
   const row = container.querySelector(".sidebar-plan");
   assert.ok(row instanceof HTMLButtonElement);
   return row;
@@ -315,6 +326,111 @@ test("Pin and Archive mark the plan from either door, and each offers its way ba
     [OTHER.id, PLAN_MARK.UNARCHIVE],
   ]);
   assert.deepEqual(asked.opened, []);
+});
+
+/** The buttons a sidebar row offers at its end, beside the row rather than inside it. */
+function rowMarks(row: HTMLButtonElement): HTMLButtonElement[] {
+  return [...(row.parentElement?.querySelectorAll<HTMLButtonElement>(":scope > * button") ?? [])];
+}
+
+test("a sidebar plan's end offers Pin and Archive, Unpin when pinned and Unarchive alone when archived, each marking it and opening nothing", () => {
+  const { plans, asked } = openTab();
+  const pinned = { ...OTHER, pinnedAt: 7 };
+  const archived = { ...OTHER, pinnedAt: 7, archivedAt: 9 };
+  const listed = rowMarks(mountSidebarPlan(plans, OTHER, asked));
+  const pinnedMarks = rowMarks(
+    mountSidebarPlan({ ...plans, plans: [PLAN, pinned] }, pinned, asked),
+  );
+  const archivedMarks = rowMarks(
+    mountSidebarPlan({ ...plans, plans: [PLAN], archived: [archived] }, archived, asked),
+  );
+  const named = (marks: HTMLButtonElement[]) =>
+    marks.map((mark) => mark.getAttribute("aria-label"));
+
+  for (const mark of [...listed, ...pinnedMarks, ...archivedMarks]) act(() => mark.click());
+
+  assert.deepEqual(named(listed), ["Pin", "Archive"]);
+  assert.deepEqual(named(pinnedMarks), ["Unpin", "Archive"]);
+  assert.deepEqual(named(archivedMarks), ["Unarchive"]);
+  assert.deepEqual(asked.marked, [
+    [OTHER.id, PLAN_MARK.PIN],
+    [OTHER.id, PLAN_MARK.ARCHIVE],
+    [OTHER.id, PLAN_MARK.UNPIN],
+    [OTHER.id, PLAN_MARK.ARCHIVE],
+    [OTHER.id, PLAN_MARK.UNARCHIVE],
+  ]);
+  assert.deepEqual(asked.opened, []);
+  assert.equal(document.querySelector('[role="menu"]'), null, "no press opened the menu");
+});
+
+test("a right-click on a sidebar plan's Pin or Archive offers the plan's menu, ringing the row", () => {
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const [, archive] = rowMarks(row);
+  assert.ok(archive);
+
+  rightClick(archive, 40, 60);
+
+  assert.deepEqual(labels(), [
+    "Rename",
+    "Pin",
+    "Archive",
+    "Change repository…",
+    "Permanently delete",
+  ]);
+  assert.equal(row.dataset.menuOpen, "true");
+  assert.deepEqual(asked.marked, []);
+});
+
+test("only the open plan's row names Command-Shift-A on its Archive, the chord archiving the open plan alone", () => {
+  const { plans, asked } = openTab();
+  const [, openArchive] = rowMarks(mountSidebarPlan(plans, PLAN, asked, true));
+  const [, otherArchive] = rowMarks(mountSidebarPlan(plans, OTHER, asked));
+
+  assert.equal(openArchive?.getAttribute("aria-keyshortcuts"), "Meta+Shift+A");
+  assert.equal(otherArchive?.getAttribute("aria-keyshortcuts"), null);
+});
+
+test("hovered or reached from the keyboard, a sidebar plan's time steps out and its Pin and Archive step into its place", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const item = row.parentElement;
+  const time = row.querySelector(".sidebar-plan-time");
+  const marks = rowMarks(row)[0]?.closest("span");
+  assert.ok(item && time && marks);
+  // jsdom computes no cascade and hovers nothing, so the sheet's last rule
+  // for the element wins, with the item marked where the sheet says :hover.
+  const styled = (element: Element, property: string) =>
+    rules
+      .filter((rule) => rule.declarations.has(property))
+      .filter((rule) =>
+        rule.selectors.some((selector) => {
+          try {
+            return element.matches(selector.replaceAll(":hover", "[data-hovered]"));
+          } catch {
+            return false;
+          }
+        }),
+      )
+      .at(-1)
+      ?.declarations.get(property);
+  const shown = () => [styled(time, "visibility") ?? "visible", styled(marks, "opacity")];
+
+  const resting = shown();
+  item.dataset.hovered = "true";
+  const hovered = shown();
+  delete item.dataset.hovered;
+  // Tab reaches the row, as the keyboard would.
+  act(() => {
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    row.focus();
+  });
+  const focused = shown();
+
+  assert.deepEqual(resting, ["visible", "0"]);
+  assert.deepEqual(hovered, ["hidden", "1"]);
+  assert.deepEqual(focused, ["hidden", "1"]);
 });
 
 test("Permanently delete on an archived plan asks without pointing at Archive", () => {

@@ -394,7 +394,10 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
-.sidebar-plan:hover,
+/* A plan's row fills while the pointer is anywhere on its item, its own
+   buttons at its end included, and no more than its hover does, so the open
+   plan keeps its stronger fill. */
+:where(.sidebar-plan-item:hover) > .sidebar-plan,
 .sidebar-new-plan:hover:not(:disabled) {
   background: var(--raised);
 }
@@ -451,9 +454,49 @@ body,
 
 .sidebar-plan-time {
   flex: none;
+  min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Pin and Archive stand in the time's slot, which is always as wide as the
+   two of them, while the row is hovered or holds the keyboard: the time
+   steps out and they step in over the name's first line, so the name is cut
+   where it always is and nothing moves. They are the row's siblings, since
+   a button holds no button, laid over its end. */
+.sidebar-plan-item {
+  --sidebar-plan-mark: 22px;
+  position: relative;
+}
+
+.sidebar-plan-marks {
+  position: absolute;
+  top: var(--space-8);
+  right: var(--row-inset);
+  display: flex;
+  height: 1lh;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  opacity: 0;
+}
+
+.sidebar-plan-mark {
+  width: var(--sidebar-plan-mark);
+  height: var(--sidebar-plan-mark);
+  border-radius: 6px;
+}
+
+.sidebar-plan-item:hover > .sidebar-plan-marks,
+.sidebar-plan-item:has(:focus-visible) > .sidebar-plan-marks {
+  opacity: 1;
+}
+
+.sidebar-plan-item:hover .sidebar-plan-time,
+.sidebar-plan-item:has(:focus-visible) .sidebar-plan-time {
+  visibility: hidden;
 }
 
 /* A repository's plans under a quiet header in the headings' voice: the
