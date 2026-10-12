@@ -9,6 +9,7 @@ import {
   PLAN_HEADING,
   type PlanNote,
   ROLLOUT_BAR,
+  ROLLOUT_NOTE_FIELD,
   ROLLOUT_PURPOSE,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
@@ -274,13 +275,16 @@ You are the notetaker on a live voice call between Luke, a senior engineer, and 
 
 The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading, and replace or remove any template guidance text in a section once you fill it. Answer with the notes the latest lines call for, in the order they were said:
+You are handed the saved plan as its Markdown text, its rollout under [rollout], the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading, and replace or remove any template guidance text in a section once you fill it. Answer with the notes the latest lines call for, in the order they were said:
 
 - add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown bullet, a line or two, added at the end of that section. A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
 - replace: a correction, where the developer corrected something the plan holds, or a section's template guidance you are filling. find is a phrase copied exactly from the saved text, as short as names one place; text is what it becomes.
 - remove: a point the developer retracted or rejected, or guidance a section no longer needs. find is a phrase copied exactly from the line to strike.
 
+The rollout stands beside the text, never in it: the pull requests the work lands as, in order, each on main or on an earlier one. A note on it carries field "${ROLLOUT_NOTE_FIELD}" and takes the same three kinds, each over one pull request rather than words: add takes item, the pull request added after the last; replace takes find, a phrase copied exactly from one pull request's title, and item, that pull request as it now stands; remove takes find the same way. An item's base is main or the position, counted from one, of the earlier pull request it cannot build without.
+
 - Never rewrite or strike a heading: the headings are the developer's.
+- When Luke cuts the work into pull requests and the developer does not push back, write the cut as rollout notes, one per pull request in order, never as prose or a bullet under any heading. A pull request regrouped, renamed, or rebased is a replace of that one; one folded into another is a replace of the one that absorbs it, then a remove of the folded one.
 - Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
@@ -318,8 +322,21 @@ function noteWords(words: string): string {
   );
 }
 
+/** What a rollout note names: the pull request it adds or restates by its title, or the phrase it struck. */
+function rolloutNoteWords(note: Extract<PlanNote, { readonly field: string }>): string {
+  switch (note.kind) {
+    case NOTE_KIND.ADD:
+      return noteWords(note.item.title);
+    case NOTE_KIND.REPLACE:
+      return `${noteWords(note.find)} → ${noteWords(note.item.title)}`;
+    case NOTE_KIND.REMOVE:
+      return noteWords(note.find);
+  }
+}
+
 /** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck among them. */
 function agentNoteLine(note: PlanNote): string {
+  if ("field" in note) return `${note.kind} ${note.field}: ${rolloutNoteWords(note)}`;
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add under ${noteWords(note.section)}: ${noteWords(note.text)}`;

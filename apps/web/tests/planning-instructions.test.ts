@@ -3,6 +3,7 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
+  ROLLOUT_NOTE_FIELD,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
@@ -53,5 +54,17 @@ test("the planning model and its worker are asked to say what each command is fo
   assert.ok(field in RUN_IN_REPOSITORY_TOOL.inputSchema.fields);
   for (const instructions of [PLANNING_INSTRUCTIONS, WORKER_INSTRUCTIONS]) {
     assert.ok(instructions.includes(`\`${field}\``));
+  }
+});
+
+test("the notetaker is told the rollout stands beside the text, its notes, and to write a cut as them", () => {
+  for (const words of [
+    "The rollout stands beside the text, never in it",
+    `field "${ROLLOUT_NOTE_FIELD}"`,
+    "add takes item, the pull request added after the last",
+    "a phrase copied exactly from one pull request's title",
+    "write the cut as rollout notes, one per pull request in order, never as prose or a bullet under any heading",
+  ]) {
+    assert.ok(SCRIBE_INSTRUCTIONS.includes(words), `the notetaker's prompt says ${words}`);
   }
 });

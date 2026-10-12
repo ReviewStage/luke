@@ -387,6 +387,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     const plan = {
       ...held,
       document: draft.document,
+      rollout: draft.rollout,
       ...(draft.savedAt === undefined
         ? undefined
         : {

@@ -1,8 +1,10 @@
 import {
   applyNotesToText,
+  applyRolloutNotes,
   type PlanNote,
   planNotesSchema,
   readNotes,
+  rolloutNotesInProgress,
   textNotesInProgress,
 } from "@sidecar/hosted/plan-template";
 import {
@@ -10,6 +12,7 @@ import {
   PLAN_BOUNDS,
   type PlanDocument,
   type PlanSectionEdit,
+  type Rollout,
 } from "@sidecar/hosted/plan-wire";
 import {
   LIVE_SERVER_EVENT,
@@ -45,7 +48,8 @@ import { spendHostedMeter } from "../hosted/quota.js";
  * call has been quiet for a beat, whoever spoke last, it makes one model call
  * over what was said since its cursor, which answers with notes: a point
  * added under a heading, a phrase corrected, or a
- * line struck. They are saved through `saveNotes`, the plan's one write,
+ * line struck, or a pull request of the rollout added, restated, or struck.
+ * They are saved through `saveNotes`, the plan's one write,
  * under the call, so the plan's history keeps the call's saves as one
  * revision.
  * While the model writes, the notes so far go to the device as a draft of the
@@ -80,6 +84,8 @@ export const PLAN_SCRIBE = {
 const ASK_MARKER = {
   /** The plan's Markdown text. */
   DOCUMENT: "[saved plan]",
+  /** The rollout beside the plan, whose pull requests a rollout note names by title and position. */
+  ROLLOUT: "[rollout]",
   EARLIER: "[earlier lines]",
   LATEST: "[latest lines]",
   NOTES: "[Luke's research notes]",
@@ -113,6 +119,8 @@ export interface PlanScribeOptions {
  */
 export interface PlanDraft {
   readonly document: PlanDocument;
+  /** The rollout beside the document: its whole pull requests so far while a draft, the saved one once saved. */
+  readonly rollout: Rollout;
   /** Epoch milliseconds of the save the run read. */
   readonly readAt: number;
   readonly savedAt?: number;
@@ -167,12 +175,18 @@ class ScribeModelError extends Data.TaggedError("ScribeModelError")<{
 /** What one run hands the model: the saved plan, the sections the developer wrote, the lines around the cursor, and the notes since it. */
 function askText(input: {
   readonly plan: NotedPlan;
+  readonly rollout: Rollout;
   readonly developerFields: readonly string[];
   readonly earlier: readonly TranscriptUtterance[];
   readonly latest: readonly TranscriptUtterance[];
   readonly notes: readonly string[];
 }): string {
-  const parts = [input.plan.marker, input.plan.asked];
+  const parts = [
+    input.plan.marker,
+    input.plan.asked,
+    ASK_MARKER.ROLLOUT,
+    JSON.stringify(input.rollout),
+  ];
   if (input.developerFields.length > 0) {
     parts.push(DEVELOPER_FIELDS_MARKER, input.developerFields.join(", "));
   }
@@ -237,6 +251,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     const { plan, text } = stored.value;
     const developerFields = developerWritten(stored.value);
     const noted = notedText(text);
+    const { rollout } = plan;
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
 
     const draft = (partial: UnparsedWireValue) =>
@@ -246,7 +261,11 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         const document = noted.drafted(partial);
         if (document === undefined) return;
         drafted.at = now;
-        options.onDraft?.({ document, readAt: plan.updatedAt });
+        options.onDraft?.({
+          document,
+          rollout: rolloutNotesInProgress(rollout, partial),
+          readAt: plan.updatedAt,
+        });
       });
 
     const written = Effect.gen(function* () {
@@ -257,6 +276,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
             system: SCRIBE_INSTRUCTIONS,
             prompt: askText({
               plan: noted,
+              rollout,
               developerFields,
               earlier,
               latest,
@@ -296,12 +316,16 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         options.report(`The plan's notetaker took ${output.unread} notes outside the template`);
       }
       const taken = noted.taken(output.notes);
-      if (taken.missed.length > 0) {
-        const missed = taken.missed.map(missedNote).join(", ");
+      const cut = applyRolloutNotes(rollout, output.notes);
+      const missedNotes = output.notes.filter(
+        (note) => taken.missed.includes(note) || cut.missed.includes(note),
+      );
+      if (missedNotes.length > 0) {
+        const missed = missedNotes.map(missedNote).join(", ");
         options.report(`The plan's notetaker named what the plan does not hold: ${missed}`);
       }
       // Notes that change nothing are the model saying nothing new was said, and need no save.
-      if (taken.changed) {
+      if (taken.changed || cut.rollout !== rollout) {
         const saved = yield* saveNotes(
           { userId: options.userId, planId: options.planId },
           output.notes,
@@ -317,11 +341,12 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
           saved.moved
             ? {
                 document: saved.document,
+                rollout: saved.rollout,
                 readAt: plan.updatedAt,
                 savedAt: saved.savedAt,
                 sectionEdits: saved.sectionEdits,
               }
-            : { document: saved.document, readAt: plan.updatedAt },
+            : { document: saved.document, rollout: saved.rollout, readAt: plan.updatedAt },
         );
       }
       cursor.heardThrough = heardThrough;
@@ -332,7 +357,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       landed,
       Effect.sync(() => {
         if (drafted.at > Number.NEGATIVE_INFINITY && !drafted.landed) {
-          options.onDraft?.({ document: plan.document, readAt: plan.updatedAt });
+          options.onDraft?.({ document: plan.document, rollout, readAt: plan.updatedAt });
         }
       }),
     );

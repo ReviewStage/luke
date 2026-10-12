@@ -714,6 +714,7 @@ it.live(
       assert.ok(first);
       const draft: PlanDraftFrame = {
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
         document: { body: "# Teammate invitations\n", assumptions: [] },
       };

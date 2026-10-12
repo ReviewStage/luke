@@ -14,6 +14,191 @@
                   "add"
                 ]
               },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "rollout"
+                ],
+                "description": "The rollout: the pull requests the work lands as, in order."
+              },
+              "item": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "main"
+                        ]
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    ]
+                  },
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "title",
+                  "scope",
+                  "base",
+                  "acceptance"
+                ],
+                "additionalProperties": false,
+                "description": "The new pull request, added after the last. Its title; its scope, what it changes; its base, main or the position counted from one of the earlier pull request it cannot build without; and acceptance, what is true once it lands, or null while unsaid."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "item"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "replace"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "rollout"
+                ],
+                "description": "The rollout: the pull requests the work lands as, in order."
+              },
+              "find": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "A phrase copied exactly from the title of the one pull request the note changes."
+              },
+              "item": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "main"
+                        ]
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    ]
+                  },
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "title",
+                  "scope",
+                  "base",
+                  "acceptance"
+                ],
+                "additionalProperties": false,
+                "description": "The pull request as it now stands, in the same position. Its title; its scope, what it changes; its base, main or the position counted from one of the earlier pull request it cannot build without; and acceptance, what is true once it lands, or null while unsaid."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "find",
+              "item"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "rollout"
+                ],
+                "description": "The rollout: the pull requests the work lands as, in order."
+              },
+              "find": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "A phrase copied exactly from the title of the one pull request the note changes."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "find"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "add"
+                ]
+              },
               "section": {
                 "type": "string",
                 "minLength": 1,

@@ -32,6 +32,7 @@ import {
   type PlanSummary,
   type PlanTreeAnswer,
   type RepositoryPin,
+  ROLLOUT_BASE,
   type ShownCode,
 } from "@sidecar/hosted/plan-wire";
 import {
@@ -468,6 +469,7 @@ it.effect(
       const drafting = { body: "# Draft\n\n## Goal", assumptions: [] };
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: INVITES,
         document: drafting,
       });
@@ -479,6 +481,7 @@ it.effect(
       const saved = { body: "# Draft\n\n## Goal\n\nInvite by email.", assumptions: [] };
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: INVITES,
         document: saved,
         savedAt: 11,
@@ -496,6 +499,36 @@ it.effect(
 );
 
 it.effect(
+  "a rollout the notetaker cuts during a call is drawn on the open plan as it is taken",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const rollout = [
+        {
+          title: "Add the invite table",
+          scope: "The `invite` table and its migration.",
+          base: ROLLOUT_BASE.MAIN,
+          acceptance: null,
+        },
+      ];
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout,
+        planId: INVITES,
+        document: invites.document,
+      });
+      assert.deepEqual(last()?.document, {
+        status: PLANNING_READ.READY,
+        plan: { ...invites, rollout },
+      });
+    }),
+);
+
+it.effect(
   "a saved draft of a document plan carries who last changed each section, and the open plan takes them",
   () =>
     Effect.gen(function* () {
@@ -507,6 +540,7 @@ it.effect(
       const named = [{ section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true }];
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: INVITES,
         document: { body: "## Context\n\nAdmins only, today.\n", assumptions: [] },
         savedAt: 11,
@@ -578,6 +612,7 @@ it.effect(
 
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: INVITES,
         document: { body: "# Teammate invitations\n\nA stale draft.", assumptions: [] },
         readAt: EDITED_AT - 1,
@@ -586,6 +621,7 @@ it.effect(
       const saved = { body: "# Teammate invitations\n\nInvites expire.\n\nMore.", assumptions: [] };
       planning.showDraft({
         type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        rollout: [],
         planId: INVITES,
         document: saved,
         readAt: EDITED_AT - 1,
@@ -606,6 +642,7 @@ it.effect("a draft of a plan the panel does not have open is dropped", () =>
 
     planning.showDraft({
       type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+      rollout: [],
       planId: BILLING,
       document: { body: "# Billing export", assumptions: [] },
     });
@@ -2017,6 +2054,7 @@ it.effect(
       const draft = (body: string, savedAt?: number) =>
         planning.showDraft({
           type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+          rollout: [],
           planId: INVITES,
           document: { body, assumptions: [] },
           ...(savedAt === undefined ? undefined : { savedAt }),

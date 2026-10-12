@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
+import {
+  NOTE_KIND,
+  PLAN_HEADING,
+  type PlanNote,
+  ROLLOUT_NOTE_FIELD,
+} from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR, ROLLOUT_BASE, type RolloutItem } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -108,6 +113,69 @@ function linesLost(earlier: string, later: string): readonly string[] {
   return wordLinesOf(earlier).filter((line) => !kept.some((standing) => standing.startsWith(line)));
 }
 
+const TABLE: RolloutItem = {
+  title: "Add the invite table",
+  scope: "The `invite` table and its migration.",
+  base: ROLLOUT_BASE.MAIN,
+  acceptance: null,
+};
+
+const ROUTE: RolloutItem = {
+  title: "Invite route",
+  scope: "The route over the table.",
+  base: 1,
+  acceptance: "A member invites by email.",
+};
+
+/**
+ * A cut Luke said on the call and the developer took, as the notetaker
+ * notes it, then a rename of its second pull request on the next run: the
+ * rollout is saved beside the plan and sent on every draft, the model is
+ * handed it, and nothing of it is written into the plan's text.
+ */
+const cutOnCall = () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+      const renamed = { ...ROUTE, title: "Invite route and its refusals" };
+      const { scribe, asked, drafts } = yield* scribeFor(userId, planId, [
+        {
+          notes: [
+            { kind: NOTE_KIND.ADD, field: ROLLOUT_NOTE_FIELD, item: TABLE },
+            { kind: NOTE_KIND.ADD, field: ROLLOUT_NOTE_FIELD, item: ROUTE },
+          ],
+        },
+        {
+          notes: [
+            { kind: NOTE_KIND.REPLACE, field: ROLLOUT_NOTE_FIELD, find: "route", item: renamed },
+          ],
+        },
+      ]);
+      const rolloutOf = Effect.map(
+        readPlan(userId, planId),
+        (stored) => Option.getOrThrow(stored).plan.rollout,
+      );
+      const before = yield* savedBody(userId, planId);
+
+      scribe.observe(said("Two PRs: the table on main, then the route on it.", 0, 2_000));
+      scribe.observe(heard("Sounds right.", 2_500, 3_000));
+      yield* quiet;
+      const cut = yield* settledRead(rolloutOf, (rollout) => rollout.length === 2);
+      scribe.observe(heard("Call the route one invite route and its refusals.", 4_000, 5_000));
+      yield* quiet;
+      const named = yield* settledRead(rolloutOf, (rollout) => rollout[1]?.title === renamed.title);
+
+      assert.deepEqual(cut, [TABLE, ROUTE]);
+      assert.deepEqual(named, [TABLE, renamed]);
+      assert.equal(yield* savedBody(userId, planId), before);
+      assert.ok(promptText(asked[0]).includes("[rollout]\n[]"));
+      assert.ok(promptText(asked[1]).includes(`[rollout]\n${JSON.stringify(cut)}`));
+      assert.deepEqual(drafts.at(-1)?.rollout, named);
+      assert.equal(drafts.at(-1)?.document.body, before);
+    }),
+  );
+
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
     const { model, asked, pace } = scriptedScribeModel(answers);
@@ -149,6 +217,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         }),
       ),
   );
+
+  it.effect("a rollout cut on the call is saved beside the plan's text, never in it", cutOnCall);
 
   it.effect(
     "a call's saves are one revision of the plan, written by the notetaker on the call",
