@@ -40,7 +40,7 @@ import type { StoreWriter } from "./store/writer.js";
  * eve: one ask, one delivery. A Stop on a turn eve is running is eve's
  * cancel of that turn, named by the eve turn id the relay wrote on its row at
  * the start; a Stop on an ask still waiting is a stamp on the record,
- * honoured when its turn starts. Every id read here is one `ids.ts` mints.
+ * honoured when its turn starts. Every id read here is one `@sidecar/database/models/ids` mints.
  *
  * The ask and the standing read answer effects over the ambient SQL client,
  * as the record they are handed does: a caller composes them into the one
