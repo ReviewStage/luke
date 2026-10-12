@@ -113,6 +113,13 @@ export class AccountSessionManager {
   readonly #options: AccountSessionManagerOptions;
   /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
   readonly refreshOnce: () => Effect.Effect<void>;
+  /**
+   * One refresh grant however many callers ask for it at once, `refresh`'s
+   * own included. Note that two grants on one refresh token are a replay to
+   * Better Auth, which answers the second by revoking every token the account
+   * holds on this client, so no second flight may ever start beside this one.
+   */
+  readonly renewOnce: () => Effect.Effect<void>;
   readonly #changesPubSub: PubSub.PubSub<AccountSnapshot>;
   /**
    * Every snapshot this session settles on, in order, as the subscription a
@@ -135,6 +142,7 @@ export class AccountSessionManager {
     this.#changesPubSub = changesPubSub;
     this.changes = PubSub.subscribe(this.#changesPubSub).pipe(Effect.map(Stream.fromSubscription));
     this.refreshOnce = singleFlightEffect(() => this.refresh());
+    this.renewOnce = singleFlightEffect(() => this.#renew());
   }
 
   #publishChange(): Effect.Effect<void> {
@@ -229,6 +237,22 @@ export class AccountSessionManager {
         return;
       }
       if (!accessTokenNeedsRefresh(identity.failure)) return;
+      yield* this.renewOnce();
+    });
+  }
+
+  /**
+   * The refresh grant, for a caller whose token the service already refused
+   * (RFC 6749 section 1.5). The refusal is the verdict, so no userinfo read
+   * comes first: Better Auth answers a token it no longer holds with 400
+   * `invalid_request` rather than a 401, and a read taking that as a token
+   * still good would leave a dead one standing on every call after it.
+   */
+  #renew(): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const stored = yield* this.#options.store.readAccount();
+      if (!stored || !this.#options.requiresAccount) return;
+      const generation = this.#generation;
       const renewed = yield* Effect.result(this.#options.client.refresh(stored.refreshToken));
       if (Result.isFailure(renewed)) {
         if (
