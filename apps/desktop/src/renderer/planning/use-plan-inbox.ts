@@ -8,10 +8,12 @@ import {
   type CodingAgentInboxParams,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
+  knownBlock,
 } from "@sidecar/hosted/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { messageFailureNote } from "./coding-agent-model";
@@ -50,8 +52,10 @@ import {
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
  * asking for it again, and a picture inside a settled card no one opened
- * is never asked for. A read that did not answer is held as failed, and
- * the card offers to try again.
+ * is never asked for. A picture no item names any longer, once the agent
+ * posted its item again, is let go, since the service deleted it too. A
+ * read that did not answer is held as failed, and the card offers to try
+ * again.
  */
 
 /** How one read is asked: the plan and the cursor to read past, answered as the view hears it. */
@@ -145,6 +149,26 @@ function fresh(planId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** Every attachment the items' blocks name. */
+function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
+  const named = new Set<string>();
+  for (const item of items) {
+    for (const block of item.blocks) {
+      if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+    }
+  }
+  return named;
+}
+
+/** The images held under the attachments still named; the rest let go. */
+function imagesNamed(
+  images: ReadonlyMap<string, InboxImage>,
+  named: ReadonlySet<string>,
+): ReadonlyMap<string, InboxImage> {
+  if ([...images.keys()].every((attachmentId) => named.has(attachmentId))) return images;
+  return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
+}
+
 /** The items with one replaced by the service's newer word on it. */
 function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxItem[] {
   return items.some((each) => each.id === item.id)
@@ -173,6 +197,13 @@ export function usePlanInbox(input: {
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   // The reads out now, by attachment, so an item drawn again while its read is out asks once.
   const reading = useRef(new Set<string>());
+  // The attachments the items name now, so a picture an item no longer names is let go, and one landing for it is not kept.
+  const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
+  const namedNow = useRef(named);
+  namedNow.current = named;
+  useEffect(() => {
+    setImages((standing) => imagesNamed(standing, named));
+  }, [named]);
   const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
@@ -301,9 +332,9 @@ export function usePlanInbox(input: {
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
-          // An image landing after the window moved to another plan is that plan's no longer.
+          // An image landing after the window moved to another plan, or after its item let it go, is kept for nobody.
           setImages((standing) =>
-            latest.current.planId === askedOn
+            latest.current.planId === askedOn && namedNow.current.has(attachmentId)
               ? new Map(standing).set(attachmentId, image)
               : standing,
           );

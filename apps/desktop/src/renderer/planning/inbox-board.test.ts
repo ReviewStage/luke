@@ -237,6 +237,8 @@ function service(
   const reads: string[] = [];
   const listReads: number[] = [];
   const imageReads: CodingAgentInboxAttachmentParams[] = [];
+  // A read held past the pages, answered by `deliver`.
+  let waiting: ((page: CodingAgentInboxAnswerView) => void) | undefined;
   const agents = codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -244,7 +246,11 @@ function service(
     readInbox: ({ after }) => {
       reads.push(after);
       const page = pages.shift();
-      return page === undefined ? new Promise(() => undefined) : Promise.resolve(page);
+      return page === undefined
+        ? new Promise((resolve) => {
+            waiting = resolve;
+          })
+        : Promise.resolve(page);
     },
     answerInbox: (params) => {
       sent.push(params);
@@ -259,7 +265,12 @@ function service(
       return Promise.resolve(next ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
     },
   });
-  return { agents, sent, reads, listReads, imageReads };
+  /** Answers the read held past the pages with the page given. */
+  const deliver = (page: CodingAgentInboxAnswerView) => {
+    waiting?.(page);
+    waiting = undefined;
+  };
+  return { agents, sent, reads, listReads, imageReads, deliver };
 }
 
 /**
@@ -905,6 +916,44 @@ it.effect(
       );
       press(viewer.querySelector("img.attachment-viewer-image"));
       assert.equal(document.body.querySelector(".attachment-viewer-backdrop"), null);
+    }),
+);
+
+it.effect(
+  "an image an item no longer names, once its agent posted the item again, is let go, and the item's new picture is read in its place",
+  () =>
+    Effect.gen(function* () {
+      const REPLACED = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c70";
+      const reposted = {
+        ...SHOT,
+        revision: 2,
+        updatedAt: 2_000,
+        blocks: [
+          { type: INBOX_BLOCK.IMAGE, attachmentId: REPLACED, alt: "The landing page, again" },
+        ],
+      };
+      const { agents, imageReads, deliver } = service(
+        [{ items: [SHOT], cursor: "1" }],
+        [],
+        [
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+        ],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.ok(card(page, SHOT.id).querySelector("[data-inbox-image] img"), "the first is drawn");
+      deliver({ items: [reposted], cursor: "2" });
+      yield* settle;
+      assert.deepEqual(
+        imageReads.map((read) => read.attachmentId),
+        [ATTACHMENT, REPLACED],
+      );
+      const pictures = [...card(page, SHOT.id).querySelectorAll("[data-inbox-image] img")];
+      assert.deepEqual(
+        pictures.map((picture) => picture.getAttribute("alt")),
+        ["The landing page, again"],
+      );
     }),
 );
 
