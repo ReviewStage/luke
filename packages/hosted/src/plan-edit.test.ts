@@ -103,7 +103,7 @@ test("clearing a field Luke wrote in since it was opened conflicts rather than s
   assert.deepEqual(outcome, { conflict: { current: added } });
 });
 
-test("a heading the developer types into a field stays inside it once formatted", () => {
+test("a heading the developer types into a field stays inside it once formatted, below the field's own heading", () => {
   const outcome = applyDeveloperEdit(PLAN, {
     field: PLAN_FIELD.PROBLEM,
     base: OPENED,
@@ -113,7 +113,7 @@ test("a heading the developer types into a field stays inside it once formatted"
 
   const body = planBody(HEADER, outcome.applied.fields);
   assert.equal(body.split("\n").filter((line) => line === "## Scope").length, 1);
-  assert.ok(body.includes("\\## Scope\nNot a section."));
+  assert.ok(body.includes("##### Scope\nNot a section."));
 });
 
 const RULE_ONE = { statement: "Any member may invite by email.", examples: null };

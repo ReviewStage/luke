@@ -43,8 +43,9 @@ import {
  * pointers into it rather than a description of it.
  *
  * The formatter owns every heading and its order. Field text is Markdown the
- * model wrote, contained where it stands: a line that would open a heading or
- * an HTML block is escaped, and a code fence left open is closed at the end of
+ * model wrote, contained where it stands: a heading in it is moved below the
+ * field's own, a line that would underline a heading or open an HTML block
+ * is escaped, and a code fence left open is closed at the end of
  * its field, so no answer can impersonate a section or swallow the ones after
  * it. The schema guarantees shape only; whether a note is understood or
  * agreed is the model's judgment.
@@ -162,10 +163,33 @@ function fenceCloses(line: string, fence: OpenFence): boolean {
   return sameCharacter && marker.length >= fence.marker.length && (match?.[2] ?? "").trim() === "";
 }
 
-/** One line outside a fence, with a backslash before whatever would open a heading or an HTML block. */
+/**
+ * How far a heading in a field moves down: a field's own heading is `###`, so
+ * the field's `#` becomes `####` and nothing in a field can open a section.
+ */
+const FIELD_HEADING_DEPTH = 3;
+
+/** The deepest heading Markdown has. */
+const DEEPEST_HEADING = 6;
+
+/** A run of a heading's hashes. */
+const HEADING_HASHES = /^#{1,6}/u;
+
+/**
+ * One line outside a fence, kept inside its field: a heading moved down below
+ * the field's own, so the document draws it as a heading inside the field,
+ * and a backslash before whatever would underline the line above into a
+ * heading or open an HTML block.
+ */
 function escapedLine(line: string, afterText: boolean): string {
-  const heading = HEADING_LINE.exec(line) ?? (afterText ? SETEXT_LINE.exec(line) : null);
-  const opener = heading ?? HTML_LINE.exec(line);
+  const heading = HEADING_LINE.exec(line);
+  if (heading !== null) {
+    const at = heading[1]?.length ?? 0;
+    const hashes = HEADING_HASHES.exec(line.slice(at))?.[0].length ?? 0;
+    const level = Math.min(DEEPEST_HEADING, hashes + FIELD_HEADING_DEPTH);
+    return `${line.slice(0, at)}${"#".repeat(level)}${line.slice(at + hashes)}`;
+  }
+  const opener = (afterText ? SETEXT_LINE.exec(line) : null) ?? HTML_LINE.exec(line);
   if (opener === null) return line;
   const at = opener[1]?.length ?? 0;
   return `${line.slice(0, at)}\\${line.slice(at)}`;

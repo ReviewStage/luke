@@ -576,9 +576,10 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
   it. One field is open at a time, and an editor stays where it opened while
   it stands, so its inputs never move under the typing.
   - A text field opens its Markdown in a plain text box. An unanswered field
-    opens empty, and leaving it empty keeps it unanswered. A heading line
-    typed into a field is escaped by the formatter, so no edit can open a
-    section of its own.
+    opens empty, and leaving it empty keeps it unanswered. A heading typed
+    into a field is moved below the field's own by the formatter, so it is
+    drawn as a heading inside the field and no edit can open a section of
+    its own.
   - The open questions and the assumptions open in one box, one item a line;
     a line's list marker is dropped, a blank line is none, and an empty box
     leaves the list empty.
@@ -746,10 +747,12 @@ and the planning model reads the canonical Markdown on its next turn.
   null until one is agreed. `openQuestions` is always a list, rendering "No
   additional questions recorded" while empty.
 - **Order and containment.** The formatter owns every heading and its order,
-  so the body's order is the template's whatever order notes arrive in. Field text is contained where it stands: a line that would open a
-  heading or an HTML block is escaped, and a code fence left open is closed
-  at the end of its field, so no answer can impersonate a section or swallow
-  the ones after it.
+  so the body's order is the template's whatever order notes arrive in. Field text is contained where it stands: a heading in it is moved
+  below the field's own `###` (`#` becomes `####`, `##` `#####`, deeper
+  ones `######`), so the document draws it as a heading inside the field; a
+  line that would underline a heading or open an HTML block is escaped; and
+  a code fence left open is closed at the end of its field. So no answer can
+  impersonate a section or swallow the ones after it.
 - **A new plan** is the template with every field unanswered, no open
   question, and no assumption; its `fields` column is null and its `body`
   empty until the first save, and the store formats an empty body as the
