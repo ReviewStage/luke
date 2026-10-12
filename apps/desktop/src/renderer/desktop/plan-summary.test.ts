@@ -97,7 +97,18 @@ const roots: Root[] = [];
  * the plan holding an agent, a worker, a file shown, and the board and
  * transcript used.
  */
-function Page({ archived }: { archived: boolean }) {
+/** The code Luke showed on the plan: one file, unless a test shows more. */
+const SHOWN: PlansControl["shownCode"] = [
+  { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+];
+
+function Page({
+  archived,
+  shownCode,
+}: {
+  archived: boolean;
+  shownCode: PlansControl["shownCode"];
+}) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const agents = codingAgentsControl({
     agents: [AGENT],
@@ -110,7 +121,7 @@ function Page({ archived }: { archived: boolean }) {
     { id: plan.id, holds: HOLDS },
     mainTabs.openAgents,
     workerCallIds(WORK.turns),
-    [CODE.ref.path],
+    (shownCode ?? []).map((showing) => showing.code.ref.path),
   );
   const summary = useSummaryPin(false);
   return createElement(
@@ -127,18 +138,18 @@ function Page({ archived }: { archived: boolean }) {
         sidePanel,
         agents,
         work: WORK,
-        shownCode: [{ callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE }],
+        shownCode,
       }),
     }),
     createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
   );
 }
 
-function mount(archived = false): HTMLElement {
+function mount(archived = false, shownCode = SHOWN): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived })));
+  act(() => root.render(createElement(Page, { archived, shownCode })));
   return container;
 }
 
@@ -185,13 +196,20 @@ function card(): HTMLElement | null {
 function listed(root: HTMLElement): [string, string[]][] {
   return [...root.querySelectorAll<HTMLElement>("ul[aria-label]")].map((rows) => [
     rows.getAttribute("aria-label") ?? "",
-    [...rows.querySelectorAll("li")].map((row) => row.textContent ?? ""),
+    [...rows.querySelectorAll<HTMLElement>("li button")].map(rowLabel),
   ]);
+}
+
+/** What a row is named by: its label's own words, without the folder a file's adds, or a rail row's hidden name. */
+function rowLabel(row: HTMLElement): string {
+  const label =
+    row.querySelector(".plan-summary-label")?.firstChild ?? row.querySelector(".visually-hidden");
+  return label?.textContent ?? "";
 }
 
 function rowNamed(root: HTMLElement, label: string): HTMLElement {
   const row = [...root.querySelectorAll<HTMLElement>("li button")].find(
-    (each) => each.textContent === label,
+    (each) => rowLabel(each) === label,
   );
   assert.ok(row, `no ${label} row`);
   return row;
@@ -370,4 +388,50 @@ test("unpinning takes the summary away and the next launch keeps it away until i
 
   act(() => summaryButton(relaunched).click());
   assert.ok(pinned(relaunched));
+});
+
+test("Escape on the card is the card's alone: the window under it hears nothing of it", () => {
+  const page = mount();
+  press(page, '[aria-label="Show panel"]');
+  act(() => summaryButton(page).click());
+  const heard = vi.fn();
+  window.addEventListener("keydown", heard);
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  window.removeEventListener("keydown", heard);
+
+  assert.equal(card(), null);
+  assert.equal(heard.mock.calls.length, 0);
+});
+
+test("a card hung over the open panel does not come back when the panel is shut and opened again", () => {
+  const page = mount();
+  press(page, '[aria-label="Show panel"]');
+  act(() => summaryButton(page).click());
+  assert.ok(card());
+
+  press(page, '[aria-label="Hide panel"]');
+  press(page, '[aria-label="Show panel"]');
+
+  assert.equal(card(), null);
+  assert.equal(summaryButton(page).getAttribute("aria-expanded"), "false");
+});
+
+test("two files of one name are told apart by their folders, as their picker rows are", () => {
+  const roles = (path: string, at: number) => ({
+    callId: `show-${at}`,
+    turnId: "turn-1",
+    shownAt: at,
+    code: { ...CODE, ref: { path, startLine: 1, endLine: 1 } },
+  });
+  const page = mount(false, [roles("apps/web/roles.ts", 1), roles("apps/desktop/roles.ts", 2)]);
+  const summary = pinned(page);
+  assert.ok(summary);
+
+  const files = [...summary.querySelectorAll('ul[aria-label="Files"] li')].map(
+    (row) => row.querySelector(".plan-summary-detail")?.textContent,
+  );
+  assert.deepEqual(files, ["apps/web", "apps/desktop"]);
 });

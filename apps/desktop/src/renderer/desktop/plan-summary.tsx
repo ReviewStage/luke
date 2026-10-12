@@ -170,6 +170,9 @@ export function useSummaryLayout(
     : mode === SUMMARY_MODE.RAIL
       ? CARD_FROM.RAIL
       : undefined;
+  // A card hung from somewhere no longer standing is let go, so a panel
+  // shut and opened again does not bring it back unasked.
+  if (cardFrom !== undefined && cardFrom !== from) setCardFrom(undefined);
   const card = from !== undefined && cardFrom === from;
   const toggleCard = (asked: CardFrom) => setCardFrom(card ? undefined : asked);
   const onDismiss = useCallback(() => setCardFrom(undefined), []);
@@ -248,7 +251,7 @@ function summarySections(plans: PlansControl): SummarySection[] {
   });
 }
 
-/** A row of the column or the card: its glyph and its label, faded at its end where it is cut short. */
+/** A row of the column or the card: its glyph, its label, and what tells it apart, a file's folder, as its "+" row says it, faded at its end where it is cut short. */
 function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) {
   const [words, clipped] = useClipped();
   return (
@@ -257,17 +260,20 @@ function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) 
         <span className="plan-summary-glyph">{entry.row.icon}</span>
         <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
           {entry.row.label}
+          {entry.row.detail === undefined ? null : (
+            <span className="plan-summary-detail">{entry.row.detail}</span>
+          )}
         </span>
       </button>
     </li>
   );
 }
 
-/** A row of the rail: its glyph alone, naming itself to a reader and in its hint. */
+/** A row of the rail: its glyph alone, naming itself to a reader and in its hint, a file's hint its whole path, which its "+" row is searched by. */
 function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
-      <Tooltip label={entry.row.label}>
+      <Tooltip label={entry.row.terms?.[0] ?? entry.row.label}>
         <button type="button" className="icon-button" onClick={entry.onPick}>
           <span className="plan-summary-glyph">{entry.row.icon}</span>
           <span className="visually-hidden">{entry.row.label}</span>
@@ -337,12 +343,14 @@ function SummaryCard({
       if (!(target instanceof Element) || card.current?.contains(target)) return;
       if (target.closest(OPENER) === null) onDismiss();
     };
-    // Note that the window's own Escape steps back a layer (app.tsx), so the
-    // card claims the press before it is heard there, and hands the focus to
-    // the control that hung it, which names it.
+    // Note that the window's own Escape mutes a call or steps back a layer
+    // (app.tsx), so the card keeps the press, as a menu does, before it is
+    // heard there, and hands the focus to the control that hung it, which
+    // names it.
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
+      event.stopPropagation();
       const opener = [...document.querySelectorAll<HTMLElement>(OPENER)].find(
         (control) => control.getAttribute("aria-controls") === id,
       );
