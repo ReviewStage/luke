@@ -26,10 +26,17 @@ export const accountPreference = pgTable("account_preference", {
   codingAgentModel: text("coding_agent_model"),
   codingAgentEffort: text("coding_agent_effort"),
   codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
+  /**
+   * The Markdown a new plan of this account starts from, kept verbatim as
+   * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`
+   * (`@sidecar/hosted/plan-document-template`). Its own path writes it
+   * (`/api/account/plan-template`), apart from the preferences snapshot.
+   */
+  planTemplate: text("plan_template"),
   createdAt: instant("created_at").notNull().defaultNow(),
   /**
    * When the preferences part was last written; null on a row only a
-   * coding-agent choice opened. The desktop reads the instant's presence as
+   * coding-agent choice or a plan template opened. The desktop reads the instant's presence as
    * a snapshot to apply over its own settings, so a row with none written
    * must answer none, or a never-synced Mac would take an empty snapshot
    * over the voice it holds.

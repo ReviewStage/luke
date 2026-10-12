@@ -12,10 +12,12 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "./model-catalog.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
- * What the account group reads and writes of an account: the erasure, and
- * the cross-device snapshot behind `/api/account/preferences`, which is the
+ * What the account group reads and writes of an account: the erasure, the
+ * cross-device snapshot behind `/api/account/preferences`, which is the
  * settings preferences and the coding agents' default model, effort, and
- * context window beside them. Every function here is an effect over the ambient `SqlClient`
+ * context window beside them, and the plan template behind
+ * `/api/account/plan-template`, a column of the same row that neither path
+ * reads of the other. Every function here is an effect over the ambient `SqlClient`
  * and names no database of its own; `account-seams.ts` beside it runs them
  * at the web edge and is the only file of the two that reaches the auth
  * session.
@@ -30,7 +32,7 @@ export interface AccountPreferencesRow {
   codingAgent: ModelChoice;
   /**
    * When the preferences part was last written; none on a row only a
-   * coding-agent choice opened. The desktop reads its presence as a snapshot
+   * coding-agent choice or a plan template opened. The desktop reads its presence as a snapshot
    * to apply over its own settings, so it stands for the preferences alone.
    */
   updatedAt: Date | undefined;
@@ -205,4 +207,69 @@ export function writeAccountPreferences(
     );
     return snapshotOf(row);
   });
+}
+
+/* ----- The plan template ----- */
+
+/** The template column alone, so a read of it reaches nothing of the preferences beside it. */
+const PLAN_TEMPLATE_COLUMNS = { planTemplate: accountPreference.planTemplate };
+
+const PlanTemplateRowSchema = Schema.Struct({ planTemplate: Schema.NullOr(Schema.String) });
+
+const findPlanTemplate = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: PlanTemplateRowSchema,
+  execute: (userId) =>
+    db
+      .select(PLAN_TEMPLATE_COLUMNS)
+      .from(accountPreference)
+      .where(eq(accountPreference.userId, userId))
+      .limit(1),
+});
+
+/** The account's own template, or null where it holds the default: no row, or a reset. */
+export function readPlanTemplate(
+  userId: string,
+): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findPlanTemplate(userId),
+    Option.match({ onNone: () => null, onSome: (row) => row.planTemplate }),
+  );
+}
+
+const PlanTemplateWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  planTemplate: Schema.NullOr(Schema.String),
+});
+
+/**
+ * Note that the write sets the template column and nothing else, not even
+ * `updated_at`, because that instant tells a Mac the preferences part was
+ * written and a template is no part of it. A row the template opens holds
+ * no preferences, so it answers none.
+ */
+const upsertPlanTemplate = SqlSchema.findOne({
+  Request: PlanTemplateWriteSchema,
+  Result: PlanTemplateRowSchema,
+  execute: (write) =>
+    db
+      .insert(accountPreference)
+      .values(write)
+      .onConflictDoUpdate({
+        target: accountPreference.userId,
+        set: { planTemplate: write.planTemplate },
+      })
+      .returning(PLAN_TEMPLATE_COLUMNS),
+});
+
+/** Keeps the account's template verbatim, or null for the default, and answers what is then kept. */
+export function writePlanTemplate(
+  userId: string,
+  template: string | null,
+): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
+  return upsertPlanTemplate({ userId, planTemplate: template }).pipe(
+    Effect.map((row) => row.planTemplate),
+    // An upsert that returned no row is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+  );
 }

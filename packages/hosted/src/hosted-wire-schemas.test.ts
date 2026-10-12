@@ -15,6 +15,7 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
+import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
 import * as providerKeyWire from "./provider-key-wire.js";
@@ -134,6 +135,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDefaultAnswerSchema: modelsWire.codingAgentDefaultAnswerSchema,
     codingAgentDefaultWriteSchema: modelsWire.codingAgentDefaultWriteSchema,
   } satisfies RecordedEffectJsonSchemas<typeof modelsWire>,
+  "plan-document-template": {
+    planTemplateAnswerSchema: planDocumentTemplate.planTemplateAnswerSchema,
+    planTemplateWriteRequestSchema: planDocumentTemplate.planTemplateWriteRequestSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof planDocumentTemplate>,
   "plan-edit": {
     planEditRequestSchema: planEdit.planEditRequestSchema,
     planEditAnswerSchema: planEdit.planEditAnswerSchema,

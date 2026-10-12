@@ -1,5 +1,11 @@
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  DEFAULT_PLAN_TEMPLATE,
+  PLAN_TEMPLATE_BOUNDS,
+  type PlanTemplateAnswer,
+  planTemplateWriteRequestSchema,
+} from "@sidecar/hosted/plan-document-template";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -26,6 +32,7 @@ import {
   hostedNotFoundRoute,
   hostedRefusalResponse,
   hostedStoreOrUnavailable,
+  readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import {
@@ -37,13 +44,13 @@ import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * The account group: the signed-in desktop's own delete and preferences
- * endpoints. Both endpoints resolve the same bearer against the deployment's
- * own account store before touching anything, and answer nothing about any
- * account but the one the bearer names — root AGENTS.md pins that no
- * credential or account secret ever travels in an answer, so what each
- * endpoint answers is a boolean or the caller's own stored snapshot, never a
- * token or a session id.
+ * The account group: the signed-in desktop's own delete, preferences, and
+ * plan template endpoints. Each resolves the same bearer against the
+ * deployment's own account store before touching anything, and answers
+ * nothing about any account but the one the bearer names — root AGENTS.md
+ * pins that no credential or account secret ever travels in an answer, so
+ * what each endpoint answers is a boolean or the caller's own stored value,
+ * never a token or a session id.
  *
  * The preferences snapshot is two parts: the settings preferences the
  * desktop syncs, and the coding agents' default model, effort, and context
@@ -51,12 +58,21 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * part or both, and a coding-agent choice is accepted only as the catalog
  * accepts it (`hosted/model-catalog.ts`), so what is stored is always a
  * choice a Start could run.
+ *
+ * The plan template is a path of its own rather than a third part of the
+ * snapshot, because the desktop syncs the snapshot and applies it over its
+ * own settings, and a twenty-thousand-character text has no place in that
+ * loop. It is kept verbatim, and null stands for the built-in default.
  */
 
 const ACCOUNT_PATH = {
   DELETE: "/api/account/delete",
   PREFERENCES: "/api/account/preferences",
+  PLAN_TEMPLATE: "/api/account/plan-template",
 } as const;
+
+/** A template write is the template at its bound with every character escaped, and the key around it. */
+const MAXIMUM_PLAN_TEMPLATE_BODY_BYTES = PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_024;
 
 const HTTP_METHOD = {
   GET: "GET",
@@ -74,6 +90,10 @@ export interface AccountAppSeams {
     userId: string,
     write: AccountPreferencesWrite,
   ) => AccountSeamEffect<AccountPreferencesRow>;
+  /** The account's own template, or null where it holds the default. */
+  readPlanTemplate: (userId: string) => AccountSeamEffect<string | null>;
+  /** Keeps the template verbatim, or null for the default, and answers what is then kept. */
+  writePlanTemplate: (userId: string, template: string | null) => AccountSeamEffect<string | null>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -244,6 +264,67 @@ const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("web/accountPrefere
   },
 );
 
+/** The template as the group answers it: the account's own, or the default where it holds none. */
+function planTemplateAnswer(stored: string | null): PlanTemplateAnswer {
+  return { template: stored ?? DEFAULT_PLAN_TEMPLATE, custom: stored !== null };
+}
+
+/** GET: the caller's own template, or the default for an account that kept none. */
+const planTemplateReadEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateReadEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    ReturnType<typeof hostedJsonResponse>,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    const userId = yield* resolvedUserId(seams);
+    const stored = yield* hostedStoreOrUnavailable(seams.readPlanTemplate(userId));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, planTemplateAnswer(stored));
+  },
+);
+
+/**
+ * PUT: keeps the body's template verbatim, untrimmed and possibly empty, or
+ * goes back to the default on null, and answers the template as it then
+ * stands. A body naming any other key, or a template past the bound, is
+ * refused and nothing is written.
+ */
+const planTemplateWriteEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateWriteEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    ReturnType<typeof hostedJsonResponse>,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    const userId = yield* resolvedUserId(seams);
+    const body = yield* readJsonBodyEffect(MAXIMUM_PLAN_TEMPLATE_BODY_BYTES);
+    const asked = readEither(planTemplateWriteRequestSchema)(body);
+    if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const stored = yield* hostedStoreOrUnavailable(
+      seams.writePlanTemplate(userId, asked.success.template),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, planTemplateAnswer(stored));
+  },
+);
+
+/** GET or PUT on the template's path; any other method is refused. */
+const accountPlanTemplateEndpoint = /* @__PURE__ */ Effect.fn("web/accountPlanTemplateEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  > {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method === HTTP_METHOD.GET) return yield* planTemplateReadEndpoint(seams);
+    if (incoming.method === HTTP_METHOD.PUT) return yield* planTemplateWriteEndpoint(seams);
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  },
+);
+
 /**
  * An endpoint's refusal carried back onto the answer channel. A refusal is
  * failed with rather than returned, so an endpoint's steps read as the early
@@ -257,7 +338,7 @@ function refusing<R>(
 }
 
 /**
- * The group: the two account endpoints on their own paths, and the hosted
+ * The group: the three account endpoints on their own paths, and the hosted
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
@@ -270,6 +351,11 @@ export function accountApp(
       ANY_METHOD,
       ACCOUNT_PATH.PREFERENCES,
       refusing(accountPreferencesEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE,
+      refusing(accountPlanTemplateEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

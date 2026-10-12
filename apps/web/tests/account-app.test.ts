@@ -184,6 +184,9 @@ function groupSeams(state: Backing): AccountAppSeams {
     readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
     writePreferences: (userId, write) =>
       overStore(state, () => writePreferences(state)(userId, write)),
+    // The plan template's path is answered over a real dialect in `account-plan-template.test.ts`.
+    readPlanTemplate: () => Effect.die(new Error("this suite reads no plan template")),
+    writePlanTemplate: () => Effect.die(new Error("this suite writes no plan template")),
   };
 }
 

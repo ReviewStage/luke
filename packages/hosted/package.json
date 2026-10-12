@@ -15,6 +15,7 @@
     "./model-label": "./src/model-label.js",
     "./models-wire": "./src/models-wire.js",
     "./plan-document": "./src/plan-document.js",
+    "./plan-document-template": "./src/plan-document-template.js",
     "./plan-edit": "./src/plan-edit.js",
     "./plan-markdown": "./src/plan-markdown.js",
     "./plan-template": "./src/plan-template.js",
