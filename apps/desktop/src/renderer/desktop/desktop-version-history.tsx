@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { Plan, PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { BackIcon, ChevronRightIcon, TerminalIcon, WingFace } from "@sidecar/panel";
 import { ArrowUpRightIcon, HistoryIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
