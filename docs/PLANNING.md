@@ -281,8 +281,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   is drawn as the plan's name, in the look of the body's `# Name` line
   (`planning/plan-title.tsx`), over its text and nothing else: the text has
   no title line, its assumptions are a section of it, and nothing stands in
-  for a section it leaves empty. It is read-only until its editor lands. The
-  text is cut into sections as the service cuts it (`planSections` in
+  for a section it leaves empty. It is edited in place ("Editing a plan that
+  is one document" below). The text is cut into sections as the service cuts it (`planSections` in
   `packages/hosted/src/plan-document.ts`): what stands before the first
   heading, then each `#` or `##` heading with what stands under it, a
   heading inside a code fence being code.
@@ -575,6 +575,46 @@ the instant, and the notes as taken; the agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" the planning model is handed both say what the row
 says now.
+
+### Editing a plan that is one document
+
+A plan that is one document is edited whole, in place, with its title
+(`planning/plan-document-editor.tsx`; the editor is `renderer/plan-editor/`).
+
+- **Opening.** The title and each section are blocks, and nothing on them
+  marks them editable. A click into a section's words opens the whole text in
+  place, the caret where the click landed. The editor is TipTap, loaded as a
+  bundle of its own (`plan-editor.js`) the first time a block is hovered or
+  selected, and it draws the words exactly as the sections were drawn, so
+  nothing moves as it opens; a click before the bundle has loaded keeps the
+  sections drawn until it has. Everything TipTap's Markdown holds is edited
+  as it reads (headings, lists, quotes, code, links, task lists, tables), with
+  its own shortcuts; inline HTML, a footnote, a link's definition, and a block
+  of HTML are kept byte for byte as locked blocks.
+- **The keyboard.** The document is one Tab stop, at the block selected last
+  (the title before any); ↑ and ↓ move between blocks, and with nothing
+  focused ↓ selects the first block in view and ↑ the last. Return on a
+  section opens the text with the caret at the section's end. Esc or ⌘↩ in
+  the editor saves and selects the section the caret stood in.
+- **The title.** A click puts the caret in it; Return or ↓ saves it and goes
+  into the text at its start; ↑ on the text's first line saves the text and
+  comes back into the title; Esc saves it and selects it. It is saved by
+  renaming the plan, so the name never enters the text, and a title left
+  empty or unchanged renames nothing.
+- **Saving.** The editor hands its text over once per pause in the typing,
+  and the text saves a second after the developer stops and as the editor
+  closes, as the document's base and value (`POST /api/plans/{id}/edit`);
+  a text longer than a document may hold says so and is not sent. A block
+  the developer did not touch is written back exactly as it stood, so an edit
+  is a change on its own lines alone. A conflict asks Keep mine or Use Luke's,
+  as a field's does, and a save under way says nothing.
+- **Luke writing meanwhile.** The notetaker's drafts never redraw the open
+  editor. Each save that lands answers with the text merged with what Luke
+  wrote since its base; the editor takes Luke's part block by block, in place
+  of only the blocks he changed where the developer has not changed them
+  since, so the caret's block stays, the selection maps through, and it is no
+  step of the developer's undo. While the editor is closed, the document
+  draws Luke's drafts with its typing.
 
 ### Editing
 

@@ -1,0 +1,481 @@
+import { useAtom, useAtomValue } from "@effect/atom-react";
+import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { Duration, Effect } from "effect";
+import { AsyncResult } from "effect/unstable/reactivity";
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { bundleAtom } from "../bundle-loader";
+import {
+  PLAN_EDITOR_ASSET,
+  type PlanEditorHandle,
+  type PlanEditorModule,
+  type PlanEditorProps,
+} from "../plan-editor/contract";
+import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
+import { RetryButton } from "../retry-button";
+import { EDITOR_PLACE, type EditorHost, type FieldEditing } from "./plan-field-editor";
+import {
+  CONFLICT_NOTE,
+  EDIT_SCOPE,
+  FIELD_EDITOR_STATE,
+  type FieldEditor,
+} from "./plan-field-editor-model";
+
+/**
+ * plan-document-editor.tsx -- a plan that is one document, edited in place: its title, its sections as blocks, and its whole text in one editor.
+ *
+ * The text is drawn as its sections, and nothing on them marks them
+ * editable. A click into a section's words opens the whole text in place,
+ * the caret where the click landed; the editor is TipTap, from a bundle of
+ * its own loaded the first time a section is hovered or selected
+ * (`../plan-editor/contract.ts`), and draws the words exactly as the
+ * sections drew them, so nothing moves. Until the bundle has loaded the
+ * sections stay drawn, so a click's point still lands on the same word. The
+ * keyboard moves between the title and the sections as a document editor
+ * moves between blocks: the document is one Tab stop, at the block selected
+ * last; ↑ and ↓ move between blocks; Return edits the selected section with
+ * the caret at its end; and Esc in the editor saves and selects the section
+ * the caret stood in. The title is edited where it stands (Return or ↓ goes
+ * into the text, ↑ on the text's first line comes back to it, Esc saves and
+ * selects it) and saved by renaming the plan, so the name never enters the
+ * text. The words save as the developer pauses, through the field editor's
+ * model, which merges them with what Luke writes (`plan-field-editor-model.ts`).
+ * A save's merged answer is taken into the open editor block by block, and
+ * the notetaker's drafts never redraw it. The editor stands under
+ * `ph-no-capture`, and its words are document text, which the recording masks.
+ */
+
+/** What every block of a document the keyboard moves between wears: the title, and each section. */
+export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
+
+/** What the text says while the editor's bundle could not be loaded. */
+const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+
+/** How long the typing pauses before the document hears the text. */
+const DRAFT_PAUSE = Duration.millis(150);
+
+/** The pause before the text is handed over, as an atom whose work is the wait; setting it again starts the wait over. */
+const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
+  Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
+);
+
+/** The plan editor's own bundle, loaded once per window. */
+const planEditorAtom = bundleAtom(
+  { script: PLAN_EDITOR_ASSET.SCRIPT },
+  () => window.lukePlanEditor,
+  EDITOR_LOAD_FAILED,
+);
+
+/** Starts the editor's bundle loading as the pointer or the keyboard comes onto a block, so it is there by the click. */
+function prefetchPlanEditor(): void {
+  rendererRegistry.get(planEditorAtom);
+}
+
+/** The keyboard moved to the block before or after this one in the document. */
+function stepBlock(from: HTMLElement, by: 1 | -1): void {
+  const blocks = [...document.querySelectorAll<HTMLElement>(`.${DOCUMENT_BLOCK_CLASS}`)];
+  blocks[blocks.indexOf(from) + by]?.focus();
+}
+
+/** The arrows move to the next or previous block. */
+function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return false;
+  event.preventDefault();
+  stepBlock(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+  return true;
+}
+
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link. */
+function editsOnClick(target: EventTarget): boolean {
+  const selection = window.getSelection();
+  if (selection !== null && !selection.isCollapsed) return false;
+  return !(target instanceof Element && target.closest("a") !== null);
+}
+
+/** The block an editor closed from by the keyboard takes the keyboard back, once. */
+function useSelectedOnClose(editing: FieldEditing, key: EditorHost, take: () => void): void {
+  useEffect(() => {
+    if (editing.editor !== undefined || editing.selecting !== key) return;
+    take();
+    editing.selected();
+  });
+}
+
+/** Opens the whole text in its editor, the caret where `placement` says. */
+function openText(editing: FieldEditing, placement?: PlanEditorProps["placement"]): void {
+  editing.open({ field: EDIT_SCOPE.DOCUMENT }, EDITOR_PLACE.DOCUMENT, placement);
+}
+
+/**
+ * One section of the text as a block: its drawn words, which a click opens
+ * the text at, and the keyboard selects, moves past, or opens at the
+ * section's end. A block is a labelled group rather than a button, so a
+ * screen reader still reads the words inside it.
+ */
+export function DocumentBlock({
+  host,
+  section,
+  label,
+  entry,
+  editing,
+  children,
+}: {
+  host: EditorHost;
+  section: number;
+  label: string;
+  /** Whether this block is where Tab enters the document. */
+  entry: boolean;
+  editing: FieldEditing;
+  children: ReactNode;
+}): React.JSX.Element {
+  const block = useRef<HTMLDivElement>(null);
+  useSelectedOnClose(editing, host, () => block.current?.focus());
+  // Note that a code block is taken out of the Tab order, because Chrome makes
+  // a scrolling `<pre>` a Tab stop of its own inside the document's one.
+  useEffect(() => {
+    for (const code of block.current?.querySelectorAll("pre") ?? []) code.tabIndex = -1;
+  });
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a block holds a section's words, not a form's controls, so it is no `<fieldset>`.
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a block is selected by the keyboard and edited with Return, as a document editor's blocks are.
+    <div
+      ref={block}
+      className={DOCUMENT_BLOCK_CLASS}
+      role="group"
+      tabIndex={entry ? 0 : -1}
+      aria-label={label}
+      aria-keyshortcuts="Enter"
+      onPointerEnter={prefetchPlanEditor}
+      onFocus={() => {
+        prefetchPlanEditor();
+        editing.select(host);
+      }}
+      onClick={(event) => {
+        if (editsOnClick(event.target)) openText(editing, { x: event.clientX, y: event.clientY });
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (steppedByArrow(event)) return;
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        openText(editing, { section });
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The caret at the end of an element's words. */
+function caretAtEnd(element: HTMLElement): void {
+  element.focus();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+}
+
+/**
+ * The title over the text, edited where it stands. A click puts the caret
+ * in it; Return or ↓ saves it and goes into the text at its start; Esc saves
+ * it and selects it as a block, from which Return comes back into it. It is
+ * saved by renaming the plan, and a title left empty or unchanged renames
+ * nothing, as a rename anywhere else does.
+ */
+export function EditableTitle({
+  name,
+  entry,
+  editing,
+  onRename,
+}: {
+  name: string;
+  /** Whether this block is where Tab enters the document. */
+  entry: boolean;
+  editing: FieldEditing;
+  onRename: (name: string) => void;
+}): React.JSX.Element {
+  const block = useRef<HTMLDivElement>(null);
+  const text = useRef<HTMLDivElement>(null);
+  // ↑ on the text's first line comes back into the title, its caret at the end.
+  useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
+    if (text.current !== null) caretAtEnd(text.current);
+  });
+  const save = () => {
+    const element = text.current;
+    if (element === null) return;
+    const typed = (element.textContent ?? "").trim();
+    if (typed !== "" && typed !== name) onRename(typed);
+    else element.textContent = name;
+  };
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a block the keyboard selects, as the sections are.
+    <div
+      ref={block}
+      className={`plan-title-block ${DOCUMENT_BLOCK_CLASS}`}
+      role="group"
+      tabIndex={entry ? 0 : -1}
+      aria-label="Title"
+      aria-keyshortcuts="Enter"
+      onPointerEnter={prefetchPlanEditor}
+      onFocus={(event) => {
+        prefetchPlanEditor();
+        if (event.target === event.currentTarget) editing.select(EDITOR_PLACE.TITLE);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (steppedByArrow(event)) return;
+        if (event.key !== "Enter" || text.current === null) return;
+        event.preventDefault();
+        caretAtEnd(text.current);
+      }}
+    >
+      <div className="markdown plan-title ph-no-capture">
+        {/* biome-ignore lint/a11y/useSemanticElements: the title is edited in the heading's own look, which wraps as a heading does; an input cannot. */}
+        <div
+          ref={text}
+          className="markdown-heading plan-title-text"
+          data-level="1"
+          contentEditable="plaintext-only"
+          suppressContentEditableWarning
+          role="textbox"
+          aria-label="Plan name"
+          tabIndex={-1}
+          spellCheck
+          onBlur={save}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              save();
+              block.current?.focus();
+              return;
+            }
+            if (event.key !== "Enter" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            save();
+            openText(editing);
+          }}
+        >
+          {name}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** What the editor reports its text, its finish, and its leaving through. */
+interface DraftDoors {
+  readonly onDraft: (markdown: string) => void;
+  readonly onFinish: (section: number) => void;
+  readonly onLeave: () => void;
+  readonly onLeaveUp: () => void;
+}
+
+/**
+ * The editor's text, handed to the model once per pause in the typing.
+ * Note that it is held back, because each hand-over draws the document
+ * around the editor again, and the editor holds the text meanwhile; a
+ * finish, a leaving, or the editor going hands over the last first, and the
+ * document hands over what is held before it saves what is left as a plan
+ * goes.
+ */
+function useDraftHandOver(
+  editing: FieldEditing,
+  hostOf: (section: number) => EditorHost,
+): DraftDoors {
+  const [pause, restartPause] = useAtom(draftPauseAtom);
+  const pending = useRef<string | undefined>(undefined);
+  const stamp = useRef(0);
+  const door = useRef(editing);
+  door.current = editing;
+  const flush = () => {
+    const next = pending.current;
+    pending.current = undefined;
+    if (next !== undefined) door.current.typeText(next);
+  };
+  // A pause that ran out on the newest text hands it over.
+  useEffect(() => {
+    if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) flush();
+  });
+  useLayoutEffect(() => {
+    door.current.holdWords(flush);
+    return () => {
+      door.current.holdWords(undefined);
+      flush();
+    };
+  }, []);
+  return {
+    onDraft: (markdown) => {
+      pending.current = markdown;
+      stamp.current += 1;
+      restartPause(stamp.current);
+    },
+    onFinish: (section) => {
+      flush();
+      door.current.close(hostOf(section));
+    },
+    onLeave: () => {
+      flush();
+      door.current.close();
+    },
+    onLeaveUp: () => {
+      flush();
+      door.current.close(EDITOR_PLACE.TITLE);
+    },
+  };
+}
+
+/** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
+function MountedPlanEditor({
+  module,
+  props,
+  handle,
+}: {
+  module: PlanEditorModule;
+  props: PlanEditorProps;
+  handle: React.RefObject<PlanEditorHandle | undefined>;
+}): React.JSX.Element {
+  const host = useRef<HTMLDivElement>(null);
+  const latest = useRef(props);
+  latest.current = props;
+  useLayoutEffect(() => {
+    if (host.current === null) return;
+    const mounted = module.mount(host.current, {
+      ...latest.current,
+      onDraft: (markdown) => latest.current.onDraft(markdown),
+      onFinish: (section) => latest.current.onFinish(section),
+      onLeaveUp: () => latest.current.onLeaveUp(),
+    });
+    handle.current = mounted;
+    return () => {
+      handle.current = undefined;
+      mounted.destroy();
+    };
+  }, [module, handle]);
+  return <div ref={host} />;
+}
+
+/**
+ * A save's merged answer taken into the open editor. A save that landed shows
+ * as the model's base moving to the text it sent; the host draws the plan
+ * the service answered before the save's answer arrives, so the plan whose
+ * last save is the developer's, and newer than the one last taken, holds
+ * the merged text. Then Luke's part of it is laid in and the model's base
+ * becomes what the service holds. A draft never moves the last save, and a
+ * save of Luke's is not the developer's, so neither reaches the editor.
+ */
+function useMergedAnswers(
+  editor: FieldEditor,
+  editing: FieldEditing,
+  plan: Plan,
+  handle: React.RefObject<PlanEditorHandle | undefined>,
+): void {
+  const seen = useRef({ base: editor.saved.base, updatedAt: plan.updatedAt });
+  const landed = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const { saved, sending, state } = editor;
+    if (saved.field !== EDIT_SCOPE.DOCUMENT) return;
+    const settled = sending === undefined && state.kind === FIELD_EDITOR_STATE.EDITING;
+    if (settled && saved.base !== seen.current.base) landed.current = saved.base;
+    seen.current.base = saved.base;
+    const sent = landed.current;
+    if (sent === undefined || plan.updatedAt === seen.current.updatedAt) return;
+    if (plan.lastEdit?.actor !== PLAN_ACTOR.DEVELOPER) return;
+    landed.current = undefined;
+    seen.current.updatedAt = plan.updatedAt;
+    const taken = handle.current?.take(sent, plan.document.body);
+    if (taken === undefined) return;
+    seen.current.base = taken.base;
+    editing.rebase(taken.base, taken.text);
+  });
+}
+
+/** What stands under the editor: Luke's change and the choice it asks, or a failed save and its retry; a save under way says nothing. */
+function DocumentNote({
+  editor,
+  editing,
+}: {
+  editor: FieldEditor;
+  editing: FieldEditing;
+}): React.JSX.Element | null {
+  if (editor.state.kind === FIELD_EDITOR_STATE.CONFLICT) {
+    return (
+      <div className="plan-field-note" role="alert">
+        <span>{CONFLICT_NOTE}</span>
+        <button type="button" className="toolbar-button" onClick={editing.keepMine}>
+          Keep mine
+        </button>
+        <button type="button" className="toolbar-button" onClick={editing.takeLukes}>
+          Use Luke's
+        </button>
+      </div>
+    );
+  }
+  if (editor.state.kind === FIELD_EDITOR_STATE.FAILED) {
+    return (
+      <div className="plan-field-note" role="alert">
+        <span>{editor.state.note}</span>
+        <RetryButton onRetry={editing.retry} />
+      </div>
+    );
+  }
+  return null;
+}
+
+/**
+ * The whole text in its editor, in place of its drawn sections, which stand
+ * as `drawn` until the editor's bundle has loaded. `hostOf` names the block
+ * of a section, which the keyboard goes back to as the editor finishes.
+ * Focus leaving the editor closes it, unless it moved to its own buttons.
+ */
+export function PlanDocumentEditor({
+  plan,
+  editor,
+  editing,
+  drawn,
+  hostOf,
+}: {
+  plan: Plan;
+  editor: FieldEditor;
+  editing: FieldEditing;
+  drawn: ReactNode;
+  hostOf: (section: number) => EditorHost;
+}): React.JSX.Element {
+  const doors = useDraftHandOver(editing, hostOf);
+  const handle = useRef<PlanEditorHandle | undefined>(undefined);
+  useMergedAnswers(editor, editing, plan, handle);
+  const module = useAtomValue(planEditorAtom);
+  if (!AsyncResult.isSuccess(module)) {
+    return (
+      <section className="plan-field-editor plan-document-editor ph-no-capture" aria-busy="true">
+        {drawn}
+        {AsyncResult.isFailure(module) ? (
+          <p className="plan-field-note" role="alert">
+            {EDITOR_LOAD_FAILED}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+  const props: PlanEditorProps = {
+    markdown: editor.draft,
+    placement: editing.placement,
+    label: "Plan",
+    className: "markdown plan-unit",
+    onDraft: doors.onDraft,
+    onFinish: doors.onFinish,
+    onLeaveUp: doors.onLeaveUp,
+  };
+  return (
+    <section
+      className="plan-field-editor plan-document-editor ph-no-capture"
+      aria-label="Editing the plan"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) doors.onLeave();
+      }}
+    >
+      <MountedPlanEditor module={module.value} props={props} handle={handle} />
+      <DocumentNote editor={editor} editing={editing} />
+    </section>
+  );
+}

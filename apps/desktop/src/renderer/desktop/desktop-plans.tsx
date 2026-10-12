@@ -320,7 +320,14 @@ function PlanDocument({
                 plan={plan}
                 live={plans.live}
                 onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
-                {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
+                {...(archived
+                  ? {}
+                  : {
+                      onEdit: (request) => plans.edit(plan.id, request),
+                      onRename: (name) => {
+                        plans.onRenamePlan(plan.id, name).catch(() => undefined);
+                      },
+                    })}
                 looks={looks}
               />
             </section>

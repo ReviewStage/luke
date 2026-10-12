@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
 import { EMPTY_PLAN_CONTENT, type PlanContent } from "@sidecar/hosted/plan-template";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { PLAN_BOUNDS, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import {
+  EDIT_SCOPE,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
   editorKeptMine,
   editorOpened,
+  editorRebased,
   editorRetried,
   editorSent,
   editorTookLukes,
@@ -36,7 +38,7 @@ const CONTEXT = { field: PLAN_FIELD.CONTEXT } as const;
 /** The save an editor would make now, failing the test where it has none. */
 function saved(editor: FieldEditor) {
   const request = pendingSave(editor);
-  assert.ok(request, "a save is pending");
+  assert.ok(request !== undefined && !("document" in request), "a field's save is pending");
   return request;
 }
 
@@ -187,4 +189,59 @@ test("an item with line breaks opened and closed saves nothing, and keeps its br
     saved(editorTyped(opened, "Check access when revoked\nInvites reuse accounts.")).value,
     [{ text: "Check access\nwhen revoked" }, { text: "Invites reuse accounts." }],
   );
+});
+
+const TEXT = "# Context\n\nOnly an admin can add a member.\n";
+
+const DOCUMENT = { field: EDIT_SCOPE.DOCUMENT } as const;
+
+test("a plan that is one document opens whole and saves as the document's base and value, nothing while unchanged", () => {
+  const opened = editorOpened(DOCUMENT, { text: TEXT });
+  const typed = editorTyped(opened, `${TEXT}\nMembers wait.\n`);
+
+  assert.equal(opened.draft, TEXT);
+  assert.equal(pendingSave(opened), undefined);
+  assert.deepEqual(pendingSave(typed), {
+    document: { base: TEXT, value: `${TEXT}\nMembers wait.\n` },
+  });
+});
+
+test("a document's save that lands moves the base to what was sent; a conflict kept moves it to Luke's text", () => {
+  const typed = editorTyped(editorOpened(DOCUMENT, { text: TEXT }), `${TEXT}Mine.\n`);
+  const request = pendingSave(typed);
+  assert.ok(request !== undefined);
+  const landed = editorAnswered(editorSent(typed, request), { saved: true });
+  const lukes = `${TEXT}Luke's.\n`;
+  const kept = editorKeptMine(
+    editorAnswered(editorSent(editorTyped(landed, `${TEXT}Mine, again.\n`), request), {
+      conflict: { current: lukes },
+    }),
+  );
+
+  assert.equal(pendingSave(landed), undefined);
+  assert.deepEqual(pendingSave(kept), {
+    document: { base: lukes, value: `${TEXT}Mine, again.\n` },
+  });
+});
+
+test("a document past the bound a document may hold says so and is never sent; trimmed back, it saves", () => {
+  const long = "x".repeat(PLAN_BOUNDS.MAX_BODY_CHARS + 1);
+  const over = editorTyped(editorOpened(DOCUMENT, { text: TEXT }), long);
+
+  assert.deepEqual(over.state, {
+    kind: FIELD_EDITOR_STATE.FAILED,
+    note: "Not saved: the plan would be longer than a plan may be.",
+  });
+  assert.equal(pendingSave(editorRetried(over)), undefined);
+  assert.deepEqual(pendingSave(editorTyped(over, `${TEXT}Short.\n`)), {
+    document: { base: TEXT, value: `${TEXT}Short.\n` },
+  });
+});
+
+test("a document rebased on a save's merged answer saves only what the developer typed since", () => {
+  const merged = `${TEXT}Luke's.\nMine.\n`;
+  const rebased = editorRebased(editorOpened(DOCUMENT, { text: TEXT }), merged, `${merged}More.\n`);
+
+  assert.deepEqual(pendingSave(rebased), { document: { base: merged, value: `${merged}More.\n` } });
+  assert.equal(editorRebased(editorOpened(CONTEXT, CONTENT), merged, merged).draft, LUKES);
 });
