@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  deleteAccount,
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@sidecar/database/models/account-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
@@ -12,11 +17,6 @@ import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
-import {
-  deleteAccount,
-  readAccountPreferences,
-  writeAccountPreferences,
-} from "../server/hosted/account-store";
 
 /**
  * The account group's own reads and writes against a real Postgres dialect.

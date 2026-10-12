@@ -542,6 +542,9 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

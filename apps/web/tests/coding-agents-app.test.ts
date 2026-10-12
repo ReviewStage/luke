@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@sidecar/database/models/account-store";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
@@ -81,7 +85,6 @@ import {
   userMessage,
   userMetadataOf,
 } from "../server/core";
-import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {

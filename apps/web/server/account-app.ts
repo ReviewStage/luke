@@ -1,3 +1,8 @@
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+  AccountSeamEffect,
+} from "@sidecar/database/models/account-store";
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -18,11 +23,6 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type {
-  AccountPreferencesRow,
-  AccountPreferencesWrite,
-  AccountSeamEffect,
-} from "./hosted/account-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {

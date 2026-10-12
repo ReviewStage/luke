@@ -1,7 +1,3 @@
-import { db } from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { user } from "@sidecar/database/schemas/auth";
-import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -10,6 +6,10 @@ import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { user } from "../schemas/auth.js";
+import { accountPreference } from "../schemas/preferences.js";
+import { InstantColumnSchema } from "./columns.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the

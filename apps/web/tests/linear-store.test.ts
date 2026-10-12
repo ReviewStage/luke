@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { deleteAccount } from "@sidecar/database/models/account-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Layer } from "effect";
-import { deleteAccount } from "../server/hosted/account-store";
 import {
   beginLinearSignIn,
   completeLinearSignIn,

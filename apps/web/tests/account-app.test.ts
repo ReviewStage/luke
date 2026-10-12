@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+} from "@sidecar/database/models/account-store";
 import {
   type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
@@ -15,10 +19,6 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
-import type {
-  AccountPreferencesRow,
-  AccountPreferencesWrite,
-} from "../server/hosted/account-store.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {

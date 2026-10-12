@@ -1,3 +1,7 @@
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@sidecar/database/models/account-store";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -7,7 +11,6 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
-import { readAccountPreferences, writeAccountPreferences } from "../account-store.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
