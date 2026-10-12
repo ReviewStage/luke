@@ -78,9 +78,20 @@ export interface FileTreeHandle {
   readonly unmount: () => void;
 }
 
+/** One folder's entries drawn as the tree draws them, which a breadcrumb's list is. */
+export interface FolderListProps {
+  readonly entries: readonly FolderEntry[];
+  /** The entry the list stands for, marked and taking the keyboard; none for the repository's root. */
+  readonly current: string | undefined;
+  /** An entry chosen by a press or Return, in a tab of its own where ⌘ was held. */
+  readonly onChoose: (entry: FolderEntry, newTab: boolean) => void;
+}
+
 /** What the file tree bundle sets on `window` once it has loaded. */
 export interface FileTreeModule {
   readonly mount: (host: HTMLElement, props: FileTreeProps) => FileTreeHandle;
+  /** Draws one folder's entries in rows the tree's own, its icons, hover, and keys; answers how to take it down. */
+  readonly list: (host: HTMLElement, props: FolderListProps) => () => void;
 }
 
 declare global {

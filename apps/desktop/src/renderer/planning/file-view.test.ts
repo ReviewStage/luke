@@ -47,6 +47,20 @@ window.lukeFileTree = {
       unmount: () => undefined,
     };
   },
+  // A crumb's list as buttons, one an entry, the current one marked, standing in for Pierre's rows.
+  list: (host, props) => {
+    host.replaceChildren(
+      ...props.entries.map((entry) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.textContent = `${entry.name}${entry.folder ? "/" : ""}`;
+        if (entry.name === props.current) row.setAttribute("aria-current", "true");
+        row.addEventListener("click", (event) => props.onChoose(entry, event.metaKey));
+        return row;
+      }),
+    );
+    return () => host.replaceChildren();
+  },
 };
 
 const roots: Root[] = [];
@@ -242,7 +256,7 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
   );
 });
 
-test("each crumb lists the folder it stands in, itself checked, the repository the root; the chevrons between are no controls; a file chosen is browsed to and a folder revealed in the tree; a folder is listed once however often it is asked", async () => {
+test("each crumb lists the folder it stands in in rows the tree draws, itself marked, the repository the root; the chevrons between are no controls; a file chosen is browsed to, in a tab of its own where ⌘ is held, and a folder revealed in the tree; Escape hands the keyboard back to the crumb; a folder is listed once however often it is asked", async () => {
   const view = mounted();
   await view.draw("apps/web/README.md");
   assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "README.md"]);
@@ -258,21 +272,36 @@ test("each crumb lists the folder it stands in, itself checked, the repository t
     [...view.container.querySelectorAll(".file-breadcrumb")].find(
       (each) => each.textContent === name,
     );
-  const items = () => [...document.querySelectorAll('[role="menu"] button')];
+  const items = () => [...document.querySelectorAll(".file-crumb-list button")];
   await view.press(crumb("README.md"));
   assert.equal(crumb("README.md")?.getAttribute("aria-expanded"), "true");
   assert.deepEqual(
     items().map(
-      (item) => `${item.textContent}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}`,
+      (item) =>
+        `${item.textContent}${item.getAttribute("aria-current") === "true" ? " (current)" : ""}`,
     ),
-    ["lib/", "server/", "package.json", "README.md ✓"],
+    ["server/", "README.md (current)", "package.json", "lib/"],
   );
+  await act(async () => {
+    items()[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
+  });
+  assert.equal(document.querySelector(".file-crumb-list"), null, "a choice closes the list");
+  await view.press(crumb("README.md"));
   await view.press(items()[2]);
-  assert.deepEqual(view.browsed, ["apps/web/package.json"]);
+  assert.deepEqual(view.browsed, ["apps/web/package.json in a new tab", "apps/web/package.json"]);
   assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "package.json"]);
 
   await view.press(crumb("package.json"));
-  await view.press(items()[0]);
+  act(() => {
+    document
+      .querySelector(".file-crumb-list button")
+      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(document.querySelector(".file-crumb-list"), null);
+  assert.equal(document.activeElement, crumb("package.json"));
+
+  await view.press(crumb("package.json"));
+  await view.press(items()[3]);
   assert.ok(view.container.querySelector(".file-tree-pane"), "the folder opened the tree");
   assert.ok(tree.reveals.includes("apps/web/lib/ focused"));
   assert.equal(view.listed.filter((path) => path === "apps/web").length, 1);
@@ -414,7 +443,7 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
 
   type("web");
   await view.press(view.container.querySelectorAll(".file-breadcrumb")[3]);
-  await view.press(document.querySelector('[role="menu"] button'));
+  await view.press(document.querySelectorAll(".file-crumb-list button")[3]);
   assert.equal(field.value, "");
   assert.equal(filter?.getAttribute("aria-pressed"), "false");
   assert.equal(
@@ -662,7 +691,9 @@ test("a later press on another crumb stands in for one still listing, so only it
     for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
   });
   assert.deepEqual(
-    [...document.querySelectorAll('[role="menu"]')].map((menu) => menu.getAttribute("aria-label")),
+    [...document.querySelectorAll(".file-crumb-list")].map((list) =>
+      list.getAttribute("aria-label"),
+    ),
     ["apps/web/server"],
   );
 });
@@ -700,3 +731,39 @@ it.effect(
       assert.match(document.body.textContent ?? "", /lines too long to copy whole/);
     }),
 );
+
+test("a crumb's list stands within the window, its rows scrolling inside; over a folder not listed it still takes Escape; and a second press on a crumb still listing lets it go", async () => {
+  const view = mounted();
+  await view.draw(FILE);
+  const crumb = (name: string) =>
+    [...view.container.querySelectorAll<HTMLButtonElement>(".file-breadcrumb")].find(
+      (each) => each.textContent === name,
+    );
+  const list = () => document.querySelector<HTMLElement>(".file-crumb-list");
+
+  vi.stubGlobal("innerHeight", 60);
+  await view.press(crumb("server"));
+  assert.equal(list()?.style.height, "48px", "the room under the crumb, less the window's margin");
+  vi.stubGlobal("innerHeight", 768);
+  await view.press(crumb("server"));
+  assert.equal(list(), null);
+
+  await view.press(crumb("apps"));
+  assert.match(list()?.textContent ?? "", /Could not list this folder/);
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.equal(list(), null);
+  assert.equal(document.activeElement, crumb("apps"));
+
+  const server = crumb("server");
+  assert.ok(server);
+  await act(async () => {
+    server.click();
+    server.click();
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  });
+  assert.equal(list(), null, "the second press let the list go before it opened");
+});

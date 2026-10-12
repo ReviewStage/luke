@@ -246,3 +246,40 @@ test("handed the whole repository, a search finds a file in a folder never opene
   await tree.settled();
   assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
 });
+
+test("a crumb's list draws one folder's entries as the tree's own rows, folders first and coloured, none opening, the current one marked; a press or Return chooses one, ⌘ in a tab of its own", async () => {
+  const module = window.lukeFileTree;
+  assert.ok(module, "the bundle sets its global");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const chosen: string[] = [];
+  const unmount = module.list(host, {
+    entries: [
+      { name: "README.md", folder: false },
+      { name: "src", folder: true },
+      { name: "index.ts", folder: false },
+    ],
+    current: "index.ts",
+    onChoose: (entry, newTab) =>
+      chosen.push(`${entry.name}${entry.folder ? "/" : ""}${newTab ? " in a new tab" : ""}`),
+  });
+  onTestFinished(() => {
+    unmount();
+    host.remove();
+  });
+  for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+
+  const shadow = host.querySelector("file-tree-container")?.shadowRoot;
+  assert.ok(shadow?.querySelector("[data-file-tree-colored-icons='true']"));
+  const rows = [...(shadow?.querySelectorAll<HTMLElement>("[data-item-path]") ?? [])];
+  assert.deepEqual(
+    rows.map((row) => row.dataset.itemPath),
+    ["src/", "index.ts", "README.md"],
+  );
+  assert.equal(rows[1]?.getAttribute("aria-selected"), "true");
+
+  host.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  rows[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  rows[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, metaKey: true }));
+  assert.deepEqual(chosen, ["index.ts", "src/", "README.md in a new tab"]);
+});
