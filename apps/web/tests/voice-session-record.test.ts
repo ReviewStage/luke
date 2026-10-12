@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { user } from "../server/db/auth-schema";
@@ -48,6 +49,7 @@ const VoiceSessionRowSchema = Schema.Struct({
   closedAt: Schema.NullOr(InstantColumnSchema),
   closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
+  model: Schema.NullOr(Schema.String),
 });
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
@@ -69,6 +71,7 @@ const callWith = (
       sessionId: liveSessionId,
       planId: input.planId,
       attachId: randomUUID(),
+      model: LIVE_DEFAULTS.MODEL,
     });
     assert.ok(voiceSessionId);
     yield* db
@@ -85,7 +88,7 @@ const callWith = (
 
 it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
-    "a registered session names its account, keeps its first owner, and answers the owner's re-attach alone",
+    "a registered session names its account and its model, keeps its first owner, and answers the owner's re-attach alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -97,12 +100,14 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           sessionId: liveSessionId,
           planId,
           attachId: randomUUID(),
+          model: LIVE_DEFAULTS.MODEL,
         });
         const taken = yield* record.register({
           userId: other,
           sessionId: liveSessionId,
           planId: randomUUID(),
           attachId: randomUUID(),
+          model: LIVE_DEFAULTS.MODEL,
         });
 
         // The owner is answered the store's id for the row, and another account nothing.
@@ -120,6 +125,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
             delegationMode: row.delegationMode,
             closedAt: row.closedAt,
             usage: row.usage,
+            model: row.model,
           })),
           [
             {
@@ -127,6 +133,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
               delegationMode: VOICE_DELEGATION_MODE.CLIENT,
               closedAt: null,
               usage: null,
+              model: LIVE_DEFAULTS.MODEL,
             },
           ],
         );
@@ -149,6 +156,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           sessionId: liveSessionId,
           planId: plan.id,
           attachId: randomUUID(),
+          model: LIVE_DEFAULTS.MODEL,
         });
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           planId: plan.id,
@@ -206,6 +214,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           sessionId: liveSessionId,
           planId: randomUUID(),
           attachId: randomUUID(),
+          model: LIVE_DEFAULTS.MODEL,
         });
         yield* record.noteUsage({ sessionId: liveSessionId, seconds: 10 });
         yield* record.noteUsage({ sessionId: liveSessionId, seconds: 25 });
@@ -252,6 +261,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         sessionId: liveSessionId,
         planId: randomUUID(),
         attachId: randomUUID(),
+        model: LIVE_DEFAULTS.MODEL,
       });
       yield* record.close({
         sessionId: liveSessionId,
@@ -298,6 +308,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           sessionId: liveSessionId,
           planId: randomUUID(),
           attachId: first,
+          model: LIVE_DEFAULTS.MODEL,
         });
         yield* record.attached({ sessionId: liveSessionId, attachId: second });
 

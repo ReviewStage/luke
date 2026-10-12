@@ -231,7 +231,7 @@ interface FakeSessionRow {
 }
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
-  registered: Array<{ userId: string; sessionId: string; planId: string }>;
+  registered: Array<{ userId: string; sessionId: string; planId: string; model: string }>;
   /** Each live session's row as the writes that landed left it, by live session id. */
   rows: Map<string, FakeSessionRow>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
@@ -274,6 +274,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
           userId: input.userId,
           sessionId: input.sessionId,
           planId: input.planId,
+          model: input.model,
         });
         if (!owners.has(input.sessionId)) {
           owners.set(input.sessionId, { userId: input.userId, planId: input.planId });

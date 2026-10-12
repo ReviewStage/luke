@@ -60,6 +60,40 @@
               ],
               "additionalProperties": false
             }
+          },
+          "endedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ending": {
+            "type": "string",
+            "enum": [
+              "close_requested",
+              "expired",
+              "content",
+              "remote_hangup",
+              "connection_lost"
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "seconds": {
+                "type": "number",
+                "minimum": 0
+              },
+              "confirmed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "seconds",
+              "confirmed"
+            ],
+            "additionalProperties": false
+          },
+          "model": {
+            "type": "string"
           }
         },
         "required": [

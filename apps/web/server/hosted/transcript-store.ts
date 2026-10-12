@@ -2,15 +2,16 @@ import {
   type PlanTranscript,
   TRANSCRIPT_BOUNDS,
   TRANSCRIPT_PART_TYPE,
+  type TranscriptCall,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger } from "@sidecar/live";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../db/voice-schema.js";
-import { VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
+import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 
@@ -21,7 +22,9 @@ import { InstantColumnSchema } from "./store/database.js";
  * (`store/voice-writer.ts`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
- * whose id is its place on the call. Every statement names the
+ * whose id is its place on the call. Beside its words, each call says what
+ * its session row recorded of it: when and why it ended, its metered
+ * seconds, and its model, each only where the row holds it. Every statement names the
  * account beside the plan, so a plan another account owns reads as no plan,
  * exactly as in `plan-store.ts`, and a call another account made about a
  * plan of the same id is never gathered. Nothing is written here.
@@ -84,10 +87,48 @@ const findNewestSegments = SqlSchema.findAll({
       .limit(TRANSCRIPT_BOUNDS.MAX_SEGMENTS + 1),
 });
 
+const CallRecordRowSchema = Schema.Struct({
+  id: Schema.String,
+  closedAt: Schema.NullOr(InstantColumnSchema),
+  closeReason: Schema.NullOr(Schema.Literals(Object.values(VOICE_CLOSE_REASON))),
+  usage: Schema.NullOr(Schema.Struct({ seconds: Schema.Number, confirmed: Schema.Boolean })),
+  model: Schema.NullOr(Schema.String),
+});
+
+type CallRecordRow = typeof CallRecordRowSchema.Type;
+
+/** What the account's session rows recorded of the calls named: how each ended, what it metered, and its model. */
+const findCallRecords = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, ids: Schema.Array(Schema.String) }),
+  Result: CallRecordRowSchema,
+  execute: ({ userId, ids }) =>
+    db
+      .select({
+        id: voiceSessions.id,
+        closedAt: voiceSessions.closedAt,
+        closeReason: voiceSessions.closeReason,
+        usage: voiceSessions.usage,
+        model: voiceSessions.model,
+      })
+      .from(voiceSessions)
+      .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
+});
+
 /** One call as it is read: its first fragment, which names it, and the ledger its fragments are grouped by. */
 interface CallRead {
   readonly first: SegmentRow;
   readonly ledger: TranscriptLedger;
+}
+
+/** What a call's record adds to its words: each field its row holds, and nothing where it holds none. */
+function recordOf(row: CallRecordRow | undefined): Partial<TranscriptCall> {
+  if (row === undefined) return {};
+  return {
+    ...(row.closedAt === null ? undefined : { endedAt: row.closedAt.getTime() }),
+    ...(row.closeReason === null ? undefined : { ending: row.closeReason }),
+    ...(row.usage === null ? undefined : { usage: row.usage }),
+    ...(row.model === null ? undefined : { model: row.model }),
+  };
 }
 
 /**
@@ -96,8 +137,7 @@ interface CallRead {
  * were written. Note that the ledger's row ids are never read, because a
  * line's place on its call is what names it here.
  */
-function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
-  const earlierOmitted = newestFirst.length > TRANSCRIPT_BOUNDS.MAX_SEGMENTS;
+function callsOf(newestFirst: readonly SegmentRow[]): readonly CallRead[] {
   const calls: CallRead[] = [];
   for (const segment of newestFirst.slice(0, TRANSCRIPT_BOUNDS.MAX_SEGMENTS).reverse()) {
     let call = calls.at(-1);
@@ -112,6 +152,15 @@ function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
       endMs: segment.endMs,
     });
   }
+  return calls;
+}
+
+/** The calls read, each with its lines and what its record holds of it. */
+function transcriptOf(
+  calls: readonly CallRead[],
+  records: ReadonlyMap<string, CallRecordRow>,
+  earlierOmitted: boolean,
+): PlanTranscript {
   return {
     calls: calls.map(({ first, ledger }) => ({
       id: first.voiceSessionId,
@@ -121,6 +170,7 @@ function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
         role: line.speaker,
         parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.text }],
       })),
+      ...recordOf(records.get(first.voiceSessionId)),
     })),
     earlierOmitted,
   };
@@ -133,6 +183,16 @@ export function readTranscript(
 ): PlanStoreEffect<Option.Option<PlanTranscript>> {
   return Effect.gen(function* () {
     if (Option.isNone(yield* findOwnedPlan({ userId, planId }))) return Option.none();
-    return Option.some(transcriptOf(yield* findNewestSegments({ userId, planId })));
+    const newestFirst = yield* findNewestSegments({ userId, planId });
+    const calls = callsOf(newestFirst);
+    const ids = calls.map((call) => call.first.voiceSessionId);
+    const records = ids.length === 0 ? [] : yield* findCallRecords({ userId, ids });
+    return Option.some(
+      transcriptOf(
+        calls,
+        new Map(records.map((row) => [row.id, row])),
+        newestFirst.length > TRANSCRIPT_BOUNDS.MAX_SEGMENTS,
+      ),
+    );
   });
 }

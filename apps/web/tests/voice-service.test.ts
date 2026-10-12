@@ -8,6 +8,7 @@ import {
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { LIVE_DEFAULTS } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { EXCESS_KEYS, isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -277,7 +278,12 @@ test("a session is authorized, counted, created, registered to its account, atta
   assert.deepEqual(context.accounts.resolved, [BEARER]);
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
   assert.deepEqual(context.record.registered, [
-    { userId: FAKE_USER_ID, sessionId: created.sessionId, planId: PLAN.id },
+    {
+      userId: FAKE_USER_ID,
+      sessionId: created.sessionId,
+      planId: PLAN.id,
+      model: LIVE_DEFAULTS.MODEL,
+    },
   ]);
 
   assert.equal(context.openAi.creates.length, 1);
@@ -290,6 +296,7 @@ test("a session is authorized, counted, created, registered to its account, atta
   assert.equal(session.instructions, sessionInstructions());
   assert.deepEqual(session.delegation, { type: LIVE_DELEGATION_TARGET.CLIENT });
   assert.equal(session.store, false);
+  assert.equal(session.model, LIVE_DEFAULTS.MODEL);
   assert.deepEqual(session.audio, { output: { voice: LIVE_VOICE.MARIN } });
   // The plan's own seed goes ahead of the desktop's input, which follows it untouched.
   assert.ok(Array.isArray(session.input));
@@ -1105,6 +1112,7 @@ test("an attach to a session another account created, or one never created, is r
       sessionId: "live_theirs",
       planId: PLAN.id,
       attachId: "attach-theirs",
+      model: LIVE_DEFAULTS.MODEL,
     }),
   );
 

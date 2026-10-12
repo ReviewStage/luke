@@ -74,6 +74,8 @@ export const voiceSessions = pgTable(
     closedAt: instant("closed_at"),
     closeReason: text("close_reason").$type<VoiceCloseReason>(),
     usage: jsonb("usage").$type<VoiceSessionUsage>(),
+    /** The Live API model the session was created on; null only for a row an earlier build wrote. */
+    model: text("model"),
     /**
      * When the device's socket last went without a hang-up, leaving the
      * WebRTC session standing for a re-attach; null while a connection holds
