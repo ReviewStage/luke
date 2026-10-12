@@ -95,8 +95,12 @@ The agent can change or withdraw its items, and our service keeps each one
 as it last stood. When you answer an item in Luke, your Mac sends your answer
 and any note you write to our service, which stores it with the item and,
 where the agent asked to hear back, hands it to the agent as one of your
-messages, kept in its transcript. Deleting the plan, or your account, deletes
-its items.
+messages, kept in its transcript. Where the answer decided something, an
+option you chose or a step you approved or declined, our service also writes
+it into the plan's own document and history as a note of that agent's: the
+decision, your note as its reason, and the options it passed over, under the
+plan's Approach, Alternatives, or Not doing. Deleting the plan, or your
+account, deletes its items.
 
 **Your own API keys.** If you add an Anthropic or OpenAI API key of your
 own in Settings, your Mac sends it once, over HTTPS, to our service, which

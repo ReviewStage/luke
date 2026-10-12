@@ -50,6 +50,7 @@ import {
 import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import { childTitlesOf } from "./hosted/child-titles.js";
+import { recordInboxDecision } from "./hosted/coder-host/inbox-decision.js";
 import { planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
@@ -739,7 +740,11 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
  * so a hand-off cut short by the function's own end is finished by the
  * retry rather than reported done. An agent whose session has ended for
  * good can hear nothing again, so its item keeps the answer rather than
- * waiting on the developer for ever.
+ * waiting on the developer for ever. An answer that decided something, a
+ * choice taken or an approval answered, is then written into the plan as
+ * the agent's own notes (`coder-host/inbox-decision.ts`), by the send that
+ * took it alone, so a retry writes it once; a plan write that is refused
+ * is logged, and the answer stands.
  */
 const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -765,28 +770,43 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (!taken.needsReply || taken.answer === undefined) return inboxAnswered(taken, true);
-  const answer = taken.answer;
-  const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
-    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(taken, answer),
-      clientKey,
+  const { item, fresh } = taken;
+  const answer = item.answer;
+  if (answer === undefined) return inboxAnswered(item, true);
+  if (item.needsReply) {
+    const handedOver = Effect.gen(function* () {
+      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+      const eve = yield* eveFor(seams, request);
+      yield* steerCodingAgent(eve, writer, userId, agent.value, {
+        text: inboxAnswerMessage(item, answer),
+        clientKey,
+      });
     });
-  });
-  yield* handedOver.pipe(
-    Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
+    yield* handedOver.pipe(
+      Effect.catchIf(retiredRefusal, () => Effect.void),
+      Effect.onError(() =>
+        withdrawInboxAnswer(userId, itemId, clientKey).pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.ignore,
+        ),
       ),
-    ),
-  );
-  return inboxAnswered(taken, true);
+    );
+  }
+  // What was decided is written into the plan by the send that took the answer, once the hand-off
+  // stood, so a retry under the key writes it once and an answer taken back writes nothing. Note
+  // that a function cut off between the hand-off and this write leaves the plan without the
+  // record, because a retry cannot tell that from a record already made; the item still holds
+  // the answer, and the agent heard it.
+  if (fresh) yield* recordInboxDecision(userId, item, answer);
+  return inboxAnswered(item, true);
 });
+
+/** An answer standing on its item under the request's key, and whether this send took it rather than an earlier one under the same key. */
+interface TakenAnswer {
+  readonly item: InboxItem;
+  readonly fresh: boolean;
+}
 
 /**
  * The item with the answer standing on it under the request's key: taken
@@ -798,9 +818,9 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   stored: StoredInboxItem,
   asked: { readonly revision: number; readonly clientKey: string; readonly reply: InboxReply },
-): Effect.fn.Return<InboxItem | undefined, HostedRefusal, SqlClient.SqlClient> {
+): Effect.fn.Return<TakenAnswer | undefined, HostedRefusal, SqlClient.SqlClient> {
   const { item, answerKey } = stored;
-  if (answerKey === asked.clientKey) return item;
+  if (answerKey === asked.clientKey) return { item, fresh: false };
   if (item.status !== INBOX_STATUS.OPEN || item.revision !== asked.revision) return undefined;
   if (inboxReplyRefusal(item, asked.reply) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -808,7 +828,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const answered = yield* hostedStoreOrUnavailable(
     answerInboxItem(userId, item.id, asked.revision, asked.reply, asked.clientKey),
   );
-  return Option.getOrUndefined(answered);
+  return Option.map(answered, (item) => ({ item, fresh: true })).pipe(Option.getOrUndefined);
 });
 
 /** The group: the eight paths, and the hosted vocabulary's own refusal for any other. */

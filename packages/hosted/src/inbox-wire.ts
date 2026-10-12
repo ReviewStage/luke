@@ -261,6 +261,11 @@ function replyWords(reply: InboxReply): string {
   }
 }
 
+/** An item's title, or an option's label, put on one line, since wherever it names the item the line is read whole. */
+export function inboxTitleLine(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
 /**
  * The message an answer reaches the agent as: a first line naming the item
  * by its key and title with what the developer did, then their note. Note
@@ -270,7 +275,7 @@ export function inboxAnswerMessage(
   item: Pick<InboxItem, "key" | "title">,
   reply: InboxReply,
 ): string {
-  const title = item.title.replace(/\s+/gu, " ").trim();
+  const title = inboxTitleLine(item.title);
   const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${replyWords(reply)}`;
   const note = reply.note?.trim();
   return note ? `${header}\n\n${note}` : header;

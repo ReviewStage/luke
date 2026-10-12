@@ -108,7 +108,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, savePlanDocument, updatePlan } from "../server/hosted/plan-store";
+import { createPlan, readPlan, savePlanDocument, updatePlan } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
@@ -117,6 +117,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -3421,6 +3422,294 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
         assert.deepEqual(
           yield* ask(request(PLAN_INBOX, other, { id: plan.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  const PROVIDER = {
+    key: "email-provider",
+    kind: INBOX_KIND.CHOICE,
+    title: "Which email provider?",
+    options: [
+      { label: "Postmark", detail: "Cheapest at our volume." },
+      { label: "SendGrid" },
+      { label: "SES" },
+    ],
+    recommended: "Postmark",
+  } as const;
+
+  /** The plan's fields and its agents' journal as they now stand. */
+  const planNow = (owner: string, planId: string) =>
+    Effect.map(readPlan(owner, planId), (stored) => {
+      assert.ok(Option.isSome(stored));
+      return stored.value;
+    });
+
+  it.effect(
+    "a choice taken writes the decision under Approach with the developer's note as its why and the options it beat under Alternatives, journaled as the agent's and naming the item; a retry under the same key writes it once",
+    () =>
+      Effect.gen(function* () {
+        const { eve, owner, plan, agent, post, read, answer } = yield* openInbox();
+        yield* post(PROVIDER);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const body = {
+          revision: item.revision,
+          reply: INBOX_REPLY.CHOSE,
+          choice: "Postmark",
+          note: "Cheaper at our volume.",
+          clientKey: randomUUID(),
+        };
+        const taken = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, body),
+        );
+        assert.equal(taken.taken, true);
+
+        const written = yield* planNow(owner, plan.id);
+        assert.equal(
+          written.fields.approach,
+          '- Decision on "Which email provider?": Postmark. Why: Cheaper at our volume.',
+        );
+        assert.equal(
+          written.fields.alternatives,
+          '- Rejected on "Which email provider?": SendGrid and SES, in favor of Postmark.',
+        );
+        assert.ok(written.plan.document.body.includes("## Approach\n\n- Decision on"));
+        const at = yield* Clock.currentTimeMillis;
+        assert.deepEqual(written.plan.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(
+          written.agentEdits.map((edit) => edit.notes.map((note) => note.field)),
+          [["approach", "alternatives"]],
+        );
+
+        const again = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, body),
+        );
+        assert.equal(again.taken, true);
+        assert.equal(eve.sent.length, 1, "the agent hears it once");
+        const retried = yield* planNow(owner, plan.id);
+        assert.equal(retried.fields.approach, written.fields.approach);
+        assert.equal(retried.agentEdits.length, 1, "the decision is written once");
+      }),
+  );
+
+  it.effect(
+    "a choice answered in the developer's own words is the decision under Approach, its lines kept inside the bullet, with every option offered under Alternatives as rejected",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, post, read, answer } = yield* openInbox();
+        yield* post(PROVIDER);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        yield* answer(item.id, {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Our own SMTP relay.\nIt already exists.",
+          clientKey: randomUUID(),
+        });
+        const written = yield* planNow(owner, plan.id);
+        assert.equal(
+          written.fields.approach,
+          '- Decision on "Which email provider?": Our own SMTP relay.\n  It already exists.',
+        );
+        assert.equal(
+          written.fields.alternatives,
+          '- Rejected on "Which email provider?": Postmark, SendGrid, and SES, in favor of the developer\'s own answer.',
+        );
+      }),
+  );
+
+  it.effect(
+    "an approval approved is written under Approach and one declined under Not doing, with or without a note, whether or not the agent hears back",
+    () =>
+      Effect.gen(function* () {
+        const { eve, owner, plan, post, read, answer } = yield* openInbox();
+        yield* post({
+          key: "drop-legacy",
+          kind: INBOX_KIND.APPROVAL,
+          title: "Drop the legacy invites table?",
+          needsReply: false,
+        });
+        yield* post({
+          key: "force-push",
+          kind: INBOX_KIND.APPROVAL,
+          title: "Force-push over the release branch?",
+        });
+        const items = (yield* read()).items;
+        const drop = items.find((item) => item.key === "drop-legacy");
+        const push = items.find((item) => item.key === "force-push");
+        assert.ok(drop && push);
+        yield* answer(drop.id, {
+          revision: drop.revision,
+          reply: INBOX_REPLY.APPROVED,
+          clientKey: randomUUID(),
+        });
+        yield* answer(push.id, {
+          revision: push.revision,
+          reply: INBOX_REPLY.DECLINED,
+          note: "Open a pull request instead.",
+          clientKey: randomUUID(),
+        });
+        const written = yield* planNow(owner, plan.id);
+        assert.equal(
+          written.fields.approach,
+          '- Decision on "Drop the legacy invites table?": approved.',
+        );
+        assert.equal(
+          written.fields.notDoing,
+          '- Decision on "Force-push over the release branch?": declined. Why: Open a pull request instead.',
+        );
+        assert.equal(written.agentEdits.length, 2, "each answer is its own save");
+        assert.equal(eve.sent.length, 1, "only the item that asked to hear back reaches the agent");
+      }),
+  );
+
+  it.effect(
+    "a question answered and a task done decide nothing of the design, so the plan is not written",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, post, read, answer } = yield* openInbox();
+        yield* post(QUESTION);
+        yield* post({
+          key: "branch-protection",
+          kind: INBOX_KIND.TASK,
+          title: "Protect main",
+          needsReply: false,
+        });
+        const items = (yield* read()).items;
+        const question = items.find((item) => item.key === QUESTION.key);
+        const task = items.find((item) => item.key === "branch-protection");
+        assert.ok(question && task);
+        yield* answer(question.id, {
+          revision: question.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey: randomUUID(),
+        });
+        yield* answer(task.id, {
+          revision: task.revision,
+          reply: INBOX_REPLY.DONE,
+          clientKey: randomUUID(),
+        });
+        const stood = yield* planNow(owner, plan.id);
+        assert.deepEqual(stood.fields, EMPTY_PLAN_FIELDS);
+        assert.deepEqual(stood.agentEdits, []);
+      }),
+  );
+
+  it.effect(
+    "a decision whose hand-off was refused is taken back and written nowhere, so the plan never records an answer the agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, post, read, answer } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY }),
+        );
+        yield* post(PROVIDER);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const refused = yield* answer(item.id, {
+          revision: item.revision,
+          reply: INBOX_REPLY.CHOSE,
+          choice: "Postmark",
+          clientKey: randomUUID(),
+        });
+        assert.notEqual(refused.status, HOSTED_HTTP_STATUS.OK);
+        const stood = yield* planNow(owner, plan.id);
+        assert.deepEqual(stood.fields, EMPTY_PLAN_FIELDS);
+        assert.deepEqual(stood.agentEdits, []);
+      }),
+  );
+
+  it.effect(
+    "a plan that refuses notes, one that is a document, takes no decision, and the answer still stands on the item",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, post, read, answer } = yield* openInbox();
+        yield* makeDocumentPlan(plan.id, INVITATIONS_TEXT);
+        yield* post(PROVIDER);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const taken = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: item.revision,
+            reply: INBOX_REPLY.CHOSE,
+            choice: "Postmark",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(taken.taken, true);
+        assert.equal(taken.item.status, INBOX_STATUS.ANSWERED);
+        const stood = yield* planNow(owner, plan.id);
+        assert.equal(stood.text, INVITATIONS_TEXT);
+        assert.deepEqual(stood.agentEdits, []);
+      }),
+  );
+
+  it.effect(
+    "an agent handed a task rather than the plan has no plan of its own to record a decision in, and the answer still stands",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask, read, answer } = yield* openInbox();
+        const tasked = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              task: "Rename the invite button.",
+            }),
+          ),
+        ).agent;
+        yield* postInboxItem(
+          { userId: owner, planId: plan.id, agentId: tasked.id },
+          { ...PROVIDER, needsReply: false },
+        );
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        assert.equal(item.agentId, tasked.id);
+        const taken = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: item.revision,
+            reply: INBOX_REPLY.CHOSE,
+            choice: "Postmark",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(taken.taken, true);
+        const stood = yield* planNow(owner, plan.id);
+        assert.deepEqual(stood.fields, EMPTY_PLAN_FIELDS);
+        assert.deepEqual(stood.agentEdits, []);
+      }),
+  );
+
+  it.effect(
+    "an archived plan still takes the decision, as it takes the notes of an agent already running when it was archived",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, post, read, answer } = yield* openInbox();
+        yield* post({ ...PROVIDER, needsReply: false });
+        yield* updatePlan(owner, plan.id, { archived: true });
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        yield* answer(item.id, {
+          revision: item.revision,
+          reply: INBOX_REPLY.CHOSE,
+          choice: "SES",
+          clientKey: randomUUID(),
+        });
+        const written = yield* planNow(owner, plan.id);
+        assert.equal(written.fields.approach, '- Decision on "Which email provider?": SES.');
+        assert.equal(
+          written.fields.alternatives,
+          '- Rejected on "Which email provider?": Postmark and SendGrid, in favor of SES.',
         );
       }),
   );
