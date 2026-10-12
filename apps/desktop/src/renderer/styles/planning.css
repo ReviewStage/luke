@@ -717,15 +717,26 @@ button.code-card-path:hover {
   margin-top: auto;
 }
 
+/* An agent's log runs right up to the card's top edge and its words
+   dissolve over `--scroll-fade` just above it, rather than being sliced
+   short of the card: a mask, so they fade into whatever ground the panel
+   stands on in either appearance. Its foot pads past the fade, so the
+   newest line, scrolled to or followed, stands whole above it. */
+.agent-log-over-composer {
+  padding-bottom: calc(var(--scroll-fade) + var(--space-4));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
-   card and the column line up. What stands here is the room around the card. */
+   card and the column line up. What stands here is the room around the
+   card, none above it, since the log meets the card itself. */
 .agent-composer {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 16px 12px;
+  padding: 0 16px 12px;
 }
 
 .agent-composer-note {

@@ -339,6 +339,7 @@ export function AgentTranscriptView({
   onRetry,
   openGitHub,
   footer,
+  overComposer = false,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
@@ -360,6 +361,8 @@ export function AgentTranscriptView({
   openGitHub: (url: string) => void;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
+  /** Whether the composer stands right under the log, which the log's foot then fades into. */
+  overComposer?: boolean;
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
@@ -373,7 +376,11 @@ export function AgentTranscriptView({
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
-        <ConversationContent className="pt-(--section-gap)">
+        <ConversationContent
+          className={
+            overComposer ? "agent-log-over-composer pt-(--section-gap)" : "pt-(--section-gap)"
+          }
+        >
           {messages.map((message, index) => (
             <AgentMessage
               key={message.id}
@@ -485,6 +492,7 @@ export function AgentTabView({
             <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
           ) : null
         }
+        overComposer
       />
       <footer className="agent-tab-foot">
         <AgentComposer

@@ -23,8 +23,10 @@ import { useMinute } from "./plan-time";
  * Cursor draw one, filled with the share of the window the agent's newest
  * step read and coloured by how near eve's compaction that is
  * (`agent-context-model.ts`); its hover says the share in words. A press
- * opens a popover right above the ring, from its trailing edge where that
- * keeps it on screen (`../anchored-popover.tsx`), the model menu's width, that says the
+ * opens a popover right above the ring, the model menu's width, from the
+ * ring's leading edge as the model menu hangs from its chip, and from its
+ * trailing edge only where the leading one would run past the panel
+ * (`../anchored-popover.tsx`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the
  * cache, the step's answer, where eve compacts, and when it last did. The
@@ -191,7 +193,7 @@ export function AgentContextRing({
         </button>
       </Tooltip>
       {open ? (
-        <AnchoredPopover align={POPOVER_ALIGN.END}>
+        <AnchoredPopover align={POPOVER_ALIGN.START}>
           <ContextPopover
             id={popoverId}
             context={context}
