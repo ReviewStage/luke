@@ -54,33 +54,63 @@ jobs:
   # each test file clones it as a template into a database of its own and
   # drops the clone when it is done (`tests/support/store-test-postgres.ts`),
   # so a statement one file forgets to scope reaches no other file's rows here
-  # any more than it does on PGlite. The image is Docker's official one pulled
-  # through AWS's public mirror, because a runner pulls Docker Hub anonymously
-  # and its shared address keeps meeting Hub's unauthenticated rate limit.
+  # any more than it does on PGlite. The image is Docker's official one, and a
+  # runner pulls it anonymously from a shared address, so every registry it
+  # can come from meets a rate limit sooner or later: Docker Hub's pull count,
+  # then AWS's public mirror's data limit. A service container gets one pull
+  # (the runner's own three tries, seconds apart, at the one registry), so
+  # the container is a step instead: each round tries AWS's mirror, Google's
+  # mirror, then Docker Hub, and a round that finds all three throttled waits
+  # and tries again. It starts before the checkout so it boots while the
+  # workspace installs, as a service container did, and the job waits for it
+  # to answer only before the first step that needs it.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    services:
-      postgres:
-        image: public.ecr.aws/docker/library/postgres:18
-        env:
-          POSTGRES_USER: luke
-          POSTGRES_PASSWORD: luke
-          POSTGRES_DB: luke
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U luke"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
     env:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
       LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
+      - name: Start Postgres
+        run: |
+          for round in 1 2 3 4; do
+            for image in \
+              public.ecr.aws/docker/library/postgres:18 \
+              mirror.gcr.io/library/postgres:18 \
+              docker.io/library/postgres:18; do
+              if docker pull --quiet "$image"; then
+                docker run --detach --name postgres \
+                  --env POSTGRES_USER=luke \
+                  --env POSTGRES_PASSWORD=luke \
+                  --env POSTGRES_DB=luke \
+                  --publish 5432:5432 \
+                  --health-cmd "pg_isready -U luke" \
+                  --health-interval 5s \
+                  --health-timeout 5s \
+                  --health-retries 12 \
+                  "$image"
+                exit 0
+              fi
+              echo "::warning::Could not pull $image (round $round)"
+            done
+            if [ "$round" -lt 4 ]; then sleep $((round * 15)); fi
+          done
+          echo "::error::Every registry refused postgres:18"
+          exit 1
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 90); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' postgres)
+            if [ "$status" = healthy ]; then exit 0; fi
+            if [ "$status" = unhealthy ]; then break; fi
+            sleep 1
+          done
+          docker logs postgres
+          echo "::error::Postgres did not become healthy"
+          exit 1
       - run: pnpm --filter @luke/web db:migrate
       - run: pnpm --filter @luke/web test:store
       # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
