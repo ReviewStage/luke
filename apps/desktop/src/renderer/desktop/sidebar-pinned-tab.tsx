@@ -27,7 +27,7 @@ import {
  * it is closed. Its Unpin stands at the row's end while it is hovered or
  * reached from the keyboard, in the plan rows' Pin and Archive style, and
  * a right-click offers Unpin, beside an agent's two copies of its
- * transcript, which are read from the service whichever plan is open.
+ * transcript while its plan is open.
  *
  * A pin outlives what it opens only on the open plan's word: an agent the
  * plan's agents no longer hold, or a file no longer among those Luke showed
@@ -53,7 +53,10 @@ function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
 
 /**
  * A pin's actions in the groups a rule divides: an agent's two copies of
- * its transcript, read whole from the service, then Unpin.
+ * its transcript, read whole from the service, then Unpin. Note that the
+ * copies stand only while the agent's plan is open, because a copy heads its
+ * brief as the plan or the task the agent was handed, which only the open
+ * plan's agents say.
  */
 function pinActionGroups(
   pin: PinnedTab,
@@ -66,11 +69,13 @@ function pinActionGroups(
     icon: <UnpinIcon />,
     onSelect: () => plans.sidePanel.onUnpin(pin.plan, tab),
   };
-  if (!isAgentTab(tab)) return [[unpin]];
-  const brief = plans.agents.agents?.find((agent) => agent.id === tab.agent)?.brief;
-  const copy = copied(
-    agentTranscriptRead(plans.agents.readTranscript, tab.agent, pin.label, brief),
-  );
+  const agent =
+    isAgentTab(tab) && pin.plan === plans.activePlanId
+      ? plans.agents.agents?.find((each) => each.id === tab.agent)
+      : undefined;
+  if (agent === undefined) return [[unpin]];
+  const read = agentTranscriptRead(plans.agents.readTranscript, agent.id, pin.label, agent.brief);
+  const copy = copied(read);
   return [
     [
       {

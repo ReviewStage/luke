@@ -463,6 +463,30 @@ test("a pinned agent takes the name its tab has now on its own plan, and keeps t
   assert.equal(panel.control().pins[0]?.label, "Invite flow");
 });
 
+test("a file shown from its pin before the plan's code is read is chosen once it is, though other tabs arrive first", () => {
+  const { TRANSCRIPT, BOARD, CODE } = SIDE_PANEL_TAB;
+  const panel = mountStood({
+    plan: { id: PLAN, holds: { [TRANSCRIPT]: true } },
+    agents: [],
+    subagents: [],
+  });
+  act(() => panel.control().onShow(PLAN, { file: ROLES }));
+  assert.equal(panel.control().tab, TRANSCRIPT, "standing in while the file is unread");
+
+  panel.render({
+    plan: { id: PLAN, holds: { [TRANSCRIPT]: true, [BOARD]: true } },
+    agents: [],
+    subagents: [],
+  });
+  panel.render({
+    plan: { id: PLAN, holds: { [TRANSCRIPT]: true, [BOARD]: true, [CODE]: true } },
+    agents: [],
+    subagents: [],
+    files: [ROLES],
+  });
+  assert.deepEqual(panel.control().tab, { file: ROLES });
+});
+
 test("the tabs an earlier version pinned in each plan's strip read as pinned to the sidebar, older than any pinned since, a subagent's let go", () => {
   const OTHER_PLAN = "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
   window.localStorage.setItem(

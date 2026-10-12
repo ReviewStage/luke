@@ -1019,6 +1019,8 @@ export function useSidePanel(
   const [fullScreen, setFullScreen] = useState(false);
   const [newTabAsked, setNewTabAsked] = useState(false);
   const [seen, setSeen] = useState<OpenPlan>(plan);
+  // The tab a pin or a notification asked for, while it is still the one chosen.
+  const [asked, setAsked] = useState<{ plan: string; tab: SidePanelTab } | undefined>(undefined);
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const planId = plan.id;
   const state = stage === undefined ? kept : (moved ?? stage);
@@ -1052,12 +1054,20 @@ export function useSidePanel(
   // the shown one's place, because a tab ahead of it in the strip would
   // otherwise become the first, and a chosen tab the plan lacked would come
   // back over the one standing in for it: the tab shown is kept as chosen.
+  // A tab a pin or a notification asked for is the exception, since it was
+  // chosen on this very plan and stands in for nothing: a file's waits for
+  // the plan's code to be read, however much arrives before it.
   if (seen.id !== planId || !sameHolds(seen.holds, plan.holds)) {
     setSeen(plan);
     const before =
       seen.id === planId && arrived(seen.holds, plan.holds) ? shownFor(seen.holds) : undefined;
     const after = shownFor(plan.holds);
-    if (before !== undefined && (after === undefined || !sameTab(before, after))) {
+    const awaited =
+      asked !== undefined &&
+      asked.plan === planId &&
+      state.tab !== undefined &&
+      sameTab(asked.tab, state.tab);
+    if (!awaited && before !== undefined && (after === undefined || !sameTab(before, after))) {
       update((held) => ({ ...held, tab: before }));
     }
   }
@@ -1092,21 +1102,25 @@ export function useSidePanel(
   }, [update]);
   const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onChoose = useCallback(
-    (tab: SidePanelTab) =>
+    (tab: SidePanelTab) => {
+      setAsked(undefined);
       update((held) => ({
         ...withTab(withChosenViewed(held, tab, drawn), tab, planId),
         open: true,
-      })),
+      }));
+    },
     [update, drawn, planId],
   );
   // Note that a tab shown on another plan is not counted viewed on the open
   // one, because the plan it is viewed on is the one about to open.
   const onShow = useCallback(
-    (on: string, tab: SidePanelTab) =>
+    (on: string, tab: SidePanelTab) => {
+      setAsked({ plan: on, tab });
       update((held) => ({
         ...withTab(on === planId ? withChosenViewed(held, tab, drawn) : held, tab, on),
         open: true,
-      })),
+      }));
+    },
     [update, drawn, planId],
   );
   const onClose = useCallback(

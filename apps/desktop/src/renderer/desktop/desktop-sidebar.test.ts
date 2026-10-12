@@ -534,29 +534,57 @@ test("a pinned tab alone draws Pinned, and a press on it opens its plan on the t
   assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
 });
 
-test("a pinned tab's Unpin and its right-click's Unpin both unpin it, and an agent's menu offers its transcript's two copies first", () => {
+/** The items of the menu a right-click on the row opens, the menu left open. */
+function rowMenu(row: HTMLElement): HTMLElement[] {
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+}
+
+test("a pinned tab's Unpin and its right-click's Unpin both unpin it, and an agent's menu offers its transcript's two copies first while its plan is open", () => {
   const billing = listedPlan("Billing");
+  const invites = listedPlan("Invites");
   const agent: PinnedTab = {
     plan: billing.id,
     tab: { agent: "agent-1" },
     label: "Invite flow",
+    at: 3,
+  };
+  const elsewhere: PinnedTab = {
+    plan: invites.id,
+    tab: { agent: "agent-2" },
+    label: "Seats",
     at: 2,
   };
   const board: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 1 };
   const unpinned: unknown[] = [];
   const container = mount(DEAN, {
-    plans: withPins([agent, board], { plans: [billing] }, (planId, tab) =>
-      unpinned.push({ planId, tab }),
+    plans: withPins(
+      [agent, elsewhere, board],
+      {
+        plans: [billing, invites],
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: billing.id,
+        agents: codingAgentsControl({ agents: [agentOn("agent-1")] }),
+      },
+      (planId, tab) => unpinned.push({ planId, tab }),
     ),
   });
 
   press(container, '[aria-label="Unpin Board"]');
-  const row = container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
-  assert.ok(row);
-  act(() => {
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
-  });
-  const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  const [open, other] = container.querySelectorAll<HTMLElement>(
+    "nav[aria-label='Pinned'] .sidebar-plan",
+  );
+  assert.ok(open && other);
+  const elsewhereItems = rowMenu(other);
+  assert.deepEqual(
+    elsewhereItems.map((item) => item.textContent),
+    ["Unpin"],
+    "another plan's agent offers no copy",
+  );
+  act(() => elsewhereItems[0]?.click());
+  const items = rowMenu(open);
   assert.deepEqual(
     items.map((item) => item.textContent),
     ["Copy concise transcript", "Copy full transcript", "Unpin"],
@@ -565,6 +593,7 @@ test("a pinned tab's Unpin and its right-click's Unpin both unpin it, and an age
 
   assert.deepEqual(unpinned, [
     { planId: billing.id, tab: SIDE_PANEL_TAB.BOARD },
+    { planId: invites.id, tab: { agent: "agent-2" } },
     { planId: billing.id, tab: { agent: "agent-1" } },
   ]);
 });
