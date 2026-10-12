@@ -31,6 +31,7 @@ import {
   repositoryLabel,
   repositoryPageUrl,
 } from "../planning/planning-model";
+import { isAgentTab, sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
@@ -347,6 +348,53 @@ function PinnedRows({
 }
 
 /**
+ * The Pinned section, its header drawn as a repository's is: the pin in the
+ * picture's place, giving way to the fold's chevron while hovered or reached
+ * from the keyboard, and folded, the count after its name. The fold is kept
+ * across launches as a repository's is, and folded, the open plan, or the
+ * pinned tab on show, still stands under it, as under a repository's fold.
+ */
+function PinnedSection({
+  rows,
+  folds,
+  shown,
+  context,
+  onOpenTab,
+}: {
+  rows: readonly PinnedRow[];
+  folds: FoldedGroups;
+  /** Whether a row is the plan open or the pinned tab on show, which a fold leaves standing. */
+  shown: (row: PinnedRow) => boolean;
+  context: RowContext;
+  onOpenTab: (pin: PinnedTab) => void;
+}): React.JSX.Element {
+  const folded = folds.pinnedFolded;
+  const drawn = folded ? rows.filter(shown) : rows;
+  return (
+    <nav className="sidebar-group" aria-label="Pinned">
+      <div className="sidebar-repository-header">
+        <button
+          type="button"
+          className="sidebar-repository-toggle sidebar-pinned-row"
+          aria-expanded={!folded}
+          onClick={folds.togglePinned}
+        >
+          <span className="sidebar-repository-glyph">
+            <PinIcon />
+            <ChevronRightIcon />
+          </span>
+          <span className="sidebar-repository-name">Pinned</span>
+          {folded ? <FoldedCount count={rows.length} noun={PIN_NOUN} /> : null}
+        </button>
+      </div>
+      {drawn.length === 0 ? null : (
+        <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} />
+      )}
+    </nav>
+  );
+}
+
+/**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
  * account, Archive plans puts every plan under the header away, and Open on
@@ -377,15 +425,32 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
   return [[pin, archive], [github]];
 }
 
+/** What a folded group's count is read as, one and many. */
+interface CountNoun {
+  readonly one: string;
+  readonly many: string;
+}
+
+const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
+
+/** Pinned holds tabs as well as plans, so its count is read as pins. */
+const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
 /**
- * A folded group's count of its plans, shown after its name while the
+ * A folded group's count of what it holds, shown after its name while the
  * header is hovered or reached from the keyboard, and read as "n plans".
  */
-function FoldedCount({ count }: { count: number }): React.JSX.Element {
+function FoldedCount({
+  count,
+  noun = PLAN_NOUN,
+}: {
+  count: number;
+  noun?: CountNoun;
+}): React.JSX.Element {
   return (
     <span className="sidebar-repository-count">
       {count}
-      <span className="visually-hidden">{count === 1 ? " plan" : " plans"}</span>
+      <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
     </span>
   );
 }
@@ -559,7 +624,8 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  * row that leads to Settings. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, a plan naming its repository
- * and a tab its plan; the rest are grouped
+ * and a tab its plan, under a header that folds as a repository's does;
+ * the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
  * pinned first, then the group updated most recently first;
  * and the archived ones are folded away under them all.
@@ -628,6 +694,16 @@ export function DesktopSidebar({
   };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
+  // A pinned tab is on show where its plan is open and its column shows it:
+  // an agent's in the plan's own column, any other in the side panel.
+  const pinnedShown = ({ plan, pin }: PinnedRow) =>
+    current(plan.id) &&
+    (pin === undefined ||
+      (isAgentTab(pin.tab)
+        ? sameTab(plans.mainTabs.tab, pin.tab)
+        : plans.sidePanel.open &&
+          plans.sidePanel.tab !== undefined &&
+          sameTab(plans.sidePanel.tab, pin.tab)));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
   const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
@@ -641,7 +717,7 @@ export function DesktopSidebar({
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.
   const drawn = [
-    ...pinned,
+    ...(folds.pinnedFolded ? pinned.filter((plan) => current(plan.id)) : pinned),
     ...groups.flatMap((group) =>
       folds.folded(group.repository) ? group.plans.filter((plan) => current(plan.id)) : group.plans,
     ),
@@ -695,10 +771,13 @@ export function DesktopSidebar({
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
         {plans.signedIn && pinnedSection.length > 0 ? (
-          <nav className="sidebar-group" aria-label="Pinned">
-            <h2 className="sidebar-heading">Pinned</h2>
-            <PinnedRows rows={pinnedSection} context={context} onOpenTab={openPinnedTab} />
-          </nav>
+          <PinnedSection
+            rows={pinnedSection}
+            folds={folds}
+            shown={pinnedShown}
+            context={context}
+            onOpenTab={openPinnedTab}
+          />
         ) : null}
         <nav className="sidebar-group" aria-label="Plans">
           <h2 className="sidebar-heading">Plans</h2>
