@@ -299,6 +299,16 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow back up and to the left: the way back to the plan a call is about. */
+export function ReturnIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M17.5 17.5 6.5 6.5" />
+      <path d="M6.5 15.5v-9h9" />
+    </Glyph>
+  );
+}
+
 /** A person: the account the app is signed in as. */
 export function UserIcon(): React.JSX.Element {
   return (

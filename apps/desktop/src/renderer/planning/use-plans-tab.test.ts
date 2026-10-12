@@ -1741,6 +1741,40 @@ test("a notification's click opens its plan on the agent's tab in the plan's col
   assert.equal(tab.control().sidePanel.fullScreen, false);
 });
 
+test("the call card's way back opens the call's plan on its own document tab, out from under its version history and a side panel filling the window", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+    },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+
+  // From another plan: the call's plan is opened.
+  act(() => tab.control().onShowPlan(PLAN.id));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.PLAN);
+
+  // On the plan itself, but on an agent's tab, under its history and a panel filling the window.
+  act(() => tab.control().mainTabs.onShow(PLAN.id, { agent: AGENT_ID }));
+  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().onShowPlan(PLAN.id));
+  // The open plan is not opened again.
+  assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_SELECT).length, 1);
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.PLAN);
+  assert.equal(tab.control().history.open, false);
+  assert.equal(tab.control().sidePanel.fullScreen, false);
+});
+
 test("an agent pinned to the sidebar opens its plan on the agent's tab in the plan's column, its closed tab opened again, and leaves the side panel shut", async () => {
   const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
   const tab = mount(

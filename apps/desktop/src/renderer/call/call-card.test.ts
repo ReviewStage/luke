@@ -15,7 +15,7 @@ import {
   CallCardDock,
   type CallCardInput,
   callControls,
-  RETURN_TO_PLAN_LABEL,
+  returnLabel,
 } from "./call-card";
 import { callCard } from "./call-card-model";
 
@@ -76,25 +76,19 @@ function press(label: string): HTMLButtonElement {
   return button;
 }
 
-test("in a Luke window the card is the call's plan over the call bar itself, its first line the way back and its controls telling their acts naming no plan", () => {
+test("the card is the call's plan, a way back named for it, and the call bar itself, and its controls tell their acts naming no plan", () => {
   draw(createElement(CallCard, { ...input(LISTENING), surface: CALL_CARD_SURFACE.SIDEBAR }));
-  const title = container.querySelector<HTMLButtonElement>("button.call-card-title");
-  assert.ok(title);
-  assert.equal(title.textContent, "Planning call");
+  assert.equal(container.querySelector(".call-card-title")?.textContent, "Planning call");
   // The call bar's own row and words, not a look-alike of them.
   assert.equal(
     container.querySelector('.call-bar[data-call="true"] .call-status-word')?.textContent,
     "Listening",
   );
-  act(() => title.click());
+  press(returnLabel("Planning call"));
   assert.equal(press("Mute microphone").getAttribute("aria-pressed"), "false");
   assert.equal(press("Mute speaker").getAttribute("aria-pressed"), "false");
   press("End call");
-  // There is no × to put a live call out of sight, and the way back is the title itself.
-  assert.equal(
-    container.querySelector(`button[aria-label="${RETURN_TO_PLAN_LABEL}"]`) === null,
-    true,
-  );
+  // There is no × to put a live call out of sight.
   assert.equal(container.querySelectorAll("button").length, 4);
   assert.deepEqual(told, [
     [ACT_KIND.CALL_SHOW_PLAN],
@@ -104,7 +98,7 @@ test("in a Luke window the card is the call's plan over the call bar itself, its
   ]);
 });
 
-test("in the floating window the first line is the drag handle, so the way back is a button of its own", () => {
+test("in the floating window the plan's name is the drag handle and the way back is the same button, hinted by the system", () => {
   draw(
     createElement(CallCard, {
       ...input({
@@ -116,12 +110,11 @@ test("in the floating window the first line is the drag handle, so the way back 
       surface: CALL_CARD_SURFACE.WINDOW,
     }),
   );
-  assert.equal(container.querySelector("button.call-card-title") === null, true);
-  assert.equal(container.querySelector(".call-card-title")?.textContent, "Planning call");
   assert.equal(container.querySelector(".call-status-word")?.textContent, "Muted");
   assert.equal(press("Unmute microphone").getAttribute("aria-pressed"), "true");
   assert.equal(press("Unmute speaker").getAttribute("aria-pressed"), "true");
-  press(RETURN_TO_PLAN_LABEL);
+  const back = press(returnLabel("Planning call"));
+  assert.equal(back.title, "Open Planning call");
   assert.deepEqual(told, [
     [ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.TOGGLE_MICROPHONE }],
     [ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.UNMUTE_SPEAKER }],

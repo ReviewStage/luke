@@ -11,7 +11,7 @@
  */
 
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
-import { ExternalIcon } from "@sidecar/panel";
+import { ReturnIcon } from "@sidecar/panel";
 import { type AnimationEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
@@ -23,8 +23,10 @@ import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
 import { type CallCardModel, callCard } from "./call-card-model";
 
-/** The way back's name, for a reader and its hover. */
-export const RETURN_TO_PLAN_LABEL = "Return to the plan";
+/** The way back's name, for a reader and its hover: the plan it opens. */
+export function returnLabel(planName: string): string {
+  return `Open ${planName}`;
+}
 
 /** Where a card is drawn, which decides how its title answers and how its controls are hinted. */
 export const CALL_CARD_SURFACE = {
@@ -70,14 +72,15 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
 }
 
 /**
- * The card as drawn from what it is handed: the call's plan by name over the
- * call bar itself, the same component the plan's own page draws, so its
- * status, its mutes, and its end are the bar's in every word, glyph, and
- * colour, and restyling the bar restyles the card. The first line is the way
- * back in a Luke window and the drag handle in the floating window, where
- * the way back is a button beside it instead: macOS hands a press on a drag
- * region to the drag, never the page. There is no ×: End call is the way to
- * put a call away, and a live call nobody can see is what the card is for.
+ * The card as drawn from what it is handed: the call's plan by name, with
+ * the way back to it beside the name, over the call bar itself, the same
+ * component the plan's own page draws, so its status, its mutes, and its end
+ * are the bar's in every word, glyph, and colour, and restyling the bar
+ * restyles the card. The way back is a button of its own everywhere, named
+ * for the plan it opens. In the floating window the name is the drag handle,
+ * since macOS hands a press on a drag region to the drag, never the page.
+ * There is no ×: End call is the way to put a call away, and a live call
+ * nobody can see is what the card is for.
  */
 export function CallCard({
   card,
@@ -99,6 +102,19 @@ export function CallCard({
       {card.planName}
     </span>
   );
+  // The floating window is too small to hold a tooltip, so there the
+  // system's own hint names the plan the button opens.
+  const returnButton = (
+    <button
+      type="button"
+      className="icon-button"
+      aria-label={returnLabel(card.planName)}
+      title={inWindow ? returnLabel(card.planName) : undefined}
+      onClick={controls.onReturn}
+    >
+      <ReturnIcon />
+    </button>
+  );
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
@@ -111,26 +127,12 @@ export function CallCard({
       onAnimationEnd={left}
     >
       <div className="call-card-head">
+        <p className="call-card-title">{name}</p>
         {inWindow ? (
-          <p className="call-card-title">{name}</p>
+          returnButton
         ) : (
-          <Tooltip label={RETURN_TO_PLAN_LABEL}>
-            <button type="button" className="call-card-title" onClick={controls.onReturn}>
-              {name}
-            </button>
-          </Tooltip>
+          <Tooltip label={returnLabel(card.planName)}>{returnButton}</Tooltip>
         )}
-        {inWindow ? (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={RETURN_TO_PLAN_LABEL}
-            title={RETURN_TO_PLAN_LABEL}
-            onClick={controls.onReturn}
-          >
-            <ExternalIcon />
-          </button>
-        ) : null}
       </div>
       {/* A block of its own, as the plan's page holds it, so the bar spans the card. */}
       <div>
