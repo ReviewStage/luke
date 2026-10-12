@@ -59,11 +59,19 @@ const ROW = {
   FILE: "file",
 } as const;
 
-/** How both trees draw: compact rows, each file's type in colour, and a lone folder sharing its parent's row. */
+/**
+ * How both trees draw: compact rows, each file's type in colour, a lone
+ * folder sharing its parent's row, and the window's thin scrollbar
+ * (`styles/desktop.css`), whose colour inherits into Pierre's shadow root
+ * and whose width does not, so it is set there on the scroller and on the
+ * box Pierre measures that scroller's gutter from.
+ */
 const TREE_LOOK = {
   flattenEmptyDirectories: true,
   density: "compact",
   icons: "complete",
+  unsafeCSS:
+    "[data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }",
 } as const;
 
 /** The slot Pierre resolves a file's type icon for, and the type of a file no rule names. */

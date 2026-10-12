@@ -41,8 +41,6 @@
   padding: 10px 2px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -534,8 +532,6 @@ button.code-card-path:hover {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
 }
 
 /* The File tabs' settings (file-view-settings.ts): lines unwrapped scroll
@@ -803,7 +799,6 @@ button.code-card-path:hover {
   --trees-focus-ring-color-override: var(--focus-ring);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
-  --trees-scrollbar-thumb-override: var(--scrollbar);
   display: flex;
   min-height: 0;
   flex: 1;
@@ -993,8 +988,6 @@ button.code-card-path:hover {
   font-size: 11.5px;
   line-height: 1.6;
   overflow-wrap: normal;
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
   tab-size: 2;
   white-space: pre;
 }
@@ -1021,8 +1014,6 @@ button.code-card-path:hover {
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
 }
 
 .transcript-table > table {
