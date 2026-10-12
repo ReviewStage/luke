@@ -1,4 +1,9 @@
-import { type PlanContent, type PlanFieldWriterWho, planBody } from "@sidecar/hosted/plan-template";
+import {
+  EMPTY_PLAN_FIELDS,
+  type PlanContent,
+  type PlanFieldWriterWho,
+  planBody,
+} from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -229,9 +234,12 @@ const findRevisionLines = SqlSchema.findAll({
 const RevisionContentRowSchema = Schema.Struct({
   seq: Schema.Number,
   name: Schema.String,
-  fields: planFieldsSchema,
+  fields: Schema.NullOr(planFieldsSchema),
   assumptions: Schema.Array(planAssumptionSchema),
+  document: Schema.NullOr(Schema.String),
 });
+
+type RevisionContentRow = typeof RevisionContentRowSchema.Type;
 
 /** The content of the account's plan at each revision named, with the plan's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
@@ -248,6 +256,7 @@ const findRevisionContents = SqlSchema.findAll({
         name: plan.name,
         fields: planRevision.fields,
         assumptions: planRevision.assumptions,
+        document: planRevision.document,
       })
       .from(planRevision)
       .innerJoin(plan, eq(plan.id, planRevision.planId))
@@ -426,24 +435,39 @@ export function listRevisions(
   });
 }
 
-/** The account's plan's content at one revision; nothing where it has no such revision, or the account owns no such plan. */
+/**
+ * The account's plan's fields at one revision; nothing where it has no such
+ * revision, the revision is of a plan that is one document, which has no
+ * fields to put back, or the account owns no such plan.
+ */
 export function readRevisionContent(
   userId: string,
   planId: string,
   seq: number,
 ): Effect.Effect<Option.Option<PlanContent>, RevisionFailure, SqlClient.SqlClient> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
-    Option.map(Option.fromNullishOr(rows[0]), ({ fields, assumptions }) => ({
-      fields,
-      assumptions,
-    })),
+    Option.flatMap(Option.fromNullishOr(rows[0]), ({ fields, assumptions }) =>
+      fields === null ? Option.none() : Option.some({ fields, assumptions }),
+    ),
   );
+}
+
+/**
+ * A revision as the History tab reads it: a document plan's text as its body,
+ * or the template's fields formatted under the plan's name as it stands now.
+ */
+function revisionDocument(row: RevisionContentRow): PlanDocument {
+  if (row.document !== null) return { body: row.document, assumptions: [] };
+  return {
+    body: planBody({ name: row.name }, row.fields ?? EMPTY_PLAN_FIELDS),
+    assumptions: row.assumptions,
+  };
 }
 
 /**
  * One revision of the account's plan as the History tab shows it: the plan
  * after it and before it, the first revision having nothing before it, each
- * formatted under the plan's name as it stands now; nothing where the plan
+ * as `revisionDocument` reads it; nothing where the plan
  * has no such revision, or the account owns no such plan.
  */
 export function readRevision(
@@ -458,9 +482,7 @@ export function readRevision(
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {
       const row = rows.find((each) => each.seq === at);
-      return row === undefined
-        ? null
-        : { body: planBody({ name: row.name }, row.fields), assumptions: row.assumptions };
+      return row === undefined ? null : revisionDocument(row);
     };
     const document = documentAt(seq);
     return document === null

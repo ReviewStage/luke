@@ -102,6 +102,8 @@ export const PLAN_SAVE_REFUSAL = {
   NO_PLAN: "Not saved: this plan no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
   ARCHIVED: "Not saved: this plan is archived.",
+  /** The plan is one document, which takes none of the template's notes, field edits, or revisions. */
+  DOCUMENT: "Not saved: this plan is a document, not the template's fields.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -139,6 +141,11 @@ const ARCHIVED_RESULT: PlanNotSaved = {
   reason: PLAN_SAVE_REFUSAL.ARCHIVED,
 };
 
+const DOCUMENT_RESULT: PlanNotSaved = {
+  status: PLAN_SAVE_STATUS.NOT_SAVED,
+  reason: PLAN_SAVE_REFUSAL.DOCUMENT,
+};
+
 /** Whether the plan as read under its lock is archived, which takes none of the developer's writes. */
 function archived(stored: StoredPlan): boolean {
   return stored.plan.archivedAt !== undefined;
@@ -174,7 +181,8 @@ interface PlanConflict {
  * as a revision under its writer, and each field it moved names the writer
  * as its last; one that moved nothing saves the document as it stood. A
  * change that refuses the plan as it found it answers its refusal, and
- * nothing is saved.
+ * nothing is saved. A plan that is one document is refused before anything
+ * is taken, since its text, not the fields, is what it reads as.
  */
 function savedUnderLock<T extends PlanTaken, F>(
   binding: PlanDocumentBinding,
@@ -188,6 +196,8 @@ function savedUnderLock<T extends PlanTaken, F>(
   > {
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
+    // A plan that is one document keeps no fields, so a change to them would be written where nothing reads it.
+    if (stored.value.text !== undefined) return DOCUMENT_RESULT;
     const { fields, plan, saved: savedBefore } = stored.value;
     const before: PlanContent = { fields, assumptions: plan.document.assumptions };
     const now = yield* Clock.currentTimeMillis;

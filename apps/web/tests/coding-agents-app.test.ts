@@ -28,6 +28,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
@@ -146,6 +147,13 @@ const SAVED = {
   body: "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n",
   assumptions: [{ text: "Invites expire after 7 days." }],
 };
+
+/** The saved plan as Copy writes it, which is what an agent started on the plan is handed. */
+const SNAPSHOT = planMarkdown({
+  name: "Teammate invitations",
+  document: SAVED,
+  fields: EMPTY_PLAN_FIELDS,
+});
 
 const SOL = "openai/gpt-6.1-sol";
 
@@ -448,7 +456,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(agent.brief, CODING_AGENT_BRIEF.PLAN);
         const stored = yield* readCodingAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
-        assert.equal(stored.value.planSnapshot, planMarkdown(SAVED));
+        assert.equal(stored.value.planSnapshot, SNAPSHOT);
         assert.equal(stored.value.task, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
         assert.deepEqual(eve.opened, [
@@ -457,7 +465,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             message: {
               conversationId: stored.value.conversationId,
               turn: BRAIN_HOST_TURN.TYPED,
-              message: planMarkdown(SAVED),
+              message: SNAPSHOT,
             },
             sessionId: eve.opened[0]?.sessionId ?? "",
           },
@@ -851,7 +859,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           sequence: 2,
           message: userMessage(
             randomUUID(),
-            planMarkdown(SAVED),
+            SNAPSHOT,
             userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
           ),
         });
@@ -1665,7 +1673,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           sequence: 2,
           message: userMessage(
             randomUUID(),
-            planMarkdown(SAVED),
+            SNAPSHOT,
             userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
           ),
         });
@@ -1912,7 +1920,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           ],
         );
         assert.deepEqual(yield* transcript(), {
-          lines: [planMarkdown(SAVED), "Use the helper."],
+          lines: [SNAPSHOT, "Use the helper."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
       }),
@@ -1945,7 +1953,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
         assert.equal(listed.agents[0]?.turnId, turnId);
         assert.deepEqual(yield* transcript(), {
-          lines: [planMarkdown(SAVED), "Now add the tests."],
+          lines: [SNAPSHOT, "Now add the tests."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
 
@@ -2467,14 +2475,14 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.equal(first.agent.status, CODING_AGENT_STATUS.RUNNING);
         assert.deepEqual(again, first);
         assert.equal(eve.sent.length, 1);
-        assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED), "Use the helper."]);
+        assert.deepEqual((yield* transcript()).lines, [SNAPSHOT, "Use the helper."]);
         // The row stands under the key, which is how the repeat found it.
         assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(key)), true);
 
         yield* sent("Use the helper.", randomUUID());
         assert.equal(eve.sent.length, 2);
         assert.deepEqual((yield* transcript()).lines, [
-          planMarkdown(SAVED),
+          SNAPSHOT,
           "Use the helper.",
           "Use the helper.",
         ]);
@@ -2701,7 +2709,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           invalid,
         );
         assert.deepEqual(eve.sent, []);
-        assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED)]);
+        assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
           codingAgentAnswerSchema,
@@ -2740,7 +2748,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           const { owner, agent, ask, transcript } = yield* startedAgent(eve, { running: true });
           assert.deepEqual(yield* ask(messageAs(owner, agent.id, line)), refusal(status, error));
           assert.equal(eve.sent.length, 1);
-          assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED)]);
+          assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
           assert.deepEqual(yield* ask(messageAs(owner, agent.id, line)), refusal(status, error));
           assert.equal(eve.sent.length, 2);
         }
@@ -2817,7 +2825,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           page.read.value
             .filter((record) => record.message.role === MESSAGE_ROLE.USER)
             .map((record) => record.message.parts.find(isTextUIPart)?.text),
-          [planMarkdown(SAVED), "Keep going."],
+          [SNAPSHOT, "Keep going."],
         );
       }),
   );
@@ -2834,7 +2842,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           idempotencyKey: randomUUID(),
           model: CODING_AGENT_DEFAULT_CHOICE.model,
           effort: CODING_AGENT_DEFAULT_CHOICE.effort,
-          planSnapshot: planMarkdown(SAVED),
+          planSnapshot: SNAPSHOT,
           task: null,
           repository: "Acme/Ledger",
         });

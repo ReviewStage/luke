@@ -60,7 +60,7 @@ import {
   recordCodingAgentPublished,
 } from "../server/hosted/coding-agent-store";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
+import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { PLAN_REVISION } from "../server/hosted/plan-revisions";
 import { createPlan } from "../server/hosted/plan-store";
 import { plansApp } from "../server/plans-app";
@@ -74,6 +74,11 @@ import {
   type SentToGitHub,
 } from "./support/github-app-fake";
 import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import {
+  INVITATIONS_TEXT,
+  makeDocumentPlan,
+  recordDocumentRevision,
+} from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
 import { testSqlClient } from "./support/sql-client";
 
@@ -2158,6 +2163,140 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(
           yield* ask(request(RESTORE, owner, { id: planId, query: { seq: "1" } })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan that is one document answers its text with no fields, so a desktop draws it and edits no field, and says who changed each section by heading",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const at = yield* Clock.currentTimeMillis;
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
+          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, duringCall: true, at },
+          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at },
+        ]);
+
+        const { plan } = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+        const renamed = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(ONE_PLAN, owner, {
+              id: planId,
+              method: "PATCH",
+              body: { name: "Invitations by email" },
+            }),
+          ),
+        ).plan;
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        ).plans;
+
+        assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
+        assert.equal(plan.fields, undefined);
+        assert.equal(plan.fieldEdits, undefined);
+        assert.deepEqual(plan.sectionEdits, [
+          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true },
+          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
+        ]);
+        assert.equal(renamed.name, "Invitations by email");
+        assert.deepEqual(renamed.document, plan.document);
+        assert.deepEqual(
+          listed.map(({ id, name }) => [id, name]),
+          [[planId, "Invitations by email"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan that is one document takes no field edit, no restore of the template's fields, and no notes, and its text stands",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+
+        const edited = yield* ask(
+          request(EDIT, owner, {
+            id: planId,
+            method: "POST",
+            body: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
+          }),
+        );
+        const restored = yield* ask(
+          request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } }),
+        );
+        const noted = yield* saveNotes({ userId: owner, planId }, [
+          added(PLAN_FIELD.GOAL, "Members invite by email."),
+        ]);
+        const { plan } = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+
+        assert.deepEqual(
+          edited,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          restored,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(noted, {
+          status: PLAN_SAVE_STATUS.NOT_SAVED,
+          reason: PLAN_SAVE_REFUSAL.DOCUMENT,
+        });
+        assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
+        assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.NOTETAKER);
+      }),
+  );
+
+  it.effect(
+    "a revision of a plan that is one document reads as its text, beside the template's revision before it, and is no field content to restore",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
+        yield* recordDocumentRevision(
+          planId,
+          2,
+          INVITATIONS_TEXT,
+          new Date(yield* Clock.currentTimeMillis),
+        );
+
+        const { revision } = readAnswer(
+          planRevisionAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "2" } })),
+        );
+        const restored = yield* ask(
+          request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "2" } }),
+        );
+
+        assert.deepEqual(revision.document, { body: INVITATIONS_TEXT, assumptions: [] });
+        assert.ok(revision.previous?.body.startsWith("# Teammate invitations\n"));
+        assert.ok(revision.previous?.body.includes("Only admins."));
+        assert.deepEqual(
+          restored,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),
   );

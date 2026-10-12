@@ -775,6 +775,17 @@ holds both prompts to those words.
   them.
 - **Saving and resuming** go through the same save, so a plan written in the
   template resumes with its answers and its assumptions intact.
+- **One document, on its way.** Plans are moving from these fields to one
+  free Markdown text started from the account's own template. The store
+  already reads a plan that is one document (`plan.document` non-null): it
+  answers the text as the `body`, with no title line, no `assumptions`
+  (they are a section of the text), and no `fields`, so every desktop draws
+  it and edits no field, and it names who last changed each section by its
+  heading (`sectionEdits`, from `plan.section_writers`). A revision of one is
+  its text (`plan_revision.document`). Until the template's notes and the
+  developer's edit learn the text, a plan that is one document takes no
+  notes, field edit, or restore, and its call's notetaker writes nothing on
+  it. Nothing makes a plan one document yet.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
   is understood, true, or agreed. Resolving each section, or agreeing that one

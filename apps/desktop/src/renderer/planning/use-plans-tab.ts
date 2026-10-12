@@ -712,7 +712,7 @@ export function usePlansTab(input: {
   // it asks the model nothing and reads no flag.
   const pressCopy = () => {
     if (region.kind !== DOCUMENT_REGION.READY) return;
-    copyWithToast(planMarkdown(region.plan.document), PLAN_COPIED_NOTE);
+    copyWithToast(planMarkdown(region.plan), PLAN_COPIED_NOTE);
   };
 
   const microphone = microphoneButton({

@@ -1,5 +1,5 @@
 import { PLAN_EMPTY_TEXT, PLAN_HEADING } from "./plan-template.js";
-import { PLAN_BOUNDS, type PlanDocument } from "./plan-wire.js";
+import { PLAN_BOUNDS, type Plan } from "./plan-wire.js";
 
 /**
  * plan-markdown.ts -- a plan's saved document as the readable Markdown Copy puts on the clipboard and a coding agent is handed.
@@ -9,7 +9,9 @@ import { PLAN_BOUNDS, type PlanDocument } from "./plan-wire.js";
  * canonical order, then the template's last section, `## Assumptions`, drawn
  * from the saved list, one bullet per assumption, or "None recorded" while
  * the list is empty. A draft with every field unanswered copies the same way
- * as a finished plan (`docs/PLANNING.md`, "Copy").
+ * as a finished plan (`docs/PLANNING.md`, "Copy"). A plan that is one
+ * document copies as its name for a title over its text, which holds its
+ * assumptions itself.
  */
 
 const ASSUMPTIONS_HEADING = `## ${PLAN_HEADING.ASSUMPTIONS}`;
@@ -20,6 +22,9 @@ const WHITESPACE = /\s/u;
 
 /** The characters the heading and the blank lines around it add to the body. */
 const HEADING_OVERHEAD = ASSUMPTIONS_HEADING.length + 4;
+
+/** A run of whitespace, line breaks among it, which a title spells as one space. */
+const WHITESPACE_RUN = /\s+/gu;
 
 /**
  * The most characters the Markdown of any document the store admits can
@@ -59,11 +64,18 @@ function listItem(text: string): string {
 }
 
 /**
- * The document as Markdown: the body as saved, then the
- * assumptions' section, which stands whether or not the list holds anything.
+ * The plan as Markdown. A plan that is one document, which answers no
+ * fields, is its name as a title over its text. Any other is its body as
+ * saved, whose heading is already the name, then the assumptions' section,
+ * which stands whether or not the list holds anything.
  */
-export function planMarkdown(document: PlanDocument): string {
+export function planMarkdown(plan: Pick<Plan, "name" | "document" | "fields">): string {
+  const { document } = plan;
   const body = document.body.trimEnd();
+  if (plan.fields === undefined) {
+    const title = `# ${plan.name.replace(WHITESPACE_RUN, " ").trim()}`;
+    return body.length === 0 ? `${title}\n` : `${title}\n\n${body}\n`;
+  }
   const items =
     document.assumptions.length === 0
       ? [PLAN_EMPTY_TEXT.NO_ASSUMPTIONS]

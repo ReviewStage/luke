@@ -113,7 +113,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   const brief =
     ask.task === undefined
-      ? { planSnapshot: planMarkdown(plan.value.plan.document), task: null }
+      ? { planSnapshot: planMarkdown(plan.value.plan), task: null }
       : { planSnapshot: null, task: ask.task };
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
