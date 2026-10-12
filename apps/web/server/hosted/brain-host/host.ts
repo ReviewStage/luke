@@ -1,4 +1,5 @@
 import { askRecord } from "@sidecar/database/models/asks";
+import { readBoard } from "@sidecar/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
@@ -23,7 +24,6 @@ import {
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";

@@ -12,6 +12,7 @@
     "./models/account-store": "./src/models/account-store.js",
     "./models/asks": "./src/models/asks.js",
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
+    "./models/board-store": "./src/models/board-store.js",
     "./models/columns": "./src/models/columns.js",
     "./models/content-addressed": "./src/models/content-addressed.js",
     "./models/hosted-store": "./src/models/hosted-store.js",

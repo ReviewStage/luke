@@ -1,3 +1,4 @@
+import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
 import {
   createPlan,
@@ -36,7 +37,6 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { readBoard, writeScene } from "./hosted/board-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,

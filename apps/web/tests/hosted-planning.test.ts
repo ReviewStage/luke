@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { readBoard, writeScene } from "@sidecar/database/models/board-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   createPlan,
@@ -56,7 +57,6 @@ import {
 import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
 import { GitHubApp } from "../server/github/github-app";
 import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
-import { readBoard, writeScene } from "../server/hosted/board-store";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
   BRAIN_HOST_ATTRIBUTE,
