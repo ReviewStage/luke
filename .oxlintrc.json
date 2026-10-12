@@ -22,6 +22,8 @@
   ],
   "rules": {
     "unicorn/no-useless-spread": "off",
+    "anti-slop/enforce-delete-with-where": "error",
+    "anti-slop/enforce-update-with-where": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-known-value-widening": "error",
@@ -39,6 +41,7 @@
     {
       "files": ["**/*.test.ts", "**/*.test.mjs", "**/*.test.tsx"],
       "rules": {
+        "anti-slop/enforce-delete-with-where": "off",
         "anti-slop/no-chained-type-assertions": "off"
       }
     },
