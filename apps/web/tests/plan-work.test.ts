@@ -411,6 +411,45 @@ test("the worker reads as running while its turn is parked on it, and as done on
   );
 });
 
+test("a worker's start and the stop of its task carry the task, so the stop names the subagent it stopped; a call that touches no task carries none", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: EVE_DELEGATION_TOOL.WORKER,
+          input: { message: "Read the styling setup." },
+          output:
+            "Started task worker-13zmbg. Its result will arrive in a <task_result> message. To send it another message, call worker again with taskId worker-13zmbg.",
+        },
+      ]),
+      ...callingStep(FIRST_EVE_TURN, 1, [
+        { toolName: START_CODING_AGENT_TOOL.name, input: { task: "Investigate." }, output: {} },
+        {
+          toolName: EVE_DELEGATION_TOOL.TASK_CANCEL,
+          input: { taskId: "worker-13zmbg" },
+          output: "Stopped worker-13zmbg's current work; it won't report back.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 2, "Started Opus 5.5 on it."),
+    ],
+    standing,
+  );
+
+  const work = await worked(target, standing);
+  assert.deepEqual(
+    work.parts.map((part) => (part.type === PLAN_WORK_PART.TOOL ? [part.tool, part.task] : [])),
+    [
+      [PLAN_WORK_TOOL.WORKER, "worker-13zmbg"],
+      [PLAN_WORK_TOOL.START_AGENT, undefined],
+      [PLAN_WORK_TOOL.WORKER_CANCEL, "worker-13zmbg"],
+      [],
+    ],
+  );
+});
+
 test("a turn says when it ended once it has, and no end while it runs", async () => {
   const target = await conversation();
   const standing = standingFor(target);

@@ -64,11 +64,11 @@ export const CALL_WORDS = {
   [CALL_KIND.TODOS]: { verb: "Updated the to-dos:", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
-  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
   [CALL_KIND.LIST_AGENTS]: { verb: "Listed the coding agents", code: false },
   [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
-  [CALL_KIND.START_AGENT]: { verb: "Started an agent", code: false },
+  [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;

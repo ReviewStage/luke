@@ -184,8 +184,9 @@ const planWorkReasoningPartSchema = EffectSchema.Struct({
 /**
  * One call the planning model made: which tool, by kind and by name; its
  * state; the one input a reader looks for first (the command, the query, the
- * page, the file), as its subject; and the whole input and output as text,
- * each cut to its bound.
+ * page, the file), as its subject; the subagent task it started, sent work
+ * to, or stopped; and the whole input and output as text, each cut to its
+ * bound.
  */
 const planWorkToolPartSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(PLAN_WORK_PART.TOOL),
@@ -195,6 +196,10 @@ const planWorkToolPartSchema = EffectSchema.Struct({
   state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
   subject: EffectSchema.optionalKey(
     EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
+  ),
+  /** The subagent task a `worker` call started or sent work to, or a `worker-cancel` call stopped, by eve's id for it, so the stop names the subagent it stopped; absent for any other call, before a start answered, and from a service older than it. */
+  task: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
   ),
   input: workText,
   output: EffectSchema.optionalKey(workText),

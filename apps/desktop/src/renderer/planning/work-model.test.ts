@@ -169,6 +169,31 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
   );
 });
 
+test("a stop names the subagent it stopped by that subagent's job, a start in an earlier turn included, and a stop of a task no turn here started names none, though a call sent it more work", () => {
+  const started = turn(PLAN_WORK_STATE.DONE, [
+    { ...call("w", PLAN_WORK_TOOL.WORKER, "Read the styling setup."), task: "worker-1" },
+    {
+      ...call("r", PLAN_WORK_TOOL.WORKER, "Also read the build."),
+      task: "worker-0",
+      input: JSON.stringify({ message: "Also read the build.", taskId: "worker-0" }),
+    },
+    words("A worker is reading it."),
+  ]);
+  const stopping = {
+    ...turn(PLAN_WORK_STATE.RUNNING, [
+      { ...call("c1", PLAN_WORK_TOOL.WORKER_CANCEL, undefined), task: "worker-1" },
+      { ...call("c2", PLAN_WORK_TOOL.WORKER_CANCEL, undefined), task: "worker-0" },
+      call("c3", PLAN_WORK_TOOL.WORKER_CANCEL, undefined),
+    ]),
+    turnId: "turn-2",
+  };
+
+  const [, later] = workRowsOf([started, stopping], true);
+  assert.deepEqual(scanned(later?.rows ?? []), [
+    [TURN_ROW.GROUP, ["Read the styling setup.", undefined, undefined], true],
+  ]);
+});
+
 test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
   const rows = rowsOf([
     turn(PLAN_WORK_STATE.DONE, [

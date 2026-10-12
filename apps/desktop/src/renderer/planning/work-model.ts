@@ -30,7 +30,8 @@ import {
  * they are, reasoning only where it has any, each call named by its kind
  * (`turn-rows.ts`) with the one input a reader looks for first set apart
  * as its subject, and a worker on its own row, never in a group, because
- * it runs on after its call. The rows those blocks fold into are
+ * it runs on after its call. A stop names the subagent it stopped by that
+ * subagent's job, wherever among the turns its start stands. The rows those blocks fold into are
  * `turn-rows.ts`'s, the same an agent's tab folds its turns into.
  */
 
@@ -185,7 +186,7 @@ export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined):
 }
 
 /** The fields of a call's input the tab reads apart from the rest. */
-const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message" } as const;
+const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message", TASK: "taskId" } as const;
 
 type InputField = (typeof INPUT_FIELD)[keyof typeof INPUT_FIELD];
 
@@ -215,17 +216,25 @@ function inputBlock(kind: CallKind, input: string): ToolBlock {
     : { kind: TOOL_BLOCK.COMMAND, text: command };
 }
 
+/** The job of each subagent the turns started, by eve's id for its task, as its line names it; the first call naming a task is its start. */
+type JobsByTask = ReadonlyMap<string, string>;
+
 function callRowOf(
   part: Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>,
   moving: boolean,
+  jobs: JobsByTask,
 ): WorkCallRow {
   const kind = CALL_KIND_OF_TOOL[part.tool];
+  const stopped =
+    part.tool === PLAN_WORK_TOOL.WORKER_CANCEL && part.task !== undefined
+      ? jobs.get(part.task)
+      : undefined;
   const subject =
     part.tool === PLAN_WORK_TOOL.OTHER
       ? part.name
       : kind === CALL_KIND.WEB_PAGE && part.subject !== undefined
         ? pageName(part.subject)
-        : part.subject;
+        : (stopped ?? part.subject);
   return {
     id: part.id,
     kind,
@@ -249,13 +258,14 @@ function rowsOf(
   moving: boolean,
   done: boolean,
   grouped: boolean,
+  jobs: JobsByTask,
 ): readonly TurnRow<WorkBlock>[] {
   const blocks: WorkBlock[] = parts.map((part) => {
     if (part.type === PLAN_WORK_PART.TEXT) return { kind: WORK_BLOCK.TEXT, text: part.text };
     if (part.type === PLAN_WORK_PART.REASONING) {
       return { kind: WORK_BLOCK.REASONING, text: part.text };
     }
-    const call = callRowOf(part, moving);
+    const call = callRowOf(part, moving, jobs);
     if (part.tool !== PLAN_WORK_TOOL.WORKER) return { kind: WORK_BLOCK.CALL, call };
     return {
       kind: WORK_BLOCK.WORKER,
@@ -266,7 +276,7 @@ function rowsOf(
         : {
             session: {
               earlierOmitted: part.session.earlierOmitted,
-              rows: rowsOf(part.session.parts, part.id, call.running, false, false),
+              rows: rowsOf(part.session.parts, part.id, call.running, false, false, jobs),
               ...(part.session.startedAt === undefined
                 ? undefined
                 : { startedAt: part.session.startedAt }),
@@ -283,6 +293,22 @@ function rowsOf(
 }
 
 /**
+ * The job of each subagent the turns started, by its task, so a stop in a
+ * later turn still names it. Note that only a start names a task's job,
+ * never a call that sent the task more work, whose message is no job of the
+ * subagent's, so a task whose start is on a page not read names none.
+ */
+function jobsOf(turns: readonly PlanWorkTurn[]): JobsByTask {
+  const jobs = new Map<string, string>();
+  for (const part of turns.flatMap((turn) => turn.parts)) {
+    if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) continue;
+    if (part.task === undefined || inputField(part.input, INPUT_FIELD.TASK) !== undefined) continue;
+    jobs.set(part.task, workerJob(callRowOf(part, false, jobs)));
+  }
+  return jobs;
+}
+
+/**
  * The open plan's turns as rows, oldest first. A turn moves only while the
  * call it ran on stands: a call that ended leaves its last turn as it was
  * last told, with nothing on it still turning.
@@ -291,6 +317,7 @@ export function workRowsOf(
   turns: readonly PlanWorkTurn[] | undefined,
   callLive: boolean,
 ): readonly WorkTurnRow[] {
+  const jobs = jobsOf(turns ?? []);
   return (turns ?? []).map((turn) => {
     const moving = callLive && turn.state === PLAN_WORK_STATE.RUNNING;
     const left = turn.state === PLAN_WORK_STATE.RUNNING && !moving;
@@ -300,7 +327,14 @@ export function workRowsOf(
       ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
-      rows: rowsOf(turn.parts, turn.turnId, moving, turn.state === PLAN_WORK_STATE.DONE, true),
+      rows: rowsOf(
+        turn.parts,
+        turn.turnId,
+        moving,
+        turn.state === PLAN_WORK_STATE.DONE,
+        true,
+        jobs,
+      ),
     };
   });
 }
