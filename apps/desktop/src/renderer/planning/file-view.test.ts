@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { PLAN_FILE_REFUSAL, PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
-import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -18,9 +18,11 @@ const FILE = "apps/web/server/plans-app.ts";
 interface TreeSeen {
   props: FileTreeProps | undefined;
   reveals: string[];
+  /** Each search the tree was asked for, and each narrowing, the whole repository written as "all". */
+  narrowed: string[];
 }
 
-const tree: TreeSeen = { props: undefined, reveals: [] };
+const tree: TreeSeen = { props: undefined, reveals: [], narrowed: [] };
 
 // The bundle already loaded, as it is once a tree has been shown in this window.
 window.lukeFileTree = {
@@ -29,6 +31,8 @@ window.lukeFileTree = {
     return {
       reveal: (path, options) =>
         tree.reveals.push(`${path}${options.folder ? "/" : ""}${options.focus ? " focused" : ""}`),
+      search: (query) => tree.narrowed.push(`search "${query}"`),
+      only: (paths) => tree.narrowed.push(`only ${paths?.join(", ") ?? "all"}`),
       unmount: () => undefined,
     };
   },
@@ -39,6 +43,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   tree.props = undefined;
   tree.reveals = [];
+  tree.narrowed = [];
 });
 
 afterEach(() => {
@@ -69,8 +74,18 @@ const FOLDERS = new Map<string, PlanningTreeAnswer>([
   ["flaky", { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE }],
 ]);
 
+/** A code Luke showed on the plan, of the file and repository given. */
+function showing(path: string, repository: string): PlanCodeShowing {
+  return {
+    callId: `call-${path}`,
+    turnId: "turn-1",
+    shownAt: 0,
+    code: { ref: { path }, repository, firstLine: 1, lineCount: 1, lines: [[]] },
+  };
+}
+
 /** The view over a file, its tree closed, every folder listed and every file browsed to written down. */
-function mounted() {
+function mounted(shownCode: readonly PlanCodeShowing[] = []) {
   const listed: string[] = [];
   const browsed: string[] = [];
   const container = document.createElement("div");
@@ -84,6 +99,7 @@ function mounted() {
       repository: REPOSITORY,
       file,
       snippet: undefined,
+      shownCode,
       readFile: (window) =>
         Promise.resolve({
           file: { ...window, repository: REPOSITORY, branch: "main", lineCount: 1, lines: [[]] },
@@ -195,4 +211,67 @@ test("the tree hears a folder in the File tab's words, a refusal saying whether 
     ["flaky", "flaky"],
     "a refusal is not kept, so the next ask lists again",
   );
+});
+
+test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F in the pane takes the caret there; the filter narrows to the files Luke showed of this repository; a breadcrumb's folder lets go of both", async () => {
+  const view = mounted([
+    showing(FILE, REPOSITORY),
+    showing("README.md", "acme/other"),
+    showing("apps/web/README.md", REPOSITORY),
+    showing(FILE, REPOSITORY),
+  ]);
+  await view.draw(FILE);
+  await view.press(view.container.querySelector(".file-tree-toggle"));
+  const field = view.container.querySelector<HTMLInputElement>('input[aria-label="Search files"]');
+  assert.ok(field, "the tree has a search field");
+  tree.narrowed = [];
+
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  const type = (words: string) =>
+    act(() => {
+      setValue?.call(field, words);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  type("plans");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(field.value, "");
+  assert.deepEqual(tree.narrowed, ['search "plans"', 'search ""']);
+
+  const filter = view.container.querySelector('[aria-label="Only files Luke showed"]');
+  await view.press(filter);
+  assert.equal(filter?.getAttribute("aria-pressed"), "true");
+  assert.equal(tree.narrowed.at(-1), `only ${FILE}, apps/web/README.md`);
+
+  const pane = view.container.querySelector(".file-tree-pane");
+  act(() => {
+    pane?.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+  });
+  assert.equal(document.activeElement, field);
+
+  type("web");
+  await view.press(view.container.querySelectorAll(".file-breadcrumb")[1]);
+  assert.equal(field.value, "");
+  assert.equal(filter?.getAttribute("aria-pressed"), "false");
+  assert.equal(
+    tree.narrowed.findLast((asked) => asked.startsWith("search")),
+    'search ""',
+  );
+  assert.equal(
+    tree.narrowed.findLast((asked) => asked.startsWith("only")),
+    "only all",
+  );
+  assert.equal(tree.reveals.at(-1), "apps/ focused");
+});
+
+test("the filter offers nothing while Luke has shown no file of the repository", async () => {
+  const view = mounted([showing("README.md", "acme/other")]);
+  await view.draw(FILE);
+  await view.press(view.container.querySelector(".file-tree-toggle"));
+
+  const filter = view.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Only files Luke showed"]',
+  );
+  assert.equal(filter?.disabled, true);
 });

@@ -53,7 +53,7 @@ export interface RevealOptions {
   readonly focus: boolean;
 }
 
-/** The tree as mounted: bring a path into view, and take the tree down. */
+/** The tree as mounted: bring a path into view, narrow the rows shown, and take the tree down. */
 export interface FileTreeHandle {
   /**
    * Lists and opens each folder above the path, then scrolls it into view:
@@ -62,6 +62,13 @@ export interface FileTreeHandle {
    * listed waits for it.
    */
   readonly reveal: (path: string, options: RevealOptions) => void;
+  /**
+   * Shows only the rows whose path holds the query, the folders above them
+   * opened, or says no file matches; the empty query shows every row again.
+   */
+  readonly search: (query: string) => void;
+  /** Shows only these files, every folder above them opened, or the whole repository for none. */
+  readonly only: (paths: readonly string[] | undefined) => void;
   readonly unmount: () => void;
 }
 
