@@ -77,20 +77,32 @@ html.call-window #root {
    column with a dock at its foot (an agent's to-do list and composer, a
    plan's call bar) it stands just above that dock, the window's step clear
    of it, and moves with it as it grows or shrinks; the shell measures the
-   dock (`column-dock.ts`). */
+   dock (`column-dock.ts`). However tall the dock grows, the card never
+   rises past the top of the window. */
 .call-card[data-surface="floating"] {
   position: fixed;
   z-index: var(--z-toast);
   bottom: var(--space-16);
   left: var(--space-16);
   width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
-  translate: 0 calc(-1 * max(0px, var(--column-dock, 0px) + var(--space-8) - var(--space-16)));
+  translate: 0
+    calc(
+      -1 *
+      min(
+        max(0px, var(--column-dock, 0px) + var(--space-8) - var(--space-16)),
+        100vh -
+        var(--floating-card, 0px) -
+        2 *
+        var(--space-16)
+      )
+    );
   transition: translate var(--duration-fast) var(--spring-fast);
 }
 
-/* The transcript under the card keeps its last line in sight above it. */
+/* The transcript under the card keeps its last line in sight above it: the
+   plan column's, or the side panel's while the panel fills the window. */
 .desktop-shell:has(> .call-card[data-surface="floating"])
-  :is(.desktop-agent, .side-panel-content)
+  :is(.desktop-agent, .side-panel[data-full-screen="true"] .side-panel-content)
   [role="log"] {
   padding-bottom: calc(var(--space-20) + var(--floating-card, 0px) + var(--space-8));
 }

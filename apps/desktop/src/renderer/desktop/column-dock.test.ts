@@ -99,9 +99,10 @@ test("a shell with no plan column, Settings or a version history, says no dock, 
     rule.selectors.includes('.call-card[data-surface="floating"]'),
   );
   assert.equal(floating?.declarations.get("bottom"), "var(--space-16)");
+  // Lifted by the dock and the gap less the corner, and never past the window's top.
   assert.equal(
-    floating?.declarations.get("translate"),
-    "0 calc(-1 * max(0px, var(--column-dock, 0px) + var(--space-8) - var(--space-16)))",
+    floating?.declarations.get("translate")?.replace(/\s+/g, " "),
+    "0 calc( -1 * min( max(0px, var(--column-dock, 0px) + var(--space-8) - var(--space-16)), 100vh - var(--floating-card, 0px) - 2 * var(--space-16) ) )",
   );
   assert.match(floating?.declarations.get("transition") ?? "", /^translate var\(--duration-fast\)/);
 });
@@ -120,11 +121,24 @@ test("the transcript under the card keeps its last line clear of it, by the card
     rule.selectors.some(
       (selector) =>
         selector.replace(/\s+/g, " ") ===
-        '.desktop-shell:has(> .call-card[data-surface="floating"]) :is(.desktop-agent, .side-panel-content) [role="log"]',
+        '.desktop-shell:has(> .call-card[data-surface="floating"]) :is(.desktop-agent, .side-panel[data-full-screen="true"] .side-panel-content) [role="log"]',
     ),
   );
   assert.equal(
     transcript?.declarations.get("padding-bottom"),
     "calc(var(--space-20) + var(--floating-card, 0px) + var(--space-8))",
   );
+});
+
+test("a plan whose column is drawn only once it has loaded is found then, and its dock read", async () => {
+  // Still reading: the shell holds no plan column yet.
+  const page = document.createElement("div");
+  const shell = draw(page);
+  assert.equal(dock(shell), "");
+  const column = part("desktop-plan-main", 0, 700);
+  column.append(part("desktop-call-bar", 639, 700));
+  await act(async () => {
+    page.append(column);
+  });
+  assert.equal(dock(shell), "61px");
 });

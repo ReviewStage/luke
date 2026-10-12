@@ -26,8 +26,9 @@ function dockHeight(column: Element): number {
  * above, and its own height (`--floating-card`), which the transcript under
  * it keeps clear. The column is the plan's, or the side panel while it fills
  * the window. One ResizeObserver follows the column, its docked parts, and
- * the card; a MutationObserver re-reads when a part arrives or goes, a to-do
- * list appearing over the composer. `key` names what the shell is drawing,
+ * the card; a MutationObserver re-reads when the column or a part arrives
+ * or goes, a plan's column once it has loaded, a to-do list appearing over
+ * the composer. `key` names what the shell is drawing,
  * so a page or a panel coming and going finds its column afresh. A shell
  * with no such column (Settings, a version history) says no dock at all.
  */
@@ -39,7 +40,10 @@ export function useColumnDock(
   useLayoutEffect(() => {
     const host = shell.current;
     if (host === null) return;
-    const column = host.querySelector(panelFull ? ".side-panel" : ".desktop-plan-main");
+    // Found afresh on every change under the shell, because a plan still
+    // loading draws its column only once its document lands.
+    const columnSelector = panelFull ? ".side-panel" : ".desktop-plan-main";
+    let column = host.querySelector(columnSelector);
     const sized = new ResizeObserver(() => write());
     function write(): void {
       if (host === null) return;
@@ -60,11 +64,11 @@ export function useColumnDock(
       if (card !== null) sized.observe(card);
     }
     const arrived = new MutationObserver(() => {
+      column = host.querySelector(columnSelector);
       follow();
       write();
     });
-    if (column !== null) arrived.observe(column, { childList: true, subtree: true });
-    arrived.observe(host, { childList: true });
+    arrived.observe(host, { childList: true, subtree: true });
     follow();
     write();
     return () => {
