@@ -638,6 +638,13 @@
       "when": 1791400000000,
       "tag": "0091_coding_agent_archived",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1791410000000,
+      "tag": "0092_plan_revision_assumptions_default",
+      "breakpoints": true
     }
   ]
 }

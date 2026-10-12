@@ -1,4 +1,5 @@
 import type { PlanActor, PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
+import { sql } from "drizzle-orm";
 import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { codingAgent } from "./coding-agent-schema.js";
 import { instant } from "./instant.js";
@@ -37,7 +38,11 @@ export const planRevision = pgTable(
     fields: jsonb("fields").$type<PlanFields>(),
     /** The document plan's whole text after the revision; null for a revision of the template's fields. */
     document: text("document"),
-    assumptions: jsonb("assumptions").$type<readonly PlanAssumption[]>().notNull(),
+    /** The fixed template's assumptions; nothing writes them, and the column goes with the fields. */
+    assumptions: jsonb("assumptions")
+      .$type<readonly PlanAssumption[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),
     /** The revision's first save. */
