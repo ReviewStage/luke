@@ -14,33 +14,22 @@
                   "add"
                 ]
               },
-              "field": {
+              "section": {
                 "type": "string",
-                "enum": [
-                  "context",
-                  "goal",
-                  "approach",
-                  "interfaces",
-                  "alternatives",
-                  "hardParts",
-                  "notDoing",
-                  "planOfAttack",
-                  "testing",
-                  "openQuestions",
-                  "assumptions"
-                ],
-                "description": "The field the note is taken under."
+                "minLength": 1,
+                "maxLength": 1000,
+                "description": "The heading the point goes under, copied exactly from the plan's text, without its #s. A heading the text does not hold opens a new section at its end."
               },
               "text": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200000,
-                "description": "The new point, added after what the field holds: a Markdown bullet in a text field, one item in a list."
+                "description": "The new point, added at the end of the section: Markdown, a bullet where the section is a list."
               }
             },
             "required": [
               "kind",
-              "field",
+              "section",
               "text"
             ],
             "additionalProperties": false
@@ -54,28 +43,11 @@
                   "replace"
                 ]
               },
-              "field": {
-                "type": "string",
-                "enum": [
-                  "context",
-                  "goal",
-                  "approach",
-                  "interfaces",
-                  "alternatives",
-                  "hardParts",
-                  "notDoing",
-                  "planOfAttack",
-                  "testing",
-                  "openQuestions",
-                  "assumptions"
-                ],
-                "description": "The field the note is taken under."
-              },
               "find": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "A phrase copied exactly from the field's saved text, long enough to name one place."
+                "description": "A phrase copied exactly from the plan's saved text, long enough to name one place, and touching no heading."
               },
               "text": {
                 "type": "string",
@@ -86,7 +58,6 @@
             },
             "required": [
               "kind",
-              "field",
               "find",
               "text"
             ],
@@ -101,33 +72,15 @@
                   "remove"
                 ]
               },
-              "field": {
-                "type": "string",
-                "enum": [
-                  "context",
-                  "goal",
-                  "approach",
-                  "interfaces",
-                  "alternatives",
-                  "hardParts",
-                  "notDoing",
-                  "planOfAttack",
-                  "testing",
-                  "openQuestions",
-                  "assumptions"
-                ],
-                "description": "The field the note is taken under."
-              },
               "find": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "A phrase copied exactly from the line or item to strike."
+                "description": "A phrase copied exactly from the line to strike, touching no heading."
               }
             },
             "required": [
               "kind",
-              "field",
               "find"
             ],
             "additionalProperties": false

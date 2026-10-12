@@ -44,7 +44,7 @@ import { spendHostedMeter } from "../hosted/quota.js";
  * and the brain's reply sentences as Luke's research notes, and once the
  * call has been quiet for a beat, whoever spoke last, it makes one model call
  * over what was said since its cursor, which answers with notes: a point
- * added under a field, a phrase corrected, or a
+ * added under a heading, a phrase corrected, or a
  * line struck. They are saved through `saveNotes`, the plan's one write,
  * under the call, so the plan's history keeps the call's saves as one
  * revision.
@@ -78,8 +78,8 @@ export const PLAN_SCRIBE = {
 
 /** The markers each part of the scribe's ask rides behind, so the model reads what follows as data. */
 const ASK_MARKER = {
-  /** The plan's text, whose sections stand under the template's headings for the fields a note names. */
-  DOCUMENT: "[saved plan, one document: a note's field is the section under that field's heading]",
+  /** The plan's Markdown text. */
+  DOCUMENT: "[saved plan]",
   EARLIER: "[earlier lines]",
   LATEST: "[latest lines]",
   NOTES: "[Luke's research notes]",
@@ -184,9 +184,9 @@ function askText(input: {
   return parts.join("\n");
 }
 
-/** A note passed over, in words for the report: its kind and field, and never its text. */
+/** A note passed over, in words for the report: its kind, and never its words or the developer's heading. */
 function missedNote(note: PlanNote): string {
-  return `${note.kind} ${note.field}`;
+  return note.kind;
 }
 
 /** The sections the developer wrote last, by heading, as the model is told them. */

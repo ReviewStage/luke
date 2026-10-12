@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { NOTE_KIND } from "@sidecar/hosted/plan-template";
+import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -24,6 +24,7 @@ import {
 } from "ai";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -597,19 +598,21 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         const author = { actor: PLAN_ACTOR.AGENT, agentId: started.agent.id } as const;
         yield* saveNotes(
           binding,
-          [{ kind: NOTE_KIND.ADD, field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" }],
+          [
+            {
+              kind: NOTE_KIND.ADD,
+              section: PLAN_HEADING.OPEN_QUESTIONS,
+              text: "- Who may withdraw?",
+            },
+          ],
           author,
         );
         yield* saveNotes(
           binding,
           [
-            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "Invites expire." },
-            {
-              kind: NOTE_KIND.REPLACE,
-              field: PLAN_FIELD.APPROACH,
-              find: "expire.",
-              text: "expire after 7 days.",
-            },
+            { kind: NOTE_KIND.ADD, section: PLAN_HEADING.APPROACH, text: "Invites expire." },
+            { kind: NOTE_KIND.REPLACE, find: "expire.", text: "expire after 7 days." },
+            { kind: NOTE_KIND.REMOVE, find: "Who may withdraw?" },
           ],
           author,
         );
@@ -621,9 +624,54 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.notEqual(at, -1);
         assert.match(
           lines[at + 1] ?? "",
-          /^- anthropic\/claude-opus-5\.5, .*: add approach: "Invites expire\."; replace approach: "expire\." → "expire after 7 days\."$/u,
+          /^- anthropic\/claude-opus-5\.5, .*: add under "Approach": "Invites expire\."; replace "expire\." → "expire after 7 days\."; remove "Who may withdraw\?"$/u,
         );
-        assert.match(lines[at + 2] ?? "", /add openQuestions: "Who may withdraw\?"$/u);
+        assert.match(lines[at + 2] ?? "", /add under "Open questions": "- Who may withdraw\?"$/u);
+      }),
+  );
+
+  // Note that the journal is written raw, because no save takes a note in the
+  // fixed template's shape any more, and a row an agent journaled before
+  // heading notes is what must still read.
+  it.effect(
+    "a coding agent's save journaled in the fixed template's shape reaches the planning model under its field's heading",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const started = Option.getOrThrow(
+          yield* createCodingAgent(userId, {
+            planId,
+            idempotencyKey: "start-1",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: "# Relay",
+            task: null,
+            repository: "acme/relay",
+          }),
+        );
+        const journal = [
+          {
+            agentId: started.agent.id,
+            at: NOW,
+            notes: [
+              { kind: "add", field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" },
+              { kind: "add", field: PLAN_FIELD.HARD_PARTS, text: "- A withdrawn link is dead." },
+              { kind: "replace", field: PLAN_FIELD.APPROACH, find: "expire.", text: "lapse." },
+            ],
+          },
+        ];
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`update plan set agent_edits = ${JSON.stringify(journal)}::jsonb where id = ${planId}`;
+        const session = yield* startSession(host, userId, conversationId);
+
+        const lines = (yield* host.standingContext(yield* admitted(host, session))).split("\n");
+
+        const at = lines.indexOf("[recent edits by coding agents]");
+        assert.notEqual(at, -1);
+        assert.match(
+          lines[at + 1] ?? "",
+          /^- anthropic\/claude-opus-5\.5, .*: add under "Open questions": "- Who may withdraw\?"; add under "Hard parts": "- A withdrawn link is dead\."; replace "expire\." → "lapse\."$/u,
+        );
       }),
   );
 
@@ -635,7 +683,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         const session = yield* startSession(host, userId, conversationId);
         const standing = yield* admitted(host, session);
-        assert.doesNotMatch(yield* host.standingContext(standing), /fields the developer wrote/u);
+        assert.doesNotMatch(yield* host.standingContext(standing), /sections the developer wrote/u);
         const changedContext = INVITATIONS_TEXT.replace("today.", "today, by hand.");
         const changedGoal = changedContext.replace("by email", "by email or link");
         yield* saveDeveloperEdit(
@@ -649,15 +697,15 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         const written = (yield* host.standingContext(standing)).split("\n");
         yield* saveNotes({ userId, planId }, [
-          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.GOAL, text: "- Owners can resend." },
+          { kind: NOTE_KIND.ADD, section: PLAN_HEADING.GOAL, text: "- Owners can resend." },
         ]);
         const rewritten = (yield* host.standingContext(standing)).split("\n");
 
-        const at = written.indexOf("[fields the developer wrote]");
+        const at = written.indexOf("[sections the developer wrote]");
         assert.notEqual(at, -1);
         assert.match(written[at + 1] ?? "", /^- Context, \d{4}-\d{2}-\d{2}T/u);
         assert.match(written[at + 2] ?? "", /^- Goal, \d{4}-\d{2}-\d{2}T/u);
-        const after = rewritten.indexOf("[fields the developer wrote]");
+        const after = rewritten.indexOf("[sections the developer wrote]");
         assert.match(rewritten[after + 1] ?? "", /^- Context, /u);
         assert.ok(!rewritten.some((line) => line.startsWith("- Goal, ")));
         assert.ok(written.some((line) => line.includes("by email or link")));

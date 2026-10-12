@@ -1,9 +1,13 @@
-import { type PlanNote, planNotesSchema } from "@sidecar/hosted/plan-template";
+import {
+  NOTE_KIND,
+  type PlanNote,
+  planNotesSchema,
+  readNotes,
+} from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
-import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
+import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {
   PLAN_SAVE_STATUS,
   type PlanDocumentBinding,
@@ -37,11 +41,11 @@ export const EDIT_PLAN_TOOL = {
   name: "edit_plan",
   description:
     "Take notes on the plan this conversation implements, as its notetaker does: add a point " +
-    "under a field, correct a phrase copied exactly from the saved text, or strike the line " +
-    "holding one. Use it to record a question the plan does not answer under openQuestions " +
-    "together with the assumption you go on under, to correct a fact you verified in the " +
-    "code, to record a hard part you met under hardParts, to record an interface you had to " +
-    "change under interfaces, or to record a decision you made under approach. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
+    "under one of its headings, correct a phrase copied exactly from the saved text, or strike " +
+    "the line holding one. Use it to record a question the plan does not answer under its open " +
+    "questions together with the assumption you go on under, to correct a fact you verified in " +
+    "the code, to record a hard part you met, an interface you had to change, or a decision you " +
+    "made, each under the heading it belongs to. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
     "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,
@@ -55,8 +59,6 @@ export const PLAN_EDIT_REFUSAL = {
   NO_PLAN:
     "Not saved: you were handed a task rather than the plan, so there is no plan of yours to update.",
 } as const;
-
-const readNotes = readEither(planNotesSchema, { excess: EXCESS_KEYS.DROP });
 
 /** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
 export interface NotesTaken {
@@ -90,10 +92,20 @@ export function settleNotes(
   return { turnId, count: Math.max(0, takenInTurn(taken, turnId) - requested + saved) };
 }
 
+/**
+ * A call's notes, each in the heading shape or the fixed template's an agent
+ * started before heading notes still takes, or nothing where the call holds
+ * no list of notes or any of its notes does not read, which refuses it whole.
+ */
+function notesOf(input: UnparsedWireValue): readonly PlanNote[] | undefined {
+  if (!isRecord(input) || !Array.isArray(input.notes)) return undefined;
+  const { notes, unread } = readNotes(input);
+  return unread > 0 ? undefined : notes;
+}
+
 /** How many notes a call asks to take, read off its input; nothing readable asks for none, and the save refuses it by name. */
 export function requestedNotes(input: UnparsedWireValue): number {
-  const read = readNotes(input);
-  return Result.isFailure(read) ? 0 : read.success.notes.length;
+  return notesOf(input)?.length ?? 0;
 }
 
 /** What a call answers, as the model and the authored file read it: the notes taken and the ones passed over, or why nothing was saved. */
@@ -111,7 +123,9 @@ export function planEditRejected(reason: string): PlanEditResult {
 
 /** A note passed over, in the words the model reads: its kind and where it was aimed. */
 function missedNote(note: PlanNote): string {
-  return `${note.kind} ${note.field}`;
+  return note.kind === NOTE_KIND.ADD
+    ? `${note.kind} under ${note.section}`
+    : `${note.kind} ${note.find}`;
 }
 
 /**
@@ -127,11 +141,8 @@ export function recordPlanEdit(
   input: UnparsedWireValue,
   takenInTurn: number,
 ): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient> {
-  const read = readNotes(input);
-  if (Result.isFailure(read)) {
-    return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNREADABLE));
-  }
-  const { notes } = read.success;
+  const notes = notesOf(input);
+  if (notes === undefined) return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNREADABLE));
   if (takenInTurn + notes.length > PLAN_EDIT.MAX_NOTES_PER_TURN) {
     return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY));
   }

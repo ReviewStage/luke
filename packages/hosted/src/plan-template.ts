@@ -10,8 +10,9 @@ import { Schema as EffectSchema, Result } from "effect";
 import { openFenceAt, planSections } from "./plan-document.js";
 import {
   PLAN_ACTOR,
+  PLAN_BOUNDS,
   PLAN_FIELD,
-  PLAN_FIELD_BOUNDS,
+  PLAN_SECTION_BOUNDS,
   type PlanAssumption,
   type PlanField,
   type PlanFields,
@@ -402,46 +403,55 @@ const MAX_NOTES = 40;
 /** The longest phrase a note may name to correct or strike. */
 const MAX_FIND_CHARS = 500;
 
-const NOTE_FIELD = describeWire(
-  EffectSchema.Literals(Object.values(PLAN_FIELD)),
-  "The field the note is taken under.",
+const SECTION = describeWire(
+  trimmedText(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+  "The heading the point goes under, copied exactly from the plan's text, without its #s. " +
+    "A heading the text does not hold opens a new section at its end.",
 );
 
 const FIND = describeWire(
   trimmedText(MAX_FIND_CHARS),
-  "A phrase copied exactly from the field's saved text, long enough to name one place.",
+  "A phrase copied exactly from the plan's saved text, long enough to name one place, " +
+    "and touching no heading.",
 );
 
 const addNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.ADD),
-  field: NOTE_FIELD,
+  section: SECTION,
   text: describeWire(
-    trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
-    "The new point, added after what the field holds: a Markdown bullet in a text field, " +
-      "one item in a list.",
+    trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+    "The new point, added at the end of the section: Markdown, a bullet where the section " +
+      "is a list.",
   ),
 });
 
 const replaceNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
-  field: NOTE_FIELD,
   find: FIND,
-  text: describeWire(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS), "What the phrase becomes."),
+  text: describeWire(trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS), "What the phrase becomes."),
 });
 
 const removeNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
-  field: NOTE_FIELD,
   find: describeWire(
     trimmedText(MAX_FIND_CHARS),
-    "A phrase copied exactly from the line or item to strike.",
+    "A phrase copied exactly from the line to strike, touching no heading.",
   ),
 });
 
 const planNoteSchema = EffectSchema.Union([addNoteSchema, replaceNoteSchema, removeNoteSchema]);
 
-/** One note: a point added, a phrase corrected, or a line struck. */
-export type PlanNote = typeof planNoteSchema.Type;
+/**
+ * A correction or a strike an agent started before heading notes aimed at
+ * one field, taken within the section under that field's heading alone, as
+ * the fixed template took it within the field.
+ */
+type ScopedNote = Exclude<typeof planNoteSchema.Type, { readonly kind: typeof NOTE_KIND.ADD }> & {
+  readonly within: string;
+};
+
+/** One note: a point added under a heading, a phrase corrected, or a line struck. */
+export type PlanNote = typeof planNoteSchema.Type | ScopedNote;
 
 /** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
 export const planNotesSchema = EffectSchema.Struct({
@@ -450,6 +460,80 @@ export const planNotesSchema = EffectSchema.Struct({
     "The notes the latest lines call for, in order; empty when nothing new was said.",
   ),
 });
+
+/**
+ * A note as the fixed template's notetaker took it, naming the field it was
+ * taken under: an addition went after what the field held, a list's item
+ * without its marker where the field was a list, and a correction or a strike
+ * named a phrase within the field. A coding agent started before notes named
+ * headings still takes them so, and the journal keeps the ones it took, so
+ * they are read still, as the note under that field's heading, a correction
+ * or a strike kept within its section (`noteOf`).
+ * TODO: delete once no journal row holds one and no agent started before
+ * heading notes can still be running.
+ */
+const NOTE_FIELD = EffectSchema.Literals(Object.values(PLAN_FIELD));
+
+const fieldAddNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.ADD),
+  field: NOTE_FIELD,
+  text: trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+});
+
+const fieldReplaceNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
+  field: NOTE_FIELD,
+  find: trimmedText(MAX_FIND_CHARS),
+  text: trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+});
+
+const fieldRemoveNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
+  field: NOTE_FIELD,
+  find: trimmedText(MAX_FIND_CHARS),
+});
+
+/**
+ * A note as it may be read: as the fixed template's notetaker took it, or
+ * under a heading. Note that the field shapes are tried first, because a
+ * correction naming a field also reads under the heading shape with the
+ * field dropped, which would aim it at the whole text.
+ */
+const readNoteSchema = EffectSchema.Union([
+  fieldAddNoteSchema,
+  fieldReplaceNoteSchema,
+  fieldRemoveNoteSchema,
+  addNoteSchema,
+  replaceNoteSchema,
+  removeNoteSchema,
+]);
+
+/** A note as it may be read, before it is taken as a note under a heading. */
+export type PlanReadNote = typeof readNoteSchema.Type;
+
+/** A note read in either shape as the note under a heading it stands for. */
+export function noteOf(note: PlanReadNote): PlanNote {
+  if (!("field" in note)) return note;
+  const heading = PLAN_FIELD_HEADING[note.field];
+  switch (note.kind) {
+    case NOTE_KIND.ADD: {
+      // A list's item is drawn as the fixed template drew it, its later lines indented under its marker.
+      const text = isTextField(note.field) ? note.text : listItem("- ", itemText(note.text));
+      return { kind: NOTE_KIND.ADD, section: heading, text };
+    }
+    case NOTE_KIND.REPLACE:
+      return { kind: NOTE_KIND.REPLACE, find: note.find, text: note.text, within: heading };
+    case NOTE_KIND.REMOVE:
+      return { kind: NOTE_KIND.REMOVE, find: note.find, within: heading };
+  }
+}
+
+/** Where a correction or a strike may look for its phrase: the whole text, or the one section an older agent aimed it at. */
+function searchedSpan(text: string, note: PlanNote): Span | undefined {
+  if (!("within" in note)) return { from: 0, to: text.length };
+  const section = planSections(text).find((each) => each.heading === note.within);
+  return section === undefined ? undefined : { from: section.from, to: section.to };
+}
 
 /** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
 export const PLAN_AGENT_EDITS_KEPT = 50;
@@ -463,7 +547,7 @@ export const planAgentEditSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   /** Epoch milliseconds of the save. */
   at: EffectSchema.Number,
-  notes: EffectSchema.Array(planNoteSchema),
+  notes: EffectSchema.Array(readNoteSchema),
 });
 
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
@@ -575,167 +659,12 @@ function located(text: string, find: string): Span | undefined {
   return spans.length === 1 ? spans[0] : undefined;
 }
 
-/** Which one item of a list holds a phrase, where exactly one place in the whole list does; -1 otherwise. */
-function soleHolder<Item>(
-  items: readonly Item[],
-  textsOf: (item: Item) => readonly string[],
-  find: string,
-): number {
-  const counts = items.map((item) =>
-    textsOf(item).reduce((total, text) => total + spansOf(text, find).length, 0),
-  );
-  const total = counts.reduce((sum, count) => sum + count, 0);
-  return total === 1 ? counts.indexOf(1) : -1;
-}
-
-/** A field's text with nothing left in it read as unanswered. */
-function answered(text: string): string | null {
-  const trimmed = text.replace(/\n{3,}/gu, "\n\n").trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
 /** Text added after a field's answer: on the next line within a list, and as a new paragraph otherwise. */
 function appended(current: string | null, text: string): string {
   if (current === null) return text;
   const lastLine = current.slice(current.lastIndexOf("\n") + 1);
   const joiner = LIST_ITEM_LINE.test(lastLine) && LIST_ITEM_LINE.test(text) ? "\n" : "\n\n";
   return `${current}${joiner}${text}`;
-}
-
-/** The text with every line the phrase touches struck out. */
-function struck(text: string, at: Span): string {
-  const start = text.lastIndexOf("\n", at.from - 1) + 1;
-  const newline = text.indexOf("\n", at.to);
-  const end = newline === -1 ? text.length : newline + 1;
-  return text.slice(0, start) + text.slice(end);
-}
-
-/** The text with the phrase replaced, or nothing where the phrase is not in it. */
-function replacedIn(text: string, find: string, replacement: string): string | undefined {
-  const at = located(text, find);
-  return at === undefined ? undefined : text.slice(0, at.from) + replacement + text.slice(at.to);
-}
-
-/** A list with the one item holding the phrase changed, or nothing where no item, or more than one place, holds it. */
-function replacedItem<Item>(
-  items: readonly Item[],
-  textsOf: (item: Item) => readonly string[],
-  change: (item: Item) => Item | undefined,
-  find: string,
-): readonly Item[] | undefined {
-  const index = soleHolder(items, textsOf, find);
-  const item = items[index];
-  if (item === undefined) return undefined;
-  const changed = change(item);
-  if (changed === undefined) return undefined;
-  return items.map((standing, at) => (at === index ? changed : standing));
-}
-
-function mapDefined<A, B>(value: A | undefined, map: (value: A) => B): B | undefined {
-  return value === undefined ? undefined : map(value);
-}
-
-/** A list of plain items with a note applied, or nothing where the note names no item. */
-function itemsNoted<Item>(
-  items: readonly Item[],
-  note: PlanNote,
-  textOf: (item: Item) => string,
-  itemOf: (text: string) => Item,
-): readonly Item[] | undefined {
-  switch (note.kind) {
-    case NOTE_KIND.ADD:
-      return [...items, itemOf(note.text)];
-    case NOTE_KIND.REPLACE:
-      return replacedItem(
-        items,
-        (item) => [textOf(item)],
-        (item) =>
-          mapDefined(replacedIn(textOf(item), note.find, note.text), (text) => itemOf(text.trim())),
-        note.find,
-      );
-    case NOTE_KIND.REMOVE: {
-      const index = soleHolder(items, (item) => [textOf(item)], note.find);
-      return index === -1 ? undefined : items.filter((_, at) => at !== index);
-    }
-  }
-}
-
-/** One text field with a note applied, or nothing where the note names no phrase in it. */
-function textNoted(current: string | null, note: PlanNote): string | null | undefined {
-  switch (note.kind) {
-    case NOTE_KIND.ADD:
-      return appended(current, note.text);
-    case NOTE_KIND.REPLACE:
-      return current === null
-        ? undefined
-        : mapDefined(replacedIn(current, note.find, note.text), answered);
-    case NOTE_KIND.REMOVE: {
-      const at = current === null ? undefined : located(current, note.find);
-      return current === null || at === undefined ? undefined : answered(struck(current, at));
-    }
-  }
-}
-
-/** Whether a list is still within the template's bound on items. */
-function withinItems(items: readonly unknown[]): boolean {
-  return items.length <= PLAN_FIELD_BOUNDS.MAX_ITEMS;
-}
-
-/**
- * The content with one note taken, or nothing where the note cannot be: a
- * phrase it names that the field does not hold, a rule number the plan does
- * not have, or a list grown past its bound. Note that a note that cannot be
- * taken is never guessed into another, because an append standing in for a
- * correction would write the point twice.
- */
-export function applyNote(content: PlanContent, note: PlanNote): PlanContent | undefined {
-  const { fields, assumptions } = content;
-  const field = note.field;
-  if (field === PLAN_FIELD.OPEN_QUESTIONS) {
-    const questions = itemsNoted(fields.openQuestions, note, (text) => text, itemText);
-    if (questions === undefined || !withinItems(questions)) return undefined;
-    return { fields: { ...fields, openQuestions: questions }, assumptions };
-  }
-  if (field === PLAN_FIELD.ASSUMPTIONS) {
-    const noted = itemsNoted(
-      assumptions,
-      note,
-      (item) => item.text,
-      (text) => ({ text: itemText(text) }),
-    );
-    if (noted === undefined || !withinItems(noted)) return undefined;
-    return { fields, assumptions: noted };
-  }
-  const text = textNoted(fields[field], note);
-  return text === undefined ? undefined : { fields: { ...fields, [field]: text }, assumptions };
-}
-
-/** Notes taken over a plan's content: the content after, and the notes that could not be taken. */
-export interface NotesTaken {
-  readonly content: PlanContent;
-  readonly missed: readonly PlanNote[];
-}
-
-/** Every note taken in order, and the notes that could not be. */
-export function applyNotes(content: PlanContent, notes: readonly PlanNote[]): NotesTaken {
-  let taken = content;
-  const missed: PlanNote[] = [];
-  for (const note of notes) {
-    const next = applyNote(taken, note);
-    if (next === undefined) missed.push(note);
-    else taken = next;
-  }
-  return { content: taken, missed };
-}
-
-/** The heading a field's note lands under in a document, as the template names the field. */
-function noteHeading(note: PlanNote): string {
-  return PLAN_FIELD_HEADING[note.field];
-}
-
-/** What a note adds to a document: a list's item behind its own marker, any other field's text as written, each contained where it stands. */
-function addedText(note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>): string {
-  return isTextField(note.field) ? contained(note.text) : listItem("- ", itemText(note.text));
 }
 
 /**
@@ -757,8 +686,8 @@ function addedToText(
   text: string,
   note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
 ): string {
-  const heading = noteHeading(note);
-  const added = addedText(note);
+  const heading = note.section;
+  const added = contained(note.text);
   const section = planSections(text).find((each) => each.heading === heading);
   if (section === undefined) {
     const head = fenceClosed(text.trimEnd());
@@ -795,16 +724,21 @@ function struckFromText(text: string, at: Span): string {
 
 /**
  * A document's text with one note taken, or nothing where the note cannot
- * be. A field's note lands in the document's section under that field's
- * heading (`PLAN_FIELD_HEADING`): an addition at the end of the section, or
- * as a new section at the end of the text where it has none; a correction
+ * be: an addition at the end of the first section under its heading, or as
+ * a new section at the end of the text where it has none; a correction
  * or a strike names a phrase that must stand exactly once in the whole text
  * and touch no heading, since the headings are the developer's and a note
  * writes under them.
  */
 function applyNoteToText(text: string, note: PlanNote): string | undefined {
   if (note.kind === NOTE_KIND.ADD) return addedToText(text, note);
-  const at = located(text, note.find);
+  const searched = searchedSpan(text, note);
+  if (searched === undefined) return undefined;
+  const inside = located(text.slice(searched.from, searched.to), note.find);
+  const at =
+    inside === undefined
+      ? undefined
+      : { from: searched.from + inside.from, to: searched.from + inside.to };
   if (at === undefined || touchesHeading(text, at)) return undefined;
   if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
   // A correction inside a fence is code, written as given rather than contained as prose.
@@ -830,7 +764,7 @@ export function applyNotesToText(text: string, notes: readonly PlanNote[]): Text
   return { text: taken, missed };
 }
 
-const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
+const readNote = readEither(readNoteSchema, { excess: EXCESS_KEYS.DROP });
 
 /** Text still being written, cut back to its last line that cannot change how it is escaped. */
 function settledText(text: string): string {
@@ -847,7 +781,7 @@ function growingAddition(value: UnparsedWireValue): PlanNote | undefined {
   const text = settledText(value.text).trim();
   if (text.length === 0) return undefined;
   const read = readNote(unparsedWire({ ...value, text }));
-  return Result.isSuccess(read) ? read.success : undefined;
+  return Result.isSuccess(read) ? noteOf(read.success) : undefined;
 }
 
 /** An answer's notes as read, and how many of its notes did not read. */
@@ -858,33 +792,29 @@ export interface NotesRead {
 
 /**
  * The notes of an answer, each read on its own so a note that does not read
- * is passed over alone rather than costing the rest, and how many were.
+ * is passed over alone rather than costing the rest, and how many were; a
+ * note in the fixed template's shape reads as the note under a heading it
+ * stands for.
  */
 export function readNotes(answer: UnparsedWireValue): NotesRead {
   const values = isRecord(answer) && Array.isArray(answer.notes) ? answer.notes : [];
   const notes = values.flatMap((value: UnparsedWireValue) => {
     const read = readNote(value);
-    return Result.isSuccess(read) ? [read.success] : [];
+    return Result.isSuccess(read) ? [noteOf(read.success)] : [];
   });
   return { notes: notes.slice(0, MAX_NOTES), unread: values.length - notes.length };
 }
 
 /**
- * The content as the notetaker's answer so far leaves it, for a draft drawn
- * while the answer streams. The answer arrives as the JSON emitted so far,
- * so every note before the last is whole, and each is taken in order; one
- * that does not read or cannot be taken is passed over alone. The last note
- * may be cut off partway, so it is drawn only when it adds a point, as the
- * text written so far, held back at a trailing line of nothing but Markdown
- * markers. Each draft therefore differs from the one before only where the
- * newest note lands, and nothing a draft showed is taken back until the
- * answer is saved.
+ * A document's text as the notetaker's answer so far leaves it, for a draft
+ * drawn while the answer streams. The answer arrives as the JSON emitted so
+ * far, so every note before the last is whole, and each is taken in order;
+ * one that does not read or cannot be taken is passed over alone. The last
+ * note may be cut off partway, so it is drawn only when it adds a point, as
+ * the text written so far, held back at a trailing line of nothing but
+ * Markdown markers. Each draft therefore differs from the one before only
+ * where the newest note lands.
  */
-export function notesInProgress(content: PlanContent, partial: UnparsedWireValue): PlanContent {
-  return applyNotes(content, notesSoFar(partial)).content;
-}
-
-/** A document's text as the notetaker's answer so far leaves it, drawn as `notesInProgress` draws a plan of fields. */
 export function textNotesInProgress(text: string, partial: UnparsedWireValue): string {
   return applyNotesToText(text, notesSoFar(partial)).text;
 }

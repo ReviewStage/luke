@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
-import { NOTE_KIND, type PlanAgentEdit, type PlanNote } from "@sidecar/hosted/plan-template";
+import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -57,8 +57,27 @@ const OLD_EDITS = [
   },
 ];
 
-/** The same journal's notes as the new template names them. */
-const CARRIED_NOTES: readonly PlanNote[] = [
+/** The same journal as migration 0084 leaves it: every note under the new template's fields. */
+const CARRIED_EDITS = [
+  {
+    agentId: OLD_EDITS[0]?.agentId,
+    at: 1_000,
+    notes: [
+      { kind: "add", field: "approach", text: "Email only, because a shared link leaks." },
+      { kind: "replace", field: "interfaces", find: "invite(", text: "invite(email" },
+      { kind: "remove", field: "testing", find: "opens its link" },
+      {
+        kind: "add",
+        field: "hardParts",
+        text: "Rule 2: Given a withdrawn invite, when its link is opened, then ?",
+      },
+      { kind: "add", field: "openQuestions", text: "Who may withdraw an invite?" },
+    ],
+  },
+];
+
+/** The carried journal's notes as the store reads them: each still naming its field, as the fixed template's notetaker took it. */
+const CARRIED_NOTES: readonly PlanReadNote[] = [
   {
     kind: NOTE_KIND.ADD,
     field: PLAN_FIELD.APPROACH,
@@ -75,7 +94,7 @@ const CARRIED_NOTES: readonly PlanNote[] = [
 ];
 
 /** A journal as a row may hold it: naming the new fields or the old ones. */
-type StoredEdits = readonly PlanAgentEdit[] | typeof OLD_EDITS;
+type StoredEdits = typeof CARRIED_EDITS | typeof OLD_EDITS;
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -125,14 +144,13 @@ it.layer(testSqlClient)("migration 0084 onto the teammate template's journal", (
   it.effect("a journal already in the new template is left as it stood", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const edits: readonly PlanAgentEdit[] = [
-        { agentId: randomUUID(), at: 2_000, notes: CARRIED_NOTES },
-      ];
-      const planId = yield* insertPlan(userId, edits);
+      const planId = yield* insertPlan(userId, CARRIED_EDITS);
 
       yield* runMigration;
 
-      assert.deepEqual(yield* journalOf(userId, planId), edits);
+      assert.deepEqual(yield* journalOf(userId, planId), [
+        { agentId: CARRIED_EDITS[0]?.agentId, at: 1_000, notes: CARRIED_NOTES },
+      ]);
     }),
   );
 });

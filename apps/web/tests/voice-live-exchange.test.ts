@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
+import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
@@ -470,7 +470,7 @@ it.live(
         stand(target, {
           scribe: {
             planId: target.planId,
-            model: scriptedScribeModel([{ notes: [added(PLAN_FIELD.CONTEXT, problem)] }]).model,
+            model: scriptedScribeModel([{ notes: [added(PLAN_HEADING.CONTEXT, problem)] }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
         }),
