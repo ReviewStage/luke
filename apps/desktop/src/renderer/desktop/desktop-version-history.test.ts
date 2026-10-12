@@ -169,6 +169,9 @@ afterEach(() => {
 /** Archives the plan the mounted window draws, as another window or Mac would. */
 let archive: (() => void) | undefined;
 
+/** Says the plan was saved at the moment given, as main does once a save lands, which reads the history again. */
+let saved: ((at: number) => void) | undefined;
+
 /** The plan as the window draws it, its document as the service holds it now, archived where asked. */
 function planOf(document: PlanDocument, fields: PlanFields | undefined, archived: boolean): Plan {
   return {
@@ -200,10 +203,12 @@ function mount(
     const [open, setOpen] = useState(true);
     const [archivedNow, setArchivedNow] = useState(archived);
     archive = () => setArchivedNow(true);
+    const [editedAt, setEditedAt] = useState<number | undefined>(undefined);
+    saved = setEditedAt;
     const history = usePlanHistory({
       source: service.source,
       planId: PLAN_ID,
-      editedAt: undefined,
+      editedAt,
       name: "Teammate invitations",
       shown: open,
       seek,
@@ -610,6 +615,75 @@ it.effect(
       assert.equal(sectionsOpen(page), false);
       yield* pressEscape();
       assert.ok(page.querySelector(".plan-as-it-stands"), "Escape over the versions leaves");
+    }),
+);
+
+it.effect(
+  "a plan of the template's fields lists its changed assumptions as a section of their own, drawn as the list alone",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* mount(fakeService(), yield* registryOnTestClock);
+      yield* openSections(page, "Luke2h2 changes");
+
+      assert.deepEqual(sectionRows(page), ["DecisionsAdded", "Assumptions"]);
+      yield* press(page, "Assumptions");
+      assert.deepEqual(marked(page, ".plan-assumption.version-added"), [
+        "Invites create memberships.",
+      ]);
+      assert.doesNotMatch(body(page) ?? "", /Invites expire/u);
+    }),
+);
+
+/** Lands a save at the moment given, and lets what it read again land. */
+function landSave(at: number) {
+  return Effect.promise(() =>
+    act(async () => {
+      saved?.(at);
+    }),
+  );
+}
+
+it.effect(
+  "a save that joins the open version keeps the section chosen by its name, though a section written before it moves it down",
+  () =>
+    Effect.gen(function* () {
+      const versions = [...SECTIONED];
+      const page = yield* mount(fakeService(NOW, versions, true), yield* registryOnTestClock);
+      yield* openSections(page, "Luke2h2 changes");
+      yield* press(page, "DecisionsAdded");
+
+      versions[2] = textOf([
+        "## Goal\n\nAny member can invite by email.",
+        "## Risks\n\nSpam.",
+        "## Decisions\n\nInvites expire.",
+      ]);
+      yield* landSave(NOW);
+      assert.deepEqual(sectionRows(page), ["Goal", "RisksAdded", "DecisionsAdded"]);
+      assert.equal(chosenSection(page), "Decisions");
+      assert.match(body(page) ?? "", /Invites expire/u);
+    }),
+);
+
+it.effect(
+  "a newer version landing while the newest's sections are open moves the history on to it, and the sections give way",
+  () =>
+    Effect.gen(function* () {
+      const versions = [...SECTIONED];
+      const service = fakeService(NOW, versions, true);
+      const page = yield* mount(service, yield* registryOnTestClock);
+      yield* openSections(page, "Luke2h2 changes");
+      assert.equal(sectionsOpen(page), true);
+
+      versions.push(textOf(["## Goal\n\nAnyone can invite."]));
+      service.lines.unshift({
+        seq: 4,
+        lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false },
+        startedAt: NOW,
+        changes: 1,
+      });
+      yield* landSave(NOW);
+      assert.equal(sectionsOpen(page), false);
+      assert.equal(chosen(page), "You");
     }),
 );
 

@@ -389,3 +389,17 @@ test("only a revision of several changes opens its sections: not one change, a r
     false,
   );
 });
+
+test("a plan of the template's fields lists its assumptions as one section where they changed, and its first revision lists no title line", () => {
+  const before = documentOf(["## Goal\n\nOnly admins."], ["Invites reuse memberships."]);
+  const after = documentOf(["## Goal\n\nOnly admins."], ["Invites create memberships."]);
+  const diff = versionDiff(before, after);
+
+  assert.deepEqual(changedSections(diff, false), [
+    { unit: diff.units.length, heading: "Assumptions", change: VERSION_CHANGE.CHANGED },
+  ]);
+  assert.deepEqual(
+    changedSections(versionDiff(null, after), true).map((section) => section.heading),
+    ["Goal", "Assumptions"],
+  );
+});

@@ -110,7 +110,9 @@ function VersionBody({
   title: string | undefined;
   section: number | undefined;
 }): React.JSX.Element {
+  // The unit just past the last is a plan of fields' assumptions, drawn as its list alone.
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
+  const assumptions = section === undefined || section === diff.units.length;
   return (
     <>
       <div className="plan-body">
@@ -126,7 +128,7 @@ function VersionBody({
           />
         ))}
       </div>
-      {title === undefined && section === undefined ? <VersionAssumptions diff={diff} /> : null}
+      {title === undefined && assumptions ? <VersionAssumptions diff={diff} /> : null}
     </>
   );
 }

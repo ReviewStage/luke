@@ -387,10 +387,15 @@ function useOpenedRowShown(
   }, [selected, rows, log]);
 }
 
-/** The revision whose sections are open, and the one of them drawn, the first until another is chosen. */
+/**
+ * The revision whose sections are open, and the one of them drawn by its
+ * heading, the first until another is chosen. Note that the section is
+ * held by its heading rather than its place, because a save that joins the
+ * revision while it is open can add a section before it.
+ */
 interface OpenedSections {
   readonly seq: number;
-  readonly unit: number | undefined;
+  readonly heading: string | undefined;
 }
 
 /** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
@@ -507,12 +512,17 @@ export function DesktopVersionHistory({
   const name =
     plan?.name ??
     [...plans.plans, ...plans.archived].find((each) => each.id === plans.boundFor)?.name;
+  // A newer version arriving while another's sections are open moves the
+  // history on to it, as it does over the list, so the sections give way.
+  if (opened !== undefined && versions.selected !== opened.seq) setOpened(undefined);
   const sections = openedSections(versions.viewing, opened, plan);
   const openedLine = revisions.find((line) => line.seq === opened?.seq);
-  const unit = opened?.unit ?? sections?.[0]?.unit;
+  const chosenSection =
+    sections?.find((section) => section.heading === opened?.heading) ?? sections?.[0];
+  const unit = chosenSection?.unit;
   const openSections = (seq: number) => {
     versions.onSelect(seq);
-    setOpened({ seq, unit: undefined });
+    setOpened({ seq, heading: undefined });
   };
   const closeSections = () => {
     if (opened === undefined) return;
@@ -520,7 +530,10 @@ export function DesktopVersionHistory({
     rows.get(opened.seq)?.focus();
   };
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, opened === undefined ? onExit : closeSections);
-  const chooseUnit = (at: number) => setOpened((held) => held && { ...held, unit: at });
+  const chooseUnit = (at: number) => {
+    const heading = sections?.find((section) => section.unit === at)?.heading;
+    setOpened((held) => held && { ...held, heading });
+  };
   const units = sections?.map((section) => section.unit) ?? [];
   const seqs = revisions.map((line) => line.seq);
   useArrowKeys(
