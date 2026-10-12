@@ -451,6 +451,26 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${mode}-${name}.png
   await page.close();
 }
 
+// O. With nothing focused, the arrows select a block instead of scrolling.
+{
+  const page = await open();
+  const scrolled = () =>
+    page.evaluate(() => document.querySelector(".plan-document-scroll").scrollTop);
+  const before = await scrolled();
+  await page.keyboard.press("ArrowDown");
+  await sleep(150);
+  const down = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-label") ?? null,
+  );
+  const after = await scrolled();
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press("ArrowUp");
+  await sleep(150);
+  const up = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
+  results.arrowsFromNothing = { down, up, scrolled: after !== before };
+  await page.close();
+}
+
 // K. Session replay: is every editable node inside a blocked subtree?
 {
   const page = await open();

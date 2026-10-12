@@ -99,12 +99,15 @@ kind):
   - The document is **one Tab stop**: Tab enters at the block you last
     selected (the first block before that), and Tab again leaves the
     document for the rest of the window.
-  - Inside it, **↑ and ↓** move between blocks.
+  - Inside it, **↑ and ↓** move between blocks. With nothing focused (a
+    fresh window, or after a click elsewhere in the page), ↓ selects the
+    first block in view and ↑ the last, rather than scrolling the page. Focus
+    on any other control keeps its own arrows.
   - **Return** edits the selected block with the caret at the end. On the
     Rules heading it adds a rule.
   - **Esc** (or ⌘↩) saves, stops editing, and leaves the block selected.
   - A selected block wears a soft tint of the focus colour in the hover
-    wash's old box.
+    wash's old box, with no border.
   - Each block is a labelled group (`role="group"`, `aria-label` the field's
     name, `aria-keyshortcuts="Enter"`), not a button, so a screen reader still
     reads the words inside it.
@@ -132,22 +135,48 @@ edits, Esc saves and selects Problem again, and "Saving…" never appears.
 
 ## Should a rule just be a numbered list?
 
-No, not without changing what a rule is. Given/When/Then is the stored shape
-(`examples: [{given, when, then}]` in `plan-wire.ts`), not decoration in
-the editor. The notetaker writes it with its own `addExample` note. The
-formatter turns it into the `### Rule N:` blocks that Copy hands a coding
-agent, and the read view draws it as such. A numbered list in the editor
-would need one of two things:
+Not as an editor change. Given/When/Then is the stored shape
+(`examples: [{given, when, then}]` in `plan-wire.ts`), and a deliberate one:
+`docs/PLANNING.md` takes it from Example Mapping (rules, each with its
+examples) so that "two agents given the plan build the same behavior". The
+notetaker writes it with its own `addExample` note. The formatter turns it
+into the `### Rule N:` blocks that Copy hands a coding agent, and the read
+view draws it as a numbered rule over its examples. The editor's part is
+about 120 lines of TipTap nodes.
 
-- **A parser.** Read the list back into rules, which is exactly the
-  body-to-fields parsing the proposal rules out, and brittle the moment a
-  label is deleted.
-- **A new data model.** Store rules as one Markdown field: a migration, the
-  notetaker's notes, the formatter, and what coding agents are told.
+### Making the schema less bespoke
 
-The editor's part is about 120 lines of TipTap nodes, so the cheaper path is
-to keep it. Dropping Given/When/Then is a product decision about plans, not
-an editor one.
+The honest version of "less bespoke" is to store rules as one Markdown text
+field, like Decisions, written as a numbered list with Given/When/Then lines
+under each rule by convention. The rules would then edit in the stock TipTap
+editor, and `rule-extension.ts` would go. What it takes:
+
+- **The wire and the template.** `planFieldsSchema.rules` becomes
+  `string | null`, so the JSON Schema goldens the models are shown change.
+  Those bytes key the providers' prompt caches, so every standing
+  conversation pays its prefix once.
+- **The notes.** `addExample`, and the rule-by-number notes the notetaker
+  and coding agents' `edit_plan` write, become ordinary `add` and `replace`
+  notes on a text field. The notetaker's instructions and its offline eval
+  change with them.
+- **The data.** A migration rewrites every stored `rules` array as the
+  Markdown the formatter already prints for it.
+- **The desktop.** The chase's per-rule units (`### Rule N:`), `plan-rule.tsx`'s
+  numbered drawing, the history model's rule matching, and the field
+  editor's rule targets all go, and the Rules section becomes one unit.
+- **In all, about 27 files** across `packages/hosted`, `apps/web` (brain,
+  notetaker, coding agents' edits, tests), and `apps/desktop`, plus the
+  goldens and a migration. That is an L-sized PR with a model-behaviour risk.
+
+What is lost: the guarantee that every example has exactly a Given, a When,
+and a Then. Today the schema enforces it. As Markdown, it would rest on the
+models following a convention, and on the developer not deleting a label.
+
+**Recommendation:** keep the schema. The structure is the product's own
+decision, and the cost of honouring it in the editor is small and contained.
+Revisit only if Dean wants rules to be freeform. That is a decision about
+plans, and it should be made with the notetaker's eval in hand rather than
+for the editor's sake.
 
 ## Demo
 

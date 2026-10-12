@@ -547,6 +547,33 @@ export function PlanBody({
     };
   }, []);
 
+  // SPIKE: with nothing focused, the arrows select a block, the first in view
+  // going down and the last going up, rather than scroll the page. Note that
+  // focus anywhere else keeps its own arrows, so this never takes them from a
+  // control.
+  useEffect(() => {
+    if (!editable) return;
+    const select = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const element = scroller.current;
+      if (element === null || document.activeElement !== document.body) return;
+      const shown = element.getBoundingClientRect();
+      const blocks = [...element.querySelectorAll<HTMLElement>(".plan-unit-editable")].filter(
+        (block) => {
+          const at = block.getBoundingClientRect();
+          return at.bottom > shown.top && at.top < shown.bottom;
+        },
+      );
+      const chosen = event.key === "ArrowDown" ? blocks[0] : blocks.at(-1);
+      if (chosen === undefined) return;
+      event.preventDefault();
+      chosen.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", select);
+    return () => window.removeEventListener("keydown", select);
+  }, [editable]);
+
   // A pause in the typing hands the view back: the next burst is followed again.
   useEffect(() => {
     if (!behind) scrolledAway.current = false;

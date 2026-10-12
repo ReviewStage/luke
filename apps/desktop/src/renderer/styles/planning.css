@@ -236,7 +236,6 @@
   inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
   border-radius: 6px;
   background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-ring) 45%, transparent);
   content: "";
   pointer-events: none;
 }
