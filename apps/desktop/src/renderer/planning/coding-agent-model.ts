@@ -234,11 +234,21 @@ export function agentTabLabel(agent: CodingAgentSummary, models?: readonly Catal
 /** The first run of digits and points in a model's own name, which is its version: `claude-opus-5.5` is 5.5, `gpt-6-astra` is 6. */
 const MODEL_VERSION = /\d+(?:\.\d+)*/u;
 
+/** A word of a model's own name that is its version whole: `5.5` in `claude-opus-5.5`. */
+const VERSION_WORD = /^\d+(?:\.\d+)*$/u;
+
+/** What separates the words of a model's own name. */
+const NAME_WORD_SEPARATOR = "-";
+
+/** A model's own name, past its provider: `claude-opus-5.5` of `anthropic/claude-opus-5.5`. */
+function ownName(modelId: string): string {
+  const separator = modelId.indexOf(CATALOG_ID_SEPARATOR);
+  return separator === -1 ? modelId : modelId.slice(separator + 1);
+}
+
 /** The version's numbers, most significant first; none for a name that carries no version. */
 function modelVersion(modelId: string): number[] {
-  const separator = modelId.indexOf(CATALOG_ID_SEPARATOR);
-  const name = separator === -1 ? modelId : modelId.slice(separator + 1);
-  const found = MODEL_VERSION.exec(name)?.[0];
+  const found = MODEL_VERSION.exec(ownName(modelId))?.[0];
   return found === undefined ? [] : found.split(".").map(Number);
 }
 
@@ -255,26 +265,63 @@ function compareVersions(a: readonly number[], b: readonly number[]): number {
 const PROVIDER_ORDER: readonly string[] = Object.values(MODEL_PROVIDER);
 
 /**
+ * The model families the menus lead with, in the order they list them,
+ * Anthropic's and then OpenAI's: the newest of each is listed before
+ * anything is searched, and every other version only once something is. A
+ * new version needs nothing here; a new family is one word.
+ */
+const LEAD_FAMILIES: readonly string[] = [
+  "opus",
+  "fable",
+  "sonnet",
+  "haiku",
+  "astra",
+  "sol",
+  "luna",
+  "terra",
+];
+
+/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast` beside `anthropic/claude-opus-5.5`. */
+const FAST_ID_SUFFIX = "-fast";
+
+/**
+ * Where a model's family stands in `LEAD_FAMILIES`: the last word of its
+ * own name, its version and any fast suffix aside, so `claude-opus-5.5` is
+ * Opus and `gpt-6-astra` Astra, while `gpt-6-astra-mini` is no lead family's
+ * and stands after them all.
+ */
+function familyRank(modelId: string): number {
+  const name = ownName(baseIdOf(modelId) ?? modelId);
+  const words = name.split(NAME_WORD_SEPARATOR).filter((word) => !VERSION_WORD.test(word));
+  const rank = LEAD_FAMILIES.indexOf(words.at(-1) ?? "");
+  return rank === -1 ? LEAD_FAMILIES.length : rank;
+}
+
+/**
  * The models as the menus list them: grouped by provider, Anthropic's first,
- * and within each the newest version first, so a catalog that lists forty
+ * within each by family in `LEAD_FAMILIES`' order and the rest after, and
+ * within a family the newest version first, so a catalog that lists forty
  * models leads with the ones worth starting on. The catalog carries no
  * release date, so the version in the id stands for one; models of one
  * version keep the catalog's own order between them.
  */
 export function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
   return models
-    .map((model, index) => ({ model, index, version: modelVersion(model.id) }))
+    .map((model, index) => ({
+      model,
+      index,
+      family: familyRank(model.id),
+      version: modelVersion(model.id),
+    }))
     .sort(
       (a, b) =>
         PROVIDER_ORDER.indexOf(a.model.provider) - PROVIDER_ORDER.indexOf(b.model.provider) ||
+        a.family - b.family ||
         compareVersions(b.version, a.version) ||
         a.index - b.index,
     )
     .map((each) => each.model);
 }
-
-/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast` beside `anthropic/claude-opus-5.5`. */
-const FAST_ID_SUFFIX = "-fast";
 
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
@@ -312,6 +359,26 @@ export function offeredModels(models: readonly CatalogModel[]): readonly Offered
   return orderedModels(models)
     .filter((model) => !isFastVersion(model.id, ids))
     .map((model) => ({ model, fast: fastOf.get(model.id) }));
+}
+
+/**
+ * The base models a menu lists before anything is searched: the newest of
+ * each lead family the catalog offers, and the one chosen, which stays on
+ * screen however old; every model where the catalog offers no lead family,
+ * so the list is never empty for want of a search.
+ */
+export function unsearchedModels(
+  models: readonly CatalogModel[],
+  chosen: string | undefined,
+): ReadonlySet<string> {
+  const offered = offeredModels(models).map((each) => each.model.id);
+  const leads = new Map<number, string>();
+  for (const id of offered) {
+    const family = familyRank(id);
+    if (family < LEAD_FAMILIES.length && !leads.has(family)) leads.set(family, id);
+  }
+  if (leads.size === 0) return new Set(offered);
+  return new Set([...leads.values(), ...(chosen === undefined ? [] : [chosen])]);
 }
 
 /** Whether the id is the fast version of a model the catalog offers. */

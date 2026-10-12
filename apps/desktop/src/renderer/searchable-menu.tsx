@@ -51,6 +51,8 @@ export interface MenuRow {
   command?: KeyedCommand | undefined;
   /** Why the row cannot be picked now, printed muted at its end in the shortcut's place; the row is dimmed and the arrows pass over it. */
   disabled?: string | undefined;
+  /** The row is listed only once something is searched: a model older than its family's newest. */
+  searchOnly?: boolean | undefined;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -126,10 +128,10 @@ function firstOpen(rows: readonly MenuRow[]): number {
   return rows.findIndex((row) => row.disabled === undefined);
 }
 
-/** The rows whose label, terms, or section hold every word of the query, case aside; all of them for no query. */
+/** The rows whose label, terms, or section hold every word of the query, case aside; for no query, every row not kept for a search. */
 function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
-  if (words.length === 0) return rows;
+  if (words.length === 0) return rows.filter((row) => row.searchOnly !== true);
   return rows.filter((row) => {
     const named = [
       row.label,

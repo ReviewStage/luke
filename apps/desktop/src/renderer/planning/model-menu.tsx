@@ -11,13 +11,15 @@ import {
   modelLabel,
   offeredModels,
   readModelChoice,
+  unsearchedModels,
 } from "./coding-agent-model";
 
 /**
  * model-menu.tsx -- the one menu that picks a coding agent's model and effort: the Start button's and the agent box's chip's alike.
  *
  * The shared searchable menu over the base models the service offers,
- * newest first under their harness's mark, each fast version folded into
+ * the newest of each family until a search reaches the rest, under their
+ * harness's mark, each fast version folded into
  * its model, the choice standing checked with its effort and Fast beside
  * its name; a pick of a model keeps the effort it was running or the
  * model's first where it lacks that one, and its fast version where Fast
@@ -50,10 +52,12 @@ const FOOT_ROW = {
  * The menu's rows: each base model under the mark of the harness that runs
  * it, found by its name, its catalog name, or its provider, so "claude"
  * still finds the names that no longer say it; the chosen one says its
- * effort after its name.
+ * effort after its name. Before a search only the newest of each family
+ * and the chosen one are listed (`unsearchedModels`).
  */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
   const read = chosen === undefined ? undefined : readModelChoice(models, chosen.model);
+  const unsearched = unsearchedModels(models, read?.base);
   return offeredModels(models).map(({ model }) => ({
     id: model.id,
     label: modelLabel(model.id, models),
@@ -63,6 +67,7 @@ function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefi
       chosen !== undefined && model.id === read?.base
         ? choiceDetail(chosen.effort, read.fast)
         : undefined,
+    searchOnly: !unsearched.has(model.id),
   }));
 }
 

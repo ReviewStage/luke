@@ -478,6 +478,18 @@ test("a query matches a row's label or its terms, every word of it, and the chos
   assert.equal(menu.find(".plan-compose-menu-note").textContent, "No repositories match");
 });
 
+test("a row kept for a search is not listed until something is typed, and then is found like any other", () => {
+  const menu = mount({
+    rows: [...ROWS, { id: "acme/archive", label: "acme/archive", searchOnly: true }],
+  });
+  const names = () => menu.rows().map((row) => row.textContent);
+  assert.deepEqual(names(), ["acme/relay", "acme/billing", "acme/site"]);
+  type(menu.find<HTMLInputElement>("input[role=combobox]"), "acme");
+  assert.deepEqual(names(), ["acme/relay", "acme/billing", "acme/site", "acme/archive"]);
+  type(menu.find<HTMLInputElement>("input[role=combobox]"), "");
+  assert.deepEqual(names(), ["acme/relay", "acme/billing", "acme/site"]);
+});
+
 test("with no placeholder there is no search: the list holds focus and reads the same keys", () => {
   const menu = mount({ placeholder: undefined });
   assert.equal(menu.container.querySelector("input"), null);

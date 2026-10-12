@@ -12,6 +12,7 @@ import {
   modelLabel,
   offeredModels,
   readModelChoice,
+  unsearchedModels,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -67,6 +68,7 @@ function DefaultRows({
   const efforts = offered.length === 0 ? [choice.effort] : offered;
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
+  const unsearched = unsearchedModels(models ?? [], read.base);
   /** The choice at a catalog id, at the stored effort where the model lists it, else its first. */
   const choiceAt = (modelId: string): ModelChoice => ({
     model: modelId,
@@ -93,6 +95,7 @@ function DefaultRows({
                 label: modelLabel(model.id, models),
                 icon: <HarnessMark provider={model.provider} />,
                 terms: [model.name, model.provider],
+                searchOnly: !unsearched.has(model.id),
               }))
         }
         placeholder="Search models"
