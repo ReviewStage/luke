@@ -902,6 +902,14 @@ account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
 
+`server/workspaces-app.ts` answers `GET /api/workspaces`, every workspace the
+bearer's account is a member of, its personal one first and the rest by name,
+each `{ id, name, personal }` (`packages/hosted/src/workspace-wire.ts`). It
+ensures the personal workspace before it reads the list, so an account's first
+read is the one that makes it, through `workspaceSeams(auth.api)`; a plugin
+refusal answers `unavailable`, logged by its kind alone.
+`tests/workspaces-app.test.ts` holds it over the plugin on PGlite.
+
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
 conversation's turns, twenty a page newest first, each projected from its

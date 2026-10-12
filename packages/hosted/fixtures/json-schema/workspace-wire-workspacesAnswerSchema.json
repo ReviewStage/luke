@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "workspaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "name": {
+            "type": "string"
+          },
+          "personal": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "personal"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "workspaces"
+  ],
+  "additionalProperties": false
+}
