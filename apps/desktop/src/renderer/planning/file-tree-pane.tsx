@@ -53,7 +53,8 @@ type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
 /** Where the tree stands while its bundle loads or fails to. */
 const TREE_LOAD_FAILED = "The files could not be shown.";
 
-const fileTreeModuleAtom = bundleAtom(
+/** The file tree bundle, loaded the first time a tree or a breadcrumb's list is drawn and kept for the window's life. */
+export const fileTreeModuleAtom = bundleAtom(
   { script: FILE_TREE_ASSET.SCRIPT },
   () => window.lukeFileTree,
   TREE_LOAD_FAILED,

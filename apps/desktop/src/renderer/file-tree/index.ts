@@ -3,6 +3,7 @@ import type {
   FileTreeHandle,
   FileTreeModule,
   FileTreeProps,
+  FolderListProps,
   ReadFolder,
   RevealOptions,
 } from "./contract";
@@ -42,6 +43,10 @@ import {
  * only the files Luke showed, in a tree of those paths alone, every folder
  * open. Each stands in the repository's place while it is asked for, so the
  * folders opened there are as they were when it is let go.
+ *
+ * A breadcrumb's list of one folder is drawn by Pierre too (`list`), so it
+ * reads as the tree does, row for row: a tree of the folder's entries alone,
+ * none of its folders opening, the crumb's own entry marked.
  */
 
 /** What Pierre marks a row with: that it is an entry, and that it is a file. */
@@ -256,4 +261,31 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   };
 }
 
-window.lukeFileTree = { mount } satisfies FileTreeModule;
+/** One folder's entries as rows of the tree, the current one marked and taking the keyboard. */
+function list(host: HTMLElement, props: FolderListProps): () => void {
+  const byPath = new Map(props.entries.map((entry) => [treePath(entry.name, entry.folder), entry]));
+  const view = viewOf([...byPath.keys()], "closed");
+  host.replaceChildren(view.frame);
+  const current = props.entries.find((entry) => entry.name === props.current);
+  if (current === undefined) view.tree.focusFirstItem();
+  else markAlone(view.tree, treePath(current.name, current.folder), true);
+  const choose = (path: string | null | undefined, event: MouseEvent | KeyboardEvent) => {
+    const entry = path === null || path === undefined ? undefined : byPath.get(path);
+    if (entry === undefined) return;
+    event.preventDefault();
+    props.onChoose(entry, event.metaKey || event.ctrlKey);
+  };
+  const onClick = (event: MouseEvent) => choose(pressedRow(event)?.dataset.itemPath, event);
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Enter") choose(view.tree.getFocusedPath(), event);
+  };
+  host.addEventListener("click", onClick);
+  host.addEventListener("keydown", onKey);
+  return () => {
+    host.removeEventListener("click", onClick);
+    host.removeEventListener("keydown", onKey);
+    view.tree.cleanUp();
+  };
+}
+
+window.lukeFileTree = { mount, list } satisfies FileTreeModule;

@@ -216,7 +216,7 @@ export function FileView({
             path={file.path}
             listFolder={listFolder}
             onReveal={reveal}
-            onOpen={(path) => onBrowse(path, false)}
+            onOpen={onBrowse}
           />
         ) : (
           <Tooltip label={file.path}>
