@@ -8,6 +8,7 @@ ALTER TABLE "oauth_client" ADD COLUMN "application_type" text;--> statement-brea
 ALTER TABLE "oauth_client" ADD COLUMN "jwks" text;--> statement-breakpoint
 ALTER TABLE "oauth_client" ADD COLUMN "jwks_uri" text;--> statement-breakpoint
 ALTER TABLE "oauth_client" ADD COLUMN "dpop_bound_access_tokens" boolean DEFAULT false;--> statement-breakpoint
+UPDATE "oauth_client" SET "application_type" = "type" WHERE "type" IN ('web', 'native');--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD COLUMN "authorization_code_id" text;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD COLUMN "resources" text[];--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD COLUMN "requested_user_info_claims" text[];--> statement-breakpoint
