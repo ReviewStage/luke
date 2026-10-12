@@ -164,6 +164,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     ...FIXTURE_OTHER_PLANS,
   ],
   listStatus: PLANNING_READ.READY,
+  workspaces: [{ id: "workspace-personal", name: "Personal", personal: true }],
   document: { status: PLANNING_READ.IDLE },
 };
 

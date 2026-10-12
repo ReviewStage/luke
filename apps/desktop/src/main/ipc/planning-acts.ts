@@ -57,6 +57,7 @@ export interface PlanningActsDependencies {
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+    workspacesManage(): Effect.Effect<boolean>;
   };
   /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
   openExternal: (url: string) => Promise<void>;
@@ -92,7 +93,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
-  | typeof ACT_KIND.PLANNING_RESTORE;
+  | typeof ACT_KIND.PLANNING_RESTORE
+  | typeof ACT_KIND.WORKSPACES_MANAGE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -211,6 +213,16 @@ export function planningActRows(
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
       return host.planningBoardSave(params);
+    },
+    // The page's address is the host's, the service's own site, so the
+    // panel names nothing about what opens.
+    [ACT_KIND.WORKSPACES_MANAGE]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACES_MANAGE, sender);
+      return Effect.flatMap(host.workspacesManage(), (opened) =>
+        opened
+          ? Effect.void
+          : Effect.fail(new ActRefused({ message: ACT[ACT_KIND.WORKSPACES_MANAGE].refusal })),
+      );
     },
   };
 }

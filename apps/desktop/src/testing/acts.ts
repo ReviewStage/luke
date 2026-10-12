@@ -101,6 +101,7 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { url: "https://github.com/acme/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.WORKSPACES_MANAGE]: { kind: ACT_KIND.WORKSPACES_MANAGE },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     kind: ACT_KIND.PLANNING_BOARD_SAVE,
     payload: {

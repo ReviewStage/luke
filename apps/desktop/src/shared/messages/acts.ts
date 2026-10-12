@@ -168,6 +168,8 @@ export const ACT_KIND = {
   PLANNING_REVISION: "planning.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
+  /** The service's Workspaces page opened in the browser, where the account's workspaces are made and their members managed; refused where it could not be opened. */
+  WORKSPACES_MANAGE: "workspaces.manage",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -522,6 +524,7 @@ export const ACT = {
     refusal: "Could not open GitHub on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.WORKSPACES_MANAGE]: press("Could not open the Workspaces page on this system."),
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,
