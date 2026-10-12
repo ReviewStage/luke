@@ -62,6 +62,12 @@ import {
   planEditRejected,
   recordPlanEdit,
 } from "./plan-edit.js";
+import {
+  PLAN_READ_REFUSAL,
+  type PlanReadResult,
+  planReadRejected,
+  readAgentPlan,
+} from "./plan-read.js";
 import type { CoderHostSeams } from "./production.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -219,6 +225,10 @@ export interface CoderHost {
     input: UnparsedWireValue,
     takenInTurn: number,
   ): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient>;
+  /** Reads the agent's plan whole, as it stands now, for one `read_plan` call. */
+  readPlan(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<PlanReadResult, never, SqlClient.SqlClient>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
     admitted: AdmittedConversation,
@@ -500,6 +510,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+      ),
+
+    readPlan: (admitted) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return planReadRejected(found.failure);
+        // An agent handed a task never saw the plan, so it has none to read.
+        if (found.success.task !== null) return planReadRejected(PLAN_READ_REFUSAL.NO_PLAN);
+        return yield* readAgentPlan({
+          userId: admitted.target.userId,
+          planId: found.success.planId,
+        });
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(planReadRejected(PLAN_READ_REFUSAL.UNAVAILABLE))),
       ),
 
     inbox: (admitted, call) =>

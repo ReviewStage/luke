@@ -52,6 +52,7 @@ import {
   settleNotes,
   takenInTurn,
 } from "../server/hosted/coder-host/plan-edit";
+import { PLAN_READ_REFUSAL } from "../server/hosted/coder-host/plan-read";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET, opensSandbox } from "../server/hosted/coder-host/tool-set";
@@ -1881,6 +1882,45 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         // The count is the session's own: a new turn starts it over.
         assert.equal(takenInTurn(count, "turn_1"), 0);
         assert.deepEqual(reserveNotes(count, "turn_1", 1), { turnId: "turn_1", count: 1 });
+      }),
+  );
+
+  it.effect(
+    "an agent reads its plan whole as it stands now, notes taken since it started among it, and one handed a task is refused",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        // A note taken on the plan after the agent was handed it, as another agent on it would take one.
+        const noted = yield* host.editPlan(
+          admitted,
+          unparsedWire({
+            notes: [{ kind: "add", field: "approach", text: "- Invites expire after 7 days." }],
+          }),
+          0,
+        );
+        assert.equal(noted.status, ACTION_RESULT_STATUS.ACCEPTED);
+
+        const answer = yield* host.readPlan(admitted);
+
+        assert.ok(answer.status === ACTION_RESULT_STATUS.ACCEPTED);
+        assert.ok(answer.plan.startsWith("# Teammate invitations\n"));
+        assert.ok(answer.plan.includes("- Invites expire after 7 days."));
+        // What is read is the plan the store holds, not the snapshot the agent was handed.
+        assert.ok(!answer.plan.includes(PLAN_TEXT));
+        // The read changes nothing: the plan stands as it was saved.
+        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.ok(stored.text.includes("- Invites expire after 7 days."));
+
+        // An agent handed a task never saw the plan, so it is refused by name.
+        const onTask = yield* openAgent(host, "anthropic/claude-opus-5.5", "high", {
+          planSnapshot: null,
+          task: "Rename the invite button.",
+        });
+        assert.deepEqual(yield* host.readPlan(onTask.admitted), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_READ_REFUSAL.NO_PLAN,
+        });
       }),
   );
 });

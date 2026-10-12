@@ -2001,7 +2001,12 @@ row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and the planning model's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next planning call while the
-agent runs on, and a turn may take only so many notes. The
+agent runs on, and a turn may take only so many notes. Beside it,
+`read_plan` (`coder-host/plan-read.ts`) answers the agent's plan whole as it
+stands now, as Copy spells it (`planMarkdown`), and opens no sandbox: a
+rollout's worker is handed one pull request's brief rather than the plan, so
+it reads the plan through this before a note and wherever the brief is short.
+An agent handed a task is refused both. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

@@ -24,7 +24,8 @@ import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
  * pair below and repeats the worker's answer; the worker, running on the
  * same model, reads the task back under eve's wrapper as the agent reads
  * the plan's title back. Handed a list of to-dos, it writes them, the first
- * in progress, and says so. It is
+ * in progress, and says so. Told to read the plan, it reads it whole and
+ * says the plan's first line. It is
  * selected only by the fixture's own environment variable and a deployment
  * never names it.
  */
@@ -39,10 +40,17 @@ export const SCRIPTED_DELEGATED_REPLY = "The worker says:";
 export const SCRIPTED_TODOS = "To-dos: ";
 /** The reply once the to-dos are written. */
 export const SCRIPTED_TODOS_REPLY = "The to-dos are written.";
+/** What a developer's words start with when they ask the scripted agent to read its plan whole. */
+export const SCRIPTED_READ_PLAN = "Read the plan: ";
+/** The reply once the plan is read: the plan's first line follows. */
+export const SCRIPTED_READ_PLAN_REPLY = "The plan opens:";
 /** The pair the scripted agent names for every worker, which the fixture records as asked. */
 export const SCRIPTED_WORKER_CHOICE = { model: "openai/gpt-6.1-sol", effort: "low" } as const;
 
 const readDelegationOutput = Schema.decodeUnknownOption(codingAgentDelegationOutputSchema);
+
+/** What the fixture reads of a plan read's answer: the plan, where the read was taken. */
+const readPlanOutput = Schema.decodeUnknownOption(Schema.Struct({ plan: Schema.String }));
 
 /** The line eve puts ahead of the agent's own words when it hands a worker its task. */
 const CALLER_MESSAGE_MARK = "Caller message:\n";
@@ -72,7 +80,20 @@ function scriptedTodos(words: string): CodingAgentTodos {
   };
 }
 
+/** The reply to a plan read: the plan's first line, or that nothing was read. */
+function planReadReply(read: MockModelToolResult): MockModelResponse {
+  return Option.match(readPlanOutput(read.output), {
+    onNone: () => ({ text: SCRIPTED_READ_PLAN_REPLY }),
+    onSome: (output) => ({ text: `${SCRIPTED_READ_PLAN_REPLY} ${readBack(output.plan)}` }),
+  });
+}
+
 function scriptedResponse(request: MockModelRequest): MockModelResponse {
+  const read = request.toolResults.find((result) => result.name === CODER_TOOL.READ_PLAN);
+  if (read) return planReadReply(read);
+  if (request.lastUserMessage?.startsWith(SCRIPTED_READ_PLAN)) {
+    return { toolCalls: [{ name: CODER_TOOL.READ_PLAN, input: {} }] };
+  }
   if (request.toolResults.some((result) => result.name === CODER_TOOL.WRITE_TODOS)) {
     return { text: SCRIPTED_TODOS_REPLY };
   }

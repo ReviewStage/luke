@@ -8,6 +8,7 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { READ_PLAN_TOOL } from "./plan-read.js";
 import { TODOS_TOOL } from "./todos.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
@@ -48,6 +49,16 @@ const UPDATING_WORDS = `
 
 \`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`;
 
+/**
+ * How a rollout's worker, handed one pull request rather than the plan,
+ * reads the plan whole: before a note, since a correction quotes the saved
+ * text, and wherever the brief leaves it short, since the plan has moved
+ * on since the brief was cut.
+ */
+const PULL_REQUEST_UPDATING_WORDS = `${UPDATING_WORDS}
+
+Your brief is one pull request cut from the plan, not the plan. \`${READ_PLAN_TOOL.name}\` reads the whole plan as it stands now, which may have changed since your brief was cut: the developer plans on, and the other pull requests' workers take notes on it too. Read it before you take a note with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, since a correction quotes the saved text exactly; when you need why the plan chose what your brief asks; and when your pull request meets an interface another pull request of the rollout builds or uses. Read it rather than guess, and never build what it says belongs to another pull request.`;
+
 /** The words the instructions say of what the agent was handed, a plan, a task, or one pull request of the plan's rollout, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
@@ -79,7 +90,7 @@ const BRIEF_WORDS = {
     none: "the pull request could not be built",
     describe: "name the plan and the pull request's position in its rollout in its description",
     decided: DECIDED_WORDS,
-    updating: UPDATING_WORDS,
+    updating: PULL_REQUEST_UPDATING_WORDS,
   },
 } as const satisfies Record<
   CodingAgentBrief,

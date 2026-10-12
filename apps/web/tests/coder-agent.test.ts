@@ -350,6 +350,14 @@ test("an agent handed the plan is told how to update it, and one handed a task i
   assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("edit_plan"));
 });
 
+test("a worker handed one pull request is told to read the whole plan, and one handed the plan or a task is not", () => {
+  const worker = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PULL_REQUEST, false);
+  assert.ok(worker.includes("`read_plan` reads the whole plan as it stands now"));
+  assert.ok(worker.includes("Read it before you take a note with `edit_plan`"));
+  assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false).includes("read_plan"));
+  assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("read_plan"));
+});
+
 test("the session is told to watch its pull request's checks for the bounded rounds where its token reads them, and that CI was not watched where it does not", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const watching = coderInstructions(RELAY_AGENT, brief, true);

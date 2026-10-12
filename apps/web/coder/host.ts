@@ -7,6 +7,7 @@ import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/code
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
+import { type PlanReadResult, planReadRejected } from "../server/hosted/coder-host/plan-read.js";
 import {
   type CoderHostSeams,
   productionCoderHostSeams,
@@ -106,6 +107,17 @@ export function editPlanNotes(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
       return yield* host.editPlan(admitted.success, input, takenInTurn);
+    }),
+  );
+}
+
+/** One `read_plan` call's read of the agent's plan, for the tool, which runs here rather than at an edge of its own. */
+export function readAgentPlan(auth: SessionAuth, sessionId: string): Promise<PlanReadResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return planReadRejected(admitted.failure);
+      return yield* host.readPlan(admitted.success);
     }),
   );
 }

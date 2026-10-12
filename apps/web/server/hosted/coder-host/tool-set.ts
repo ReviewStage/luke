@@ -18,7 +18,7 @@ import { connectionToolEntries } from "../connection-tools.js";
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the provider-run web reads, the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
+ * its plan (`plan-edit.ts`) and its read of the plan whole (`plan-read.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
@@ -40,6 +40,7 @@ export const CODER_TOOL = {
   WEB_SEARCH: "web_search",
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
+  READ_PLAN: "read_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
