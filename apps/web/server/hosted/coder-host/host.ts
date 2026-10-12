@@ -35,6 +35,7 @@ import { promptHashOf } from "../store/index.js";
 import { logStoreFailure } from "../store-failure.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
+  agentCiReadable,
   agentRepositoryToken,
   CheckoutRefused,
   type CheckoutServices,
@@ -84,10 +85,21 @@ type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.S
 /** How a checkout or a mint fails: the checkout's refusal, which the host's own refusal of a conversation that is no agent's is carried as, or the store's. */
 export type CheckoutFailure = CheckoutRefused | SqlError | Schema.SchemaError;
 
-/** The prompt a session runs under and the content address its turns are recorded under. */
+/** The prompt a session runs under and the content address its turns are recorded under, with the one fact of the repository it was composed on. */
 interface CoderSessionPrompt {
   readonly text: string;
   readonly hash: string;
+  readonly ciReadable: boolean;
+}
+
+/**
+ * What the coder project keeps of the session's prompt, beside the content
+ * address the planning brain keeps (`brain-host/host.ts`): whether the
+ * prompt said the repository's CI is readable, which is what composes the
+ * same text again for a step's estimate of it.
+ */
+export interface CoderSessionPromptRecord extends SessionPromptRecord {
+  readonly ciReadable?: boolean;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -136,8 +148,11 @@ export interface CoderHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under; the text itself is stored nowhere. */
-  prompt(agent: CodingAgent): CoderSessionPrompt;
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI; the text itself is stored nowhere. */
+  prompt(
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+  ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
   /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
   checkOut(
     admitted: AdmittedConversation,
@@ -189,7 +204,7 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     session: SessionContext["session"],
     state: RelayStateStore,
-    prompt: SessionPromptRecord,
+    prompt: CoderSessionPromptRecord,
   ): Effect.Effect<
     void,
     SqlError | Schema.SchemaError,
@@ -246,26 +261,35 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       return coderModel(choice, seams.keys(), window);
     });
 
-  /** The instructions the agent's session runs under, composed as its session's start composes them. */
-  const promptOf = (agent: CodingAgent): CoderSessionPrompt => {
+  /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
+  const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
     const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
-    const text = coderInstructions(agent.repository, brief);
-    return { text, hash: promptHashOf(text) };
+    const text = coderInstructions(agent.repository, brief, ciReadable);
+    return { text, hash: promptHashOf(text), ciReadable };
   };
 
   /**
    * What a step's end or a compaction leaves in the agent's context,
-   * written on its row; every other event writes nothing. A write that
-   * fails is logged and the relay goes on, since the transcript stands
-   * without it and the next step writes again.
+   * written on its row; every other event writes nothing. The instructions
+   * are composed again as the session's start composed them, from what its
+   * prompt record kept. A write that fails is logged and the relay goes on,
+   * since the transcript stands without it and the next step writes again.
    */
-  const recordContext = (event: MessageStreamEvent, userId: string, agent: CodingAgent) => {
+  const recordContext = (
+    event: MessageStreamEvent,
+    userId: string,
+    agent: CodingAgent,
+    prompt: CoderSessionPromptRecord,
+  ) => {
     const written = Effect.suspend(() => {
       switch (event.type) {
         case "step.completed": {
           const step = agentStepOf(
             event.data.usage,
-            { instructions: promptOf(agent).text, brief: agent.task ?? agent.planSnapshot ?? "" },
+            {
+              instructions: promptOf(agent, prompt.ciReadable ?? false).text,
+              brief: agent.task ?? agent.planSnapshot ?? "",
+            },
             seams.now(),
           );
           return step === undefined ? Effect.void : recordCodingAgentStep(userId, agent.id, step);
@@ -351,7 +375,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         return yield* selectedModel({ model, effort }, scripted);
       }),
 
-    prompt: promptOf,
+    prompt: (admitted, agent) =>
+      Effect.map(agentCiReadable(admitted.target, agent), (ciReadable) =>
+        promptOf(agent, ciReadable),
+      ),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
@@ -455,7 +482,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           state,
         });
-        if (agent !== undefined) yield* recordContext(event, admitted.target.userId, agent);
+        if (agent !== undefined) {
+          yield* recordContext(event, admitted.target.userId, agent, prompt);
+        }
       }),
   };
 }

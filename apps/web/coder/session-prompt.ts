@@ -1,14 +1,15 @@
 import { defineState } from "eve/context";
-import type { SessionPromptRecord } from "../server/hosted/brain-host/host.js";
+import type { CoderSessionPromptRecord } from "../server/hosted/coder-host/host.js";
 import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/plan-edit.js";
 
 /**
- * The session's prompt as its content address, in eve's durable session
- * state: written by the instructions resolver that composes the prompt at
- * the session's start and read by the store hook as each turn starts, so the
- * turn row names the prompt the model reads rather than one composed again.
+ * The session's prompt as its content address, and whether it said the
+ * repository's CI is readable, in eve's durable session state: written by
+ * the instructions resolver that composes the prompt at the session's start
+ * and read by the store hook as each turn starts, so the turn row names the
+ * prompt the model reads rather than one composed again.
  */
-export const sessionPrompt = defineState<SessionPromptRecord>("luke.coder.prompt", () => ({}));
+export const sessionPrompt = defineState<CoderSessionPromptRecord>("luke.coder.prompt", () => ({}));
 
 /**
  * What the session's sandbox has been told, in eve's durable session state:

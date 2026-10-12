@@ -128,12 +128,20 @@ export interface RepositoryFixture {
   readonly defaultBranch?: string;
 }
 
-/** One installation as a test names it: on whose account, and the repositories it reaches for the user. */
+/** One installation as a test names it: on whose account, the repositories it reaches for the user, and what it grants the App, by permission name; the fixture's own when unsaid. */
 export interface InstallationFixture {
   readonly id: number;
   readonly login: string;
   readonly repositories: readonly RepositoryFixture[];
+  readonly permissions?: Readonly<Record<string, string>>;
 }
+
+/** What an installation grants the App where a test says nothing: what every installation of the App granted before CI read was added. */
+const FIXTURE_INSTALLATION_PERMISSIONS = {
+  contents: "write",
+  metadata: "read",
+  pull_requests: "write",
+} as const;
 
 /** GitHub's own record of a repository, as much of it as the service reads and a little it does not. */
 function repositoryJson(fixture: RepositoryFixture) {
@@ -226,6 +234,7 @@ export function githubReaching(
           id: installation.id,
           account: { login: installation.login, type: "User" },
           repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+          permissions: installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS,
           app_id: Number(GITHUB_FIXTURE.APP_ID),
         })),
       });

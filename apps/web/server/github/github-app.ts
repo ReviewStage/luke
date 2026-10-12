@@ -15,9 +15,11 @@
  * without one is deliberately not. The tokens the App mints are
  * installation tokens for one repository: with contents read alone for the
  * planning sandbox's checkout, and with contents and pull requests write for
- * a coding agent's branch and pull request; each is minted only where that
- * check passes. The user token also reads the user's own record and the
- * App's bot's, which is what a coding agent's commits are attributed under.
+ * a coding agent's branch and pull request, plus what reads its pull
+ * request's CI where the installation has granted it; each is minted only
+ * where that check passes. The user token also reads the user's own record
+ * and the App's bot's, which is what a coding agent's commits are attributed
+ * under.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
@@ -88,13 +90,24 @@ const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 
 /**
+ * What reads a pull request's CI: its check runs, its commit statuses, and
+ * the workflow runs behind them. An installation grants a permission the App
+ * added after it was installed only once its owner accepts it on GitHub, and
+ * a mint naming one the installation never granted fails whole, so these are
+ * asked only of an installation that grants them all.
+ */
+export const CI_READ_PERMISSIONS = { checks: "read", statuses: "read", actions: "read" } as const;
+
+/**
  * What the App asks of an installation token, by what the token is for:
  * contents read alone, which is what a checkout needs, or contents and pull
- * requests write, which is what a coding agent's push and pull request need.
+ * requests write, which is what a coding agent's push and pull request need,
+ * with CI read beside them where the installation grants it.
  */
 const INSTALLATION_TOKEN_PERMISSIONS = {
   READ: { contents: "read" },
   WRITE: { contents: "write", pull_requests: "write" },
+  WRITE_READING_CI: { contents: "write", pull_requests: "write", ...CI_READ_PERMISSIONS },
 } as const;
 
 type InstallationTokenPermissions =
@@ -144,6 +157,8 @@ interface GitHubInstallation {
   /** The user or organization the App is installed on; absent for an enterprise install, which has no login. */
   readonly accountLogin: string | undefined;
   readonly repositorySelection: GitHubRepositorySelection;
+  /** Whether the installation grants the App every permission that reads a pull request's CI (`CI_READ_PERMISSIONS`). */
+  readonly ciReadable: boolean;
 }
 
 /** One GitHub account as a commit names it: its id and login, which together make its noreply address, and the name it set, if any. */
@@ -296,9 +311,19 @@ export interface GitHubAppService {
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
   /**
+   * Whether a write token for the repository will read its pull requests'
+   * CI: the installation the user reaches it through grants the App
+   * `CI_READ_PERMISSIONS` whole; false where the user does not reach it.
+   */
+  readonly repositoryCiReadable: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | SqlClient.SqlClient>;
+  /**
    * The same mint with contents and pull requests write, which is what a
-   * coding agent's push to its branch and its pull request need, on the same
-   * terms: the user's own reach admits it, and the token reaches that one
+   * coding agent's push to its branch and its pull request need, and with CI
+   * read beside them where the installation grants it, on the same terms:
+   * the user's own reach admits it, and the token reaches that one
    * repository and no other.
    */
   readonly repositoryWriteToken: (
@@ -368,6 +393,8 @@ const InstallationSchema = Schema.Struct({
   id: Schema.Number,
   account: Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
   repository_selection: Schema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
+  /** What the installation grants the App, by permission name; read for the CI permissions alone. */
+  permissions: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 type InstallationRecord = typeof InstallationSchema.Type;
 
@@ -492,11 +519,14 @@ function privateKeyOf(pem: Redacted.Redacted): KeyObject | undefined {
   }
 }
 
+/** A permission is granted at read where the installation names it at any level: write grants read. */
 function installationOf(record: InstallationRecord): GitHubInstallation {
+  const granted = record.permissions ?? {};
   return {
     id: record.id,
     accountLogin: record.account?.login,
     repositorySelection: record.repository_selection,
+    ciReadable: Object.keys(CI_READ_PERMISSIONS).every((permission) => permission in granted),
   };
 }
 
@@ -841,11 +871,11 @@ function githubAppService(
       }));
     });
 
-  /** A token minted as the App for the one repository the user reaches, cut to the permissions given; none where they do not reach it. */
+  /** A token minted as the App for the one repository the user reaches, cut to the permissions chosen for its installation; none where they do not reach it. */
   const repositoryToken = (
     userId: string,
     fullName: string,
-    permissions: InstallationTokenPermissions,
+    permissionsOn: (installation: GitHubInstallation) => InstallationTokenPermissions,
   ) =>
     Effect.gen(function* () {
       const reached = yield* reachableRepository(userId, fullName);
@@ -857,7 +887,7 @@ function githubAppService(
           send(
             githubMintAsApp(`/app/installations/${installation.id}/access_tokens`, jwt, {
               repositories: [repository.name],
-              permissions,
+              permissions: permissionsOn(installation),
             }),
           ),
           (response) => readBody(response, InstallationTokenSchema),
@@ -897,9 +927,18 @@ function githubAppService(
         Option.map((reached) => reached.repository),
       ),
     repositoryReadToken: (userId, fullName) =>
-      repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.READ),
+      repositoryToken(userId, fullName, () => INSTALLATION_TOKEN_PERMISSIONS.READ),
+    repositoryCiReadable: (userId, fullName) =>
+      Effect.map(
+        reachableRepository(userId, fullName),
+        (reached) => Option.isSome(reached) && reached.value.installation.ciReadable,
+      ),
     repositoryWriteToken: (userId, fullName) =>
-      repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.WRITE),
+      repositoryToken(userId, fullName, (installation) =>
+        installation.ciReadable
+          ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
+          : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
+      ),
     signedInUser: (userId) =>
       Effect.gen(function* () {
         const token = yield* userToken(userId);

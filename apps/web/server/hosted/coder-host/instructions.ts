@@ -18,9 +18,10 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
  * which the plan also decided. The repository's name and the checkout's
- * place are the two facts the session needs that the plan does not carry;
- * the checkout's place is told as where every tool starts, the shell
- * (`shell.ts`) and the file tools (`files.ts`) alike.
+ * place are two facts the session needs that the plan does not carry, and
+ * whether its token reads the repository's CI is the third; the checkout's
+ * place is told as where every tool starts, the shell (`shell.ts`) and the
+ * file tools (`files.ts`) alike.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the commits are the developer's.
  * The worker's instructions stand beside the agent's: it owns one slice,
@@ -59,8 +60,24 @@ const BRIEF_WORDS = {
   { job: string; reread: string; whole: string; none: string; describe: string; updating: string }
 >;
 
-/** The instructions for one agent, on the repository its row names, worded for what it was handed. */
-export function coderInstructions(repository: string, brief: CodingAgentBrief): string {
+/**
+ * What the agent does about its pull request's checks: watches them and
+ * fixes what fails, for at most `CODER.CI_FIX_ROUNDS` rounds, where its
+ * token reads them; says so where it cannot, since the installation has not
+ * granted the App the read (`github-app.ts`'s `CI_READ_PERMISSIONS`).
+ */
+const CHECKS_WORDS = {
+  readable: `After you push and open or update a pull request, watch its checks with \`gh pr checks <number> --watch --fail-fast\`. \`bash\` keeps a command still running after a while in the background and answers "running" with how to check on it, so check back on it, and never poll in a loop of your own. When a check fails, read why with \`gh run view <run-id> --log-failed\`, or the failing check's own details, fix the cause, push, and watch again, for at most ${CODER.CI_FIX_ROUNDS} rounds of fixes. Stop as soon as every check passes, or at once where the repository runs no checks, and say plainly in your final message when you stopped with a check still failing. Watching the checks never marks the pull request ready, merges it, or closes it.`,
+  unreadable:
+    "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
+} as const;
+
+/** The instructions for one agent, on the repository its row names, worded for what it was handed, and for whether its token reads the repository's CI. */
+export function coderInstructions(
+  repository: string,
+  brief: CodingAgentBrief,
+  ciReadable: boolean,
+): string {
   const words = BRIEF_WORDS[brief];
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
@@ -77,6 +94,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
 7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}.
+8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
 
 ## Handing work to a worker
 

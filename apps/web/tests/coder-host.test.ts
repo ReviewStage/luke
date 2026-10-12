@@ -31,6 +31,7 @@ import {
 } from "../server/core";
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
+import { CI_READ_PERMISSIONS } from "../server/github/github-app";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
@@ -75,7 +76,7 @@ import {
   storeWriter,
 } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
-import { openGithubUser } from "./support/github-app-fake";
+import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
@@ -235,6 +236,21 @@ const openAgent = (
       admitted: admitted.success,
     };
   });
+
+/** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
+const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
+  githubReaching([
+    {
+      id: 7,
+      login: "acme",
+      repositories: [{ owner: "acme", name: "relay" }],
+      ...(permissions === undefined ? undefined : { permissions }),
+    },
+  ]).layer;
+
+/** The prompt the session composes at its start, on an installation granting the App no CI read. */
+const composedPrompt = (host: CoderHost, ...composed: Parameters<CoderHost["prompt"]>) =>
+  host.prompt(...composed).pipe(Effect.provide(reachingRelay()));
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
@@ -760,13 +776,39 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "the session is told whether its pull request's checks are readable, from what the installation grants the App, and told they are not where GitHub cannot be read",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+
+        const granted = yield* host
+          .prompt(admitted, agent)
+          .pipe(
+            Effect.provide(
+              reachingRelay({ contents: "write", pull_requests: "write", ...CI_READ_PERMISSIONS }),
+            ),
+          );
+        const withheld = yield* composedPrompt(host, admitted, agent);
+        const unread = yield* host.prompt(admitted, agent).pipe(Effect.provide(NO_GITHUB));
+
+        assert.equal(granted.ciReadable, true);
+        assert.ok(granted.text.includes("gh pr checks"));
+        assert.equal(withheld.ciReadable, false);
+        assert.ok(!withheld.text.includes("gh pr checks"));
+        assert.notEqual(granted.hash, withheld.hash);
+        assert.equal(unread.ciReadable, false);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
-        const prompt = host.prompt(agent);
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         for (const event of codingTurn("turn_0", "turn.completed")) {
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
@@ -831,11 +873,12 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         ] as const) {
           const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
           const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
           for (const event of codingTurn("turn_0", end)) {
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
             yield* host.relay(event, admitted, session as never, state, {
-              hash: host.prompt(agent).hash,
+              hash: prompt.hash,
             });
           }
           const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
@@ -858,10 +901,11 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const relay = (event: MessageStreamEvent) =>
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-          host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash });
+          host.relay(event, admitted, session as never, state, { hash: prompt.hash });
         const context = Effect.map(
           transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
             Effect.provide(modelCatalogOf(CATALOG)),
@@ -962,12 +1006,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const events = codingTurn("turn_0", "turn.completed");
         const play = (from: number, to: number) =>
           Effect.forEach(events.slice(from, to), (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const read = (after: MessageCursor) =>
           transcriptPast(target, CODER_TOOL_SET, after, agent).pipe(
@@ -1057,11 +1102,12 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const play = (events: readonly MessageStreamEvent[]) =>
           Effect.forEach(events, (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const statusNow = () =>
           Effect.gen(function* () {
@@ -1146,11 +1192,12 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const play = (events: readonly MessageStreamEvent[]) =>
           Effect.forEach(events, (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const [started, received] = codingTurn("turn_0", "turn.completed");
         assert.ok(started && received);
@@ -1233,6 +1280,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.equal(selected.success.model, scripted.model);
 
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
         yield* host.relay(
@@ -1240,7 +1288,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           admitted,
           session as never,
           state,
-          { hash: host.prompt(agent).hash },
+          { hash: prompt.hash },
         );
         const turn = yield* turnRow(hostTurnId(sessionId, "turn_0"));
         assert.equal(turn?.model, CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID);
