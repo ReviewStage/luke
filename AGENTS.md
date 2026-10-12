@@ -68,8 +68,8 @@ pnpm --filter @luke/web test:agent       # offline brain eval, scripted model
 evidence; CI builds nothing for the Mac.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
-testing guide. Where a rule below disagrees with it, the skill wins; the lint
-rules named below still fail the build either way.
+testing guide, and the rules below agree with it. Its `bunx vitest` is
+`pnpm exec vitest` here.
 
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
@@ -79,22 +79,29 @@ rules named below still fail the build either way.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.
-- Prefer the real implementation, then a fake, then a stub. A double is a
-  test `Layer` on the subject's `Context.Tag` at a process boundary: provider
-  HTTP, Apple, the model, the OS, the clock.
+- Prefer the real implementation, then a fake, then a stub. Mock at a
+  process boundary (provider HTTP, Apple, the model, the OS, the clock), never
+  between internal modules. For an Effect service the double is a test
+  `Layer` on its `Context.Tag`; elsewhere `vi.spyOn` over `vi.mock`, restored
+  with `vi.restoreAllMocks()`.
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup: `packages/host/src/testing/`,
   `apps/web/tests/support/`, `packages/wire/src/testing/`, and
   `temporaryDirectory` from `@sidecar/runtime/testing`.
+- A database model or repository ships with a sibling
+  `__tests__/<name>.test.ts` in the same PR, run on a real database through
+  `getTestDB()`, and tests that one user cannot read another's rows.
 - Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
   `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
   (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
   `it.live` fail lint (`testing/no-real-time`).
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
   helpers, with the diff explained in the PR.
-- Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
-  `.todo`, and `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix
-  or delete a flaky test.
+- Never loosen or skip a test to go green. `.only`, `.skip`, `.todo`, and
+  `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix or delete a
+  flaky test. A test that breaks on a refactor because it checks internal
+  wiring a behavior test already covers is deleted, not fixed, and the PR
+  says which behavior test covers it.
 - Do not write change-detector tests: an expected value computed by the code
   under test or pasted from its output; a test of a getter, constant, type,
   re-export, or Schema round-trip on a valid value; a test that only asserts
