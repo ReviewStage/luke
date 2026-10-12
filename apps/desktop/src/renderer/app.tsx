@@ -133,9 +133,7 @@ export function App(): React.JSX.Element {
   );
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
-  useWindowZoom(settings?.zoom, (zoom) => {
-    void updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom);
-  });
+  useWindowZoom(settings?.zoom, (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
 
   // The stop key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.

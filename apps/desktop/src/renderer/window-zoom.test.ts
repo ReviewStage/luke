@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { ZoomPercent } from "@sidecar/settings";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -15,12 +16,18 @@ import { useWindowZoom } from "./window-zoom";
  * storing a size itself.
  */
 let stored: ZoomPercent = 100;
+/** Whether the store refuses a write, as a disk that cannot be written does. */
+let refusing = false;
 let root: Root | undefined;
 
 function Window({ zoom }: { zoom: ZoomPercent }): null {
   useAppKeymap(true);
-  useWindowZoom(zoom, (next) => {
+  useWindowZoom(zoom, (next): Promise<ActionResult> => {
+    if (refusing) {
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "No room." });
+    }
     stored = next;
+    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
   });
   return null;
 }
@@ -34,6 +41,13 @@ function draw(): void {
 
 /** Presses a Command chord, answering whether the window claimed it, and draws what it stored. */
 function press(key: string, shift = false): boolean {
+  const claimed = pressOnly(key, shift);
+  draw();
+  return claimed;
+}
+
+/** Presses a Command chord before the settings it wrote have come back. */
+function pressOnly(key: string, shift = false): boolean {
   const event = new KeyboardEvent("keydown", {
     key,
     metaKey: true,
@@ -43,7 +57,6 @@ function press(key: string, shift = false): boolean {
   act(() => {
     window.dispatchEvent(event);
   });
-  draw();
   return event.defaultPrevented;
 }
 
@@ -55,6 +68,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   stored = 100;
+  refusing = false;
   document.body.innerHTML = "";
 });
 
@@ -98,4 +112,29 @@ test("a press past the largest or smallest size, or ⌘0 at actual size, is left
   draw();
   assert.equal(press("0"), false);
   assert.equal(stored, 100);
+});
+
+test("two presses before the first one's write comes back are two steps", () => {
+  draw();
+  pressOnly("=");
+  pressOnly("=");
+  assert.equal(stored, 125);
+  draw();
+  pressOnly("-");
+  pressOnly("-");
+  pressOnly("-");
+  assert.equal(stored, 90);
+});
+
+test("a size the store refused is not the one the next press steps from", async () => {
+  draw();
+  refusing = true;
+  pressOnly("=");
+  // The refusal's answer lands a turn later.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  refusing = false;
+  press("=");
+  assert.equal(stored, 110);
 });
