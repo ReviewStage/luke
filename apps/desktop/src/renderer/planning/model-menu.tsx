@@ -1,17 +1,24 @@
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { HarnessMark } from "../provider-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
 import {
-  choiceDetail,
+  CONTEXT_WORD,
   choiceModelId,
+  choiceOn,
+  choiceWords,
+  contextWindowsOf,
   effortFor,
   effortLabel,
   effortsOf,
   FAST_WORD,
+  longWindowNote,
   modelLabel,
   offeredModels,
   readModelChoice,
   unsearchedModels,
+  windowLabel,
+  windowOf,
 } from "./coding-agent-model";
 
 /**
@@ -20,14 +27,17 @@ import {
  * The shared searchable menu over the base models the service offers,
  * the newest of each family until a search reaches the rest, under their
  * harness's mark, each fast version folded into
- * its model, the choice standing checked with its effort and Fast beside
- * its name; a pick of a model keeps the effort it was running or the
- * model's first where it lacks that one, and its fast version where Fast
- * is on and the model has one, and closes the menu. Pinned under the list
- * stand two rows: Effort, naming the effort chosen now and opening a
- * submenu of the ones the chosen model lists, which closes the menu on a
- * pick, and Fast, a switch to the model's fast version, muted where the
- * model has none, which leaves the menu open. The id a choice names is
+ * its model, the choice standing checked with its effort, Fast, and the
+ * standard window beside its name; a pick of a model keeps the effort it was
+ * running or the model's first where it lacks that one, its fast version
+ * where Fast is on and the model has one, and the standard window where the
+ * model offers two, and closes the menu. Pinned under the list stand up to
+ * three rows: Effort, naming the effort chosen now and opening a submenu
+ * of the ones the chosen model lists; Context, only for a model that
+ * offers two windows, naming the window chosen now and opening a submenu
+ * of the two with what the whole one costs under them; each closes the menu
+ * on a pick; and Fast, a switch to the model's fast version, muted where
+ * the model has none, which leaves the menu open. The id a choice names is
  * the catalog's own, the fast version's where Fast is on, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button keeps it as the account's default, the chip
@@ -45,6 +55,7 @@ const MENU_NOTE = {
 /** The rows pinned under the list. */
 const FOOT_ROW = {
   EFFORT: "effort",
+  CONTEXT: "context",
   FAST: "fast",
 } as const;
 
@@ -52,7 +63,7 @@ const FOOT_ROW = {
  * The menu's rows: each base model under the mark of the harness that runs
  * it, found by its name, its catalog name, or its provider, so "claude"
  * still finds the names that no longer say it; the chosen one says its
- * effort after its name. Before a search only the newest of each family
+ * effort, and its window where standard, after its name. Before a search only the newest of each family
  * and the chosen one are listed (`unsearchedModels`).
  */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
@@ -65,7 +76,7 @@ function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefi
     terms: [model.name, model.provider],
     detail:
       chosen !== undefined && model.id === read?.base
-        ? choiceDetail(chosen.effort, read.fast)
+        ? choiceWords(chosen, models).detail
         : undefined,
     searchOnly: !unsearched.has(model.id),
   }));
@@ -73,7 +84,8 @@ function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefi
 
 /**
  * A choice as the catalog offers it now: at its effort where the model
- * lists it, else the nearest the model lists (`effortFor`); nothing before
+ * lists it, else the nearest the model lists (`effortFor`), and on the
+ * standard window only where the model still offers two; nothing before
  * the catalog is read, or for a model the catalog no longer offers, which
  * the menu then draws unchecked and without its pinned rows.
  */
@@ -83,7 +95,9 @@ export function settledChoice(
 ): ModelChoice | undefined {
   if (models === undefined || choice === undefined) return undefined;
   const effort = effortFor(effortsOf(models, choice.model), choice.effort);
-  return effort === undefined ? undefined : { model: choice.model, effort };
+  return effort === undefined
+    ? undefined
+    : choiceOn(models, { model: choice.model, effort }, choice.contextWindow);
 }
 
 export function ModelMenu(props: {
@@ -114,12 +128,44 @@ export function ModelMenu(props: {
       : undefined;
   const efforts =
     models !== undefined && chosen !== undefined ? effortsOf(models, chosen.model) : [];
+  const windows =
+    models !== undefined && chosen !== undefined
+      ? contextWindowsOf(models, chosen.model)
+      : undefined;
 
-  /** The choice at a model, at the effort chosen where the model lists it, else its first. */
+  /** The choice at a model, at the effort chosen where the model lists it, else its first, on the window chosen where the model offers it. */
   const choiceAt = (modelId: string, wanted: string | undefined): ModelChoice | undefined => {
     if (models === undefined) return undefined;
     const next = effortFor(effortsOf(models, modelId), wanted);
-    return next === undefined ? undefined : { model: modelId, effort: next };
+    return next === undefined
+      ? undefined
+      : choiceOn(models, { model: modelId, effort: next }, chosen?.contextWindow);
+  };
+
+  const contextRow = (choice: ModelChoice, offered: readonly CatalogModel[]): FootRow[] => {
+    if (windows === undefined) return [];
+    const standard = windowOf(offered, choice) === CONTEXT_WINDOW.STANDARD;
+    return [
+      {
+        id: FOOT_ROW.CONTEXT,
+        label: CONTEXT_WORD,
+        detail: windowLabel(standard ? windows.standardTokens : windows.longTokens),
+        submenu: {
+          label: CONTEXT_WORD,
+          rows: [
+            { id: CONTEXT_WINDOW.STANDARD, label: windowLabel(windows.standardTokens) },
+            { id: CONTEXT_WINDOW.LONG, label: windowLabel(windows.longTokens) },
+          ],
+          value: standard ? CONTEXT_WINDOW.STANDARD : CONTEXT_WINDOW.LONG,
+          note: longWindowNote(windows),
+          onPick: (picked) => {
+            onClose();
+            const window = picked === CONTEXT_WINDOW.STANDARD ? CONTEXT_WINDOW.STANDARD : undefined;
+            onChoose(choiceOn(offered, choice, window));
+          },
+        },
+      },
+    ];
   };
 
   const foot: FootRow[] | undefined =
@@ -136,10 +182,11 @@ export function ModelMenu(props: {
               value: chosen.effort,
               onPick: (picked) => {
                 onClose();
-                onChoose({ model: chosen.model, effort: picked });
+                onChoose({ ...chosen, effort: picked });
               },
             },
           },
+          ...contextRow(chosen, models),
           {
             id: FOOT_ROW.FAST,
             label: FAST_WORD,

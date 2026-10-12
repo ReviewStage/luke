@@ -14,11 +14,13 @@ import type { AgentModelControl } from "./use-agent-model";
  * Drawn along the composer card's foot as a toolbar's quiet button is, with
  * no border and no fill until the pointer is on it or its menu is open:
  * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
- * the fast version is on, and a chevron saying it opens a menu. A press
+ * the fast version is on and the standard context window's size where the
+ * agent runs on that rather than its model's whole window ("GPT-5.5 High
+ * 272K"), and a chevron saying it opens a menu. A press
  * opens the shared model menu (`model-menu.tsx`) right above the chip,
  * from its leading edge (`../anchored-popover.tsx`), the
- * agent's choice checked; what the menu chooses is the agent's model and
- * effort for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
+ * agent's choice checked; what the menu chooses is the agent's model,
+ * effort, and context window for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
  * the next step and an idle agent's next turn takes it. The models are
  * read as the chip mounts and again as the menu opens, so the menu shows

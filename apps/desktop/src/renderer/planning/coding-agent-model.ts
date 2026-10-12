@@ -6,6 +6,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
@@ -13,12 +14,14 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
   type CodingAgentUsage,
+  type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
 import {
   type CatalogModel,
+  type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -447,9 +450,93 @@ export function choiceModelId(offered: OfferedModel, fast: boolean): string {
   return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
 }
 
-/** What a choice says after its model's name: the effort, and Fast where the fast version is on. */
-export function choiceDetail(effort: string, fast: boolean): string {
-  return fast ? `${effortLabel(effort)}${CHOICE_WORD_SEPARATOR}${FAST_WORD}` : effortLabel(effort);
+/**
+ * What a choice says after its model's name: the effort, Fast where the
+ * fast version is on, and the standard window's size where it runs on that,
+ * so the model's whole window, which every choice runs on unless it says,
+ * says nothing.
+ */
+function choiceDetail(effort: string, fast: boolean, standardTokens?: number): string {
+  const words = [effortLabel(effort)];
+  if (fast) words.push(FAST_WORD);
+  if (standardTokens !== undefined) words.push(windowLabel(standardTokens));
+  return words.join(CHOICE_WORD_SEPARATOR);
+}
+
+/** The word the menu's pinned row and the settings row say for the context window. */
+export const CONTEXT_WORD = "Context";
+
+/** The tenth of a million a window's size in millions is cut to. */
+const TENTH_OF_A_MILLION = MILLION / 10;
+
+/** A window's size as a choice says it, cut to the thousand or the tenth of a million below: 272K, 1M for 1,050,000. */
+export function windowLabel(tokens: number): string {
+  if (tokens >= MILLION) return `${Math.floor(tokens / TENTH_OF_A_MILLION) / 10}M`;
+  return `${Math.floor(tokens / THOUSAND)}K`;
+}
+
+/** The two windows the model offers, or nothing for a model with one, or one the catalog does not offer now. */
+export function contextWindowsOf(
+  models: readonly CatalogModel[],
+  modelId: string,
+): ContextWindows | undefined {
+  return models.find((model) => model.id === modelId)?.contextWindows;
+}
+
+/** The window a choice runs on as the catalog stands: the standard one only where it was chosen and the model offers two, else the model's whole window. */
+export function windowOf(models: readonly CatalogModel[], choice: ModelChoice): ContextWindow {
+  return choice.contextWindow === CONTEXT_WINDOW.STANDARD &&
+    contextWindowsOf(models, choice.model) !== undefined
+    ? CONTEXT_WINDOW.STANDARD
+    : CONTEXT_WINDOW.LONG;
+}
+
+/**
+ * A model and effort on the window given, as a request names them: the
+ * standard window only where the model offers two, so a change to a model
+ * with one window drops it, and nothing for the model's whole window, the
+ * default, so a service that predates the window is sent no key it would
+ * refuse.
+ */
+export function choiceOn(
+  models: readonly CatalogModel[],
+  pair: { readonly model: string; readonly effort: string },
+  window: ContextWindow | undefined,
+): ModelChoice {
+  const choice = { model: pair.model, effort: pair.effort };
+  return windowOf(models, { ...choice, contextWindow: window ?? CONTEXT_WINDOW.LONG }) ===
+    CONTEXT_WINDOW.STANDARD
+    ? { ...choice, contextWindow: CONTEXT_WINDOW.STANDARD }
+    : choice;
+}
+
+/** A choice as a request carries it: the model, the effort, and the window only where it is the standard one. */
+export function choiceRequest(choice: ModelChoice): ModelChoice {
+  return choice.contextWindow === CONTEXT_WINDOW.STANDARD
+    ? { model: choice.model, effort: choice.effort, contextWindow: CONTEXT_WINDOW.STANDARD }
+    : { model: choice.model, effort: choice.effort };
+}
+
+/** A price multiple as a note says it: 2×, 1.5×, to the hundredth. */
+function factorLabel(factor: number): string {
+  return `${Number(factor.toFixed(2))}×`;
+}
+
+/**
+ * What the long window costs, as the catalog prices it, said of the long
+ * window by name since only a prompt on it can grow past the standard one:
+ * the multiple of the standard price a prompt past the standard window is
+ * billed at, input and output each where the catalog says, else that it
+ * costs more.
+ */
+export function longWindowNote(windows: ContextWindows): string {
+  const past = `On ${windowLabel(windows.longTokens)}, prompts over ${windowLabel(windows.standardTokens)} tokens cost`;
+  const parts: string[] = [];
+  if (windows.longInputPriceFactor !== undefined)
+    parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
+  if (windows.longOutputPriceFactor !== undefined)
+    parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
+  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */
@@ -460,10 +547,17 @@ export interface ChoiceWords {
 
 export function choiceWords(choice: ModelChoice, models: readonly CatalogModel[]): ChoiceWords {
   const read = readModelChoice(models, choice.model);
-  return { model: modelLabel(read.base, models), detail: choiceDetail(choice.effort, read.fast) };
+  const standard =
+    windowOf(models, choice) === CONTEXT_WINDOW.STANDARD
+      ? contextWindowsOf(models, choice.model)?.standardTokens
+      : undefined;
+  return {
+    model: modelLabel(read.base, models),
+    detail: choiceDetail(choice.effort, read.fast, standard),
+  };
 }
 
-/** A choice as one line, for a hint that holds no markup: "Opus 5.5 High Fast". */
+/** A choice as one line, for a hint that holds no markup: "Opus 5.5 High Fast", "GPT-5.5 High 272K". */
 export function choiceLabel(choice: ModelChoice, models: readonly CatalogModel[]): string {
   const words = choiceWords(choice, models);
   return `${words.model}${CHOICE_WORD_SEPARATOR}${words.detail}`;

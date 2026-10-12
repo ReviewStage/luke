@@ -4,7 +4,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import { CONTEXT_WINDOW, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
@@ -12,6 +12,7 @@ import type { ActHandle } from "../act";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import {
   type AgentRun,
+  choiceRequest,
   MODEL_CHANGE_FAILED,
   RENAME_FAILED,
   START_ARCHIVED,
@@ -158,8 +159,14 @@ function startReason(
   return repository === null ? START_NEEDS_REPOSITORY : undefined;
 }
 
+/** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
-  return a?.model === b?.model && a?.effort === b?.effort;
+  return (
+    a?.model === b?.model &&
+    a?.effort === b?.effort &&
+    (a?.contextWindow === CONTEXT_WINDOW.STANDARD) ===
+      (b?.contextWindow === CONTEXT_WINDOW.STANDARD)
+  );
 }
 
 export function useCodingAgents(input: {
@@ -257,7 +264,7 @@ export function useCodingAgents(input: {
 
   const writeDefault = (choice: ModelChoice): Promise<CodingAgentDefaultAnswer> => {
     setNote(undefined);
-    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choice)
+    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choiceRequest(choice))
       .catch((): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         if ("failure" in answer && planId !== undefined)
@@ -311,7 +318,7 @@ export function useCodingAgents(input: {
     setNote(undefined);
     askStart(planId, {
       idempotencyKey: key,
-      ...(choice === undefined ? undefined : { model: choice.model, effort: choice.effort }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
     }).then((answer) => {
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
@@ -364,7 +371,7 @@ export function useCodingAgents(input: {
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,
-      ...(choice === undefined ? undefined : { model: choice.model, effort: choice.effort }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
     if ("failure" in answer) return startFailureNote(answer.failure);
     withDraft(planId, undefined);
@@ -416,8 +423,7 @@ export function useCodingAgents(input: {
       chooses.current.set(agentId, change);
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
         agentId,
-        model: choice.model,
-        effort: choice.effort,
+        ...choiceRequest(choice),
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer) && chooses.current.get(agentId) === change) {
         setList((was) =>

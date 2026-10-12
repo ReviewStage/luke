@@ -547,6 +547,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
           model: choice.model,
           effort: choice.effort,
+          ...(choice.contextWindow === undefined
+            ? undefined
+            : { contextWindow: choice.contextWindow }),
         }),
         codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
       ),
@@ -562,6 +565,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
+          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
           ...("task" in params ? { task: params.task } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
@@ -590,6 +594,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           model: params.model,
           effort: params.effort,
+          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

@@ -1,3 +1,4 @@
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useEffect, useState } from "react";
@@ -5,14 +6,19 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
   choiceModelId,
+  choiceOn,
+  contextWindowsOf,
   effortFor,
   effortLabel,
   effortsOf,
   FAST_WORD,
+  longWindowNote,
   modelLabel,
   offeredModels,
   readModelChoice,
   unsearchedModels,
+  windowLabel,
+  windowOf,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -31,7 +37,10 @@ import { PickerRow } from "./picker-row";
  * switch runs the model's fast version, resting where the model has none;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
- * model lists. A write is one ask of the service, the rows resting until
+ * model lists, and for a model that offers two context windows a context
+ * row is one over the two, the whole window the default, saying what it
+ * costs past the standard one; a change of model keeps the standard window
+ * where the next model offers two. A write is one ask of the service, the rows resting until
  * it answers and a refusal worded under them. With no account signed in
  * there is no default to show, and the page says so.
  */
@@ -69,11 +78,18 @@ function DefaultRows({
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
   const unsearched = unsearchedModels(models ?? [], read.base);
-  /** The choice at a catalog id, at the stored effort where the model lists it, else its first. */
-  const choiceAt = (modelId: string): ModelChoice => ({
-    model: modelId,
-    effort: effortFor(effortsOf(models ?? [], modelId), choice.effort) ?? choice.effort,
-  });
+  const windows = contextWindowsOf(models ?? [], choice.model);
+  const window = windowOf(models ?? [], choice);
+  /** The choice at a catalog id, at the stored effort where the model lists it, else its first, on the stored window where the model offers it. */
+  const choiceAt = (modelId: string): ModelChoice =>
+    choiceOn(
+      models ?? [],
+      {
+        model: modelId,
+        effort: effortFor(effortsOf(models ?? [], modelId), choice.effort) ?? choice.effort,
+      },
+      choice.contextWindow,
+    );
   return (
     <>
       <PickerRow
@@ -159,7 +175,7 @@ function DefaultRows({
               aria-pressed={effort === choice.effort}
               disabled={busy}
               onClick={() => {
-                if (effort !== choice.effort) onChange({ model: choice.model, effort });
+                if (effort !== choice.effort) onChange({ ...choice, effort });
               }}
             >
               {effortLabel(effort)}
@@ -167,6 +183,34 @@ function DefaultRows({
           ))}
         </fieldset>
       </div>
+      {windows === undefined ? null : (
+        <div className="settings-row settings-row-wrapping">
+          <span className="settings-copy">
+            <strong>Default context</strong>
+            <small>{longWindowNote(windows)}</small>
+          </span>
+          <fieldset className="settings-segments">
+            <legend className="visually-hidden">Default context</legend>
+            {[
+              { id: CONTEXT_WINDOW.STANDARD, tokens: windows.standardTokens },
+              { id: CONTEXT_WINDOW.LONG, tokens: windows.longTokens },
+            ].map((each) => (
+              <button
+                key={each.id}
+                type="button"
+                className="settings-segment"
+                aria-pressed={each.id === window}
+                disabled={busy}
+                onClick={() => {
+                  if (each.id !== window) onChange(choiceOn(models ?? [], choice, each.id));
+                }}
+              >
+                {windowLabel(each.tokens)}
+              </button>
+            ))}
+          </fieldset>
+        </div>
+      )}
     </>
   );
 }
