@@ -1,19 +1,15 @@
-import { db } from "@sidecar/database/core/query";
-import { STORE_WRITE_EFFECT, type StoreWriter } from "@sidecar/database/models/writer";
-import { conversations, turns } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_STATUS, BRAIN_RUN_EVENT } from "@sidecar/brain";
+import { sessionKey } from "@sidecar/runtime/vocabulary";
+import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import {
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  sessionKey,
-  TURN_STATUS,
-} from "../../core.js";
+import { db } from "../core/query.js";
+import { conversations, turns } from "../schemas/storage.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
  * The sweep over turns whose end was never heard. A turn moves to running

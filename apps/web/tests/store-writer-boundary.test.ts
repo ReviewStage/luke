@@ -56,7 +56,7 @@ const WRITER_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 const READER = `${DATABASE_SOURCES}/models/message-reads.ts`;
 
 /** The abandoned-turns module: lists the turns still running past the bound and settles each through the writer. */
-const ABANDONED_TURNS_READER = "server/hosted/store/abandoned-turns.ts";
+const ABANDONED_TURNS_READER = `${DATABASE_SOURCES}/models/abandoned-turns.ts`;
 
 /** The tables each module reaches at all, in either dialect. */
 const TABLES_REACHED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
