@@ -8,8 +8,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 /**
  * `test:store` runs the tests that open a database against a real Postgres
  * on CI, and this is how those tests are found. A test meets a database
- * through one of the three doors under `tests/support`, and through nothing
- * else: `LUKE_STORE_TEST_DATABASE_URL` is read there alone, so a file that
+ * through one of two doors, `tests/support/hosted-store-database` or
+ * `@sidecar/database/testing`, and through nothing else:
+ * `LUKE_STORE_TEST_DATABASE_URL` is read there alone, so a file that
  * imports no door cannot run against Postgres whatever it does, and a file
  * that imports one runs against Postgres the moment it exists. The set is
  * read from the files, so adding a store test edits no list. The list this
@@ -27,15 +28,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 /** The support modules whose import makes a test a store test, as a file writes them. */
 export const STORE_TEST_DOORS = {
   HOSTED_STORE_DATABASE: "./support/hosted-store-database",
-  SQL_CLIENT: "./support/sql-client",
-  STORE_TEST_POSTGRES: "./support/store-test-postgres",
+  TEST_DB: "@sidecar/database/testing",
 } as const;
 
 const TEST_FILE_SUFFIX = ".test.ts";
 
 const escaped = (door: string) => door.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-/** Matches `from "./support/<door>"` and the `.js` spelling vitest resolves the same way. */
+/** Matches `from "<door>"` and the `.js` spelling vitest resolves the same way. */
 const doorImport = new RegExp(
   `from\\s+["'](?:${Object.values(STORE_TEST_DOORS).map(escaped).join("|")})(?:\\.js)?["']`,
 );

@@ -5,12 +5,12 @@ import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { readPlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * plan-agent-edits-migration.test.ts -- migration 0084 carries a coding agent's journaled notes onto the new template.
@@ -130,7 +130,7 @@ const journalOf = (userId: string, planId: string) =>
     Option.getOrThrow(stored).agentEdits.map(({ agentId, at, notes }) => ({ agentId, at, notes })),
   );
 
-it.layer(testSqlClient)("migration 0084 onto the teammate template's journal", (it) => {
+it.layer(getTestDB())("migration 0084 onto the teammate template's journal", (it) => {
   it.effect(
     "a plan whose agents saved under the old fields reads, each note in its new section",
     () =>

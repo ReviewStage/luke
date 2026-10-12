@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { conversations } from "@sidecar/database/schemas/storage";
+import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
@@ -126,7 +127,6 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -441,7 +441,7 @@ const openPlan = (
     return { owner, other, plan, eve, github, ask, fetch };
   });
 
-it.layer(testSqlClient)("the coding-agent routes", (it) => {
+it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
     "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session as the developer with the snapshot first",
     () =>
@@ -1790,7 +1790,7 @@ function userTexts(page: {
     });
 }
 
-it.layer(testSqlClient)("messaging a coding agent", (it) => {
+it.layer(getTestDB())("messaging a coding agent", (it) => {
   /** An agent started on the owner's plan, its session claimed, and its first turn where asked. */
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
@@ -3272,7 +3272,7 @@ const INBOX_ATTACHMENT = "/api/inbox/attachment";
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
-it.layer(testSqlClient)("the developer's inbox", (it) => {
+it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
     Effect.gen(function* () {

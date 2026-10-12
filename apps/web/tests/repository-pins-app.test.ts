@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { repositoryPin } from "@sidecar/database/schemas/repository-pin";
+import { getTestDB } from "@sidecar/database/testing";
 import { REPOSITORY_PIN_BOUNDS, repositoryPinsAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -14,7 +15,6 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { repositoryPinsApp } from "../server/repository-pins-app";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The sidebar's repository pins, answered by the group the way a function
@@ -92,7 +92,7 @@ function pinsOf(answered: Answer): [string, number][] {
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-it.layer(testSqlClient)("the repository pins route", (it) => {
+it.layer(getTestDB())("the repository pins route", (it) => {
   it.effect(
     "a pin answers every pin newest pinned first, a second pin keeps its instant, and an unpin takes it out, for the bearer's account alone",
     () =>

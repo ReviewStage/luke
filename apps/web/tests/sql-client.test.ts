@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * What the client answers, on whichever dialect this run stands over. The store
@@ -10,7 +10,7 @@ import { testSqlClient } from "./support/sql-client";
  * to do before any of them — speak to the database at all, and read a table the
  * generated migrations created.
  */
-it.layer(testSqlClient)("the web SQL client", (it) => {
+it.layer(getTestDB())("the web SQL client", (it) => {
   it.effect("answers a statement of its own", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
+import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
@@ -19,7 +20,6 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId } from "../../server/hosted/brain-host/ids";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";

@@ -1,14 +1,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
-import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
-import { sqlClientOverUrl } from "../../server/db/sql-client.js";
-import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
+import { runWebMigrations } from "../core/migrator.js";
+import { sqlClientOverUrl } from "../core/sql-client.js";
+import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./test-postgres.js";
 
 /**
  * The `SqlClient` the store's own tests will read, standing over the same two
@@ -17,7 +17,7 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store
  * `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has one. Either way a
  * build of the layer is a database of its own: a fresh PGlite, or a clone of
  * the migrated Postgres dropped when the layer's scope closes
- * (`store-test-postgres.ts`), so a file's unscoped statement reaches no other
+ * (`test-postgres.ts`), so a file's unscoped statement reaches no other
  * file's rows on either dialect. The Postgres half is the production layer's
  * own client; the PGlite half is the small connection below, because no
  * `@effect/sql-pglite` ships against the 3.x Effect line.
@@ -144,6 +144,11 @@ function postgresSqlClient(connectionString: string) {
 
 const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
 
-/** The client a test reads, over whichever dialect this run was pointed at. */
-export const testSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
+/**
+ * A database of the test's own, carrying every migration, over whichever
+ * dialect this run was pointed at: lobehub's `getTestDB`, answered as the
+ * `SqlClient` layer a test provides rather than a handle it awaits, since
+ * every statement here is an effect that reads its client from the fiber.
+ */
+export const getTestDB = (): Layer.Layer<SqlClient.SqlClient, SqlError> =>
   connectionString === undefined ? pgliteSqlClient : postgresSqlClient(connectionString);

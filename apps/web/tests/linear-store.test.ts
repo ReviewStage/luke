@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Layer } from "effect";
 import { deleteAccount } from "../server/hosted/account-store";
 import {
@@ -12,7 +13,6 @@ import {
 } from "../server/hosted/linear-store";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * An account's Linear row over the real migration on PGlite: a sign-in is
@@ -20,7 +20,7 @@ import { testSqlClient } from "./support/sql-client";
  * the row goes with the account that owns it.
  */
 
-it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the Linear connection row", (it) => {
+it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the Linear connection row", (it) => {
   it.effect("a sign-in is found by its own state, and completing it ends it", () =>
     Effect.gen(function* () {
       const mine = yield* openGithubUser();

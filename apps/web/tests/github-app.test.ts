@@ -3,6 +3,7 @@ import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { account, user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
@@ -29,7 +30,6 @@ import {
   type RepositoryFixture,
   standingGithubRow,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the
@@ -273,7 +273,7 @@ function instantOf(value: Date | null): number | null {
   return decodeInstant(value)?.getTime() ?? null;
 }
 
-it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => {
+it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
   it.effect("a token with hours left is handed out as stored, with no word to GitHub", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;

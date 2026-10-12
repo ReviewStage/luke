@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { turns } from "@sidecar/database/schemas/storage";
+import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planSections } from "@sidecar/hosted/plan-document";
@@ -86,7 +87,6 @@ import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 import { titleModelAnswering } from "./support/title-model";
 
 /**
@@ -513,7 +513,7 @@ const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
     return yield* driven(reading, CODER.MESSAGES_POLL);
   });
 
-it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it) => {
+it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
   it.effect(
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
     () =>

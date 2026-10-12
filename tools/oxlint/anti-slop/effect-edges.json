@@ -33,7 +33,7 @@
     "packages/database/src/core/drizzle.ts",
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
-    "apps/web/tests/support/sql-client.ts",
+    "packages/database/src/testing/sql-client.ts",
     "packages/host/src/host-kernel.ts",
     "packages/runtime/src/effect/single-flight.ts",
     "packages/wire/src/testing/effect.ts"

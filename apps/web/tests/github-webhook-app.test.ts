@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
@@ -26,7 +27,6 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function
@@ -215,7 +215,7 @@ const openAgent = (pull: PullRequestFixture) =>
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
+it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   it.effect(
     "a deployment holding no secret refuses every delivery, and a delivery whose signature does not hold is refused, each before GitHub is asked",
     () =>

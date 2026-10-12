@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -29,7 +30,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hoste
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
 import { noNetwork } from "./support/no-network";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The account's plan template, answered by the account group the way its
@@ -161,7 +161,7 @@ function templateOf(answered: Answer): PlanTemplateAnswer {
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-it.layer(testSqlClient)("the plan template route", (it) => {
+it.layer(getTestDB())("the plan template route", (it) => {
   it.effect("an account that kept no template reads the default, and not as its own", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;

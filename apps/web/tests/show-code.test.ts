@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@sidecar/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
@@ -15,7 +16,6 @@ import {
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The planning model's `show_code`, reading the lines it names from the
@@ -89,7 +89,7 @@ function linesOf(answer: WireRecord): readonly string[] {
   return lines.map((line) => String(line));
 }
 
-it.layer(testSqlClient)("show_code reads the plan's checkout", (it) => {
+it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
   it.effect(
     "a file of the repository is answered whole with its place, and the first call makes the checkout",
     () =>

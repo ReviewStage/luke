@@ -4,11 +4,11 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { spendHostedMeter, utcDayKey } from "../server/hosted/quota";
-import { testSqlClient } from "./support/sql-client";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -25,7 +25,7 @@ test("a day key is the UTC date", () => {
   assert.equal(utcDayKey(NOON_UTC), "2026-08-17");
 });
 
-it.layer(testSqlClient)("the usage meter over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the usage meter over effect/unstable/sql", (it) => {
   it.effect("a hosted use counts one on the day's one counter", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

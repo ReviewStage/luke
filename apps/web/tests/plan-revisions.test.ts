@@ -5,6 +5,7 @@ import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import { voiceSessions } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
 import { VOICE_DELEGATION_MODE } from "@sidecar/database/voice-vocabulary";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import {
@@ -33,7 +34,6 @@ import {
 import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:
@@ -96,7 +96,7 @@ const lastEditOf = (userId: string, planId: string) =>
     (stored): PlanLastEdit | undefined => Option.getOrThrow(stored).plan.lastEdit,
   );
 
-it.layer(testSqlClient)("a plan's history", (it) => {
+it.layer(getTestDB())("a plan's history", (it) => {
   it.effect("every save that changes the plan is a revision under the writer who made it", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

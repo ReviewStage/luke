@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -16,7 +17,6 @@ import { Effect, Schema } from "effect";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The live session row as the record now writes it: five effects over the
@@ -86,7 +86,7 @@ const callWith = (
     return voiceSessionId;
   });
 
-it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
     "a registered session names its account and its model, keeps its first owner, and answers the owner's re-attach alone",
     () =>

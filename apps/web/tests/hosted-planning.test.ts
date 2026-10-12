@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -102,7 +103,6 @@ import {
 import { noNetwork } from "./support/no-network";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:
@@ -514,7 +514,7 @@ const windowDocument = (userId: string, planId: string) =>
     }),
   );
 
-it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
+it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   it.effect(
     "a plan's conversation is opened once, attached, and read back as the one it resumes in",
     () =>
