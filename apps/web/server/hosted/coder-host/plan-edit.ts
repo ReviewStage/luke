@@ -45,7 +45,8 @@ export const EDIT_PLAN_TOOL = {
     "the line holding one. Use it to record a question the plan does not answer under its open " +
     "questions together with the assumption you go on under, to correct a fact you verified in " +
     "the code, to record a hard part you met, an interface you had to change, or a decision you " +
-    "made, each under the heading it belongs to. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
+    "made, each under the heading it belongs to. Under rollout a note adds, restates, or " +
+    "strikes one pull request whole, named by a phrase of its title. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
     "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,
@@ -122,6 +123,8 @@ export function planEditRejected(reason: string): PlanEditResult {
 
 /** A note passed over, in the words the model reads: its kind and where it was aimed. */
 function missedNote(note: PlanNote): string {
+  if ("field" in note)
+    return `${note.kind} ${note.field} ${"item" in note ? note.item.title : note.find}`;
   return note.kind === NOTE_KIND.ADD
     ? `${note.kind} under ${note.section}`
     : `${note.kind} ${note.find}`;

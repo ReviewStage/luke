@@ -9,7 +9,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
+import { planDocumentSchema, planSectionEditSchema, rolloutSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -366,6 +366,8 @@ export const planDraftFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
   planId: wireUuidSchema,
   document: planDocumentSchema,
+  /** The rollout beside the document: the whole pull requests taken so far while it is a draft, the saved one once it is saved. */
+  rollout: rolloutSchema,
   /** Epoch milliseconds of the save the document is; absent while it is a draft. */
   savedAt: Schema.optionalKey(Schema.Number),
   /** Epoch milliseconds of the save the notetaker read before it wrote; absent from a service before editing. */

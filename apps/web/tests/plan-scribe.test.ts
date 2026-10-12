@@ -5,12 +5,18 @@ import { Database } from "@sidecar/database/core/query";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
+import {
+  NOTE_KIND,
+  PLAN_HEADING,
+  ROLLOUT_NOTE_FIELD,
+} from "@sidecar/hosted/plan-template";
+import { ROLLOUT_BASE, type RolloutItem } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { startPlan, type TestPlan } from "./support/workspaces";
 
@@ -75,6 +81,78 @@ const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A)
 const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
   settledRead(savedBody(userId, planId), expected);
 
+/** The prompt text one model call was handed, read back from what the scripted model kept. */
+function promptText(asked: string | undefined): string {
+  const messages: readonly { role: string; content: readonly { text?: string }[] }[] = JSON.parse(
+    asked ?? assert.fail("the model was not asked"),
+  );
+  const ask = messages.find((message) => message.role === "user");
+  return ask?.content.map((part) => part.text ?? "").join("") ?? assert.fail("no user message");
+}
+
+const TABLE: RolloutItem = {
+  title: "Add the invite table",
+  scope: "The `invite` table and its migration.",
+  base: ROLLOUT_BASE.MAIN,
+  acceptance: null,
+};
+
+const ROUTE: RolloutItem = {
+  title: "Invite route",
+  scope: "The route over the table.",
+  base: 1,
+  acceptance: "A member invites by email.",
+};
+
+/**
+ * A cut Luke said on the call and the developer took, as the notetaker
+ * notes it, then a rename of its second pull request on the next run: the
+ * rollout is saved beside the plan and sent on every draft, the model is
+ * handed it, and nothing of it is written into the plan's text.
+ */
+const cutOnCall = () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+      const renamed = { ...ROUTE, title: "Invite route and its refusals" };
+      const { scribe, asked, drafts } = yield* scribeFor(userId, planId, [
+        {
+          notes: [
+            { kind: NOTE_KIND.ADD, field: ROLLOUT_NOTE_FIELD, item: TABLE },
+            { kind: NOTE_KIND.ADD, field: ROLLOUT_NOTE_FIELD, item: ROUTE },
+          ],
+        },
+        {
+          notes: [
+            { kind: NOTE_KIND.REPLACE, field: ROLLOUT_NOTE_FIELD, find: "route", item: renamed },
+          ],
+        },
+      ]);
+      const rolloutOf = Effect.map(
+        readPlan(userId, planId),
+        (stored) => Option.getOrThrow(stored).plan.rollout,
+      );
+      const before = yield* savedBody(userId, planId);
+
+      scribe.observe(said("Two PRs: the table on main, then the route on it.", 0, 2_000));
+      scribe.observe(heard("Sounds right.", 2_500, 3_000));
+      yield* quiet;
+      const cut = yield* settledRead(rolloutOf, (rollout) => rollout.length === 2);
+      scribe.observe(heard("Call the route one invite route and its refusals.", 4_000, 5_000));
+      yield* quiet;
+      const named = yield* settledRead(rolloutOf, (rollout) => rollout[1]?.title === renamed.title);
+
+      assert.deepEqual(cut, [TABLE, ROUTE]);
+      assert.deepEqual(named, [TABLE, renamed]);
+      assert.equal(yield* savedBody(userId, planId), before);
+      assert.ok(promptText(asked[0]).includes("[rollout]\n[]"));
+      assert.ok(promptText(asked[1]).includes(`[rollout]\n${JSON.stringify(cut)}`));
+      assert.deepEqual(drafts.at(-1)?.rollout, named);
+      assert.equal(drafts.at(-1)?.document.body, before);
+    }),
+  );
+
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
     const { model, asked, pace } = scriptedScribeModel(answers);
@@ -116,6 +194,8 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
         }),
       ),
   );
+
+  it.effect("a rollout cut on the call is saved beside the plan's text, never in it", cutOnCall);
 
   it.effect(
     "a run that corrects a phrase changes only that phrase, and what the run before wrote stands",
