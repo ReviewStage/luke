@@ -1,0 +1,101 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pr_opened",
+            "ci_green",
+            "rebased",
+            "merged",
+            "blocked",
+            "question",
+            "finished",
+            "failed",
+            "stopped"
+          ]
+        },
+        "pullRequest": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "minItems": 1,
+          "maxItems": 6
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pr_opened",
+            "ci_green",
+            "rebased",
+            "merged",
+            "blocked",
+            "question",
+            "finished",
+            "failed",
+            "stopped"
+          ]
+        },
+        "pullRequest": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "minItems": 1,
+          "maxItems": 6
+        },
+        "github": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "github"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

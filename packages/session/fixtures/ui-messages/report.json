@@ -1,0 +1,14 @@
+{
+  "id": "0a7dc165-6f9e-4c8a-d3b1-4e5f60718293",
+  "role": "user",
+  "metadata": {
+    "author": "brain",
+    "source": "report"
+  },
+  "parts": [
+    {
+      "type": "text",
+      "text": "[worker 3] opened #415\n\nThe migration and its store test are in; checks are running."
+    }
+  ]
+}

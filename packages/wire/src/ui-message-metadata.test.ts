@@ -104,6 +104,7 @@ test("every way the brain writes a user row for itself is a source, and a source
       OBSERVATION_SOURCE.CHILD,
       OBSERVATION_SOURCE.CHILD_COMPLETION,
       OBSERVATION_SOURCE.RECALLED_NOTES,
+      OBSERVATION_SOURCE.REPORT,
     ]),
   );
   const refused: UnparsedWireValue[] = [

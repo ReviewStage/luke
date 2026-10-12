@@ -22,6 +22,8 @@ export const TURN_ORIGIN = {
    * conversation's kind.
    */
   CHILD_COMPLETION: "child_completion",
+  /** A rollout worker's report on its pull request, opened on the plan's conversation with nobody asking. */
+  REPORT: "report",
 } as const;
 
 export type TurnOrigin = (typeof TURN_ORIGIN)[keyof typeof TURN_ORIGIN];

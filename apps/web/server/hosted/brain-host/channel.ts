@@ -75,7 +75,11 @@ export function brainHostChannelInput(
  * the roles it acts in: the spoken asks the voice function hands to eve for
  * the account it resolved at its own handshake and holds no bearer for by
  * the time a delegation arrives, whether the ask opens the session or
- * follows it up. A typed ask is only ever a developer's own request under
+ * follows it up, and a rollout worker's report, which lands on the plan's
+ * conversation whether or not anyone is on a call, as the opening of a new
+ * session or a message to the one recorded. A report that arrives during a
+ * spoken turn is the deployment's too but under another kind, so under
+ * `TURN_POLICY` it waits behind that turn rather than steering it. A typed ask is only ever a developer's own request under
  * their own bearer, so the deployment opens none and follows none up. A
  * caller of another role adds its row here and nowhere else; the coder
  * channel keeps a table of its own (`coder-host/channel.ts`).
@@ -84,9 +88,11 @@ export const DEPLOYMENT_TURNS = {
   [DEPLOYMENT_ACT.OPEN]: {
     [BRAIN_HOST_TURN.TYPED]: false,
     [BRAIN_HOST_TURN.SPOKEN]: true,
+    [BRAIN_HOST_TURN.REPORT]: true,
   },
   [DEPLOYMENT_ACT.FOLLOW_UP]: {
     [BRAIN_HOST_TURN.TYPED]: false,
     [BRAIN_HOST_TURN.SPOKEN]: true,
+    [BRAIN_HOST_TURN.REPORT]: true,
   },
 } as const satisfies DeploymentTurnTable;
