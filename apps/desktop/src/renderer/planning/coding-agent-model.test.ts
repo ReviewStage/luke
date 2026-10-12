@@ -165,6 +165,12 @@ test("a message's refusals each say what to do, the agent ended for good closes 
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG), /too long/u);
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), /ended for good/u);
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.NOT_FOUND), /no longer exists/u);
+  // An archive another Mac or a race made is said as such, under the box and beside Start alike.
+  assert.match(
+    messageFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED),
+    /This plan is archived/u,
+  );
+  assert.match(startFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED), /This plan is archived/u);
   assert.equal(
     messageFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY),
     messageFailureNote(CODING_AGENT_CALL_FAILURE.INVALID_CHOICE),

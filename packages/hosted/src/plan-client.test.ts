@@ -549,6 +549,24 @@ it.effect("an edit of a plan the service does not find reads as not found", () =
   }),
 );
 
+it.effect("an edit of an archived plan reads as archived, which the window says as such", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`POST /api/plans/${PLAN_ID}/edit`]: {
+        answer: () => ({ error: HOSTED_API_ERROR.PLAN_ARCHIVED }),
+        status: HTTP_STATUS.CONFLICT,
+      },
+    });
+
+    const edited = yield* Effect.provide(
+      client().edit(PLAN_ID, { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." }),
+      api.layer,
+    );
+
+    assert.deepEqual(edited, { ok: false, failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED });
+  }),
+);
+
 it.effect(
   "reads the account's pinned repositories, and a pin answers them as they then stand",
   () =>

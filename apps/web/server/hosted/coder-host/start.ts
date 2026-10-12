@@ -13,7 +13,12 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { type CodingAgent, createCodingAgent, discardCodingAgent } from "../coding-agent-store.js";
-import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrArchived,
+  hostedStoreOrUnavailable,
+} from "../http-effect.js";
 import {
   acceptedModelChoice,
   CODING_AGENT_DEFAULT_CHOICE,
@@ -106,7 +111,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     ask.task === undefined
       ? { planSnapshot: planMarkdown(plan.value.plan.document), task: null }
       : { planSnapshot: null, task: ask.task };
-  const started = yield* hostedStoreOrUnavailable(
+  const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       planId: ask.planId,
       idempotencyKey: ask.idempotencyKey,

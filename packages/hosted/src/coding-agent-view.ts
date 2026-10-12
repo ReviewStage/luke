@@ -43,6 +43,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
+  /** The plan is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type CodingAgentCallFailure =

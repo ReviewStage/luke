@@ -14,6 +14,7 @@ import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 import type { CodingAgent } from "../coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import { readPlan } from "../plan-store.js";
 import type { StoreWriter } from "../store/index.js";
 import { sentLineStands } from "../store/message-reads.js";
 import { STORE_WRITE_REFUSAL } from "../store/writer.js";
@@ -38,7 +39,9 @@ import { STORE_WRITE_REFUSAL } from "../store/writer.js";
  * first step. Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`).
+ * exactly this message (`coder-host/channel.ts`). An archived plan's agents
+ * take no message, so a send to one is refused before eve is asked; a turn
+ * already running when the plan was archived runs on to its end.
  */
 
 /** The developer's words and the key the send is made under, which a repeat carries again. */
@@ -79,6 +82,11 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     sentLineStands(userId, agent.conversationId, sentLineId(line.clientKey)),
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
+  const held = yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
+  if (Option.isNone(held)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (held.value.plan.archivedAt !== undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+  }
   const app = yield* GitHubApp;
   const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);

@@ -140,6 +140,7 @@ const SHARED_FAILURE_NOTE = {
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]:
     "This agent has ended for good. Start a new one to go on from here.",
+  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This plan is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -159,6 +160,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -189,6 +191,7 @@ export function startFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -211,6 +214,7 @@ export function messageFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

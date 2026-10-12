@@ -91,6 +91,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -98,7 +99,7 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, and the two the turn's checkout needs mended first. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its plan archived, and the two the turn's checkout needs mended first. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -106,6 +107,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */

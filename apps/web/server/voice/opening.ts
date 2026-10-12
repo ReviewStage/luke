@@ -321,7 +321,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * bearer resolved, the plan it named read from the plans the account
    * holds, and only then a session counted. A plan the account does not hold
    * is refused before the count, so a claim on someone else's plan counts
-   * nothing and creates nothing.
+   * nothing and creates nothing, and so is an archived plan, which no call is
+   * about until it is brought back.
    */
   const admitAccount = (
     admission: Admission,
@@ -333,6 +334,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const accountId = account.value;
       const plan = yield* record.heldPlan({ userId: accountId, planId });
       if (plan === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
+      if (plan.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
       yield* accounts.spend(accountId);
       return { accountId, plan };
     });
@@ -415,7 +417,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * this deployment never created, or another account's, is refused as the
    * bearer's own failure rather than as a hint that the id exists. The plan
    * the call is bound to is read off the same row, so the re-attached
-   * exchange lands in the plan the session was created about.
+   * exchange lands in the plan the session was created about; a plan
+   * archived since takes the call back no more.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -433,6 +436,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // A session no plan was bound to is no call this service still runs.
       if (owned.planId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
+      const plan = yield* record.heldPlan({ userId: accountId, planId: owned.planId });
+      if (plan?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be
