@@ -18,6 +18,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
@@ -734,6 +735,39 @@ test("at the panel's narrowest the popovers are no wider than the panel leaves, 
       placeOf(tab.container.querySelector(".agent-model-chip > .anchored-popover")).side,
       "below",
     );
+  } finally {
+    restore();
+  }
+});
+
+test("an open popover is placed again as it grows past the room above its button, and as its panel is dragged narrower, with the window left the same", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.setAttribute("data-popover-room", "");
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  assert.ok(chip);
+  // The menu opens short, while it reads the models, under a chip 300px below the panel's top.
+  const boxes = {
+    room: new DOMRect(600, 0, 400, 768),
+    chip: new DOMRect(620, 300, 130, 28),
+    ring: new DOMRect(),
+    height: 80,
+  };
+  const restore = measureBoxes(boxes);
+  const layer = () => tab.container.querySelector(".agent-model-chip > .anchored-popover");
+  try {
+    act(() => chip.click());
+    assert.deepEqual(placeOf(layer()), { side: "above", left: 0, width: 340 });
+
+    // The rows arrive, and the menu no longer fits above.
+    boxes.height = 360;
+    act(() => relayout());
+    assert.equal(placeOf(layer()).side, "below");
+
+    // The panel's edge is dragged to its narrowest.
+    boxes.room = new DOMRect(744, 0, 280, 768);
+    boxes.chip = new DOMRect(764, 300, 130, 28);
+    act(() => relayout());
+    assert.deepEqual(placeOf(layer()), { side: "below", left: 752 - 764, width: 264 });
   } finally {
     restore();
   }

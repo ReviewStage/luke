@@ -13,8 +13,9 @@ import { useLayoutEffect, useRef, useState } from "react";
  * where the asked one would run past the room, and is pushed back inside
  * where neither fits; it is never wider than the room leaves. The room is
  * the nearest box marked `data-popover-room`, the side panel, cut to the
- * window, or else the window, measured as the layer opens and again as the
- * window resizes, before it is painted.
+ * window, or else the window, measured as the layer opens, before it is
+ * painted, and again whenever the layer, its anchor, its room, or the
+ * window resizes.
  */
 
 /** Which side of its anchor a popover hangs on. */
@@ -135,8 +136,19 @@ export function AnchoredPopover({
         }),
       );
     measure();
+    // Note that the popover is placed again whenever it, its button, or its
+    // room resizes, because a menu grows as its rows arrive and the side
+    // panel is dragged wider or narrower without the window resizing.
+    const observer = new ResizeObserver(measure);
+    observer.observe(drawn);
+    observer.observe(anchor);
+    const room = anchor.closest(POPOVER_ROOM);
+    if (room !== null) observer.observe(room);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [align]);
 
   return (
