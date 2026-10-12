@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
+  type PlanWorkState,
+} from "@sidecar/hosted/planning-view";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -182,4 +187,59 @@ test("a worker's row names the model its session ran on, with its harness's mark
   const unnamed = drawn(undefined);
   assert.equal(unnamed?.querySelector("[data-subagent-pair]"), null);
   assert.ok(unnamed?.querySelector("svg.lucide-bot"));
+});
+
+test("a coding agent's start, once the agent began, is the one button that opens the agent's tab, saying what it did; a start still running or refused folds its input and answer open in place", () => {
+  const start = (id: string, state: PlanWorkState, output: string | undefined) => ({
+    type: PLAN_WORK_PART.TOOL,
+    id,
+    tool: PLAN_WORK_TOOL.START_AGENT,
+    name: "start_coding_agent",
+    state,
+    subject: "Investigate a Tailwind migration.",
+    input: JSON.stringify({ task: "Investigate a Tailwind migration." }),
+    ...(output === undefined ? undefined : { output }),
+  });
+  const opened: string[] = [];
+  const work = mounted(
+    createElement(PlanWork, {
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            start(
+              "call-started",
+              PLAN_WORK_STATE.DONE,
+              JSON.stringify({
+                status: "accepted",
+                agent: { id: "agent-1", modelName: "Opus 5.5" },
+              }),
+            ),
+            { type: PLAN_WORK_PART.TEXT, text: "Started Opus 5.5." },
+            start("call-refused", PLAN_WORK_STATE.FAILED, "Not run: no repository."),
+            { type: PLAN_WORK_PART.TEXT, text: "That did not start." },
+            start("call-starting", PLAN_WORK_STATE.RUNNING, undefined),
+          ],
+        },
+      ],
+      callLive: true,
+      earlier: undefined,
+      onLoadEarlier: async () => undefined,
+      onOpenSubagent: () => undefined,
+      onOpenAgent: (agentId) => opened.push(agentId),
+      shown: true,
+    }),
+  );
+
+  const started = work.querySelector<HTMLElement>('[data-call-id="call-started"]');
+  assert.equal(started?.tagName, "BUTTON");
+  assert.match(started?.textContent ?? "", /^Started .+ Investigate a Tailwind migration\.$/u);
+  act(() => started?.click());
+  assert.deepEqual(opened, ["agent-1"]);
+  for (const id of ["call-refused", "call-starting"]) {
+    assert.equal(work.querySelector(`[data-call-id="${id}"]`)?.tagName, "DETAILS", id);
+  }
 });
