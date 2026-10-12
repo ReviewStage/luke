@@ -15,11 +15,14 @@ import {
   PLAN_FIELD,
   PLAN_FIELD_BOUNDS,
   PLAN_FILE_REFUSAL,
+  PLAN_TREE_BOUNDS,
+  PLAN_TREE_ENTRY,
   planAnswerSchema,
   planFileAnswerSchema,
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planTreeAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
 import {
@@ -94,6 +97,7 @@ const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
 const FILE = "/api/plans/file";
+const TREE = "/api/plans/tree";
 const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
@@ -248,6 +252,66 @@ function contentsOf(sent: SentToGitHub): Response | undefined {
   return contents === undefined
     ? Response.json({ message: "Not Found" }, { status: 404 })
     : contents();
+}
+
+/** One entry of a tree as the git trees API answers it. */
+const gitEntry = (path: string, type: string, mode: string) => ({
+  path,
+  mode,
+  type,
+  sha: "0".repeat(40),
+});
+
+/** What the git trees API holds of the fixture repository, by tree-ish: the root, a folder, a folder past the bound, one GitHub cut short, and a folder GitHub fails on. */
+const TREES = new Map<string, () => Response>([
+  [
+    "main:",
+    () =>
+      Response.json({
+        tree: [
+          gitEntry(".env", "blob", "100644"),
+          gitEntry(".env.d", "tree", "040000"),
+          gitEntry("README.md", "blob", "100644"),
+          gitEntry("linked.ts", "blob", "120000"),
+          gitEntry("src", "tree", "040000"),
+          gitEntry("vendor", "commit", "160000"),
+        ],
+        truncated: false,
+      }),
+  ],
+  [
+    "main:src",
+    () => Response.json({ tree: [gitEntry("invite.ts", "blob", "100644")], truncated: false }),
+  ],
+  [
+    "main:generated",
+    () =>
+      Response.json({
+        tree: Array.from({ length: PLAN_TREE_BOUNDS.MAX_ENTRIES + 1 }, (_, at) =>
+          gitEntry(`file-${at}.ts`, "blob", "100644"),
+        ),
+        truncated: false,
+      }),
+  ],
+  [
+    "main:huge",
+    () => Response.json({ tree: [gitEntry("a.ts", "blob", "100644")], truncated: true }),
+  ],
+  [
+    "main:README.md",
+    () => Response.json({ message: "Invalid object requested." }, { status: 422 }),
+  ],
+  ["main:flaky", () => Response.json({ message: "Server Error" }, { status: 502 })],
+]);
+
+const TREES_PATH = /^\/repos\/Acme\/Relay\/git\/trees\/(.+)$/u;
+
+/** The fixture repository's files and folders, as GitHub answers them on the repository's own paths. */
+function repositoryOf(sent: SentToGitHub): Response | undefined {
+  const named = TREES_PATH.exec(new URL(sent.url).pathname);
+  if (named === null) return contentsOf(sent);
+  const tree = TREES.get(decodeURIComponent(named[1] ?? ""));
+  return tree === undefined ? Response.json({ message: "Not Found" }, { status: 404 }) : tree();
 }
 
 const RELAY_REACHED = [{ id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] }];
@@ -1499,6 +1563,175 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(yield* refusalOf("assets/logo.png"), {
           refusal: PLAN_FILE_REFUSAL.NOT_TEXT,
         });
+      }),
+  );
+
+  it.effect(
+    "a folder of the plan's repository lists as GitHub holds it on the default branch, naming that branch, on the App's token: a folder as a folder, a file, a link, and a submodule as files, and a secret file by its name; another account's plan reads as none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const folder = (userId: string, query: Readonly<Record<string, string>>) =>
+          ask(request(TREE, userId, { id: planId, query }));
+        const { FILE: AS_FILE, FOLDER } = PLAN_TREE_ENTRY;
+
+        const root = readAnswer(
+          planTreeAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* folder(owner, {}),
+        );
+        assert.deepEqual(root, {
+          folder: {
+            path: "",
+            repository: "Acme/Relay",
+            branch: "main",
+            entries: [
+              { name: ".env", kind: AS_FILE },
+              { name: ".env.d", kind: FOLDER },
+              { name: "README.md", kind: AS_FILE },
+              { name: "linked.ts", kind: AS_FILE },
+              { name: "src", kind: FOLDER },
+              { name: "vendor", kind: AS_FILE },
+            ],
+            truncated: false,
+          },
+        });
+        assert.deepEqual(
+          readAnswer(
+            planTreeAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* folder(owner, { path: "src" }),
+          ),
+          {
+            folder: {
+              path: "src",
+              repository: "Acme/Relay",
+              branch: "main",
+              entries: [{ name: "invite.ts", kind: AS_FILE }],
+              truncated: false,
+            },
+          },
+        );
+        const asked = github.sent.find((sent) => TREES_PATH.test(new URL(sent.url).pathname));
+        assert.equal(
+          asked?.headers.get("authorization"),
+          `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+        );
+        assert.equal(JSON.stringify(root).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+        assert.deepEqual(
+          yield* folder(other, {}),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "the tree's read as a desktop sends it, its folder named in a `path` query, is answered by the tree route itself once the platform lands it on its function",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const sent = request(`/api/plans/${planId}/tree?path=src`, owner);
+
+        assert.deepEqual(
+          readAnswer(planTreeAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(sent, "plans/tree")),
+          {
+            folder: {
+              path: "src",
+              repository: "Acme/Relay",
+              branch: "main",
+              entries: [{ name: "invite.ts", kind: PLAN_TREE_ENTRY.FILE }],
+              truncated: false,
+            },
+          },
+        );
+      }),
+  );
+
+  it.effect(
+    "a folder past the bound is listed to it and says it was cut, as is one GitHub cut short",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const listed = (path: string) =>
+          Effect.map(ask(request(TREE, owner, { id: planId, query: { path } })), (answered) =>
+            readAnswer(planTreeAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        const generated = yield* listed("generated");
+        assert.ok("folder" in generated);
+        assert.equal(generated.folder.entries.length, PLAN_TREE_BOUNDS.MAX_ENTRIES);
+        assert.equal(generated.folder.truncated, true);
+        const huge = yield* listed("huge");
+        assert.ok("folder" in huge);
+        assert.equal(huge.folder.truncated, true);
+      }),
+  );
+
+  it.effect(
+    "a folder is refused as a file is: one named as a secret file, one inside it, and a path leaving the tree before GitHub is asked; nothing at the path, or a file there, missing on the branch; GitHub failing as unavailable; a plan with no repository as having none; and a path named twice as invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, repositoryOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const bare = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })));
+        const refusalOf = (path: string, plan = planId) =>
+          Effect.map(ask(request(TREE, owner, { id: plan, query: { path } })), (answered) =>
+            readAnswer(planTreeAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const asked = () =>
+          github.sent.filter((sent) => TREES_PATH.test(new URL(sent.url).pathname)).length;
+
+        const secret = { refusal: PLAN_FILE_REFUSAL.SECRET };
+        assert.deepEqual(yield* refusalOf(".env.d"), secret);
+        assert.deepEqual(yield* refusalOf(".env.d/keys"), secret);
+        assert.deepEqual(yield* refusalOf("src/../.."), {
+          refusal: PLAN_FILE_REFUSAL.MISSING,
+          branch: "main",
+        });
+        assert.equal(asked(), 0, "none is asked of GitHub");
+        assert.deepEqual(yield* refusalOf("gone"), {
+          refusal: PLAN_FILE_REFUSAL.MISSING,
+          branch: "main",
+        });
+        assert.deepEqual(yield* refusalOf("README.md"), {
+          refusal: PLAN_FILE_REFUSAL.MISSING,
+          branch: "main",
+        });
+        assert.deepEqual(yield* refusalOf("flaky"), { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE });
+        assert.deepEqual(yield* refusalOf("src", bare), {
+          refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY,
+        });
+        const twice = new URL(TREE, ORIGIN);
+        twice.searchParams.set("id", planId);
+        twice.searchParams.append("path", "src");
+        twice.searchParams.append("path", "docs");
+        assert.deepEqual(
+          yield* ask(new Request(twice, { headers: { authorization: `Bearer ${owner}` } })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }),
   );
 

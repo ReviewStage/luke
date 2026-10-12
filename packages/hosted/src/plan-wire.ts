@@ -585,8 +585,9 @@ export const PLAN_FILE_BOUNDS = {
 } as const;
 
 /**
- * Why a file of the plan's repository was not read for the File tab: a
- * secret file, no regular file at the path, a file too large or not text,
+ * Why a file of the plan's repository was not read for the File tab, or a
+ * folder not listed for its tree: a secret file, no regular file (or no
+ * folder) at the path, a file too large or not text,
  * a plan with no repository, a repository the Luke GitHub App does not
  * reach for the account, an account that must sign in with GitHub again,
  * or GitHub not answering just now.
@@ -660,3 +661,56 @@ export const planFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanFileAnswer = typeof planFileAnswerSchema.Type;
+
+/** What an entry of a folder of the plan's repository is, as the File tab's tree draws it: a folder opens into its own entries, and anything else is a file, read as a File tab reads one. */
+export const PLAN_TREE_ENTRY = {
+  FILE: "file",
+  FOLDER: "folder",
+} as const;
+
+export const PLAN_TREE_BOUNDS = {
+  /** The most entries one folder's listing carries; a folder holding more is listed to here and says it was cut. */
+  MAX_ENTRIES: 5_000,
+} as const;
+
+/** One folder of the plan's repository, as the File tab's tree asks it (GET `/api/plans/{id}/tree`): its path from the repository's root, empty for the root itself. */
+export const planTreeRequestSchema = EffectSchema.Struct({
+  path: EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
+});
+
+export type PlanTreeRequest = typeof planTreeRequestSchema.Type;
+
+/** One entry of a folder: its name within the folder, and whether it is a folder or a file. */
+export const planTreeEntrySchema = EffectSchema.Struct({
+  name: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+  ),
+  kind: EffectSchema.Literals(Object.values(PLAN_TREE_ENTRY)),
+});
+
+/**
+ * A folder of the plan's repository as it stands now on the branch the
+ * File tab reads its files on, through the Luke GitHub App: the path, the
+ * repository and the branch read, its entries in GitHub's order, and
+ * whether there were more than one listing carries. A secret file is
+ * listed by name like any other, since it is its contents that are never
+ * read.
+ */
+export const planTreeFolderSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
+  entries: EffectSchema.Array(planTreeEntrySchema).check(
+    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_ENTRIES),
+  ),
+  truncated: EffectSchema.Boolean,
+});
+
+/** The tree's read of one folder answered: its listing, or why it is not listed, in the File tab's own refusals. */
+export const planTreeAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ folder: planTreeFolderSchema }),
+  planFileRefusalSchema,
+]);
+
+export type PlanTreeAnswer = typeof planTreeAnswerSchema.Type;

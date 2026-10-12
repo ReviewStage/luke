@@ -57,13 +57,18 @@ const NOT_FOUND: RepositoryFile = { regular: false, notFound: true };
 /** Something at the path that is no regular file, or a path nothing was asked of. */
 const NOT_REGULAR: RepositoryFile = { regular: false, notFound: false };
 
-/** The path's segments encoded for the URL, or nothing where a segment would leave the repository's contents. */
-function contentsPath(path: string): string | undefined {
+/** A path's segments, or nothing where a segment would leave the repository's contents, as a URL folds an empty, `.`, or `..` one away. */
+export function repositorySegments(path: string): readonly string[] | undefined {
   const segments = path.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     return undefined;
   }
-  return segments.map(encodeURIComponent).join("/");
+  return segments;
+}
+
+/** The path's segments encoded for the URL, or nothing where a segment would leave the repository's contents. */
+function contentsPath(path: string): string | undefined {
+  return repositorySegments(path)?.map(encodeURIComponent).join("/");
 }
 
 /** The repository's file at the path on the branch named, as the contents API holds it. */

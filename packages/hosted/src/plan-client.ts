@@ -36,6 +36,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSummary,
+  type PlanTreeAnswer,
+  type PlanTreeRequest,
   type PlanUpdateRequest,
   planAnswerSchema,
   planCreateRequestSchema,
@@ -46,6 +48,8 @@ import {
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planTreeAnswerSchema,
+  planTreeRequestSchema,
   planUpdateRequestSchema,
   type RepositoryPin,
   repositoryPinRequestSchema,
@@ -69,6 +73,7 @@ import {
   planRevisionPath,
   planRevisionsPath,
   planTranscriptPath,
+  planTreePath,
   planWorkPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
@@ -322,6 +327,23 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planFilePath(planId, admitted) },
       planFileAnswerSchema,
+    );
+  }
+
+  /**
+   * One folder of the plan's repository as GitHub holds it now, or why it
+   * is not listed; nothing where the service did not answer, or where the
+   * folder asked is not one the wire admits.
+   */
+  readTree(
+    planId: string,
+    folder: PlanTreeRequest,
+  ): Effect.Effect<PlanTreeAnswer | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planTreeRequestSchema)(folder));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planTreePath(planId, admitted) },
+      planTreeAnswerSchema,
     );
   }
 
