@@ -30,8 +30,8 @@ export const DICTATION_BOUNDS = {
 /** The one container a clip travels in, which is the MIME type Chromium's recorder writes Opus as. */
 export const DICTATION_AUDIO_TYPE = "audio/webm";
 
-/** Standard base64, padded, with no data-URL prefix and no line breaks. */
-const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
+/** Standard base64 in whole quanta, padded, with no data-URL prefix and no line breaks. */
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 
 /** One word on one line, without the angle brackets the transcription model refuses in a keyword. */
 const KEYWORD_PATTERN = /^[^<>\r\n]*$/u;

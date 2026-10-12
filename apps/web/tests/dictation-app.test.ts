@@ -272,6 +272,8 @@ it.layer(testSqlClient)("the dictation route", (it) => {
           yield* ask(clip(userId, { keywords: ["two\nlines"] })),
           yield* ask(clip(userId, { keywords: ["<tag>"] })),
           yield* ask(clip(userId, { audio: "not base64!" })),
+          yield* ask(clip(userId, { audio: "A" })),
+          yield* ask(clip(userId, { audio: "GkXfo=" })),
           yield* ask(clip(userId, { audio: "" })),
           yield* ask(clip(userId, { extra: true })),
           yield* ask(clipRequest(userId, { raw: "{" })),
