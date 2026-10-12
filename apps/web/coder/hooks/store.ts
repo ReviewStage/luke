@@ -32,9 +32,10 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * relayed, because a tab reads the pull request the moment it hears the
  * agent ended and the service keeps that answer a while: an end relayed
  * first would be read against the row as it stood before the turn.
- * The agent's title is generated as its first session starts, on a fiber of
- * its own so the turn is not held for it: the title fills in a moment after
- * the tab opens.
+ * The agent's title is generated as one of its first turns completes, once
+ * the relay has written the turn's answer it is named from, on a fiber of
+ * its own so the hook is not held for it: the title fills in a moment after
+ * the turn ends.
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
@@ -129,12 +130,14 @@ export default defineHook({
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
             if (Result.isFailure(starting)) return;
             if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
-            // The title fills in beside the turn rather than ahead of it; the fiber outlives this hook and ends on its own.
-            yield* Effect.forkDetach(host.title(starting.success, ctx.session.id));
           }
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
           yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
+          if (event.type === "turn.completed") {
+            // The title is asked for off the hook's path; the fiber outlives this hook and ends on its own.
+            yield* Effect.forkDetach(host.title(admitted.success));
+          }
         }),
       );
       if (event.type === "step.started" && sandbox.get().openedAt !== undefined) {

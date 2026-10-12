@@ -984,6 +984,77 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "an ended agent's untitled read with nothing new waits for its own title, due from the turn that just completed, and answers with it the moment it lands; one read past the title call's bound, or of an agent past the turns it is titled in, answers at once, untitled",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan({ titles: true });
+        const line = (text: string) =>
+          userMessage(randomUUID(), text, userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined));
+        const readPast = (agentId: string) =>
+          Effect.gen(function* () {
+            const first = readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT_MESSAGES, owner, { id: agentId })),
+            );
+            assert.equal(first.messages.length, 1);
+            return ask(request(AGENT_MESSAGES, owner, { id: agentId, after: first.cursor }));
+          });
+
+        const due = yield* startedAgent(owner, plan.id, ask);
+        // The turn completes now on the test's clock, which earlier tests have moved on.
+        const ended = yield* agentWroteMessages(due.target, [line("Build it.")]);
+        yield* agentEnded(due.target, ended, yield* Clock.currentTimeMillis);
+        const held = yield* Effect.forkChild(yield* readPast(due.agent.id));
+        yield* TestClock.adjust(Duration.seconds(3));
+        assert.equal(held.pollUnsafe(), undefined);
+        yield* fillCodingAgentTitle(owner, due.agent.id, "Sign-out button");
+        const titled = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(held, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+        );
+        assert.deepEqual(titled.messages, []);
+        assert.equal(titled.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal(titled.title, "Sign-out button");
+
+        const late = yield* startedAgent(owner, plan.id, ask);
+        const greeted = yield* agentWroteMessages(late.target, [line("Hi.")]);
+        yield* agentEnded(late.target, greeted, yield* Clock.currentTimeMillis);
+        yield* TestClock.adjust(CODER.TITLE_TIMEOUT);
+        yield* TestClock.adjust(Duration.seconds(1));
+        // Asked unforked: a read held on the test's clock would never answer.
+        const untitled = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* yield* readPast(late.agent.id),
+        );
+        assert.deepEqual(untitled.messages, []);
+        assert.equal(untitled.title, null);
+
+        // An agent past the turns it is titled in has no title call coming, however recent its end.
+        const past = yield* startedAgent(owner, plan.id, ask);
+        for (let turn = 0; turn <= CODER.TITLE_TURNS; turn += 1) {
+          const wrote = yield* agentWroteMessages(past.target, [line(`Hi ${turn}.`)]);
+          yield* agentEnded(past.target, wrote, yield* Clock.currentTimeMillis);
+        }
+        const first = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id })),
+        );
+        assert.equal(first.messages.length, CODER.TITLE_TURNS + 1);
+        const unawaited = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: past.agent.id, after: first.cursor })),
+        );
+        assert.deepEqual(unawaited.messages, []);
+        assert.equal(unawaited.title, null);
+      }),
+  );
+
+  it.effect(
     "an ended agent's read waits for no title on a deployment with no title model, nor for a worker delegated longer ago than a title call may take: each answers at once, untitled",
     () =>
       Effect.gen(function* () {
@@ -2782,8 +2853,8 @@ const agentWroteMessages = (target: Target, messages: readonly UIMessage[]) =>
     return turnId;
   });
 
-/** The agent's turn ended well, so the agent reads as completed. */
-const agentEnded = (target: Target, turnId: string) =>
+/** The agent's turn ended well at the instant given, so the agent reads as completed. */
+const agentEnded = (target: Target, turnId: string, at = 1) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     yield* writer.consume(target, {
@@ -2793,7 +2864,7 @@ const agentEnded = (target: Target, turnId: string) =>
       sequence: 1_000,
       status: BRAIN_REQUEST_STATUS.SUCCEEDED,
       responseIds: [],
-      at: 1,
+      at,
     });
   });
 
@@ -2828,6 +2899,8 @@ const endedAgentWithWorker = (options: { readonly titles: boolean }, delegatedAg
     const worker = { userId: owner, conversationId: child };
     yield* agentEnded(worker, yield* agentWroteMessages(worker, [line("Count the routes.")]));
     yield* agentEnded(parent, yield* agentWroteMessages(parent, [line("Build it.")]));
+    // The agent is titled already, so its reads wait on its worker's title alone.
+    yield* fillCodingAgentTitle(owner, stored.id, "Build it");
     /** The read past the page a first read answered at once, since it carried a message. */
     const readPast = (path: string, call?: string) =>
       Effect.gen(function* () {
