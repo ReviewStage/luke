@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import {
   type DuplicateGatewayMethod,
   HostAssemblyTag,
@@ -5,6 +6,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@sidecar/host/effect";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -56,6 +58,11 @@ export interface DesktopServices {
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
   "@luke/desktop/Desktop",
 ) {}
+
+/** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
+function accountKey(account: AccountSnapshot): string | undefined {
+  return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+}
 
 /**
  * The steps of the launch, in the order it has to keep, each one built into
@@ -205,9 +212,27 @@ export function composeDesktop(
         },
         onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
         onPanelFocusChanged: windows.onPanelFocusChanged,
-        onAccountChanged: (listener) => operator.host.onAccountChanged(() => listener()),
+        notifying: () =>
+          state.snapshot().settings?.stored.agentNotifications ??
+          APP_SETTING_SCHEMA.agentNotifications.default,
+        signedInAs: () => accountKey(state.snapshot().account),
+        onAccountChanged: (listener) =>
+          operator.host.onAccountChanged((account) => listener(accountKey(account))),
         report: config.report,
-      }).pipe(Effect.provideService(AgentNoticeDoors, electronNoticeDoors(windows.toastAgentEnd)));
+      }).pipe(
+        Effect.provideService(
+          AgentNoticeDoors,
+          electronNoticeDoors({
+            toPanels: windows.toastAgentEnd,
+            onRefused: (refused) => {
+              if (state.snapshot().notifications.refused !== refused) {
+                state.update({ notifications: { refused } });
+              }
+            },
+            report: config.report,
+          }),
+        ),
+      );
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

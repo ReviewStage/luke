@@ -203,6 +203,7 @@ export const ACT_KIND = {
    */
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
+  NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
   FEEDBACK_SEND: "feedback.send",
@@ -633,6 +634,7 @@ export const ACT = {
     refusal: "Could not read the microphone route on this system.",
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
+  [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document is copied through this act, so it admits the

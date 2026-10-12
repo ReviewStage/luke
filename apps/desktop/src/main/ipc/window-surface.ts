@@ -38,12 +38,14 @@ interface WindowSurfaceDependencies {
   microphoneRoute: () => MicrophoneRoute | undefined;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
   recordProductEvent: RecordProductEvent;
+  openExternal: (url: string) => Promise<void>;
 }
 
 type WindowSurfaceActKind =
   | typeof ACT_KIND.WINDOW_FOCUS_PANEL
   | typeof ACT_KIND.MICROPHONE_REQUEST
-  | typeof ACT_KIND.MICROPHONE_ROUTE;
+  | typeof ACT_KIND.MICROPHONE_ROUTE
+  | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS;
 
 /**
  * What the panel asks of the window it is drawn in. The focus is a panel's
@@ -84,6 +86,9 @@ export function windowSurfaceActRows(
       dependencies.microphoneRouteWatcher()?.probe();
       return dependencies.microphoneRoute();
     },
+    // The pane that lists every app's notifications, Luke's among them.
+    [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: () =>
+      dependencies.openExternal("x-apple.systempreferences:com.apple.preference.notifications"),
   };
 }
 

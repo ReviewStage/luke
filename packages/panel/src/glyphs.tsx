@@ -353,6 +353,16 @@ export function MegaphoneIcon(): React.JSX.Element {
   );
 }
 
+/** A bell: what the notifications section is for. */
+export function BellIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.8H4.6Z" />
+      <path d="M10 20.4a2.2 2.2 0 0 0 4 0" />
+    </Glyph>
+  );
+}
+
 /** A picture, on the control that attaches one. */
 export function ImageIcon(): React.JSX.Element {
   return (

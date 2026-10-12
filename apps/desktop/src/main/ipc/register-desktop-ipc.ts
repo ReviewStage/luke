@@ -70,6 +70,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRoute: () => state.snapshot().audio.microphoneRoute,
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
+      openExternal: config.openExternal,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({

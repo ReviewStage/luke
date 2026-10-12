@@ -30,7 +30,8 @@ import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
  * the window is focused on that agent's tab; in the window's own toast while
  * the window is focused on anything else, since a notification would come
  * from beside the window the developer is already looking at; and as a
- * notification while the window is behind. A message
+ * notification while the window is behind, unless the developer turned
+ * notifications off, which leaves the dot and the toast. A message
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
  * a new one: the ledger keeps the end it announced, and on the message's
@@ -41,7 +42,10 @@ import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
  * is this launch's and this account's, so an agent that ended before Luke
  * watched it, or while Luke was not running, is not announced, a reload of
  * the window announces nothing twice, and an account that signs out takes
- * its agents with it.
+ * its agents with it. Only another account is a change of hands: the
+ * account's own session renewing, which it does mid-run, says the same
+ * account again and keeps the ledger, or an agent running across the
+ * renewal would be first seen again already ended and never announced.
  *
  * The notification says the plan's name, the agent's title or else its
  * model's name, and how the turn ended, and nothing of the transcript; the
@@ -119,8 +123,12 @@ export interface AgentNoticesDependencies {
   onUnseenChanged: (unseen: readonly string[]) => void;
   /** The panel window coming forward or going behind, for as long as the subscription stands. */
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
-  /** The account signing in, out, or away, for as long as the subscription stands: the ledger is no one else's. */
-  onAccountChanged: (listener: () => void) => () => void;
+  /** Whether a notification is posted for an end the window is behind for: the developer's setting. */
+  notifying: () => boolean;
+  /** Who is signed in now, by the account's own key, or nobody. */
+  signedInAs: () => string | undefined;
+  /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
+  onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -212,6 +220,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
+    /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
+    let holder: string | undefined;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -280,7 +290,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      doors.post({ ...text, onClick: () => open(place) });
+      if (dependencies.notifying()) doors.post({ ...text, onClick: () => open(place) });
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
@@ -290,6 +300,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const was = ledger.get(agentId);
       // An agent first seen ended ended before Luke watched it.
       if (was === undefined) {
+        if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
         return;
       }
@@ -420,11 +431,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       ),
       (unsubscribe) => Effect.sync(unsubscribe),
     );
-    // The account moving leaves the ledger no one's: nothing of the account
+    // Another account leaves the ledger no one's: nothing of the account
     // that left is announced to whoever signs in next, and an answer still on
     // its way lands as a first sighting, which announces nothing.
     yield* Effect.acquireRelease(
-      Effect.sync(() => dependencies.onAccountChanged(() => forget(() => false))),
+      Effect.sync(() =>
+        dependencies.onAccountChanged((signedInAs) => {
+          if (ledger.size === 0 || signedInAs === holder) return;
+          forget(() => false);
+        }),
+      ),
       (unsubscribe) => Effect.sync(unsubscribe),
     );
     return notices;

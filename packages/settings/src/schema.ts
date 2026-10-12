@@ -75,6 +75,20 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
+  agentNotifications: toggleSetting({
+    field: "agentNotifications",
+    id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
+    label: "Notify me when a coding agent finishes",
+    description:
+      "Whether Luke sends a Mac notification when a coding agent finishes, fails, or opens a " +
+      "pull request while his window is behind. In front, the window says so itself either way. " +
+      "Notifications are also allowed or refused for Luke in System Settings.",
+    default: true,
+    page: SETTINGS_PAGE.ROOT,
+    order: 1,
+    // Nothing to run per write: main reads the setting as each end is announced.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
   voice: choiceSetting({
     field: "voice",
     id: APP_SETTING_ID.VOICE,

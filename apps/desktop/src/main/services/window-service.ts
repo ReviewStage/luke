@@ -23,6 +23,7 @@ import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
+import { askForNotifications } from "../window/notice-doors";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
@@ -364,6 +365,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
       }
+      // macOS is asked now, while the developer is here to answer, rather
+      // than as the first agent ends behind the window. Note that it is
+      // asked whatever the setting says, because asking posts nothing and
+      // macOS asks only once, and a switch turned on later would otherwise
+      // leave its first notification to ask, and be refused.
+      if (runMode.observesProviders) askForNotifications();
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);

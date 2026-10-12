@@ -30,6 +30,8 @@ const MODEL = "anthropic/claude-opus-5.5";
 const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
 const NEXT_TURN_ID = "4a2d3c8b-0e5f-4b7c-9d2e-3f6a7b8c9d0e";
 const WATCH = Duration.seconds(30);
+const ACCOUNT = "dean@example.com";
+const OTHER_ACCOUNT = "sam@example.com";
 
 function agent(
   status: CodingAgentStatus,
@@ -68,7 +70,9 @@ function fixture() {
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
   let focus: ((focused: boolean) => void) | undefined;
-  let accountChanged: (() => void) | undefined;
+  let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
+  let signedInAs: string | undefined = ACCOUNT;
+  let notifying = true;
   const notices = createAgentNotices({
     listAgents: (planId) =>
       Effect.sync(() => {
@@ -91,6 +95,8 @@ function fixture() {
         focus = undefined;
       };
     },
+    notifying: () => notifying,
+    signedInAs: () => signedInAs,
     onAccountChanged: (listener) => {
       accountChanged = listener;
       return () => {
@@ -117,9 +123,15 @@ function fixture() {
       assert.ok(focus, "the notices subscribe to the window's focus");
       focus(focused);
     },
-    changeAccount: () => {
+    /** The account as a change of it says: another one, nobody, or the same one renewed. */
+    changeAccount: (next: string | undefined) => {
       assert.ok(accountChanged, "the notices subscribe to the account");
-      accountChanged();
+      signedInAs = next;
+      accountChanged(next);
+    },
+    /** The developer's setting for notifications. */
+    notify: (on: boolean) => {
+      notifying = on;
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
@@ -483,13 +495,66 @@ it.effect(
       });
       notices.observeAgents([other]);
 
-      f.changeAccount();
+      f.changeAccount(OTHER_ACCOUNT);
       assert.deepEqual(f.unseen.at(-1), []);
       // The answer that was on its way lands as a first sighting.
       notices.observeAgents([{ ...other, status: CODING_AGENT_STATUS.COMPLETED }]);
       yield* TestClock.adjust(WATCH);
       assert.equal(f.posted.length, 1);
       assert.deepEqual(f.listed, []);
+    }),
+);
+
+it.effect(
+  "the account's session renewing mid-run is the same account: its agents stay watched and the end is announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.COMPLETED)] });
+
+      f.changeAccount(ACCOUNT);
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.listed, [PLAN_ID]);
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 finished" }]);
+    }),
+);
+
+it.effect(
+  "with notifications turned off, an end behind the window posts nothing, yet dots its tab, and the window in front still says it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.notify(false);
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.COMPLETED)] });
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+      // Turned back on, the next end behind the window is posted again.
+      f.notify(true);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.FAILED, { turnId: NEXT_TURN_ID })]);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 failed" }]);
+
+      // The toast is the window's own, not a notification, so the setting leaves it.
+      f.notify(false);
+      f.focus(true);
+      const other = "a1b2c3d4-0000-4000-8000-000000000021";
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id: other })]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id: other })]);
+      yield* Effect.yieldNow;
+      assert.equal(f.posted.length, 1);
+      assert.deepEqual(
+        f.toasted.map(({ words }) => words),
+        ["Opus 5.5 finished"],
+      );
     }),
 );
 
