@@ -78,6 +78,10 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** The Markdown the account's new plans start from, read from the service now: its own, or the default while it keeps none. */
+  PLAN_TEMPLATE_READ: "planTemplate.read",
+  /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
+  PLAN_TEMPLATE_WRITE: "planTemplate.write",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */

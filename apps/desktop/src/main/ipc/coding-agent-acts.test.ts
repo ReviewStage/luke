@@ -10,6 +10,10 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_KIND, INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@sidecar/hosted/inbox-wire";
+import {
+  DEFAULT_PLAN_TEMPLATE,
+  PLAN_TEMPLATE_BOUNDS,
+} from "@sidecar/hosted/plan-document-template";
 import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -173,6 +177,16 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`remove:${provider}`);
           return { keys: [] };
+        }),
+      planTemplateRead: () =>
+        Effect.sync(() => {
+          asked.push("template");
+          return { template: DEFAULT_PLAN_TEMPLATE, custom: false };
+        }),
+      planTemplateWrite: ({ template }) =>
+        Effect.sync(() => {
+          asked.push(`template:${template ?? "the default"}`);
+          return { template: template ?? DEFAULT_PLAN_TEMPLATE, custom: template !== null };
         }),
       dictationTranscribe: ({ audio, keywords }) =>
         Effect.sync(() => {
@@ -405,6 +419,49 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel reads, keeps, and resets the plan template through the host; the voice window cannot, and a template past the bound reaches nothing",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const read = { kind: ACT_KIND.PLAN_TEMPLATE_READ } as const;
+      const keep = {
+        kind: ACT_KIND.PLAN_TEMPLATE_WRITE,
+        payload: { template: "## Why\n" },
+      } as const;
+      const reset = { kind: ACT_KIND.PLAN_TEMPLATE_WRITE, payload: { template: null } } as const;
+
+      const answered = yield* router.performAct(read, PANEL);
+      const kept = yield* router.performAct(keep, PANEL);
+      yield* router.performAct(reset, PANEL);
+      const refused = [
+        yield* router.performAct(read, VOICE),
+        yield* router.performAct(keep, VOICE),
+        yield* router.performAct(
+          {
+            kind: ACT_KIND.PLAN_TEMPLATE_WRITE,
+            payload: { template: "x".repeat(PLAN_TEMPLATE_BOUNDS.MAX_CHARS + 1) },
+          },
+          PANEL,
+        ),
+      ];
+
+      assert.deepEqual(answered, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { template: DEFAULT_PLAN_TEMPLATE, custom: false },
+      });
+      assert.deepEqual(kept, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { template: "## Why\n", custom: true },
+      });
+      assert.deepEqual(asked, ["template", "template:## Why\n", "template:the default"]);
+      assert.deepEqual(
+        refused.map((outcome) => outcome.status),
+        [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
+      );
     }),
 );
 

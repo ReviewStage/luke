@@ -44,7 +44,10 @@ import {
   type DictationTranscribeAnswerView,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
+  type PlanTemplateAnswerView,
   type ProviderKeysAnswerView,
+  planTemplateAnswerViewSchema,
+  planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
@@ -212,6 +215,14 @@ export const ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /**
+   * Settings › Plan template: the Markdown the account's new plans start
+   * from, read as the page opens, and kept as the developer pauses or reset
+   * to the default with null. Each answers the template as the service then
+   * keeps it.
+   */
+  PLAN_TEMPLATE_READ: "planTemplate.read",
+  PLAN_TEMPLATE_WRITE: "planTemplate.write",
   /**
    * A clip dictated into a message box, carried once from the panel that
    * recorded it to the service and answered with its words. Nothing on the
@@ -677,6 +688,16 @@ export const ACT = {
     payload: actSchema(providerKeyRemoveParamsSchema),
     result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
     refusal: "Could not remove your API key on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_READ]: {
+    payload: noPayload,
+    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
+    refusal: "Could not read your plan template on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_WRITE]: {
+    payload: actSchema(planTemplateWriteParamsSchema),
+    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
+    refusal: "Could not save your plan template on this system.",
   },
   [ACT_KIND.DICTATION_TRANSCRIBE]: {
     payload: actSchema(dictationTranscribeParamsSchema),

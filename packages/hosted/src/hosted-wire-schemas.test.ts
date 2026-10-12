@@ -80,6 +80,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
     codingAgentDefaultAnswerViewSchema: codingAgentView.codingAgentDefaultAnswerViewSchema,
     codingAgentDefaultWriteParamsSchema: codingAgentView.codingAgentDefaultWriteParamsSchema,
+    planTemplateAnswerViewSchema: codingAgentView.planTemplateAnswerViewSchema,
+    planTemplateWriteParamsSchema: codingAgentView.planTemplateWriteParamsSchema,
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,

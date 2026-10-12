@@ -726,6 +726,17 @@ and an account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
 headings, each with one plain guidance sentence. Nothing reads it to start a
 plan yet; new plans start from it once the switch to one document lands.
 
+Settings › Plan template is where the developer edits it
+(`apps/desktop/src/renderer/settings/plan-template-page.tsx`), signed in
+only. The page reads the template as it opens and saves the words a second
+after the typing pauses and again as focus leaves the box, one write at a
+time, through the `planTemplate.read`/`planTemplate.write` acts and the
+coding-agent chain beside the account's default model. A template past
+20,000 characters is said and never sent. Reset to default asks first and
+writes null, and stands only while the account holds its own. The box is a
+plain Markdown textarea under `ph-no-capture` for now
+(`plan-template-editor.tsx`); the plan's document editor replaces it.
+
 Luke is the developer's teammate: someone to bounce ideas off who is also
 responsible for turning them into a concrete plan. So the template is the
 design doc two engineering teammates would write after talking a task

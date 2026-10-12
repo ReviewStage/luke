@@ -18,6 +18,10 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
+  DEFAULT_PLAN_TEMPLATE,
+  PLAN_TEMPLATE_BOUNDS,
+} from "@sidecar/hosted/plan-document-template";
+import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
@@ -176,6 +180,19 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
+      }),
+    readPlanTemplate: () =>
+      Effect.sync(() => {
+        asked.push("template");
+        return { template: DEFAULT_PLAN_TEMPLATE, custom: false };
+      }),
+    writePlanTemplate: (write) =>
+      Effect.sync(() => {
+        asked.push(`template:${write.template ?? "the default"}`);
+        return {
+          template: write.template ?? DEFAULT_PLAN_TEMPLATE,
+          custom: write.template !== null,
+        };
       }),
     transcribeDictation: (clip) =>
       Effect.sync(() => {
@@ -438,6 +455,33 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "the plan template is read, kept as written, and reset with null, each one ask of the service; a template past the bound is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const read = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_READ);
+      const kept = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: "## Why\n" });
+      const reset = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: null });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, {
+          template: "x".repeat(PLAN_TEMPLATE_BOUNDS.MAX_CHARS + 1),
+        }),
+      );
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ);
+
+      assert.deepEqual(read, { template: DEFAULT_PLAN_TEMPLATE, custom: false });
+      assert.deepEqual(kept, { template: "## Why\n", custom: true });
+      assert.deepEqual(reset, { template: DEFAULT_PLAN_TEMPLATE, custom: false });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, ["template", "template:## Why\n", "template:the default"]);
+      assert.deepEqual(signedOut.asked, []);
     }),
 );
 

@@ -23,6 +23,7 @@ import {
   INBOX_STATUS,
 } from "./inbox-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
+import { DEFAULT_PLAN_TEMPLATE, PLAN_TEMPLATE_BOUNDS } from "./plan-document-template.js";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -547,6 +548,78 @@ it.effect("a provider key the service would refuse by shape travels nowhere", ()
 
     const refused = yield* Effect.provide(
       client().saveProviderKey({ provider: PROVIDER_KEY_PROVIDER.OPENAI, key: "sk-short" }),
+      api.layer,
+    );
+
+    assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(api.requests(), []);
+  }),
+);
+
+it.effect(
+  "reads the account's plan template, ignoring a key a newer service added, and a read the service refuses reads as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "GET /api/account/plan-template": {
+          answer: () => ({ template: "## Why\n", custom: true, updatedAt: 1 }),
+        },
+      });
+      const failing = fakeCloudApi({
+        "GET /api/account/plan-template": {
+          answer: () => ({ error: HOSTED_API_ERROR.UNAVAILABLE }),
+          status: HTTP_STATUS.SERVER_ERROR,
+        },
+      });
+
+      const read = yield* Effect.provide(client().readPlanTemplate(), api.layer);
+      const failed = yield* Effect.provide(client().readPlanTemplate(), failing.layer);
+
+      assert.deepEqual(read, { template: "## Why\n", custom: true });
+      assert.deepEqual(api.credentials(), ["token-1"]);
+      assert.deepEqual(failed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "writes the plan template verbatim, and null for the default, answering the template as kept",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "PUT /api/account/plan-template": {
+          answer: (request) => {
+            const template: string | null = JSON.parse(request.body ?? "{}").template;
+            return { template: template ?? DEFAULT_PLAN_TEMPLATE, custom: template !== null };
+          },
+        },
+      });
+
+      const kept = yield* Effect.provide(
+        client().writePlanTemplate({ template: "  ## Why\n\n" }),
+        api.layer,
+      );
+      const reset = yield* Effect.provide(
+        client().writePlanTemplate({ template: null }),
+        api.layer,
+      );
+
+      assert.deepEqual(kept, { template: "  ## Why\n\n", custom: true });
+      assert.deepEqual(reset, { template: DEFAULT_PLAN_TEMPLATE, custom: false });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "{}")),
+        [{ template: "  ## Why\n\n" }, { template: null }],
+      );
+    }),
+);
+
+it.effect("a plan template past the bound travels nowhere", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "PUT /api/account/plan-template": { answer: () => ({ template: "", custom: true }) },
+    });
+
+    const refused = yield* Effect.provide(
+      client().writePlanTemplate({ template: "x".repeat(PLAN_TEMPLATE_BOUNDS.MAX_CHARS + 1) }),
       api.layer,
     );
 

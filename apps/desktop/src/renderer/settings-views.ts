@@ -17,6 +17,7 @@ export const SETTINGS_SUBVIEW_LIST = [
   SETTINGS_VIEW.VOICE,
   SETTINGS_VIEW.APPEARANCE,
   SETTINGS_VIEW.SHORTCUTS,
+  SETTINGS_VIEW.PLAN_TEMPLATE,
   SETTINGS_VIEW.CODING_AGENTS,
   SETTINGS_VIEW.API_KEYS,
 ] as const;
@@ -27,6 +28,7 @@ const NAV_ROW_ID = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "settings-nav-shortcuts",
+  [SETTINGS_VIEW.PLAN_TEMPLATE]: "settings-nav-plan-template",
   [SETTINGS_VIEW.CODING_AGENTS]: "settings-nav-coding-agents",
   [SETTINGS_VIEW.API_KEYS]: "settings-nav-api-keys",
 };

@@ -3,6 +3,7 @@ import {
   BackIcon,
   ChevronIcon,
   DisplayIcon,
+  DocumentIcon,
   KeyboardIcon,
   KeyIcon,
   SpeakerIcon,
@@ -31,6 +32,10 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.SHORTCUTS]: {
     title: "Keyboard shortcuts",
     icon: <KeyboardIcon />,
+  },
+  [SETTINGS_VIEW.PLAN_TEMPLATE]: {
+    title: "Plan template",
+    icon: <DocumentIcon />,
   },
   [SETTINGS_VIEW.CODING_AGENTS]: {
     title: "Coding agents",
