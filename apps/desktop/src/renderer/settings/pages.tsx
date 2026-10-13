@@ -42,13 +42,13 @@ export const SETTINGS_PAGE = {
     title: "Coding agents",
     icon: <CodingAgentsIcon />,
   },
-  [SETTINGS_VIEW.API_KEYS]: {
-    title: "API keys",
-    icon: <KeyIcon />,
-  },
   [SETTINGS_VIEW.INTEGRATIONS]: {
     title: "Integrations",
     icon: <PlugIcon />,
+  },
+  [SETTINGS_VIEW.API_KEYS]: {
+    title: "API keys",
+    icon: <KeyIcon />,
   },
 };
 

@@ -199,8 +199,8 @@ test("typing in the sidebar search turns the page list into results grouped unde
     "Keyboard shortcuts",
     "Plan template",
     "Coding agents",
-    "API keys",
     "Integrations",
+    "API keys",
   ]);
 
   type(field(container), "hotkey");

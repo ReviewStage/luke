@@ -86,8 +86,8 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
-  [SETTINGS_VIEW.API_KEYS]: "API keys",
   [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
+  [SETTINGS_VIEW.API_KEYS]: "API keys",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */

@@ -215,8 +215,8 @@ export const PRODUCT_SETTINGS_VIEW = {
   CONNECTIONS: "connections",
   MEMORY: "memory",
   CODING_AGENTS: "coding_agents",
-  API_KEYS: "api_keys",
   INTEGRATIONS: "integrations",
+  API_KEYS: "api_keys",
   PLAN_TEMPLATE: "plan_template",
 } as const;
 
