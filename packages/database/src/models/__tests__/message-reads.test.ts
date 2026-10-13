@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { Effect } from "effect";
-import { db } from "../../core/query.js";
+import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
@@ -18,6 +18,7 @@ import { listMessagesPast, messageCursorNow, runningChildTurns } from "../messag
  */
 
 const openAccount = Effect.gen(function* () {
+  const db = yield* Database;
   const id = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
   return id;
@@ -25,6 +26,7 @@ const openAccount = Effect.gen(function* () {
 
 const openConversation = (userId: string, parentConversationId?: string) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const id = randomUUID();
     yield* db.insert(conversations).values({
       id,
@@ -36,23 +38,27 @@ const openConversation = (userId: string, parentConversationId?: string) =>
   });
 
 const writeLine = (userId: string, conversationId: string, seq: number) =>
-  db.insert(messages).values({
-    userId,
-    conversationId,
-    seq,
-    clientId: randomUUID(),
-    role: MESSAGE_ROLE.USER,
-    parts: [{ type: "text", text: `Line ${seq}` }],
-    createdAt: new Date(),
-    placedAt: new Date(),
-  });
+  Database.use((db) =>
+    db.insert(messages).values({
+      userId,
+      conversationId,
+      seq,
+      clientId: randomUUID(),
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: `Line ${seq}` }],
+      createdAt: new Date(),
+      placedAt: new Date(),
+    }),
+  );
 
 const openTurn = (userId: string, conversationId: string, status: TurnStatus) =>
   Effect.map(
-    db
-      .insert(turns)
-      .values({ userId, conversationId, origin: TURN_ORIGIN.SPOKEN, status })
-      .returning({ id: turns.id }),
+    Database.use((db) =>
+      db
+        .insert(turns)
+        .values({ userId, conversationId, origin: TURN_ORIGIN.SPOKEN, status })
+        .returning({ id: turns.id }),
+    ),
     ([row]) => row?.id ?? "",
   );
 

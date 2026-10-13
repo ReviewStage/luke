@@ -838,6 +838,7 @@ test("a held reader hears a worker end beside one still running at the next look
     Effect.gen(function* () {
       const read = yield* Effect.forkChild(plannerPagePast(target, cursor));
       yield* TestClock.adjust(PLANNER_POLL);
+      const db = yield* Database;
       yield* db
         .update(turns)
         .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })

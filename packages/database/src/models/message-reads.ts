@@ -407,15 +407,17 @@ const findHighestSeq = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ seq: Schema.Number }),
   execute: (options) =>
-    db
-      .select({ seq: sql<number>`coalesce(max(${messages.seq}), 0)`.mapWith(Number) })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
+    Database.use((db) =>
+      db
+        .select({ seq: sql<number>`coalesce(max(${messages.seq}), 0)`.mapWith(Number) })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+          ),
         ),
-      ),
+    ),
 });
 
 /**
@@ -429,7 +431,7 @@ const findHighestSeq = SqlSchema.findAll({
 export function messageCursorNow(
   userId: string,
   conversationId: string,
-): Effect.Effect<MessageCursor, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<MessageCursor, MessageReadFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* findJournalRevision({ conversationId, userId });
     if (Option.isNone(standing)) return { seq: 0, revision: 0 };
@@ -442,26 +444,28 @@ const findRunningChildTurns = SqlSchema.findAll({
   Request: Schema.Struct({ parentConversationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (options) =>
-    db
-      .select({ id: turns.id })
-      .from(turns)
-      .innerJoin(conversations, eq(turns.conversationId, conversations.id))
-      .where(
-        and(
-          eq(conversations.parentConversationId, options.parentConversationId),
-          eq(conversations.userId, options.userId),
-          isNull(conversations.deletedAt),
-          inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
-        ),
-      )
-      .orderBy(asc(turns.id)),
+    Database.use((db) =>
+      db
+        .select({ id: turns.id })
+        .from(turns)
+        .innerJoin(conversations, eq(turns.conversationId, conversations.id))
+        .where(
+          and(
+            eq(conversations.parentConversationId, options.parentConversationId),
+            eq(conversations.userId, options.userId),
+            isNull(conversations.deletedAt),
+            inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+          ),
+        )
+        .orderBy(asc(turns.id)),
+    ),
 });
 
 /** The queued or running turns of every child conversation of the one named, a subagent's session each, by id; none of another account's. */
 export function runningChildTurns(
   userId: string,
   parentConversationId: string,
-): Effect.Effect<readonly string[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<readonly string[], MessageReadFailure, DatabaseServices> {
   return Effect.map(findRunningChildTurns({ parentConversationId, userId }), (rows) =>
     rows.map((row) => row.id),
   );
