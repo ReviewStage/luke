@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { PAGE_BOUNDS } from "@sidecar/hosted/page-wire";
@@ -11,6 +10,7 @@ import { unparsedWire, type WireBoundaryInput, type WireRecord } from "@sidecar/
 import { Effect, Option, Schema } from "effect";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "../server/hosted/page-tool";
+import { startPlan } from "./support/workspaces";
 
 /**
  * `show_page`, every agent's one tool for a page, through its public
@@ -28,7 +28,7 @@ const FUNNEL = "<!doctype html><h1>Invite funnel</h1><script>document.title = 'Ã
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 
