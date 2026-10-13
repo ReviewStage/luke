@@ -10,8 +10,10 @@ import {
   listTemplateRevisions,
   readTemplateRevision,
 } from "@sidecar/database/models/plan-template-revisions";
+import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
+import { deploymentEveOrigin } from "./brain-host/eve-origin.js";
 
 /**
  * The account group's seams over this deployment's real database. The
@@ -31,6 +33,8 @@ import { resolveHostedUserId } from "./bearer.js";
 export function accountAppSeams(): AccountAppSeams {
   return {
     resolveUserId: resolveHostedUserId,
+    eveOrigin: deploymentEveOrigin,
+    standingSessions: (userId) => standingSessionsOf(userId),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
     writePreferences: writeAccountPreferences,

@@ -102,6 +102,7 @@ import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {
   EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
@@ -233,6 +234,8 @@ function fakeEve(
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
+  /** Every session eve was asked to retire, in order. */
+  const reset: string[] = [];
   let sessions = 0;
   let deliveries = 0;
   const eve = (authorization: string): EveSessions => ({
@@ -281,8 +284,13 @@ function fakeEve(
           ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
           : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
       }),
+    reset: (sessionId) =>
+      Effect.sync(() => {
+        reset.push(sessionId);
+        return { outcome: EVE_RESET_OUTCOME.RESET };
+      }),
   });
-  return { eve, opened, sent, cancelled };
+  return { eve, opened, sent, cancelled, reset };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
@@ -1258,7 +1266,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a plan's delete stops its agent's turn under way at eve by its own id before the plan goes",
+    "a plan's delete stops its agent's turn under way at eve by its own id, then retires its session, before the plan goes",
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, eve, ask } = yield* openPlan();
@@ -1285,6 +1293,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           body: { deleted: true },
         });
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        // Stopped, its session is retired for good before the plan's conversations are cleared.
+        assert.deepEqual(eve.reset, [sessionId]);
         assert.deepEqual(
           yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
@@ -1327,6 +1337,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         assert.deepEqual(yield* statuses(refused), [CODING_AGENT_STATUS.RUNNING]);
+        assert.deepEqual(refusing.reset, []);
 
         // Still starting, its session may yet open a turn no Stop could name, so the plan stays.
         const starting = yield* openPlan();

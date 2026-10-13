@@ -3,6 +3,7 @@ import type {
   AccountPreferencesWrite,
   AccountSeamEffect,
 } from "@sidecar/database/models/account-store";
+import type { StandingSession } from "@sidecar/database/models/recorded-session";
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
@@ -27,6 +28,7 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
+import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -43,6 +45,7 @@ import {
 import { type LinearConnect, revokeLinearGrant } from "./hosted/linear-connect.js";
 import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
+import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -97,9 +100,11 @@ const HTTP_METHOD = {
   PUT: "PUT",
 } as const;
 
-export interface AccountAppSeams {
+export interface AccountAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
-  /** Deletes the user row; every dependent row cascades with it. */
+  /** The eve sessions the account's standing conversations run in, which the delete retires first. */
+  standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
+  /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
@@ -189,7 +194,12 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * to erase. Where the deployment can, the analytics person is asked to be
  * erased first, because nothing after the delete would still name it; a
  * refusal or an outage there must not hold up the delete, so it is logged as
- * a status and the delete proceeds. The account's Linear grant is revoked at
+ * a status and the delete proceeds. Every eve session the account's
+ * standing conversations run in is retired before anything is deleted, as
+ * the developer, while eve's door still admits them to it
+ * (`retire-sessions.ts`); a session eve did not retire is logged and the
+ * delete proceeds, and the delete itself queues the sandbox of every session
+ * the account ran for the sweep. The account's Linear grant is revoked at
  * Vercel Connect once the rows are gone, as a Disconnect revokes it, so the
  * grant does not outlive the account; a revoke that fails is logged by its
  * word and the account is deleted all the same.
@@ -207,6 +217,10 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
   const userId = yield* resolvedUserId(seams);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
+  yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   yield* forgetAnalytics(userId);
   yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
   yield* revokeLinearGrant(userId);

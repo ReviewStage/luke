@@ -8,22 +8,24 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "./http.js";
+import type { SessionSandboxSweepOutcome } from "./session-sandboxes.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request
  * will. A plan deleted thirty days ago has its conversation purged, a
  * deleted plan's call that was still open when the plan went is removed
  * once it has ended, a turn whose end eve never told the relay is settled as
- * abandoned, and a voice session whose device detached and never came back
- * is ended on Luke's key, as a connection would have ended it. None of the
- * four reads a word of any account; each is bounded on its own, and the
- * sweep runs them in turn.
+ * abandoned, a voice session whose device detached and never came back is
+ * ended on Luke's key, as a connection would have ended it, and the Vercel
+ * Sandboxes of the eve sessions Luke let go of are deleted. None of the five
+ * reads a word of any account; each is bounded on its own, and the sweep
+ * runs them in turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, SqlClient.SqlClient>;
 
-/** The four sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The five sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -33,6 +35,8 @@ interface MaintenanceSweeps {
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
+  /** Deletes the Vercel Sandboxes of the next eve sessions queued for it, a sweep's worth. */
+  sweepSandboxes: (now: number) => SweepRead<SessionSandboxSweepOutcome>;
 }
 
 export interface MaintenanceSweepOptions extends MaintenanceSweeps {
@@ -50,6 +54,8 @@ interface MaintenanceSweepAnswer {
   abandoned: number;
   /** What the sweep over the detached voice sessions did. */
   voice: VoiceOrphanSweepOutcome;
+  /** What the sweep over the queued sessions' sandboxes did. */
+  sandboxes: SessionSandboxSweepOutcome;
 }
 
 export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaintenanceSweep")(
@@ -77,6 +83,7 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       purgedCalls: yield* options.purgeDeletedPlanCalls(now),
       abandoned: yield* options.sweepAbandonedTurns(now),
       voice: yield* options.sweepVoice(now),
+      sandboxes: yield* options.sweepSandboxes(now),
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },

@@ -96,6 +96,7 @@ const DECLARED_TABLES = [
   "repository_pin",
   "roster_snapshot",
   "session",
+  "session_sandbox_cleanup",
   "transcript_mark",
   "turns",
   "user",

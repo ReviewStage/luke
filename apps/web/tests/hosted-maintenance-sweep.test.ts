@@ -12,6 +12,7 @@ import {
   handleMaintenanceSweep,
   type MaintenanceSweepOptions,
 } from "../server/hosted/maintenance-sweep";
+import type { SessionSandboxSweepOutcome } from "../server/hosted/session-sandboxes";
 import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
 import { noDatabase } from "./support/no-database";
 
@@ -19,6 +20,8 @@ const CRON_SECRET = Redacted.make("cron-secret-1");
 const SWEEP_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 /** What the sweep over the detached voice sessions answers. */
 const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
+/** What the sweep over the queued sessions' sandboxes answers. */
+const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
@@ -37,10 +40,17 @@ interface Recorded {
   purgedCalls: number[];
   abandoned: number[];
   voiced: number[];
+  sandboxed: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
-  const recorded: Recorded = { purged: [], purgedCalls: [], abandoned: [], voiced: [] };
+  const recorded: Recorded = {
+    purged: [],
+    purgedCalls: [],
+    abandoned: [],
+    voiced: [],
+    sandboxed: [],
+  };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
@@ -64,6 +74,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.voiced.push(now);
         return VOICED;
       }),
+    sweepSandboxes: (now) =>
+      Effect.sync(() => {
+        recorded.sandboxed.push(now);
+        return SANDBOXED;
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -82,7 +97,13 @@ it.effect("a sweep refuses every method but GET, and runs nothing", () =>
     const answer = yield* sweep(options);
 
     assert.equal(answer.status, 405);
-    assert.deepEqual(recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
+    assert.deepEqual(recorded, {
+      purged: [],
+      purgedCalls: [],
+      abandoned: [],
+      voiced: [],
+      sandboxed: [],
+    });
   }),
 );
 
@@ -93,7 +114,13 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
 
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
-    assert.deepEqual(recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
+    assert.deepEqual(recorded, {
+      purged: [],
+      purgedCalls: [],
+      abandoned: [],
+      voiced: [],
+      sandboxed: [],
+    });
   }),
 );
 
@@ -107,8 +134,20 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.status, 401);
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
-    assert.deepEqual(wrong.recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
-    assert.deepEqual(missing.recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
+    assert.deepEqual(wrong.recorded, {
+      purged: [],
+      purgedCalls: [],
+      abandoned: [],
+      voiced: [],
+      sandboxed: [],
+    });
+    assert.deepEqual(missing.recorded, {
+      purged: [],
+      purgedCalls: [],
+      abandoned: [],
+      voiced: [],
+      sandboxed: [],
+    });
   }),
 );
 
@@ -123,12 +162,19 @@ it.effect(
 
       const at = SWEEP_TIME + 7_000;
       assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body, { purged: 2, purgedCalls: 3, abandoned: 1, voice: VOICED });
+      assert.deepEqual(answer.body, {
+        purged: 2,
+        purgedCalls: 3,
+        abandoned: 1,
+        voice: VOICED,
+        sandboxes: SANDBOXED,
+      });
       assert.deepEqual(recorded, {
         purged: [at],
         purgedCalls: [at],
         abandoned: [at],
         voiced: [at],
+        sandboxed: [at],
       });
     }),
 );

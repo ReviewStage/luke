@@ -2,15 +2,17 @@ import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agen
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
+import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readTemplateRevisionContent, recordTemplateRevision } from "./plan-template-revisions.js";
+import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -66,11 +68,33 @@ const deleteUserRow = SqlSchema.void({
   execute: (userId) => db.delete(user).where(eq(user.id, userId)),
 });
 
-/** Erases the user row; every dependent row cascades with it. */
+const findAccountSessions = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
+  execute: (userId) =>
+    db
+      .select({ runtimeSessionId: conversations.runtimeSessionId })
+      .from(conversations)
+      .where(and(eq(conversations.userId, userId), isNotNull(conversations.runtimeSessionId))),
+});
+
+/**
+ * Erases the user row; every dependent row cascades with it. The eve session
+ * each of the account's conversations ran in, a deleted plan's too, is
+ * queued for its sandbox's deletion in the same transaction, since nothing
+ * after it names them.
+ */
 export function deleteAccount(
   userId: string,
 ): Effect.Effect<void, AccountSeamFailure, SqlClient.SqlClient> {
-  return deleteUserRow(userId);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
+        yield* deleteUserRow(userId);
+      }),
+    ),
+  );
 }
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */

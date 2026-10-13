@@ -4,6 +4,8 @@ import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
 } from "@sidecar/database/models/account-store";
+import type { StandingSession } from "@sidecar/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
@@ -19,6 +21,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
+import { EVE_RESET_OUTCOME, type EveSessions } from "../server/hosted/brain-host/eve-sessions.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
@@ -86,9 +89,19 @@ const CATALOG: readonly CatalogModel[] = [
   },
 ];
 
+/** The account's planning session and one coding agent's, as its standing conversations record them. */
+const SESSIONS: StandingSession[] = [
+  { sessionId: "wrun_planning", kind: CONVERSATION_KIND.PLAN },
+  { sessionId: "wrun_agent", kind: CONVERSATION_KIND.CODING_AGENT },
+];
+
 const SOL_AT_HIGH = { model: "openai/gpt-6.1-sol", effort: "high" } as const satisfies ModelChoice;
 
 interface Backing {
+  /** The eve sessions the account's standing conversations run in. */
+  sessions: StandingSession[];
+  /** The sessions eve was asked to retire, in order. */
+  retired: string[];
   deleted: string[];
   forgotten: string[];
   /** The accounts whose Linear grant Vercel Connect was asked to revoke and did. */
@@ -105,6 +118,8 @@ interface Backing {
 
 function backing(overrides: Partial<Backing> = {}): Backing {
   return {
+    sessions: [],
+    retired: [],
     deleted: [],
     forgotten: [],
     revoked: [],
@@ -210,9 +225,27 @@ function catalogLayer(state: Backing) {
     : modelCatalogOf(CATALOG);
 }
 
+/** eve as the delete reaches it: only a reset, which retires the session named. */
+function eveDouble(state: Backing): EveSessions {
+  const unasked = () => Effect.die(new Error("the account group asks eve only to retire"));
+  return {
+    open: unasked,
+    send: unasked,
+    cancel: unasked,
+    reset: (sessionId) =>
+      Effect.sync(() => {
+        state.retired.push(sessionId);
+        return { outcome: EVE_RESET_OUTCOME.RESET };
+      }),
+  };
+}
+
 function groupSeams(state: Backing): AccountAppSeams {
   return {
     resolveUserId,
+    eveOrigin: () => undefined,
+    eve: () => eveDouble(state),
+    standingSessions: () => overStore(state, async () => state.sessions),
     deleteUser: (userId) => overStore(state, () => deleteUser(state)(userId)),
     readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
     writePreferences: (userId, write) =>
@@ -300,9 +333,16 @@ interface Exchange {
 const EXCHANGES: readonly Exchange[] = [
   {
     name: "delete-success",
-    state: () => backing(),
+    state: () => backing({ sessions: SESSIONS }),
     request: deleteRequest,
-    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID], revoked: [USER_ID] }),
+    finalState: () =>
+      backing({
+        sessions: SESSIONS,
+        retired: SESSIONS.map(({ sessionId }) => sessionId),
+        deleted: [USER_ID],
+        forgotten: [USER_ID],
+        revoked: [USER_ID],
+      }),
   },
   {
     name: "delete-wrong-method",
@@ -443,14 +483,15 @@ const EXCHANGES: readonly Exchange[] = [
     request: () => new Request(`${ORIGIN}/api/account/preferences`, { method: "DELETE" }),
     finalState: () => backing(),
   },
-  // The store is unreachable: the erasure is refused as unavailable, so the
-  // caller knows to ask again, and the analytics forget that ran first is
-  // the only thing that landed; the Linear grant stands for the retry.
+  // The store is unreachable: the erasure is refused as unavailable before
+  // anything lands, since the account's sessions cannot even be read, so the
+  // caller asks again with every session, the analytics person, and the
+  // Linear grant still standing for the retry.
   {
     name: "delete-store-unavailable",
     state: () => backing({ storeUnavailable: true }),
     request: deleteRequest,
-    finalState: () => backing({ storeUnavailable: true, forgotten: [USER_ID] }),
+    finalState: () => backing({ storeUnavailable: true }),
   },
   {
     name: "preferences-read-store-unavailable",

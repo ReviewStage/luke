@@ -316,6 +316,7 @@ function eveAccepting(
         return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId };
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.die(new Error("this suite retires no session")),
   };
   return eve;
 }

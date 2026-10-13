@@ -8,6 +8,7 @@ import {
   readPlan,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
+import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
@@ -39,7 +40,7 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { type EveReach, stoppedForGood } from "./hosted/coder-host/stop.js";
+import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -63,6 +64,7 @@ import {
 } from "./hosted/plan-notes.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
+import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -317,7 +319,8 @@ const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
 /**
  * DELETE: every coding agent of the plan stopped for good first, as a Stop
  * and an archive stop one, so none works on for a plan that is gone; then
- * the plan. An eve that refuses a Stop, an agent with a turn still coming
+ * the plan's eve sessions and its agents' retired (`retire-sessions.ts`);
+ * then the plan. An eve that refuses a Stop, an agent with a turn still coming
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the plan standing and refused.
  */
@@ -328,12 +331,23 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   planId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
+  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, planId, { includeArchived: true }),
   );
   yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
     discard: true,
   });
+  // Note that the sessions are retired while their conversations still stand, because eve's door
+  // admits no one to a cleared conversation's session. An agent started meanwhile refuses the
+  // delete below, which leaves the plan standing with its stopped agents retired.
+  const conversationIds = [
+    ...(opened.value.conversationId === undefined ? [] : [opened.value.conversationId]),
+    ...agents.map((agent) => agent.conversationId),
+  ];
+  const sessions = yield* hostedStoreOrUnavailable(standingSessionsOf(userId, conversationIds));
+  yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   const stopped = new Set(agents.map(({ id }) => id));
   const deleted = yield* hostedStoreOrUnavailable(
     deletePlan(userId, planId, stopped).pipe(

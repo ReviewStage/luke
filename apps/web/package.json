@@ -42,6 +42,7 @@
     "@sidecar/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@vercel/connect": "2.4.1",
+    "@vercel/oidc": "4.0.0",
     "ai": "catalog:",
     "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
