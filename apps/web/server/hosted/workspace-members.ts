@@ -40,6 +40,7 @@ const findMembership = SqlSchema.findOneOption({
     name: Schema.String,
     role: Schema.String,
     personalOf: Schema.NullOr(Schema.String),
+    status: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, organizationId }) =>
     db
@@ -48,10 +49,12 @@ const findMembership = SqlSchema.findOneOption({
         name: organization.name,
         role: member.role,
         personalOf: personalWorkspace.userId,
+        status: githubInstallation.status,
       })
       .from(member)
       .innerJoin(organization, eq(organization.id, member.organizationId))
       .leftJoin(personalWorkspace, eq(personalWorkspace.organizationId, organization.id))
+      .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
       .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
       .limit(1),
 });
@@ -108,6 +111,7 @@ export function membershipOf(
       name: row.name,
       personal: row.personalOf !== null,
       role: roleOf(row.role),
+      active: row.status === null || row.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
     })),
   );
 }

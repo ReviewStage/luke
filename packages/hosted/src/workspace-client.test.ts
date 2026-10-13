@@ -12,8 +12,15 @@ const PERSONAL = {
   name: "Ada Lovelace",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
+  active: true,
 };
-const SHARED = { id: "org-acme-1", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const SHARED = {
+  id: "org-acme-1",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: false,
+};
 const JOINABLE = { installationId: 4_200_017, name: "relay-labs" };
 
 function client(): HostedWorkspaceClient {

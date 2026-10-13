@@ -6,7 +6,7 @@ export const GITHUB_ACCOUNT_TYPE = {
 
 export type GitHubAccountType = (typeof GITHUB_ACCOUNT_TYPE)[keyof typeof GITHUB_ACCOUNT_TYPE];
 
-/** Where an installation of the App stands, as its webhook last said; only an active one's workspace is shown. */
+/** Where an installation of the App stands, as its webhook last said; a workspace of any other is listed inactive and offered to nobody. */
 export const GITHUB_INSTALLATION_STATUS = {
   ACTIVE: "active",
   SUSPENDED: "suspended",

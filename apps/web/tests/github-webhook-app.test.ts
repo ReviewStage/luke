@@ -329,7 +329,7 @@ it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "an installation removed or suspended hides its workspace, and one brought back shows it again",
+    "an installation removed or suspended leaves its workspace listed as inactive, and one brought back active again",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
@@ -340,14 +340,16 @@ it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
           Effect.provide(github.layer),
         );
         const names = () =>
-          Effect.map(listWorkspaces(owner), (workspaces) => workspaces.map(({ name }) => name));
+          Effect.map(listWorkspaces(owner), (workspaces) =>
+            workspaces.map(({ name, active }) => ({ name, active })),
+          );
         const deliver = (action: string) =>
           answer(
             github,
             SECRET,
             delivery("installation", { action, installation: { id: installationId } }),
           );
-        assert.deepEqual(yield* names(), [login]);
+        assert.deepEqual(yield* names(), [{ name: login, active: true }]);
 
         yield* deliver("suspend");
         const suspended = yield* names();
@@ -356,9 +358,9 @@ it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
         yield* deliver("deleted");
         const deleted = yield* names();
 
-        assert.deepEqual(suspended, []);
-        assert.deepEqual(unsuspended, [login]);
-        assert.deepEqual(deleted, []);
+        assert.deepEqual(suspended, [{ name: login, active: false }]);
+        assert.deepEqual(unsuspended, [{ name: login, active: true }]);
+        assert.deepEqual(deleted, [{ name: login, active: false }]);
       }),
   );
 });

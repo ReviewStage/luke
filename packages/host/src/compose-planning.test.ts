@@ -162,12 +162,14 @@ const PERSONAL: Workspace = {
   name: "Ada Lovelace",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
+  active: true,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.ADMIN,
+  active: true,
 };
 const RELAY: AvailableWorkspace = { installationId: 4_200_017, name: "relay-labs" };
 const RELAY_JOINED: Workspace = {
@@ -175,6 +177,7 @@ const RELAY_JOINED: Workspace = {
   name: RELAY.name,
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
+  active: true,
 };
 const ADA: WorkspaceMember = {
   userId: "user-ada",

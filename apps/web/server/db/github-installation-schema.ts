@@ -12,8 +12,8 @@ import { instant } from "./instant.js";
  * installation and the account it is on, never the login, which an account
  * can change. The login and the account's kind are refreshed by each sync
  * that reaches the installation; the status is the installation webhook's,
- * and a workspace whose installation is not active is hidden rather than
- * deleted. The row leaves with its workspace.
+ * and a workspace whose installation is not active is listed as inactive
+ * rather than deleted. The row leaves with its workspace.
  */
 export const githubInstallation = pgTable("github_installation", {
   organizationId: text("organization_id")
