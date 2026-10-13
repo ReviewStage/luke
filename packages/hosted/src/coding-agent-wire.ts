@@ -891,3 +891,24 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
 });
+
+export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
+
+/**
+ * A page of an agent's messages joined to the ones held: a message heard
+ * again replaces the one held under its id, in place, and a new one joins
+ * at the end, so a journal that grows in place is redrawn where it stands.
+ * The agent's tab and the host's read of a plan's conversation join pages
+ * the same way, so both draw one transcript from the same answers.
+ */
+export function applyMessagesPage(
+  held: readonly CodingAgentMessage[],
+  page: readonly CodingAgentMessage[],
+): readonly CodingAgentMessage[] {
+  if (page.length === 0) return held;
+  const heard = new Map(page.map((message) => [message.id, message]));
+  const joined = held.map((message) => heard.get(message.id) ?? message);
+  const known = new Set(held.map((message) => message.id));
+  const appended = page.filter((message) => !known.has(message.id));
+  return [...joined, ...appended];
+}

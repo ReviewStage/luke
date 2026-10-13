@@ -120,6 +120,10 @@ export const hostAssemblyLayer: Layer.Layer<
       showPlanCode: (code) => showPlanCode(code),
       showPlanWork: (work) => showPlanWork(work),
     });
+    const codingAgentClient = new HostedCodingAgentClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    });
     const planning = yield* composePlanning({
       kernel,
       account,
@@ -128,14 +132,12 @@ export const hostAssemblyLayer: Layer.Layer<
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
+      conversations: codingAgentClient,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
-      client: new HostedCodingAgentClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
+      client: codingAgentClient,
     });
     const integrations = yield* composeIntegrations({
       kernel,

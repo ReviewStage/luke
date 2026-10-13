@@ -4,6 +4,7 @@ import {
   type CodingAgentMessagesParams,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  applyMessagesPage,
   CODING_AGENT_CURSOR_START,
   type CodingAgentContext,
   type CodingAgentFailure,
@@ -13,12 +14,7 @@ import {
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  type AgentRun,
-  agentStillWriting,
-  applyMessagesPage,
-  followsAgent,
-} from "./coding-agent-model";
+import { type AgentRun, agentStillWriting, followsAgent } from "./coding-agent-model";
 
 /**
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, read page by page on the service's held long-poll while the agent may still write.
