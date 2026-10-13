@@ -1,18 +1,7 @@
-import { defineDynamic, defineSkill } from "eve/skills";
-import type { CoderSkill } from "../../server/hosted/coder-host/skills.js";
+import { defineDynamic } from "eve/skills";
+import { offeredSkills } from "../../server/hosted/agent-runtime/skills.js";
 import { seams, sessionSkills } from "../host.js";
 import { SCRIPTED_SKILLS } from "../scripted-model.js";
-
-/** The skills as eve's map of them, by name; nothing where there are none. */
-function offered(skills: readonly CoderSkill[]) {
-  if (skills.length === 0) return null;
-  return Object.fromEntries(
-    skills.map((skill) => [
-      skill.name,
-      defineSkill({ description: skill.description, markdown: skill.markdown }),
-    ]),
-  );
-}
 
 /**
  * The skills the agent's repository keeps, offered to the session as it
@@ -25,7 +14,7 @@ function offered(skills: readonly CoderSkill[]) {
 export default defineDynamic({
   events: {
     "session.started": async (_event, ctx) =>
-      offered(
+      offeredSkills(
         seams.scriptedModel()
           ? SCRIPTED_SKILLS
           : await sessionSkills(ctx.session.auth, ctx.session.id),

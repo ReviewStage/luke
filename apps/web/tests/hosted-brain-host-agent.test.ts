@@ -10,6 +10,7 @@ import {
 } from "../server/hosted/brain-host/channel";
 import {
   EVE_DELEGATION_TOOL,
+  EVE_SKILL_TOOL,
   planningToolDeclarations,
 } from "../server/hosted/brain-host/planning";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -46,12 +47,13 @@ test("a follow-up steers the turn under way rather than queueing behind it, and 
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the writer and the reader share one tool set, which names every planning tool a turn is offered, eve's own delegation tools, and every integration's calls, and declares no output schema", () => {
+test("the writer and the reader share one tool set, which names every planning tool a turn is offered, eve's own delegation tools and skill load, and every integration's calls, and declares no output schema", () => {
   assert.deepEqual(
     Object.keys(HOSTED_TOOL_SET).sort(),
     [
       ...planningToolDeclarations().map((declared) => declared.name),
       ...Object.values(EVE_DELEGATION_TOOL),
+      EVE_SKILL_TOOL.NAME,
       ...Object.values(CONNECTION_TOOL),
       ...Object.values(INTEGRATION).map((integration) => integration.REMOTE_TOOL),
     ].sort(),

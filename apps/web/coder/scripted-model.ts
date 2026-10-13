@@ -11,8 +11,8 @@ import {
   type MockModelToolResult,
   mockModel,
 } from "eve/evals";
+import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import { CODER_MODEL_FIXTURE } from "../server/hosted/coder-host/bounds.js";
-import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 
 /**
@@ -53,7 +53,7 @@ export const SCRIPTED_SKILLS = [
     description: "Use when the developer asks for release notes.",
     markdown: "# Release notes\n\nWrite one line per change, newest first.",
   },
-] as const satisfies readonly CoderSkill[];
+] as const satisfies readonly AgentSkill[];
 
 /** A skill a developer names in their words, as `/name` at the start of a word. */
 const NAMED_SKILL = /(?:^|\s)\/([a-z0-9-]+)/u;

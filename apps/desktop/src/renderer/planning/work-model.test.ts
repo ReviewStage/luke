@@ -420,3 +420,20 @@ test("a worker's task is the whole message it was handed, which its subject cuts
   assert.equal(workerOf(rows, "w")?.task, message);
   assert.equal(workerOf(rows, "v")?.task, "Find the admin check.");
 });
+
+test("a skill load, which the wire says as another tool named load_skill, is read as the skill it loaded", () => {
+  const [load] = callsOf(
+    [
+      turn(PLAN_WORK_STATE.DONE, [
+        {
+          ...call("k", PLAN_WORK_TOOL.OTHER, "release-notes"),
+          name: "load_skill",
+          input: JSON.stringify({ skill: "release-notes" }),
+        },
+        { ...call("o", PLAN_WORK_TOOL.OTHER, undefined), name: "summon_reviewer" },
+      ]),
+    ],
+    false,
+  );
+  assert.deepEqual(load?.said, { kind: CALL_KIND.LOAD_SKILL, subject: "release-notes" });
+});

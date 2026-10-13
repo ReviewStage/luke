@@ -64,6 +64,7 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 import { insertConversation } from "./support/store-rows";
 import { titleModelAnswering } from "./support/title-model";
 
@@ -739,4 +740,50 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
   assert.equal(eve.sent.length, 2);
+});
+
+test("a planning session is offered the skills its plan's repository keeps, each loading behind where it stands for run_in_repository, and none for a plan with no repository or one the App does not reach", async () => {
+  const host = brainHost(seams);
+  const userId = await database.run(openGithubUser());
+  const kept = await planConversation(userId, RELAY_FULL_NAME);
+  const bare = await planConversation(userId);
+  const keeping = githubReaching(
+    [INSTALLATION],
+    undefined,
+    undefined,
+    skillsRepository({
+      fullName: RELAY_FULL_NAME,
+      branch: "main",
+      roots: { ".agents/skills": { "release-notes": SKILL_ENTRY.FOLDER } },
+      files: {
+        ".agents/skills/release-notes/SKILL.md":
+          "---\nname: release-notes\ndescription: Use when the developer asks for release notes.\n---\nOne line per change; see references/style.md.",
+      },
+    }),
+  ).layer;
+  const elsewhere = githubReaching([
+    { id: 7, login: RELAY.owner, repositories: [{ owner: RELAY.owner, name: "Other" }] },
+  ]).layer;
+  const admittedOn = async (target: ConversationTarget) => {
+    const id = sessionId();
+    const starting = await database.run(host.admitStarting(seat(target), id));
+    if (Result.isFailure(starting)) return assert.fail(starting.failure);
+    return starting.success;
+  };
+  const skillsOf = async (
+    target: ConversationTarget,
+    services: Layer.Layer<GitHubApp | HttpClient.HttpClient>,
+  ) => database.run(host.skills(await admittedOn(target)).pipe(Effect.provide(services)));
+
+  assert.deepEqual(await skillsOf(kept, keeping), [
+    {
+      name: "release-notes",
+      description: "Use when the developer asks for release notes.",
+      markdown:
+        "This skill is `.agents/skills/release-notes/SKILL.md` in the plan's repository; read the files it names with `run_in_repository`, relative to `.agents/skills/release-notes/`.\n\nOne line per change; see references/style.md.",
+    },
+  ]);
+  assert.deepEqual(await skillsOf(kept, elsewhere), []);
+  assert.deepEqual(await skillsOf(kept, NO_GITHUB), []);
+  assert.deepEqual(await skillsOf(bare, keeping), []);
 });
