@@ -10,8 +10,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@sidecar/hosted/integration-wire";
-import { CheckIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -19,17 +18,19 @@ import { useAct } from "../act";
 import { IntegrationMark } from "../integration-marks";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { RetryButton } from "../retry-button";
-import { searchAnchorProps } from "../settings-anchors";
-import { useConfirm } from "./confirm-state";
-import { ConfirmSwap } from "./confirm-swap";
+import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { MenuRow } from "./menu-row";
+import { SettingsGroup } from "./settings-group";
 
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
  *
- * One row per provider: its mark and name, what connecting it lets the
- * agents do, and where its connection stands. A Connect sends the browser to
- * sign in with the provider, and a Disconnect asks first, in place. The
- * window never sees a sign-in address; the host opens it. Where every
+ * One row per provider: its mark and name, and under it where its connection
+ * stands once that needs saying — connected, a sign-in under way, or one
+ * expired. A Connect sends the browser to sign in with the provider; a
+ * connected row's ⋯ (or a right-click on it) offers Disconnect, which asks
+ * first in the confirm dialog. The window never sees a sign-in address; the
+ * host opens it. Where every
  * connection stands is read once for the page (`integration-statuses.ts`),
  * when it is drawn and whenever the window is focused, which is how the
  * developer comes back from the browser. A provider this deployment offers
@@ -37,35 +38,47 @@ import { ConfirmSwap } from "./confirm-swap";
  * build; nothing the service said beyond its status words is drawn.
  */
 
-/** What connecting each provider lets the agents do, in one line. */
-const INTEGRATION_OFFER = {
-  [INTEGRATION_PROVIDER.LINEAR]: "Read and update issues, projects, and documents.",
-  [INTEGRATION_PROVIDER.NOTION]: "Search, read, and update pages and databases.",
-  [INTEGRATION_PROVIDER.SENTRY]:
-    "Read issues, errors, and traces. Untick write access on Sentry's sign-in to keep it read-only.",
-} as const satisfies Record<IntegrationProvider, string>;
+/**
+ * What a provider asks of the developer before they sign in, where its own
+ * sign-in hides a choice worth making: the one instruction a row carries
+ * besides where it stands. Only Sentry's does.
+ */
+function connectHint(provider: IntegrationProvider): string | undefined {
+  return provider === INTEGRATION_PROVIDER.SENTRY
+    ? "Untick write access on Sentry's sign-in to keep it read-only."
+    : undefined;
+}
 
 const PAGE_LINE = {
-  NOTE: "Connected services are used by your planning assistant and coding agents, as your account there sees them.",
+  CONNECTED: "Connected",
   SIGNED_OUT: "Sign in to connect integrations.",
   READ_FAILED: "Your integrations could not be read.",
   NOT_AVAILABLE: "Not available",
   NOT_OPENED: "Luke could not open your browser to sign in.",
 } as const;
 
-/** The line under a row's name: what it offers, or what needs the developer's hand. */
-function rowLine(provider: IntegrationProvider, status: IntegrationStatus | undefined): string {
+/**
+ * The line under a row's name: where the connection stands, or nothing where
+ * the row's own control already says it — a Connect, Not available, or a row
+ * whose status has not been read — save a provider's hint beside its Connect.
+ */
+function rowLine(
+  provider: IntegrationProvider,
+  status: IntegrationStatus | undefined,
+): string | undefined {
   const name = INTEGRATION_NAME[provider];
   switch (status) {
-    case undefined:
+    case INTEGRATION_STATUS.CONNECTED:
+      return PAGE_LINE.CONNECTED;
     case INTEGRATION_STATUS.PENDING:
       return `Finish signing in to ${name} in your browser.`;
     case INTEGRATION_STATUS.EXPIRED:
-      return `${name}'s sign-in has expired. Connect again to keep using it.`;
-    case INTEGRATION_STATUS.CONNECTED:
+      return "Sign-in expired.";
     case INTEGRATION_STATUS.DISCONNECTED:
+      return connectHint(provider);
+    case undefined:
     case INTEGRATION_STATUS.UNAVAILABLE:
-      return INTEGRATION_OFFER[provider];
+      return undefined;
   }
 }
 
@@ -104,8 +117,9 @@ function IntegrationRow({
       });
   }, [act, provider, name, signInBegun]);
 
-  const disconnect = useConfirm(
-    { subject: status === INTEGRATION_STATUS.CONNECTED, surfaceOpen: true },
+  const connected = status === INTEGRATION_STATUS.CONNECTED;
+  const disconnect = useConfirmDialog(
+    { subject: connected, surfaceOpen: true },
     async (): Promise<ActionResult> => {
       const answer: IntegrationStatusView | undefined = await act(
         ACT_KIND.INTEGRATIONS_DISCONNECT,
@@ -122,45 +136,33 @@ function IntegrationRow({
     },
   );
 
+  const line = rowLine(provider, status);
+  const actions = connected
+    ? [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]
+    : [];
   return (
     <>
-      <div className="settings-row integration-row" {...searchAnchorProps(provider)}>
-        <span className="settings-copy">
-          <span className="settings-name">
-            <IntegrationMark provider={provider} />
-            <strong>{name}</strong>
-            {status === INTEGRATION_STATUS.CONNECTED ? <CheckIcon /> : null}
-          </span>
-          <small>{rowLine(provider, status)}</small>
+      <MenuRow label={`${name} actions`} actions={actions} anchor={provider}>
+        <span className="settings-row-mark">
+          <IntegrationMark provider={provider} />
         </span>
-        {status === INTEGRATION_STATUS.CONNECTED ? (
-          <ConfirmSwap
-            confirm={{
-              question: `Disconnect ${name}? What Luke already did there stays.`,
-              stage: disconnect.stage,
-              verb: "Disconnect",
-              running: "Disconnecting…",
-              onKeep: disconnect.keep,
-              onAct: disconnect.run,
-            }}
-          >
-            <button
-              type="button"
-              className="toolbar-button integration-disconnect"
-              disabled={disconnect.busy}
-              /* The ellipsis is the promise that it asks first. */
-              title={`Disconnect ${name}…`}
-              onClick={disconnect.ask}
+        <span className="settings-copy">
+          <strong>{name}</strong>
+          {line === undefined ? null : (
+            <small
+              className="settings-state"
+              data-state={status === INTEGRATION_STATUS.EXPIRED ? "attention" : status}
             >
-              Disconnect
-            </button>
-          </ConfirmSwap>
-        ) : status === INTEGRATION_STATUS.UNAVAILABLE ? (
-          <span className="integration-unavailable">{PAGE_LINE.NOT_AVAILABLE}</span>
-        ) : status === undefined ? null : (
+              {line}
+            </small>
+          )}
+        </span>
+        {status === INTEGRATION_STATUS.UNAVAILABLE ? (
+          <span className="settings-unavailable">{PAGE_LINE.NOT_AVAILABLE}</span>
+        ) : status === undefined || connected ? null : (
           <button
             type="button"
-            className="toolbar-button"
+            className="toolbar-button bordered-button"
             disabled={connecting}
             title={`Sign in to ${name} in your browser`}
             onClick={connect}
@@ -168,12 +170,21 @@ function IntegrationRow({
             {status === INTEGRATION_STATUS.DISCONNECTED ? "Connect" : "Connect again"}
           </button>
         )}
-      </div>
-      {rejection !== undefined || disconnect.rejection !== undefined ? (
+      </MenuRow>
+      {rejection === undefined ? null : (
         <p className="error-message" role="alert">
-          {rejection ?? disconnect.rejection}
+          {rejection}
         </p>
-      ) : null}
+      )}
+      <ConfirmDialog
+        confirm={disconnect}
+        question={{
+          title: `Disconnect ${name}?`,
+          body: "What Luke already did there stays.",
+          verb: "Disconnect",
+          running: "Disconnecting…",
+        }}
+      />
     </>
   );
 }
@@ -188,7 +199,6 @@ function IntegrationRows(): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   return (
     <>
-      <p className="settings-note">{PAGE_LINE.NOTE}</p>
       {statuses.readFailed ? (
         <>
           <p className="error-message" role="alert">
@@ -197,25 +207,20 @@ function IntegrationRows(): React.JSX.Element {
           <RetryButton onRetry={() => void statuses.read()} />
         </>
       ) : null}
-      {INTEGRATION_PROVIDER_LIST.map((provider) => (
-        <IntegrationRow
-          key={provider}
-          provider={provider}
-          status={statuses.statusOf(provider)}
-          statuses={statuses}
-        />
-      ))}
+      <SettingsGroup>
+        {INTEGRATION_PROVIDER_LIST.map((provider) => (
+          <IntegrationRow
+            key={provider}
+            provider={provider}
+            status={statuses.statusOf(provider)}
+            statuses={statuses}
+          />
+        ))}
+      </SettingsGroup>
     </>
   );
 }
 
 export function IntegrationsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
-      {signedIn ? <IntegrationRows /> : <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>}
-    </section>
-  );
+  return signedIn ? <IntegrationRows /> : <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>;
 }

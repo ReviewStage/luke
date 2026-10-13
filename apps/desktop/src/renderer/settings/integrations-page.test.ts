@@ -23,8 +23,8 @@ import { IntegrationsSection } from "./integrations-page";
 /**
  * Settings › Integrations through the bridge the host answers, Linear standing
  * for every provider: where the connection stands as drawn, Connect sending
- * the browser and reading again when the window comes back, and Disconnect
- * asking first. The service's
+ * the browser and reading again when the window comes back, and Disconnect,
+ * from the row's ⋯ or a right-click on it, asking first. The service's
  * standing is the test's own variable, which a Connect leaves pending and the
  * browser's return settles.
  */
@@ -113,6 +113,19 @@ async function mount(signedIn = true): Promise<HTMLElement> {
 
 const line = (row: HTMLElement) => row.querySelector("small")?.textContent;
 
+/** The menu item with these words, in whichever menu stands open. */
+function menuItem(label: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`no ${label} item`)
+  );
+}
+
+function dialog(): HTMLElement {
+  return document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+}
+
 function button(row: HTMLElement, label: string): HTMLButtonElement {
   return (
     [...row.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -123,7 +136,7 @@ function button(row: HTMLElement, label: string): HTMLButtonElement {
 
 test("a disconnected account is offered Connect, which sends the browser and reads the sign-in's outcome when the window comes back", async () => {
   const row = await mount();
-  assert.equal(line(row), "Read and update issues, projects, and documents.");
+  assert.equal(line(row), undefined, "Connect says it all");
 
   act(() => button(row, "Connect").click());
   await settle();
@@ -135,8 +148,8 @@ test("a disconnected account is offered Connect, which sends the browser and rea
     window.dispatchEvent(new Event("focus"));
   });
   await settle();
-  assert.equal(line(row), "Read and update issues, projects, and documents.");
-  assert.ok(button(row, "Disconnect"));
+  assert.equal(line(row), "Connected");
+  assert.ok(row.querySelector('button[aria-label="Linear actions"]'), "the row offers its menu");
   assert.deepEqual(
     sent.map((request) => request.kind),
     [ACT_KIND.INTEGRATIONS_STATUS, ACT_KIND.INTEGRATIONS_CONNECT, ACT_KIND.INTEGRATIONS_STATUS],
@@ -164,23 +177,43 @@ test("a sign-in found expired while Connect was answering stays expired once the
   assert.match(line(row) ?? "", /expired/);
 });
 
-test("Disconnect asks first, and only the answer to the question disconnects", async () => {
+test("Disconnect, from the row's ⋯, asks first, and only the answer to the question disconnects", async () => {
   standing = INTEGRATION_STATUS.CONNECTED;
   const row = await mount();
 
-  act(() => button(row, "Disconnect").click());
+  act(() => row.querySelector<HTMLButtonElement>('button[aria-label="Linear actions"]')?.click());
+  act(() => menuItem("Disconnect").click());
   await settle();
   assert.ok(!sent.some((request) => request.kind === ACT_KIND.INTEGRATIONS_DISCONNECT));
-  const question =
-    row.querySelector<HTMLFieldSetElement>('fieldset[data-drawn="true"]') ??
-    assert.fail("no question asked");
+  const question = dialog();
   const name = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
-  assert.match(name?.textContent ?? "", /^Disconnect Linear\?/);
+  assert.equal(name?.textContent, "Disconnect Linear?");
 
   act(() => button(question, "Disconnect").click());
   await settle();
   assert.equal(standing, INTEGRATION_STATUS.DISCONNECTED);
   assert.ok(button(row, "Connect"));
+});
+
+test("a right-click on a connected row opens the same menu, and a disconnected row answers none", async () => {
+  standing = INTEGRATION_STATUS.CONNECTED;
+  const connected = await mount();
+  const rightClick = (row: Element) =>
+    act(() => {
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+  rightClick(connected.querySelector('[data-search-anchor="linear"]') ?? assert.fail("no row"));
+  assert.ok(menuItem("Disconnect"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+
+  standing = INTEGRATION_STATUS.DISCONNECTED;
+  const disconnected = await mount();
+  rightClick(disconnected.querySelector('[data-search-anchor="linear"]') ?? assert.fail("no row"));
+  assert.equal(document.querySelector('[role="menu"]:not([data-leaving])'), null);
 });
 
 test("a browser that could not be opened says so under the row, and the account stays as it was", async () => {

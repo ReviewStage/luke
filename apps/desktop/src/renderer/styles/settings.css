@@ -555,8 +555,7 @@
    service erases it and no sign-in brings it back — and wears the same warning
    the same way. */
 .account-signout:hover:not(:disabled),
-.account-delete:hover:not(:disabled),
-.integration-disconnect:hover:not(:disabled) {
+.account-delete:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger-text);
 }
@@ -862,15 +861,65 @@
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
-/* Settings › Integrations: a provider's mark and name over what connecting it
-   lets the agents do, its action at the row's end. A provider this deployment
-   offers no connector for says so in the muted ink where a button would be. */
-.integration-row .integration-mark {
-  width: 16px;
-  height: 16px;
+/* What leads a row that stands for something of its own, a provider's or a
+   service's mark, in one box whatever the artwork's proportions. */
+.settings-row-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
 }
 
-.integration-unavailable {
+.settings-row-mark > :is(svg, img) {
+  width: 20px;
+  height: 20px;
+}
+
+/* A row's words take what the row leaves once its mark and controls stand. */
+.settings-row-mark + .settings-copy {
+  flex: 1;
+}
+
+/* Where a row's subject stands, under its name: connected with the dot a
+   finished session wears, and what needs a hand in the attention tint. */
+.settings-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.settings-state[data-state="connected"]::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--state-complete);
+  content: "";
+}
+
+.settings-copy .settings-state[data-state="attention"] {
+  color: var(--state-attention);
+}
+
+/* What a row says where a button would be, when there is nothing to offer. */
+.settings-unavailable {
+  flex: none;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
+}
+
+/* A row's ⋯ (`menu-row.tsx`) keeps its room while hidden, so the row never
+   shifts as it shows: drawn while the row is hovered, holds the keyboard, or
+   has its menu open, the way a sidebar plan's is. */
+.menu-row .menu-row-more {
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.menu-row:is(:hover, :focus-within, [data-menu-open="true"]) .menu-row-more {
+  opacity: 1;
 }
