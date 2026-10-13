@@ -571,7 +571,7 @@ export const EVE_DELEGATION_INPUT = {
  * repository keeps (`../agent-runtime/skills.ts`), and what its call
  * carries, as eve declares it: the skill's name.
  */
-export const EVE_SKILL_TOOL = {
+const EVE_SKILL_TOOL = {
   NAME: AGENT_TOOL.LOAD_SKILL,
   INPUT: Schema.Struct({ skill: Schema.String }),
 } as const;

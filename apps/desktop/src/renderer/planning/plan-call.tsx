@@ -31,7 +31,7 @@ import {
   type TranscriptCallRow,
   type TranscriptRegion,
 } from "./transcript-model";
-import { type WorkTurnRow, workFailed, workRowsOf } from "./work-model";
+import { type WorkTurnRow, workerJobs, workFailed, workRowsOf } from "./work-model";
 import { WorkingLine } from "./working-time";
 
 /**
@@ -424,6 +424,8 @@ export function PlanCall({
       starts: shown ? workerStarts(rows) : undefined,
       onOpen: (callId) => onOpenSubagent(callId),
       onOpenAgent,
+      // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
+      jobs: workerJobs(turns),
     },
     counting: shown,
     revealed: at === undefined ? undefined : turnAt(rows, at),

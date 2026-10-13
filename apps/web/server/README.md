@@ -996,7 +996,7 @@ rewrite reads the next segment as a plan's id.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
-conversation's turns, twenty a page newest first, each projected from its
+conversation's turns, twenty a page newest first, each read from its
 row and journal by the same `voice/plan-work.ts` a live call tells them
 through, and `?before=<turn id>` for the page before that turn; the answer
 names the turn the next older page is read before while one stands. The

@@ -12,7 +12,6 @@ import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire"
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
-  PLAN_WORK_PART,
   PLAN_WORK_STATE,
   type PlanWorkAnswer,
   type PlanWorkTurn,
@@ -277,10 +276,13 @@ test("a plan's work reads back from its conversation after the call: its turns o
   const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
   assert.ok(Option.isSome(read));
   assert.deepEqual(
-    read.value.turns.map((turn) => [turn.state, turn.parts.at(-1)]),
+    read.value.turns.map((turn) => {
+      const last = turn.journal.at(-1);
+      return [turn.state, isRecord(last) ? last.text : undefined];
+    }),
     [
-      [PLAN_WORK_STATE.DONE, { type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
-      [PLAN_WORK_STATE.DONE, { type: PLAN_WORK_PART.TEXT, text: "Expiry is seven days." }],
+      [PLAN_WORK_STATE.DONE, "Invites live in one file."],
+      [PLAN_WORK_STATE.DONE, "Expiry is seven days."],
     ],
   );
   assert.equal(read.value.earlier, undefined);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { runModeFor } from "@sidecar/host";
-import { PLAN_WORK_PART, PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -180,7 +180,8 @@ it("the voice window is sent the document without the planning turns' work, and 
         startedAt: 0,
         state: PLAN_WORK_STATE.DONE,
         earlierOmitted: false,
-        parts: [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+        journal: [{ type: "text", text: "Invites live in one file." }],
+        workers: [],
       },
     ],
   } as const;

@@ -1,11 +1,10 @@
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
-  PLAN_WORK_PART,
   PLAN_WORK_STATE,
-  PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanCode,
   type PlanCodeShowing,
@@ -19,8 +18,10 @@ import {
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import type { WireRecord, WireValue } from "@sidecar/wire";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
+import { TOOL_STATE } from "../ai-elements/tool";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -429,18 +430,25 @@ const FIXTURE_BOARD: Board = {
 /** The open plan on its whiteboard, as the planning-board profile captures it. */
 const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
 
-/** A repository command of the fixture's turns, answered with `output`. */
-function fixtureCommand(id: string, command: string, output: string) {
+/** A call of the fixture's turns, as the AI SDK journals it: answered with `output`, or running where it has none. */
+function fixtureCall(tool: string, id: string, input: WireRecord, output?: WireValue) {
   return {
-    type: PLAN_WORK_PART.TOOL,
+    type: `tool-${tool}`,
+    toolCallId: id,
+    state: output === undefined ? TOOL_STATE.INPUT_AVAILABLE : TOOL_STATE.OUTPUT_AVAILABLE,
+    input,
+    ...(output === undefined ? undefined : { output }),
+  };
+}
+
+/** A repository command of the fixture's turns, answered with `stdout` where it has answered. */
+function fixtureCommand(id: string, command: string, stdout?: string) {
+  return fixtureCall(
+    AGENT_TOOL.RUN_IN_REPOSITORY,
     id,
-    tool: PLAN_WORK_TOOL.REPOSITORY,
-    name: "run_in_repository",
-    state: PLAN_WORK_STATE.DONE,
-    subject: command,
-    input: JSON.stringify({ command }, null, 2),
-    output,
-  } as const;
+    { command },
+    stdout === undefined ? undefined : { status: "ran", exitCode: 0, stdout, stderr: "" },
+  );
 }
 
 /** The store's id for the session of the fixture's call standing now. */
@@ -452,6 +460,9 @@ const FIXTURE_LIVE_SESSION = "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f";
  * handed a comparison to the worker and is reading on while it runs.
  * Synthetic throughout: no real repository, command output, or page.
  */
+const FIXTURE_WORKER_TASK =
+  "Compare how two invite libraries let an admin revoke a pending invite.";
+
 const FIXTURE_WORK: readonly PlanWorkTurn[] = [
   {
     turnId: "fixture-turn-1",
@@ -460,18 +471,16 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     earlierOmitted: false,
     // The earlier call's "Any member should be able to." asked for it.
     asked: ["fixture-earlier-2"],
-    parts: [
+    journal: [
       fixtureCommand("fixture-call-1", "ls src/members", "invite.ts\nmembership.ts\nroles.ts"),
       fixtureCommand(
         "fixture-call-2",
         "grep -rn withdraw src/members",
         "src/members/invite.ts:42:export function withdrawInvite(invite: Invite, by: Member) {",
       ),
-      {
-        type: PLAN_WORK_PART.TEXT,
-        text: "Only the member who sent an invite can withdraw it today.",
-      },
+      { type: "text", text: "Only the member who sent an invite can withdraw it today." },
     ],
+    workers: [],
   },
   {
     turnId: "fixture-turn-2",
@@ -481,62 +490,55 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     // The call standing now's "who can withdraw an invite?" asked for it, under the service's own row id, which the line heard on the call is matched to by where it began.
     asked: ["fixture-service-1"],
     askedAt: [{ voiceSessionId: FIXTURE_LIVE_SESSION, fromMs: 1_200 }],
-    parts: [
+    journal: [
       {
-        type: PLAN_WORK_PART.REASONING,
+        type: "reasoning",
         text: "The developer wants admins to withdraw invites too. Before suggesting a library, check whether removal already has an admin check to reuse, and hand the library comparison to the worker so the answer is not held up.",
       },
-      {
-        type: PLAN_WORK_PART.TOOL,
-        id: "fixture-call-3",
-        tool: PLAN_WORK_TOOL.WORKER,
-        name: "worker",
-        state: PLAN_WORK_STATE.RUNNING,
-        subject: "Compare how two invite libraries let an admin revoke a pending invite.",
-        input: "{}",
-        session: {
-          earlierOmitted: false,
-          parts: [
-            {
-              type: PLAN_WORK_PART.TOOL,
-              id: "fixture-worker-1",
-              tool: PLAN_WORK_TOOL.SEARCH_WEB,
-              name: "search_web",
-              state: PLAN_WORK_STATE.DONE,
-              subject: "invite library revoke pending invite admin",
-              input: JSON.stringify(
-                { query: "invite library revoke pending invite admin" },
-                null,
-                2,
-              ),
-              output: "invite-kit docs: Revoking invites\ninvitely API: DELETE /invites/:id",
-            },
-            fixtureCommand(
-              "fixture-worker-2",
-              "grep -rn revoke node_modules/invite-kit/README.md",
-              "README.md:88:Admins may revoke any pending invite with revoke(invite).",
-            ),
-            {
-              type: PLAN_WORK_PART.TEXT,
-              text: "invite-kit lets any admin revoke a pending invite; invitely only lets its sender.",
-            },
-          ],
-        },
-      },
-      { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm checking how removal works now." },
+      fixtureCall(
+        EVE_TOOL.WORKER,
+        "fixture-call-3",
+        { message: FIXTURE_WORKER_TASK },
+        "Started task worker-fixture. Its result will arrive in a <task_result> message.",
+      ),
+      { type: "text", text: "While that runs, I'm checking how removal works now." },
       fixtureCommand(
         "fixture-call-4",
         "sed -n 30,60p src/members/membership.ts",
         "export function removeMember(member: Member, by: Member) {\n  assertAdmin(by);\n  …",
       ),
+      fixtureCommand("fixture-call-5", "grep -rn pending src/members"),
+    ],
+    workers: [
       {
-        type: PLAN_WORK_PART.TOOL,
-        id: "fixture-call-5",
-        tool: PLAN_WORK_TOOL.REPOSITORY,
-        name: "run_in_repository",
+        callId: "fixture-call-3",
+        taskId: "worker-fixture",
+        task: FIXTURE_WORKER_TASK,
         state: PLAN_WORK_STATE.RUNNING,
-        subject: "grep -rn pending src/members",
-        input: JSON.stringify({ command: "grep -rn pending src/members" }, null, 2),
+        earlierOmitted: false,
+        journal: [
+          fixtureCall(
+            AGENT_TOOL.SEARCH_WEB,
+            "fixture-worker-1",
+            { query: "invite library revoke pending invite admin" },
+            {
+              status: "found",
+              query: "invite library revoke pending invite admin",
+              summary:
+                "invite-kit documents revoking invites; invitely exposes DELETE /invites/:id.",
+              findings: [],
+            },
+          ),
+          fixtureCommand(
+            "fixture-worker-2",
+            "grep -rn revoke node_modules/invite-kit/README.md",
+            "README.md:88:Admins may revoke any pending invite with revoke(invite).",
+          ),
+          {
+            type: "text",
+            text: "invite-kit lets any admin revoke a pending invite; invitely only lets its sender.",
+          },
+        ],
       },
     ],
   },
