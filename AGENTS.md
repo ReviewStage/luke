@@ -93,15 +93,17 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   over account rows tests that one user cannot read another's. A model or
   repository under `packages/database/src/` ships with a sibling
   `__tests__/<name>.test.ts` in the same PR.
-- Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
-  `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
-  (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
-  `it.live` fail lint (`testing/no-real-time`).
+- Effect tests use `it.effect` and `TestClock.adjust`, rather than running
+  an effect themselves (`Effect.run*`, `Runtime.run*`, `ManagedRuntime.make`)
+  or waiting on real time (`setTimeout`, `setInterval`, `Effect.sleep`,
+  `it.live`). No lint rule holds a test file to this: the Effect edge rules
+  exempt one by extension, because a test body is its own edge
+  (`tools/oxlint/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
   helpers, with the diff explained in the PR.
-- Never loosen or skip a test to go green. `.only`, `.skip`, `.todo`, and
-  `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix or delete a
-  flaky test. A test that breaks on a refactor because it checks internal
+- Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
+  `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
+  test. A test that breaks on a refactor because it checks internal
   wiring a behavior test already covers is deleted, not fixed, and the PR
   says which behavior test covers it.
 - Do not write change-detector tests: an expected value computed by the code
@@ -109,12 +111,11 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   re-export, or Schema round-trip on a valid value; a test that only asserts
   a fake was called; a private function exported for a test.
 
-`tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
-`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
-last entry. `liveClockTests` is permanent, for a subject that is a real socket
-or process timeout; `it.live` is allowed only there, and each entry is named
-here with its reason:
-
+What the checks hold a test to is narrower than the rules above:
+`anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
+on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
+in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+`vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms
 
