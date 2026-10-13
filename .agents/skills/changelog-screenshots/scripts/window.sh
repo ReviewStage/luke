@@ -25,9 +25,14 @@ fi
 export LUKE_SHOT_SIZE=${LUKE_SHOT_SIZE:-1600x1000}
 profile=$(mktemp -d /tmp/luke-shot.XXXX)
 # Note that we quit the build and remove its profile on every exit, because a failed capture must not leave either behind.
+# Note that we wait for the build to quit before removing its profile, because it is still writing there as it goes.
 cleanup() {
     pkill -f "user-data-dir=$profile" || true
-    rm -rf "$profile"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        pgrep -f "user-data-dir=$profile" >/dev/null || break
+        sleep 0.5
+    done
+    rm -rf "$profile" || true
 }
 trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"

@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/src/renderer/act.ts b/apps/desktop/src/renderer/act.ts
-index c7b8f8a2..5a078244 100644
+index c7b8f8a20..5a0782448 100644
 --- a/apps/desktop/src/renderer/act.ts
 +++ b/apps/desktop/src/renderer/act.ts
 @@ -12,6 +12,7 @@ import {
@@ -22,7 +22,7 @@ index c7b8f8a2..5a078244 100644
  async function performAct<Kind extends ActKind>(
    send: (request: Act) => Promise<ActOutcome>,
 diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
-index c3e268db..39c7d8f7 100644
+index c3e268dbc..39c7d8f7b 100644
 --- a/apps/desktop/src/renderer/app.tsx
 +++ b/apps/desktop/src/renderer/app.tsx
 @@ -24,6 +24,9 @@ import { usePlansTab } from "./planning/use-plans-tab";
@@ -64,7 +64,7 @@ index c3e268db..39c7d8f7 100644
                await act(ACT_KIND.ACCOUNT_SIGN_OUT);
              },
 diff --git a/apps/desktop/src/renderer/desktop/desktop-plans.tsx b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
-index 1a818b9f..46f917f7 100644
+index 1a818b9f8..46f917f7f 100644
 --- a/apps/desktop/src/renderer/desktop/desktop-plans.tsx
 +++ b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
 @@ -14,6 +14,7 @@ import {
@@ -102,7 +102,7 @@ index 1a818b9f..46f917f7 100644
        {drawing.panel ? (
          <SidePanel
 diff --git a/apps/desktop/src/renderer/desktop/side-panel.tsx b/apps/desktop/src/renderer/desktop/side-panel.tsx
-index 84440d88..d3a80542 100644
+index 84440d885..d3a80542b 100644
 --- a/apps/desktop/src/renderer/desktop/side-panel.tsx
 +++ b/apps/desktop/src/renderer/desktop/side-panel.tsx
 @@ -72,6 +72,7 @@ import { type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -132,7 +132,7 @@ index 84440d88..d3a80542 100644
          />
        )}
 diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
-index 563027b0..5fa29b42 100644
+index 563027b07..5fa29b428 100644
 --- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
 +++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
 @@ -6,6 +6,7 @@ import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -184,7 +184,7 @@ index 563027b0..5fa29b42 100644
      workers,
 diff --git a/apps/desktop/src/renderer/shots/account.ts b/apps/desktop/src/renderer/shots/account.ts
 new file mode 100644
-index 00000000..fd1afbb2
+index 000000000..fd1afbb28
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/account.ts
 @@ -0,0 +1,24 @@
@@ -214,7 +214,7 @@ index 00000000..fd1afbb2
 +}
 diff --git a/apps/desktop/src/renderer/shots/canned-acts.ts b/apps/desktop/src/renderer/shots/canned-acts.ts
 new file mode 100644
-index 00000000..488872c0
+index 000000000..488872c0a
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/canned-acts.ts
 @@ -0,0 +1,33 @@
@@ -253,7 +253,7 @@ index 00000000..488872c0
 +}
 diff --git a/apps/desktop/src/renderer/shots/clock.ts b/apps/desktop/src/renderer/shots/clock.ts
 new file mode 100644
-index 00000000..6d87e7b0
+index 000000000..6d87e7b07
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/clock.ts
 @@ -0,0 +1,31 @@
@@ -290,7 +290,7 @@ index 00000000..6d87e7b0
 +}
 diff --git a/apps/desktop/src/renderer/shots/coding-agent.ts b/apps/desktop/src/renderer/shots/coding-agent.ts
 new file mode 100644
-index 00000000..809dfbe9
+index 000000000..809dfbe9c
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/coding-agent.ts
 @@ -0,0 +1,420 @@
@@ -716,12 +716,12 @@ index 00000000..809dfbe9
 +
 diff --git a/apps/desktop/src/renderer/shots/coding-agents-shot.ts b/apps/desktop/src/renderer/shots/coding-agents-shot.ts
 new file mode 100644
-index 00000000..04ffb9b8
+index 000000000..c77e41ae3
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/coding-agents-shot.ts
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,40 @@
 +/**
-+ * coding-agents-shot.ts -- "Coding agents work alongside you": the side panel close up, its strip of agent tabs with their generated titles and one tab's right-click menu open on Rename, over the agent's transcript opened onto its work, where it updated the plan.
++ * coding-agents-shot.ts -- "Coding agents work alongside you": the side panel close up, its strip of agent tabs with their generated titles, over the agent's transcript opened onto its work, where it updated the plan.
 + *
 + * Throwaway (`shot-spec.ts`). A close-up of the panel alone, captured at
 + * `LUKE_SHOT_ZOOM=2`. The sidebar stays open and the panel is staged 704
@@ -729,25 +729,17 @@ index 00000000..04ffb9b8
 + * whole short of the window's corner. The panel is on the finished agent,
 + * "Add teammate invitations", beside "Invite emails" at work. Once its
 + * transcript lands the staging opens the finished turn's folded work, as a
-+ * developer would, so "Updated the plan: 3 added" stands under the strip,
-+ * then right-clicks the agent's tab: its actions menu stands open with
-+ * Rename lit as under the pointer, opened again should the window's blur or
-+ * resize take it down. Rename is never chosen: the shot's menu item does
-+ * nothing (`desktop/side-panel.tsx`), so the tab keeps its title whatever
-+ * reaches the menu.
++ * developer would, so "Updated the plan: 3 added" stands under the strip.
 + */
 +
 +import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 +import { codingAgentAnswers } from "./coding-agent";
-+import { agentSection, leadFold, openFold, panelTab, rightClick, settled } from "./dom";
++import { leadFold, openFold } from "./dom";
 +import { AGENT_TITLE, SHOT_ID, shotPlanningView } from "./plan-document";
 +import type { ShotSpec } from "./shot-spec";
 +
 +/** The side panel's width, in points: it starts at x 896 beside the open sidebar and the plan's 636. */
 +const PANEL_WIDTH = 704;
-+
-+/** How long after launch the menu is first opened, so the window stands at its size. */
-+const MENU_AFTER_MS = 2500;
 +
 +export function codingAgentsShot(): ShotSpec {
 +  return {
@@ -765,33 +757,12 @@ index 00000000..04ffb9b8
 +        ready: () => leadFold(AGENT_TITLE) !== null,
 +        run: () => openFold(leadFold(AGENT_TITLE)),
 +      },
-+      {
-+        key: "menu-lit",
-+        ready: () =>
-+          settled(MENU_AFTER_MS) && agentSection(AGENT_TITLE)?.querySelector("[data-plan-card]") != null,
-+        run: () => {
-+          document.documentElement.dataset.shotMenuHover = "true";
-+        },
-+      },
-+      {
-+        key: "rename-menu",
-+        again: true,
-+        ready: () =>
-+          document.documentElement.dataset.shotMenuHover === "true" &&
-+          document.querySelector('.plan-menu[aria-label="Agent actions"]') === null &&
-+          document.querySelector(".side-panel-tabs .tab-field") === null &&
-+          panelTab(AGENT_TITLE) !== null,
-+        run: () => {
-+          const tab = panelTab(AGENT_TITLE);
-+          if (tab !== null) rightClick(tab);
-+        },
-+      },
 +    ],
 +  };
 +}
 diff --git a/apps/desktop/src/renderer/shots/dean-avatar.ts b/apps/desktop/src/renderer/shots/dean-avatar.ts
 new file mode 100644
-index 00000000..05eb3f68
+index 000000000..05eb3f683
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/dean-avatar.ts
 @@ -0,0 +1,7 @@
@@ -804,7 +775,7 @@ index 00000000..05eb3f68
 +  "data:image/jpeg;base64,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";
 diff --git a/apps/desktop/src/renderer/shots/dom.ts b/apps/desktop/src/renderer/shots/dom.ts
 new file mode 100644
-index 00000000..e098aa2c
+index 000000000..e098aa2c1
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/dom.ts
 @@ -0,0 +1,59 @@
@@ -869,7 +840,7 @@ index 00000000..e098aa2c
 +}
 diff --git a/apps/desktop/src/renderer/shots/plan-document.ts b/apps/desktop/src/renderer/shots/plan-document.ts
 new file mode 100644
-index 00000000..aa42467d
+index 000000000..aa42467d3
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/plan-document.ts
 @@ -0,0 +1,207 @@
@@ -1082,7 +1053,7 @@ index 00000000..aa42467d
 +}
 diff --git a/apps/desktop/src/renderer/shots/shot-profiles.ts b/apps/desktop/src/renderer/shots/shot-profiles.ts
 new file mode 100644
-index 00000000..0fb71e01
+index 000000000..0fb71e01e
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/shot-profiles.ts
 @@ -0,0 +1,43 @@
@@ -1131,7 +1102,7 @@ index 00000000..0fb71e01
 +}
 diff --git a/apps/desktop/src/renderer/shots/shot-spec.ts b/apps/desktop/src/renderer/shots/shot-spec.ts
 new file mode 100644
-index 00000000..8acfec6a
+index 000000000..8acfec6a1
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/shot-spec.ts
 @@ -0,0 +1,77 @@
@@ -1214,7 +1185,7 @@ index 00000000..8acfec6a
 +}
 diff --git a/apps/desktop/src/renderer/shots/shots.css b/apps/desktop/src/renderer/shots/shots.css
 new file mode 100644
-index 00000000..c8255ac5
+index 000000000..c8255ac51
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/shots.css
 @@ -0,0 +1,8 @@
@@ -1228,7 +1199,7 @@ index 00000000..c8255ac5
 +}
 diff --git a/apps/desktop/src/renderer/shots/subagents-shot.ts b/apps/desktop/src/renderer/shots/subagents-shot.ts
 new file mode 100644
-index 00000000..2d7637cb
+index 000000000..2d7637cb6
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/subagents-shot.ts
 @@ -0,0 +1,61 @@
@@ -1295,7 +1266,7 @@ index 00000000..2d7637cb
 +}
 diff --git a/apps/desktop/src/renderer/shots/use-shot-staging.ts b/apps/desktop/src/renderer/shots/use-shot-staging.ts
 new file mode 100644
-index 00000000..0e8ae397
+index 000000000..0e8ae3976
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/use-shot-staging.ts
 @@ -0,0 +1,61 @@
@@ -1361,7 +1332,7 @@ index 00000000..0e8ae397
 +  }, []);
 +}
 diff --git a/apps/desktop/src/renderer/styles/index.css b/apps/desktop/src/renderer/styles/index.css
-index dd5dc313..598dd9f7 100644
+index dd5dc313a..598dd9f7c 100644
 --- a/apps/desktop/src/renderer/styles/index.css
 +++ b/apps/desktop/src/renderer/styles/index.css
 @@ -25,3 +25,5 @@
@@ -1371,7 +1342,7 @@ index dd5dc313..598dd9f7 100644
 +/* Throwaway: the changelog shots (`shots/shot-spec.ts`), last so they win. */
 +@import "../shots/shots.css";
 diff --git a/apps/desktop/src/renderer/update-row.ts b/apps/desktop/src/renderer/update-row.ts
-index f31820d6..2a7175c1 100644
+index f31820d69..2a7175c15 100644
 --- a/apps/desktop/src/renderer/update-row.ts
 +++ b/apps/desktop/src/renderer/update-row.ts
 @@ -1,4 +1,5 @@
@@ -1397,7 +1368,7 @@ index f31820d6..2a7175c1 100644
    return {
      status: UPDATE_STATUS.READY,
 diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
-index 6fd5455a..7fd7d552 100644
+index 6fd5455aa..7fd7d552d 100644
 --- a/apps/desktop/src/shared/messages/app-state.ts
 +++ b/apps/desktop/src/shared/messages/app-state.ts
 @@ -27,6 +27,9 @@ export const RUN_PROFILE = {

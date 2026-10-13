@@ -468,7 +468,7 @@ right-click menu.
 [#1962](https://github.com/ReviewStage/luke/pull/1962),
 [#1964](https://github.com/ReviewStage/luke/pull/1964))
 
-![A coding agent's tab, titled for its work, with its right-click menu open on Rename, beside the agent's transcript where it updated the plan and opened #214.](apps/web/public/changelog/0.11.0/coding-agents-work-alongside-you.png)
+![A coding agent's tab, titled for its work beside a second agent's, over its transcript where it updated the plan and opened #214.](apps/web/public/changelog/0.11.0/coding-agents-work-alongside-you.png)
 
 ### Subagents
 
