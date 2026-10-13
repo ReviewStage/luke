@@ -31,7 +31,7 @@ import {
   type HttpClient,
   HttpRouter,
   HttpServerRequest,
-  type HttpServerResponse,
+  HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -99,6 +99,7 @@ import {
 } from "./hosted/http-effect.js";
 import {
   answerInboxItem,
+  readInboxAttachment,
   readInboxItem,
   type StoredInboxItem,
   withdrawInboxAnswer,
@@ -193,11 +194,24 @@ const AGENTS_PATH = {
   INBOX_ITEM: "/api/inbox/item",
   /** GET reads what waits on the developer across the account's plans past `after`. */
   INBOX: "/api/inbox",
+  /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
+  INBOX_ATTACHMENT: "/api/inbox/attachment",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
-const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
+const QUERY = { ID: "id", AFTER: "after", CALL: "call", ATTACHMENT: "attachment" } as const;
+
+/**
+ * The headers an attachment's bytes are served under beside their type: the
+ * browser is told not to sniff them for another type, since the type is
+ * what the service sniffed them to be as they were kept, and nothing on the
+ * way may keep a copy, since the bytes are one account's.
+ */
+const ATTACHMENT_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "cache-control": "private, no-store",
+} as const;
 
 /** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
 const MAXIMUM_ATTACHMENTS_BODY_BYTES =
@@ -252,11 +266,12 @@ const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   return account.value;
 });
 
-/** The one id the path named under `query`; two is refused, and one that is no UUID names no row. */
-const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+/** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
+const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
+  name: string,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(QUERY.ID);
+  const ids = new URL(request.url).searchParams.getAll(name);
   const [id] = ids;
   if (id === undefined || ids.length !== 1) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -265,6 +280,12 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
+
+/** The one id the path named under `id`. */
+const idOf = (request: Request) => uuidOf(request, QUERY.ID);
+
+/** The one attachment the path named under `attachment`. */
+const attachmentIdOf = (request: Request) => uuidOf(request, QUERY.ATTACHMENT);
 
 /** The delegation call the path named under `query`, or not found for one that is no call id. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -779,6 +800,32 @@ const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
+/**
+ * GET serves one attachment of an inbox item, an image block's picture, as
+ * its bytes under the media type the service sniffed them to be as they
+ * were kept, to the item's account alone: an attachment of another
+ * account's, or of another item's, is not found, as an item is.
+ */
+const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const itemId = yield* idOf(request);
+  const attachmentId = yield* attachmentIdOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const found = yield* hostedStoreOrUnavailable(readInboxAttachment(userId, itemId, attachmentId));
+  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(found.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: found.value.contentType,
+    headers: ATTACHMENT_HEADERS,
+  });
+});
+
 /** An item as an answer comes back with it, and whether the answer was taken. */
 function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
@@ -915,6 +962,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           hostedRefusing(inboxAnswerEndpoint(seams, writer)),
         ),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.INBOX_ATTACHMENT,
+          hostedRefusing(inboxAttachmentEndpoint(seams)),
+        ),
         hostedNotFoundRoute,
       ),
     ),

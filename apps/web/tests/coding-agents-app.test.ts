@@ -21,10 +21,13 @@ import {
   TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
+  INBOX_BLOCK,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxImageBlock,
   type InboxPost,
   inboxAnsweredSchema,
   inboxAnswerSchema,
@@ -103,7 +106,12 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { answerInboxItem, postInboxItem, readInboxItem } from "../server/hosted/inbox-store";
+import {
+  answerInboxItem,
+  type InboxImage,
+  postInboxItem,
+  readInboxItem,
+} from "../server/hosted/inbox-store";
 import {
   CODING_AGENT_DEFAULT_CHOICE,
   modelCatalogOf,
@@ -325,15 +333,18 @@ const standing = (
       { disableLogger: true },
     );
     yield* Effect.addFinalizer(() => Effect.promise(() => dispose()));
-    return (request: Request) =>
+    /** The response as the function answers it, for the one route that answers bytes. */
+    const fetch = (request: Request) => Effect.promise(() => handler(request));
+    const ask = (request: Request) =>
       Effect.gen(function* () {
-        const response = yield* Effect.promise(() => handler(request));
+        const response = yield* fetch(request);
         const text = yield* Effect.promise(() => response.text());
         // SAFETY: the group answers JSON; the test compares it as the wire value it is, and an answer
         // with no body is compared as its text so a failure names what came back.
         const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
         return { status: response.status, body } satisfies Answer;
       });
+    return { ask, fetch };
   });
 
 function request(
@@ -346,6 +357,7 @@ function request(
     after?: string;
     call?: string;
     archived?: string | undefined;
+    attachment?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -353,6 +365,7 @@ function request(
   if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
+  if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -424,8 +437,8 @@ const openPlan = (
     ]);
     const github = githubReaching([INSTALLATION], undefined, undefined, options.github);
     const eve = options.eve ?? fakeEve();
-    const ask = yield* standing(bearers, github, eve, options.titles ?? false);
-    return { owner, other, plan, eve, github, ask };
+    const { ask, fetch } = yield* standing(bearers, github, eve, options.titles ?? false);
+    return { owner, other, plan, eve, github, ask, fetch };
   });
 
 it.layer(testSqlClient)("the coding-agent routes", (it) => {
@@ -3254,6 +3267,10 @@ function startAs(bearer: string | undefined, planId: string, body: WireBoundaryI
 const PLAN_INBOX = "/api/plans/inbox";
 const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
+const INBOX_ATTACHMENT = "/api/inbox/attachment";
+
+/** The first bytes of a PNG, as a screenshot's file starts. */
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
 it.layer(testSqlClient)("the developer's inbox", (it) => {
   /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
@@ -3264,8 +3281,9 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
       const sessionId = eve.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
       const owned = { userId: opened.owner, planId: opened.plan.id, agentId: agent.id };
-      /** An item posted for the agent, as its tool will post one. */
-      const post = (value: InboxPost) => postInboxItem(owned, value);
+      /** An item posted for the agent, as its tool will post one, with the pictures its image blocks name read. */
+      const post = (value: InboxPost, images?: readonly InboxImage[]) =>
+        postInboxItem(owned, value, images);
       /** The plan's inbox as the owner reads it past the cursor. */
       const read = (after?: string) =>
         Effect.map(
@@ -3782,6 +3800,66 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
         );
         const emptied = yield* driven(answered, CODER.ACCOUNT_INBOX_POLL, EARLY_READ_STEPS / 2);
         assert.deepEqual(emptied.items, []);
+      }),
+  );
+
+  it.effect(
+    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, fetch, ask, post, read } = yield* openInbox();
+        yield* post(
+          {
+            key: "landing",
+            title: "Does the landing page read right?",
+            blocks: [
+              { type: INBOX_BLOCK.IMAGE, path: "shots/landing.png", alt: "The landing page" },
+            ],
+            response: { type: INBOX_RESPONSE.APPROVAL },
+          },
+          [{ contentType: INBOX_IMAGE_TYPE.PNG, bytes: PNG }],
+        );
+        const item = (yield* read()).items.find((each) => each.key === "landing");
+        const block = item?.blocks.find(
+          (each): each is InboxImageBlock => each.type === INBOX_BLOCK.IMAGE,
+        );
+        assert.ok(item && block);
+        const at = (bearer: string | undefined, id = item.id, attachment = block.attachmentId) =>
+          request(INBOX_ATTACHMENT, bearer, { id, attachment });
+
+        const served = yield* fetch(at(owner));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
+
+        assert.deepEqual(
+          yield* ask(at(other)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(at(undefined)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          yield* ask(at(owner, randomUUID())),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(at(owner, item.id, "landing.png")),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            request(INBOX_ATTACHMENT, owner, {
+              method: "POST",
+              id: item.id,
+              attachment: block.attachmentId,
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
       }),
   );
 });

@@ -3,13 +3,17 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
+  knownBlock,
 } from "@sidecar/hosted/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { messageFailureNote } from "./coding-agent-model";
@@ -41,6 +45,17 @@ import {
  * so above the item as it now stands. An answer the agent was to hear
  * reached it as one of the developer's messages, which may have started
  * its turn again, so the plan's agents are read again for where they stand.
+ *
+ * An image block names an attachment the service keeps, and its bytes are
+ * read apart from the inbox, once per attachment while the plan is open,
+ * as a card first draws the block: the host fetches them under the account
+ * and the hook holds them as a `data:` URL the card draws, so a read of
+ * the inbox that replaces every item draws the same picture again without
+ * asking for it again, and a picture inside a settled card no one opened
+ * is never asked for. A picture no item names any longer, once the agent
+ * posted its item again, is let go, since the service deleted it too. A
+ * read that did not answer is held as failed, and the card offers to try
+ * again.
  */
 
 /** How one read is asked: the plan and the cursor to read past, answered as the view hears it. */
@@ -50,6 +65,14 @@ export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgen
 export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
+
+/** How one image is read: the item and the attachment its block names, answered as the view hears it. */
+export type InboxImageReader = (
+  params: CodingAgentInboxAttachmentParams,
+) => Promise<CodingAgentInboxAttachmentView>;
+
+/** One image as the hook holds it: the `data:` URL its card draws, or that its read did not answer. */
+export type InboxImage = { readonly url: string } | { readonly failed: true };
 
 /** What the tab draws and presses. */
 export interface PlanInboxControl {
@@ -71,6 +94,12 @@ export interface PlanInboxControl {
   readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
+  /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
+  readonly images: ReadonlyMap<string, InboxImage>;
+  /** Asks for an image a card draws, where it is neither held nor on its way. */
+  readonly onImage: (itemId: string, attachmentId: string) => void;
+  /** Reads an image again whose read did not answer. */
+  readonly onRetryImage: (attachmentId: string) => void;
 }
 
 /** A card's draft as the hook keeps it: the revision it was written against, and what it holds. */
@@ -120,6 +149,26 @@ function fresh(planId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** Every attachment the items' blocks name. */
+function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
+  const named = new Set<string>();
+  for (const item of items) {
+    for (const block of item.blocks) {
+      if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+    }
+  }
+  return named;
+}
+
+/** The images held under the attachments still named; the rest let go. */
+function imagesNamed(
+  images: ReadonlyMap<string, InboxImage>,
+  named: ReadonlySet<string>,
+): ReadonlyMap<string, InboxImage> {
+  if ([...images.keys()].every((attachmentId) => named.has(attachmentId))) return images;
+  return new Map([...images].filter(([attachmentId]) => named.has(attachmentId)));
+}
+
 /** The items with one replaced by the service's newer word on it. */
 function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxItem[] {
   return items.some((each) => each.id === item.id)
@@ -137,6 +186,7 @@ export function usePlanInbox(input: {
     readonly agentIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
+    readonly readInboxImage: InboxImageReader;
     /** Reads the plan's agents again, for where an agent an answer reached stands now. */
     readonly onRetryList: () => void;
   };
@@ -144,6 +194,16 @@ export function usePlanInbox(input: {
   const { planId, shown, waiting, agents } = input;
   const [held, setHeld] = useState<Held>(() => fresh(planId));
   if (held.planId !== planId) setHeld(fresh(planId));
+  const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
+  // The reads out now, by attachment, so an item drawn again while its read is out asks once.
+  const reading = useRef(new Set<string>());
+  // The attachments the items name now, so a picture an item no longer names is let go, and one landing for it is not kept.
+  const named = useMemo(() => attachmentsNamed(held.items), [held.items]);
+  const namedNow = useRef(named);
+  namedNow.current = named;
+  useEffect(() => {
+    setImages((standing) => imagesNamed(standing, named));
+  }, [named]);
   const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
@@ -153,8 +213,8 @@ export function usePlanInbox(input: {
   // against, so a change of the agent's starts its card afresh.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, KeptDraft>>(new Map());
   const attempts = useRef(new Map<string, Attempt>());
-  const latest = useRef(agents);
-  latest.current = agents;
+  const latest = useRef({ ...agents, planId });
+  latest.current = { ...agents, planId };
 
   // A plan with no agent has no Inbox tab and nothing to read, so it holds
   // no read open, unless an item waits on it, which an agent this window has
@@ -257,6 +317,44 @@ export function usePlanInbox(input: {
     for (const agentId of unknown) asked.current.add(agentId);
     latest.current.onRetryList();
   }, [held.items, ids]);
+  // An image is read once, as a card first asks for it, and held under its attachment.
+  const onImage = useCallback(
+    (itemId: string, attachmentId: string) => {
+      if (images.has(attachmentId) || reading.current.has(attachmentId)) return;
+      reading.current.add(attachmentId);
+      const askedOn = planId;
+      latest.current
+        .readInboxImage({ itemId, attachmentId })
+        .catch((): CodingAgentInboxAttachmentView => UNANSWERED)
+        .then((answer) => {
+          reading.current.delete(attachmentId);
+          const image: InboxImage =
+            "failure" in answer
+              ? { failed: true }
+              : { url: `data:${answer.contentType};base64,${answer.base64}` };
+          // An image landing after the window moved to another plan, or after its item let it go, is kept for nobody.
+          setImages((standing) =>
+            latest.current.planId === askedOn && namedNow.current.has(attachmentId)
+              ? new Map(standing).set(attachmentId, image)
+              : standing,
+          );
+        });
+    },
+    [images, planId],
+  );
+  // Another plan's images are its own: what this one asked for is let go with its items.
+  useEffect(() => {
+    setImages(new Map());
+    reading.current.clear();
+  }, [planId]);
+  const onRetryImage = useCallback((attachmentId: string) => {
+    setImages((standing) => {
+      const next = new Map(standing);
+      next.delete(attachmentId);
+      return next;
+    });
+  }, []);
+
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
@@ -280,5 +378,8 @@ export function usePlanInbox(input: {
     sending,
     notes,
     onAnswer,
+    images,
+    onImage,
+    onRetryImage,
   };
 }

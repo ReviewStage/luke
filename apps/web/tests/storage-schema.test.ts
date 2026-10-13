@@ -73,6 +73,7 @@ const DECLARED_TABLES = [
   "devices",
   "events",
   "hosted_usage",
+  "inbox_attachment",
   "inbox_item",
   "introduction_usage",
   "jwks",

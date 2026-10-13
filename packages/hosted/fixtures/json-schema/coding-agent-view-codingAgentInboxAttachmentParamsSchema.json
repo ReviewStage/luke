@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attachmentId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "itemId",
+    "attachmentId"
+  ],
+  "additionalProperties": false
+}

@@ -25,10 +25,13 @@ import {
   closeInboxItem,
   INBOX_POST_REFUSAL,
   type InboxAgent,
+  type InboxImage,
   type InboxPostRefusal,
   postInboxItem,
 } from "../inbox-store.js";
 import { logStoreFailure } from "../store-failure.js";
+import { CODER } from "./bounds.js";
+import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
 
 /**
  * inbox.ts -- the coding agent's three inbox tools: post an item for the developer, close one, and read them all.
@@ -40,7 +43,11 @@ import { logStoreFailure } from "../store-failure.js";
  * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
  * blocks of context under it, and the response it asks for, each a closed
- * shape the wire declares (`@sidecar/hosted/inbox-wire`). The agent names
+ * shape the wire declares (`@sidecar/hosted/inbox-wire`). An image block
+ * names a file in the agent's sandbox, a screenshot of what it rendered,
+ * which a post reads there first (`inbox-image.ts`) and the store keeps as
+ * an attachment of the item's; a file that is not there, not an image, or
+ * past the bound refuses the whole post with the path named. The agent names
  * each item by a key of its own and keeps it current by posting under the
  * same key again, which never posts it twice. No call holds the turn, since
  * a coder session takes no input mid-turn
@@ -63,7 +70,10 @@ export const INBOX_TOOLS = {
       "blocks is the context they need to act, in order: markdown blocks of short Markdown, link blocks naming a page, " +
       "such as the GitHub settings page a task is done on, and code blocks pointing at the exact lines a decision is about: " +
       `repo is your repository as owner/name, path is from its root, startLine to endLine spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, ` +
-      "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit. " +
+      "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit; " +
+      "and image blocks showing them a picture, such as a screenshot " +
+      "of a UI you rendered: path is the file's path in your sandbox, relative to the checkout or absolute, a PNG, JPEG, " +
+      `or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
       "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
       "answer in their words), task (something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
@@ -121,7 +131,7 @@ export type InboxToolResult =
 export const INBOX_REFUSAL = {
   UNREADABLE_POST:
     "Not posted: the item does not read. key is a lowercase slug of letters, digits, dots, dashes, and underscores; " +
-    "blocks are markdown, link, or code, a code block's sha the full 40-character lowercase commit; " +
+    "blocks are markdown, link, code, or image, a code block's sha the full 40-character lowercase commit, an image naming its path and alt; " +
     "response is one of choice, approval, text, task, form, or none; " +
     `a choice and a select field offer between two and ${INBOX_BOUNDS.MAX_OPTIONS} options.`,
   UNREADABLE_CLOSE: "Not closed: name the item's key and why you close it.",
@@ -260,21 +270,52 @@ export interface PostingAgent extends InboxAgent {
   readonly repository: string;
 }
 
-/** Runs one post: the item written under its key and the agent's inbox answered, or why not. */
+/**
+ * The post's pictures, one per image block in the blocks' order, read from
+ * the sandbox, or the first refusal among them. Each distinct path is read
+ * once, in the order first named, and the first path refused ends the
+ * reading, so a post with a block to mend reads no further file for it.
+ */
+function postImages(
+  post: InboxPost,
+  sandbox: InboxSandboxDoor,
+): Effect.Effect<Result.Result<readonly InboxImage[], string>> {
+  const paths = (post.blocks ?? []).flatMap((block) =>
+    block.type === INBOX_BLOCK.IMAGE ? [block.path] : [],
+  );
+  return Effect.gen(function* () {
+    const read = new Map<string, InboxImage>();
+    for (const path of paths) {
+      if (read.has(path)) continue;
+      const image = yield* readInboxImage(sandbox, CODER.CHECKOUT_PATH, path);
+      if (Result.isFailure(image)) return Result.fail(image.failure);
+      read.set(path, image.success);
+    }
+    // Every path was read above, so each lookup finds its picture.
+    return Result.succeed(paths.flatMap((path) => read.get(path) ?? []));
+  });
+}
+
+/** Runs one post: its pictures read from the sandbox, the item written under its key, and the agent's inbox answered, or why not. */
 export function postToInbox(
   agent: PostingAgent,
   input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
 ): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
   const read = readPost(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
   const { repository, ...owner } = agent;
   const refused = postRefusal(read.success, repository);
   if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
-  return Effect.flatMap(postInboxItem(owner, read.success), (posted) =>
-    Result.isFailure(posted)
-      ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
-      : accepted(agent),
-  ).pipe(
+  const post = read.success;
+  return Effect.flatMap(postImages(post, sandbox), (images) => {
+    if (Result.isFailure(images)) return Effect.succeed(inboxRejected(images.failure));
+    return Effect.flatMap(postInboxItem(owner, post, images.success), (posted) =>
+      Result.isFailure(posted)
+        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
+        : accepted(agent),
+    );
+  }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
   );

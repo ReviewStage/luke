@@ -10,7 +10,9 @@ import { runInboxTool } from "../host.js";
  *
  * The call reaches the store through the host's door (`../host.ts`), as
  * `edit_plan` does, and answers with the agent's whole inbox as it stands
- * (`server/hosted/coder-host/inbox.ts`).
+ * (`server/hosted/coder-host/inbox.ts`). An image block's picture is read
+ * from the session's sandbox through the same door eve hands every file
+ * tool, opened on first use, so a post with no image opens none.
  */
 export default defineTool({
   description: INBOX_TOOLS.POST.description,
@@ -20,5 +22,6 @@ export default defineTool({
     runInboxTool(ctx.session.auth, ctx.session.id, {
       tool: INBOX_TOOL.POST,
       input: unparsedWire(input as WireBoundaryInput),
+      sandbox: () => ctx.getSandbox(),
     }),
 });

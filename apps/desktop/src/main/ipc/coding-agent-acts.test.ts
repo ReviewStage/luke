@@ -10,6 +10,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -51,6 +52,8 @@ const STARTED: CodingAgentAgentAnswer = {
     turnId: null,
   },
 };
+
+const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -213,6 +216,11 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`answer:${itemId}:${revision}:${reply}:${clientKey}`);
           return { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true };
+        }),
+      codingAgentInboxAttachment: ({ itemId, attachmentId }) =>
+        Effect.sync(() => {
+          asked.push(`attachment:${itemId}:${attachmentId}`);
+          return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
         }),
     },
   });
@@ -501,7 +509,7 @@ it.effect(
 );
 
 it.effect(
-  "a panel's inbox read carries the plan and its cursor, and an answer the item, its revision, and the answer's key; the voice window is refused both",
+  "a panel's inbox read carries the plan and its cursor, an image read the item and its attachment, and an answer the item, its revision, and the answer's key; the voice window is refused each",
   () =>
     Effect.gen(function* () {
       const { router, asked, noted } = fixture();
@@ -522,8 +530,22 @@ it.effect(
         },
         PANEL,
       );
+      const image = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
+          payload: { itemId: ITEM.id, attachmentId: ATTACHMENT_ID },
+        },
+        PANEL,
+      );
       const refused = yield* router.performAct(
         { kind: ACT_KIND.CODING_AGENTS_INBOX, payload: { planId: PLAN_ID, after: "0" } },
+        VOICE,
+      );
+      const imageRefused = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
+          payload: { itemId: ITEM.id, attachmentId: ATTACHMENT_ID },
+        },
         VOICE,
       );
 
@@ -535,13 +557,22 @@ it.effect(
         status: ACT_OUTCOME_STATUS.DONE,
         value: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
       });
+      assert.deepEqual(image, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
       assert.deepEqual(refused, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.CODING_AGENTS_INBOX].refusal,
       });
+      assert.deepEqual(imageRefused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT].refusal,
+      });
       assert.deepEqual(asked, [
         `inbox:${PLAN_ID}:0`,
         `answer:${ITEM.id}:2:${INBOX_REPLY.APPROVED}:answer-1`,
+        `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       ]);
       assert.deepEqual(noted, []);
     }),

@@ -31,7 +31,7 @@ import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
-import type { InboxAnswerer, InboxReader } from "./use-plan-inbox";
+import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-plan-inbox";
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -150,6 +150,8 @@ export interface CodingAgentsControl {
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
+  /** One read of an inbox item's image, as its card asks it. */
+  readInboxImage: InboxImageReader;
 }
 
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
@@ -539,6 +541,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readInboxImage = useCallback<InboxImageReader>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
+    [act],
+  );
+
   return {
     agents,
     agentIds: agents?.map((agent) => agent.id),
@@ -573,5 +580,6 @@ export function useCodingAgents(input: {
     keywords: input.keywords ?? NO_KEYWORDS,
     readInbox,
     answerInbox,
+    readInboxImage,
   };
 }

@@ -7,6 +7,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -15,6 +16,7 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentInboxAnswerParamsSchema,
+  codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -81,6 +83,7 @@ export type CodingAgentClient = Pick<
   | "inbox"
   | "answerInbox"
   | "accountInbox"
+  | "inboxAttachment"
 >;
 
 export interface CodingAgentsDependencies {
@@ -276,6 +279,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.inbox(planId, after));
         return carried<CodingAgentInboxAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, attachmentId } = yield* read(
+          codingAgentInboxAttachmentParamsSchema,
+          params,
+          "reading an inbox item's image names the item and the attachment",
+        );
+        const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
+        return carried<CodingAgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {

@@ -5,10 +5,12 @@ import {
   INBOX_FIELD,
   INBOX_REPLY,
   INBOX_RESPONSE,
+  type InboxBlock,
   type InboxChoice,
   type InboxCodeBlock,
   type InboxField,
   type InboxForm,
+  type InboxImageBlock,
   type InboxItem,
   type InboxReadResponse,
   type InboxReplyKind,
@@ -34,6 +36,8 @@ import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentGlyph, agentEndMark } from "./agent-tab";
+import type { FileChip } from "./attachment-model";
+import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
 import { copiedLines } from "./code-pane-model";
 import { agentTabLabel, opensOnGitHub } from "./coding-agent-model";
@@ -56,7 +60,7 @@ import { momentText, sinceText, useMinute } from "./plan-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import type { PlanInboxControl } from "./use-plan-inbox";
+import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
 /**
  * inbox-board.tsx -- the plan's Inbox tab: everything its coding agents need of the developer, one card each, answered in place and handed back to the agent that posted it.
@@ -66,9 +70,13 @@ import type { PlanInboxControl } from "./use-plan-inbox";
  * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
  * and when, its title, the blocks of context the agent wrote, Markdown as
  * the transcript draws it, a link as the transcript draws one, opened on
- * GitHub alone, and code as the Code tab draws a card (`code-pane.tsx`),
+ * GitHub alone, code as the Code tab draws a card (`code-pane.tsx`),
  * its lines read from GitHub at the agent's commit through the File tab's
- * own read and opened there in the File tab, and the agent composer's box
+ * own read and opened there in the File tab, and an image the agent took
+ * in its sandbox, drawn at the card's own width from the bytes the host
+ * fetched under the account (`use-plan-inbox.ts`) and opened larger over
+ * the window by a press, in the viewer an attached file opens in
+ * (`attachment-viewer.tsx`); and the agent composer's box
  * (`ai-elements/prompt-input.tsx`) for the note. What the item asks for
  * stands between the blocks and the box: a choice's options, one perhaps
  * recommended, pressed one at a time or several where the choice allows; a
@@ -85,10 +93,14 @@ import type { PlanInboxControl } from "./use-plan-inbox";
  * of it. The tab's own label names it and counts what waits, so no head
  * repeats either. An inbox that holds nothing at all says so under the
  * tab's own glyph, drawn large (`empty-state.tsx`). The agent's name opens
- * its tab. Every card shows words an
- * agent wrote, and a code block the repository's lines, so the board is out
- * of the session recording (`ph-no-capture`).
+ * its tab. Every card shows words an agent wrote, a code block the
+ * repository's lines, and an image block a picture of what it rendered, so
+ * the board is out of the session recording (`ph-no-capture`), and the
+ * viewer, drawn over the window outside the board, is out of it on its own.
  */
+
+/** What a card says of an image whose read did not answer. */
+const IMAGE_NOT_LOADED = "The image could not be loaded.";
 
 /** What an empty inbox says. */
 const NOTHING_WAITS = "Nothing is waiting on you.";
@@ -291,45 +303,164 @@ function CodeBlock({
   );
 }
 
+/**
+ * An image block: the picture at the card's width once its bytes are held,
+ * pressed to open it larger over the window; a spinner while they are read,
+ * and a line with Retry where the read did not answer. The block asks for
+ * its image as it is first drawn, so a picture inside a card no one opened
+ * is never fetched.
+ */
+function ImageBlock({
+  itemId,
+  block,
+  image,
+  onImage,
+  onRetryImage,
+}: {
+  itemId: string;
+  block: InboxImageBlock;
+  image: InboxImage | undefined;
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
+}): React.JSX.Element {
+  const [viewing, setViewing] = useState(false);
+  const held = image !== undefined;
+  useEffect(() => {
+    if (!held) onImage(itemId, block.attachmentId);
+  }, [held, itemId, block.attachmentId, onImage]);
+  if (image === undefined) {
+    return (
+      <div className="inbox-image-pending" data-inbox-image-pending="">
+        <Spinner label="Loading image" size={SPINNER_SIZE.INLINE} />
+      </div>
+    );
+  }
+  if ("failed" in image) {
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground" data-inbox-image-failed="">
+        <span>{IMAGE_NOT_LOADED}</span>
+        <RetryButton onRetry={() => onRetryImage(block.attachmentId)} />
+      </div>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="inbox-image"
+        aria-label={`Open ${block.alt}`}
+        onClick={() => setViewing(true)}
+      >
+        <img src={image.url} alt={block.alt} />
+      </button>
+      {viewing ? (
+        <AttachmentViewer
+          files={[viewerFile(block, image.url)]}
+          at={0}
+          onAt={() => undefined}
+          onClose={() => setViewing(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** What a file's name may not spell on the Mac it is saved to. */
+const UNSAVEABLE = /[/\\:]/gu;
+
+/** The image as the viewer takes a file: named by its words under the type's own extension, since the viewer saves it by that name, and its type read off the `data:` URL. */
+function viewerFile(block: InboxImageBlock, url: string): FileChip {
+  const mediaType = url.slice("data:".length, url.indexOf(";"));
+  const name = `${block.alt.replace(UNSAVEABLE, "-")}.${mediaType.slice("image/".length)}`;
+  return { name, mediaType, url };
+}
+
+/** One block this build knows, drawn as its type is. */
+function KnownBlock({
+  itemId,
+  block,
+  images,
+  onImage,
+  onRetryImage,
+  openGitHub,
+  code,
+}: {
+  itemId: string;
+  block: InboxBlock;
+  images: PlanInboxControl["images"];
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
+  openGitHub: (url: string) => void;
+  code: InboxCodeDoors;
+}): React.JSX.Element {
+  switch (block.type) {
+    case INBOX_BLOCK.MARKDOWN:
+      return (
+        <div data-inbox-markdown="">
+          <TranscriptWords text={block.text} />
+        </div>
+      );
+    case INBOX_BLOCK.LINK:
+      return (
+        <p className="m-0" data-inbox-link="">
+          <LinkBlock url={block.url} label={block.label} openGitHub={openGitHub} />
+        </p>
+      );
+    case INBOX_BLOCK.CODE:
+      return <CodeBlock block={block} code={code} />;
+    case INBOX_BLOCK.IMAGE:
+      return (
+        <div data-inbox-image="">
+          <ImageBlock
+            itemId={itemId}
+            block={block}
+            image={images.get(block.attachmentId)}
+            onImage={onImage}
+            onRetryImage={onRetryImage}
+          />
+        </div>
+      );
+  }
+}
+
 /** The item's context: each block in turn, drawn as its type is, and a line for one this build does not know. */
 function Blocks({
   item,
+  images,
+  onImage,
+  onRetryImage,
   openGitHub,
   code,
 }: {
   item: InboxItem;
+  images: PlanInboxControl["images"];
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
   openGitHub: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
   return (
     <div className="flex flex-col gap-2" data-inbox-blocks="">
-      {item.blocks.map((block, index) => {
+      {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
-        const key = index;
-        if (!knownBlock(block)) {
-          return (
-            <p key={key} className="m-0 text-muted-foreground" data-inbox-unknown="">
-              {NEWER_LUKE.BLOCK}
-            </p>
-          );
-        }
-        if (block.type === INBOX_BLOCK.MARKDOWN) {
-          return (
-            <div key={key} data-inbox-markdown="">
-              <TranscriptWords text={block.text} />
-            </div>
-          );
-        }
-        if (block.type === INBOX_BLOCK.CODE) {
-          return <CodeBlock key={key} block={block} code={code} />;
-        }
-        return (
-          <p key={key} className="m-0" data-inbox-link="">
-            <LinkBlock url={block.url} label={block.label} openGitHub={openGitHub} />
+        knownBlock(block) ? (
+          <KnownBlock
+            key={index}
+            itemId={item.id}
+            block={block}
+            images={images}
+            onImage={onImage}
+            onRetryImage={onRetryImage}
+            openGitHub={openGitHub}
+            code={code}
+          />
+        ) : (
+          <p key={index} className="m-0 text-muted-foreground" data-inbox-unknown="">
+            {NEWER_LUKE.BLOCK}
           </p>
-        );
-      })}
+        ),
+      )}
     </div>
   );
 }
@@ -588,6 +719,9 @@ function OpenCard({
   draftOf,
   onDraft,
   onAnswer,
+  images,
+  onImage,
+  onRetryImage,
   onOpenAgent,
   openGitHub,
   code,
@@ -601,6 +735,9 @@ function OpenCard({
   draftOf: PlanInboxControl["draftOf"];
   onDraft: PlanInboxControl["onDraft"];
   onAnswer: PlanInboxControl["onAnswer"];
+  images: PlanInboxControl["images"];
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
   onOpenAgent: (agentId: string) => void;
   openGitHub: (url: string) => void;
   code: InboxCodeDoors;
@@ -620,7 +757,14 @@ function OpenCard({
         <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
           {cardTitle(item.title)}
         </h3>
-        <Blocks item={item} openGitHub={openGitHub} code={code} />
+        <Blocks
+          item={item}
+          images={images}
+          onImage={onImage}
+          onRetryImage={onRetryImage}
+          openGitHub={openGitHub}
+          code={code}
+        />
         <ResponseControls item={item} draft={draft} disabled={sending} onDraft={setDraft} />
         {known ? (
           <PromptInput
@@ -668,11 +812,17 @@ function OpenCard({
 function SettledCard({
   item,
   agent,
+  images,
+  onImage,
+  onRetryImage,
   openGitHub,
   code,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
+  images: PlanInboxControl["images"];
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
   openGitHub: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
@@ -688,7 +838,14 @@ function SettledCard({
         {words.note === undefined ? null : <p className="m-0 whitespace-pre-line">{words.note}</p>}
         {item.blocks.length === 0 ? null : (
           <div className="text-muted-foreground">
-            <Blocks item={item} openGitHub={openGitHub} code={code} />
+            <Blocks
+              item={item}
+              images={images}
+              onImage={onImage}
+              onRetryImage={onRetryImage}
+              openGitHub={openGitHub}
+              code={code}
+            />
           </div>
         )}
       </PlanContent>
@@ -749,6 +906,9 @@ export function InboxBoard({
           draftOf={control.draftOf}
           onDraft={control.onDraft}
           onAnswer={control.onAnswer}
+          images={control.images}
+          onImage={control.onImage}
+          onRetryImage={control.onRetryImage}
           onOpenAgent={onOpenAgent}
           openGitHub={openGitHub}
           code={code}
@@ -766,6 +926,9 @@ export function InboxBoard({
                 key={item.id}
                 item={item}
                 agent={agentOf(item)}
+                images={control.images}
+                onImage={control.onImage}
+                onRetryImage={control.onRetryImage}
                 openGitHub={openGitHub}
                 code={code}
               />

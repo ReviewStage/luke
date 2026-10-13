@@ -73,7 +73,8 @@ const migrationsThrough = (tag: string) =>
       );
     };
     yield* journal(tag);
-    return { folder, journal };
+    const latest = entries.at(-1)?.tag ?? tag;
+    return { folder, journal, latest };
   });
 
 /**
@@ -185,7 +186,7 @@ it.effect(
     Effect.provide(
       Effect.scoped(
         Effect.gen(function* () {
-          const { folder, journal } = yield* migrationsThrough(BEFORE);
+          const { folder, journal, latest } = yield* migrationsThrough(BEFORE);
           yield* runWebMigrations(folder);
           const agent = yield* openAgent;
           yield* Effect.forEach(OLD_ROWS, (row) => writeOldRow(agent, row));
@@ -257,7 +258,10 @@ it.effect(
             choices: ["Postgres outbox"],
           });
 
-          // What this deployment writes, the deployment before it reads through the old columns.
+          // What this deployment writes, it writes on a database its every migration ran on,
+          // and the deployment before it reads through the old columns.
+          yield* journal(latest);
+          yield* runWebMigrations(folder);
           yield* postInboxItem(agent, {
             key: "ship",
             title: "Ship it?",

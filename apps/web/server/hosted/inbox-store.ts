@@ -1,20 +1,27 @@
+import { randomUUID } from "node:crypto";
 import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
+  type InboxBlock,
+  type InboxImageType,
   type InboxItem,
   type InboxPost,
+  type InboxPostBlock,
   type InboxReply,
   inboxBlockSchema,
+  inboxImageTypeSchema,
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { codingAgent } from "../db/coding-agent-schema.js";
+import { inboxAttachment } from "../db/inbox-attachment-schema.js";
 import { inboxItem } from "../db/inbox-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
@@ -31,7 +38,14 @@ import { InstantColumnSchema } from "./store/database.js";
  * answered or closed, so the agent keeps an item current rather than
  * posting it twice. A row keeps the item's blocks and its response as the
  * wire's own JSON under the version of the vocabulary that wrote them,
- * decoded on every read against the wire's closed shapes. A post counts the agent's open items against the bound
+ * decoded on every read against the wire's closed shapes. An image block
+ * is posted by a path and kept by an attachment: the caller reads the
+ * file's bytes from the agent's sandbox and hands them in beside the post,
+ * and the post writes each as a row of the item's
+ * (`db/inbox-attachment-schema.ts`) under an id minted here, which the
+ * block kept on the item names in the path's place; the item's attachments
+ * its new blocks no longer name go with the same write, so a picture the
+ * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound
  * under a lock on the agent's own row, so two posts of one step cannot both
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
@@ -77,6 +91,12 @@ export interface InboxStamp {
 export interface StoredInboxItem {
   readonly item: InboxItem;
   readonly answerKey: string | null;
+}
+
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+export interface InboxImage {
+  readonly contentType: InboxImageType;
+  readonly bytes: Uint8Array;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -184,6 +204,74 @@ const PostWriteSchema = Schema.Struct({
   needsReply: Schema.Boolean,
   now: Schema.Date,
 });
+
+const AttachmentWriteSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  planId: Schema.String,
+  itemId: Schema.String,
+  contentType: inboxImageTypeSchema,
+  byteCount: Schema.Number,
+  bytes: Schema.Uint8Array,
+  now: Schema.Date,
+});
+
+/** One picture written as a row of the item's, under the id the block names. */
+const insertAttachment = SqlSchema.void({
+  Request: AttachmentWriteSchema,
+  execute: ({ now, ...attachment }) =>
+    db.insert(inboxAttachment).values({ ...attachment, createdAt: now }),
+});
+
+/** The item's attachments no block of its names any longer, deleted. */
+const deleteOtherAttachments = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, kept: Schema.Array(Schema.String) }),
+  execute: ({ itemId, kept }) =>
+    db
+      .delete(inboxAttachment)
+      .where(
+        kept.length === 0
+          ? eq(inboxAttachment.itemId, itemId)
+          : and(eq(inboxAttachment.itemId, itemId), notInArray(inboxAttachment.id, [...kept])),
+      ),
+});
+
+/** The account's attachment, where it is the item's: its type and its bytes. */
+const findAttachment = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    attachmentId: Schema.String,
+  }),
+  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  execute: ({ userId, itemId, attachmentId }) =>
+    db
+      .select({ contentType: inboxAttachment.contentType, bytes: inboxAttachment.bytes })
+      .from(inboxAttachment)
+      .where(
+        and(
+          eq(inboxAttachment.userId, userId),
+          eq(inboxAttachment.itemId, itemId),
+          eq(inboxAttachment.id, attachmentId),
+        ),
+      ),
+});
+
+/** The blocks as the item keeps them: each image block naming the attachment minted for it, in the order the images were handed in, and every other block as posted. */
+function storedBlocks(
+  blocks: readonly InboxPostBlock[],
+  attachmentIds: readonly string[],
+): readonly InboxBlock[] {
+  let next = 0;
+  return blocks.map((block): InboxBlock => {
+    if (block.type !== INBOX_BLOCK.IMAGE) return block;
+    const attachmentId = attachmentIds[next];
+    next += 1;
+    // The caller hands one picture per image block; fewer is its contract broken, not an outcome.
+    if (attachmentId === undefined) throw new Error("an image block has no picture handed in");
+    return { type: INBOX_BLOCK.IMAGE, attachmentId, alt: block.alt };
+  });
+}
 
 /** The item written under the agent's key: a new row at revision one, or the standing one written again, its revision moved on and opened again. */
 const upsertItem = SqlSchema.findOne({
@@ -451,13 +539,17 @@ const answerItem = SqlSchema.findOneOption({
 /**
  * The agent's post written: a new item under its key, or the one standing
  * under it written again and opened; refused where the agent would hold
- * more open items than the bound, or is no longer the account's. Note that
- * the post's own key is not counted, because writing it again opens no
- * second item.
+ * more open items than the bound, or is no longer the account's. The
+ * pictures are the post's image blocks' bytes in the blocks' own order, one
+ * each, read by the caller; each is written as an attachment of the item's
+ * under an id minted here, and the item's other attachments are deleted.
+ * Note that the post's own key is not counted, because writing it again
+ * opens no second item.
  */
 export function postInboxItem(
   agent: InboxAgent,
   post: InboxPost,
+  images: readonly InboxImage[] = [],
 ): InboxStoreEffect<Result.Result<InboxItem, InboxPostRefusal>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -471,19 +563,51 @@ export function postInboxItem(
         if (open >= INBOX_BOUNDS.MAX_OPEN_PER_AGENT) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
+        const now = yield* DateTime.nowAsDate;
+        const attachments = yield* Effect.sync(() =>
+          images.map((image) => ({ ...image, id: randomUUID() })),
+        );
         const row = yield* upsertItem({
           ...agent,
           key: post.key,
           title: post.title,
-          blocks: post.blocks ?? [],
+          blocks: storedBlocks(
+            post.blocks ?? [],
+            attachments.map((attachment) => attachment.id),
+          ),
           response: post.response,
           needsReply: post.needsReply ?? true,
-          now: yield* DateTime.nowAsDate,
+          now,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
+        yield* Effect.forEach(attachments, (attachment) =>
+          insertAttachment({
+            id: attachment.id,
+            userId: agent.userId,
+            planId: agent.planId,
+            itemId: row.id,
+            contentType: attachment.contentType,
+            byteCount: attachment.bytes.byteLength,
+            bytes: attachment.bytes,
+            now,
+          }),
+        );
+        yield* deleteOtherAttachments({
+          itemId: row.id,
+          kept: attachments.map((attachment) => attachment.id),
+        });
         return Result.succeed(storedItem(row).item);
       }),
     ),
   );
+}
+
+/** The account's picture, where it is the item's: its type and its bytes; nothing for one the account does not own or the item does not carry. */
+export function readInboxAttachment(
+  userId: string,
+  itemId: string,
+  attachmentId: string,
+): InboxStoreEffect<Option.Option<InboxImage>> {
+  return findAttachment({ userId, itemId, attachmentId });
 }
 
 /** The agent's item under the key closed with why; nothing where it has none under the key. */

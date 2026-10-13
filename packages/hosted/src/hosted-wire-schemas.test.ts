@@ -73,8 +73,11 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "inbox-wire": {
     inboxKeySchema: inboxWire.inboxKeySchema,
+    inboxImageTypeSchema: inboxWire.inboxImageTypeSchema,
     inboxBlockSchema: inboxWire.inboxBlockSchema,
     inboxBlocksSchema: inboxWire.inboxBlocksSchema,
+    inboxPostBlockSchema: inboxWire.inboxPostBlockSchema,
+    inboxPostBlocksSchema: inboxWire.inboxPostBlocksSchema,
     inboxOptionSchema: inboxWire.inboxOptionSchema,
     inboxFieldSchema: inboxWire.inboxFieldSchema,
     inboxResponseSchema: inboxWire.inboxResponseSchema,
@@ -123,6 +126,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
     codingAgentAccountInboxAnswerViewSchema:
       codingAgentView.codingAgentAccountInboxAnswerViewSchema,
+    codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
+    codingAgentInboxAttachmentViewSchema: codingAgentView.codingAgentInboxAttachmentViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,
