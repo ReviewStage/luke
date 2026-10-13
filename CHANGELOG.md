@@ -52,6 +52,382 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.12.0 — 2026-10-13
+
+### The Call tab
+
+Each plan's calls now read as one thread in the Call tab, which takes the place
+of Transcript and Work. What you and Luke said stand as messages, and the work
+Luke did for a line, his thinking, commands, and subagents, sits right under the
+line that asked for it, drawn as a coding agent's turn is. Each call ends on how
+long it ran, and its card says why it ended and the model it ran on.
+([#2365](https://github.com/ReviewStage/luke/pull/2365),
+[#2368](https://github.com/ReviewStage/luke/pull/2368),
+[#2369](https://github.com/ReviewStage/luke/pull/2369),
+[#2378](https://github.com/ReviewStage/luke/pull/2378),
+[#2404](https://github.com/ReviewStage/luke/pull/2404),
+[#2242](https://github.com/ReviewStage/luke/pull/2242),
+[#2246](https://github.com/ReviewStage/luke/pull/2246),
+[#2410](https://github.com/ReviewStage/luke/pull/2410))
+
+![The Call tab mid-call, with Luke's reading and his subagent under the question that asked for them.](apps/web/public/changelog/0.12.0/the-call-tab.png)
+
+### The plan is one document
+
+A plan is now one Markdown document you edit in place, its title inline, and the
+tab, the sidebar, and ⌘K follow the title as you type. New plans start as a copy
+of your account's template, which you write in Settings › Plan template, with a
+version history of its own. The default template reads like a design doc between
+teammates: context, goal, approach, interfaces, alternatives, hard parts,
+testing, and open questions. Luke writes each note under whichever of your
+headings it belongs to, and plans from earlier releases carry over as documents.
+([#2114](https://github.com/ReviewStage/luke/pull/2114),
+[#2182](https://github.com/ReviewStage/luke/pull/2182),
+[#2186](https://github.com/ReviewStage/luke/pull/2186),
+[#2190](https://github.com/ReviewStage/luke/pull/2190),
+[#2193](https://github.com/ReviewStage/luke/pull/2193),
+[#2219](https://github.com/ReviewStage/luke/pull/2219),
+[#2220](https://github.com/ReviewStage/luke/pull/2220),
+[#2226](https://github.com/ReviewStage/luke/pull/2226),
+[#2248](https://github.com/ReviewStage/luke/pull/2248),
+[#2275](https://github.com/ReviewStage/luke/pull/2275),
+[#2315](https://github.com/ReviewStage/luke/pull/2315),
+[#2317](https://github.com/ReviewStage/luke/pull/2317),
+[#2320](https://github.com/ReviewStage/luke/pull/2320),
+[#2331](https://github.com/ReviewStage/luke/pull/2331))
+
+![A plan drawn as one document from the default template, partway through, with sections still holding the template's guidance.](apps/web/public/changelog/0.12.0/the-plan-is-one-document.png)
+
+### Version history
+
+Every save to a plan is kept. Version history, in the plan's ⋯ menu, takes the
+whole window the way Settings does: each version stands under who wrote it, a
+version of several changes opens the sections it changed, Open goes to where it
+was written, and Restore puts it back as a new version, so a restore can be
+undone too. Each section says who last edited it, and that line opens the
+version.
+([#2011](https://github.com/ReviewStage/luke/pull/2011),
+[#2017](https://github.com/ReviewStage/luke/pull/2017),
+[#2025](https://github.com/ReviewStage/luke/pull/2025),
+[#2042](https://github.com/ReviewStage/luke/pull/2042),
+[#2063](https://github.com/ReviewStage/luke/pull/2063),
+[#2147](https://github.com/ReviewStage/luke/pull/2147),
+[#2254](https://github.com/ReviewStage/luke/pull/2254),
+[#2261](https://github.com/ReviewStage/luke/pull/2261),
+[#2272](https://github.com/ReviewStage/luke/pull/2272),
+[#2292](https://github.com/ReviewStage/luke/pull/2292))
+
+### The Inbox
+
+Coding agents post what they need from you, a decision, a manual step, or a
+question, to the plan's Inbox rather than leaving it in a transcript. An item
+can carry text, links, exact lines of the repository, and pictures the agent
+took in its sandbox, and you answer it in the plan's Inbox tab. The sidebar's
+Inbox lists every plan with items waiting and counts them, and a new item raises
+a notification and a badge on Luke's Dock icon.
+([#2161](https://github.com/ReviewStage/luke/pull/2161),
+[#2162](https://github.com/ReviewStage/luke/pull/2162),
+[#2163](https://github.com/ReviewStage/luke/pull/2163),
+[#2216](https://github.com/ReviewStage/luke/pull/2216),
+[#2218](https://github.com/ReviewStage/luke/pull/2218),
+[#2228](https://github.com/ReviewStage/luke/pull/2228),
+[#2238](https://github.com/ReviewStage/luke/pull/2238),
+[#2258](https://github.com/ReviewStage/luke/pull/2258),
+[#2288](https://github.com/ReviewStage/luke/pull/2288),
+[#2312](https://github.com/ReviewStage/luke/pull/2312),
+[#2327](https://github.com/ReviewStage/luke/pull/2327),
+[#2392](https://github.com/ReviewStage/luke/pull/2392))
+
+### The Changes tab
+
+Once a coding agent opens a pull request, its Changes tab shows the diff file by
+file, beside the file tree narrowed to the changed files, with the file count,
+the lines added and removed, and a link to the files on GitHub. Open it from the
+agent's Changes chip, the side panel's +, the summary, or ⌘K.
+([#2307](https://github.com/ReviewStage/luke/pull/2307),
+[#2395](https://github.com/ReviewStage/luke/pull/2395))
+
+### Skills
+
+Type / in a coding agent's message box to list the agent skills in the plan's
+repository (.agents/skills and .claude/skills). The one you pick is a chip the
+agent loads, and a chip in a sent message opens the skill's SKILL.md in a File
+tab. Luke and coding agents are offered the repository's skills on their own
+too, and load one when it fits.
+([#2325](https://github.com/ReviewStage/luke/pull/2325),
+[#2334](https://github.com/ReviewStage/luke/pull/2334),
+[#2337](https://github.com/ReviewStage/luke/pull/2337),
+[#2375](https://github.com/ReviewStage/luke/pull/2375),
+[#2394](https://github.com/ReviewStage/luke/pull/2394))
+
+### Commands on your Mac
+
+Luke, coding agents, and their subagents can run a shell command on your Mac. It
+runs in your login shell from your home folder, with no approval step, and draws
+in the transcript as a command row tagged On your Mac, with what it printed. It
+is on by default, and Settings › General › Let agents run commands on this Mac
+turns it off.
+([#2359](https://github.com/ReviewStage/luke/pull/2359),
+[#2374](https://github.com/ReviewStage/luke/pull/2374),
+[#2376](https://github.com/ReviewStage/luke/pull/2376),
+[#2388](https://github.com/ReviewStage/luke/pull/2388))
+
+![A command Luke ran on the Mac in the Call tab, its row tagged On your Mac and open on what it printed.](apps/web/public/changelog/0.12.0/commands-on-your-mac.png)
+
+### Luke and coding agents share one runtime
+
+Luke's planning model now runs on the same agent runtime as coding agents, so
+both have the same tools: the repository's skills, your integrations, the web,
+commands on your Mac, and pages. Both hand work to subagents the same way:
+Luke's subagents run in the background so the call keeps going, and a coding
+agent can wait on its subagent or work beside it. A message to a coding agent no
+longer stops a subagent it is waiting on, and every subagent row names the model
+and effort it ran on. Every model call on Luke's key, a coding agent's and each
+generated title included, now counts toward your account's usage.
+([#2132](https://github.com/ReviewStage/luke/pull/2132),
+[#2244](https://github.com/ReviewStage/luke/pull/2244),
+[#2363](https://github.com/ReviewStage/luke/pull/2363),
+[#2365](https://github.com/ReviewStage/luke/pull/2365),
+[#2367](https://github.com/ReviewStage/luke/pull/2367),
+[#2372](https://github.com/ReviewStage/luke/pull/2372),
+[#2386](https://github.com/ReviewStage/luke/pull/2386),
+[#2387](https://github.com/ReviewStage/luke/pull/2387),
+[#2402](https://github.com/ReviewStage/luke/pull/2402),
+[#2403](https://github.com/ReviewStage/luke/pull/2403))
+
+### Pages
+
+Luke and coding agents can show you an interactive page, such as a mockup or a
+comparison, in a Page tab in the side panel, drawn in a sandboxed frame. Each
+page keeps its versions, and the side panel's + lists the plan's pages.
+([#2360](https://github.com/ReviewStage/luke/pull/2360),
+[#2362](https://github.com/ReviewStage/luke/pull/2362),
+[#2364](https://github.com/ReviewStage/luke/pull/2364),
+[#2370](https://github.com/ReviewStage/luke/pull/2370))
+
+### Integrations
+
+Connect Linear, Notion, and Sentry in Settings › Integrations, and Luke, coding
+agents, and their subagents use them through each service's own MCP server. The
+MCP button in a coding agent's message box lists each server's tools, switches a
+server off for that chat, and connects one in place.
+([#2070](https://github.com/ReviewStage/luke/pull/2070),
+[#2319](https://github.com/ReviewStage/luke/pull/2319),
+[#2328](https://github.com/ReviewStage/luke/pull/2328),
+[#2329](https://github.com/ReviewStage/luke/pull/2329),
+[#2333](https://github.com/ReviewStage/luke/pull/2333),
+[#2336](https://github.com/ReviewStage/luke/pull/2336),
+[#2358](https://github.com/ReviewStage/luke/pull/2358))
+
+### The call follows you
+
+A call keeps going when you switch plans, open Settings, or leave Luke. While
+its plan is out of sight, the call bar stands at the foot of the sidebar, in the
+window's corner, or in a floating window over other apps, with a button back to
+the call's plan. Starting a call on another plan asks first.
+([#2123](https://github.com/ReviewStage/luke/pull/2123),
+[#2136](https://github.com/ReviewStage/luke/pull/2136),
+[#2169](https://github.com/ReviewStage/luke/pull/2169),
+[#2185](https://github.com/ReviewStage/luke/pull/2185),
+[#2209](https://github.com/ReviewStage/luke/pull/2209),
+[#2224](https://github.com/ReviewStage/luke/pull/2224),
+[#2251](https://github.com/ReviewStage/luke/pull/2251))
+
+### Pin, archive, and group plans
+
+The sidebar groups plans by repository, each row with when it last changed, and
+each repository has a + that starts a plan on it. Pin a plan or a repository to
+keep it on top on every Mac you sign in on, and archive a plan to put it away
+read-only; Delete is now Permanently delete. A plan's hover card shows its
+repository, its coding agents, and their pull requests.
+([#1992](https://github.com/ReviewStage/luke/pull/1992),
+[#2001](https://github.com/ReviewStage/luke/pull/2001),
+[#2027](https://github.com/ReviewStage/luke/pull/2027),
+[#2028](https://github.com/ReviewStage/luke/pull/2028),
+[#2034](https://github.com/ReviewStage/luke/pull/2034),
+[#2060](https://github.com/ReviewStage/luke/pull/2060),
+[#2064](https://github.com/ReviewStage/luke/pull/2064),
+[#2068](https://github.com/ReviewStage/luke/pull/2068),
+[#2074](https://github.com/ReviewStage/luke/pull/2074),
+[#2120](https://github.com/ReviewStage/luke/pull/2120))
+
+### A command palette
+
+⌘K opens any plan, coding agent, subagent, setting, or command, and any file in
+the open plan's repository, with a filter for each kind.
+([#2010](https://github.com/ReviewStage/luke/pull/2010),
+[#2192](https://github.com/ReviewStage/luke/pull/2192),
+[#2212](https://github.com/ReviewStage/luke/pull/2212),
+[#2399](https://github.com/ReviewStage/luke/pull/2399))
+
+![The ⌘K command palette over a plan, listing plans, agents, actions, and settings under its filters.](apps/web/public/changelog/0.12.0/a-command-palette.png)
+
+### Improvements
+
+- Coding agents open as tabs in the plan's own column, beside the plan, with a +
+  of their own ([#2076](https://github.com/ReviewStage/luke/pull/2076),
+  [#2077](https://github.com/ReviewStage/luke/pull/2077))
+- A summary at the plan column's right lists its tabs, coding agents, subagents,
+  and files, pinned open, folded to a rail, or hung as a card
+  ([#2105](https://github.com/ReviewStage/luke/pull/2105),
+  [#2115](https://github.com/ReviewStage/luke/pull/2115),
+  [#2318](https://github.com/ReviewStage/luke/pull/2318))
+- Attach files to a message to a coding agent with the + beside Send, by
+  pasting, or by dropping them
+  ([#2083](https://github.com/ReviewStage/luke/pull/2083),
+  [#2085](https://github.com/ReviewStage/luke/pull/2085),
+  [#2116](https://github.com/ReviewStage/luke/pull/2116),
+  [#2159](https://github.com/ReviewStage/luke/pull/2159))
+- Dictate into a coding agent's message box or the new-plan composer with the
+  mic button ([#2106](https://github.com/ReviewStage/luke/pull/2106),
+  [#2107](https://github.com/ReviewStage/luke/pull/2107))
+- A coding agent keeps a live to-do list in its transcript
+  ([#2075](https://github.com/ReviewStage/luke/pull/2075))
+- A coding agent watches its pull request's CI and fixes what fails, where the
+  GitHub App may read the checks
+  ([#2058](https://github.com/ReviewStage/luke/pull/2058))
+- Archive a coding agent from its tab or the summary, and bring it back from the
+  summary's Archived fold
+  ([#2252](https://github.com/ReviewStage/luke/pull/2252),
+  [#2276](https://github.com/ReviewStage/luke/pull/2276))
+- Settings › Coding agents takes your own Anthropic and OpenAI API keys, and
+  coding agents run on them
+  ([#2078](https://github.com/ReviewStage/luke/pull/2078),
+  [#2079](https://github.com/ReviewStage/luke/pull/2079),
+  [#2080](https://github.com/ReviewStage/luke/pull/2080),
+  [#2335](https://github.com/ReviewStage/luke/pull/2335))
+- The model picker offers a model's smaller context window, per agent or as the
+  default ([#2046](https://github.com/ReviewStage/luke/pull/2046),
+  [#2047](https://github.com/ReviewStage/luke/pull/2047))
+- The File tab has a file tree that searches the whole repository, breadcrumbs,
+  back and forward, copy and download, and a link to the file on GitHub
+  ([#2051](https://github.com/ReviewStage/luke/pull/2051),
+  [#2081](https://github.com/ReviewStage/luke/pull/2081),
+  [#2082](https://github.com/ReviewStage/luke/pull/2082),
+  [#2086](https://github.com/ReviewStage/luke/pull/2086),
+  [#2125](https://github.com/ReviewStage/luke/pull/2125),
+  [#2131](https://github.com/ReviewStage/luke/pull/2131),
+  [#2139](https://github.com/ReviewStage/luke/pull/2139),
+  [#2154](https://github.com/ReviewStage/luke/pull/2154))
+- A file Luke showed opens with his note over the lines he showed
+  ([#2264](https://github.com/ReviewStage/luke/pull/2264))
+- ⌘F finds within the tab you are in
+  ([#2156](https://github.com/ReviewStage/luke/pull/2156))
+- A Zoom setting under Settings › Appearance, stepped by ⌘+, ⌘−, and ⌘0
+  ([#2053](https://github.com/ReviewStage/luke/pull/2053))
+- The window reopens where you left it, ⌘W with no tab open closes it, ⌃⌘F goes
+  full screen, and Quit asks first during a call
+  ([#2160](https://github.com/ReviewStage/luke/pull/2160))
+- Settings pages name themselves at their top and group their rows in cards, and
+  anything that cannot be undone asks in a dialog
+  ([#2340](https://github.com/ReviewStage/luke/pull/2340),
+  [#2346](https://github.com/ReviewStage/luke/pull/2346),
+  [#2347](https://github.com/ReviewStage/luke/pull/2347),
+  [#2348](https://github.com/ReviewStage/luke/pull/2348),
+  [#2349](https://github.com/ReviewStage/luke/pull/2349))
+- The sidebar's account opens a menu with Settings, the changelog, and feedback,
+  and the gear beside it goes straight to Settings
+  ([#2232](https://github.com/ReviewStage/luke/pull/2232))
+- Toasts stack in the window's corner, and archiving, deleting, and an agent's
+  end offer an action in theirs
+  ([#2013](https://github.com/ReviewStage/luke/pull/2013),
+  [#2118](https://github.com/ReviewStage/luke/pull/2118))
+- Side panel tabs drag to any place, have a right-click menu, and pin to the
+  sidebar ([#1991](https://github.com/ReviewStage/luke/pull/1991),
+  [#2057](https://github.com/ReviewStage/luke/pull/2057),
+  [#2061](https://github.com/ReviewStage/luke/pull/2061))
+- Each coding agent wears its harness's mark and each subagent its model's, with
+  a ring while it works and an alert when it fails
+  ([#2067](https://github.com/ReviewStage/luke/pull/2067),
+  [#2189](https://github.com/ReviewStage/luke/pull/2189),
+  [#2290](https://github.com/ReviewStage/luke/pull/2290))
+- An agent's tab hovers a card with its model, its latest step, and when it last
+  moved ([#2049](https://github.com/ReviewStage/luke/pull/2049))
+- A finished turn says how long it worked, and that line's card names its model,
+  its tokens, and what it cached
+  ([#1986](https://github.com/ReviewStage/luke/pull/1986),
+  [#2038](https://github.com/ReviewStage/luke/pull/2038),
+  [#2155](https://github.com/ReviewStage/luke/pull/2155),
+  [#2167](https://github.com/ReviewStage/luke/pull/2167))
+- A context ring beside the agent's model shows how full its context window is
+  ([#2014](https://github.com/ReviewStage/luke/pull/2014))
+- The model picker shows the newest model of each family until you search
+  ([#2031](https://github.com/ReviewStage/luke/pull/2031))
+- Coding agents are titled from their first exchange, and subagents get short
+  titles too ([#2069](https://github.com/ReviewStage/luke/pull/2069),
+  [#2150](https://github.com/ReviewStage/luke/pull/2150))
+- Luke asks one question at a time on a call
+  ([#1994](https://github.com/ReviewStage/luke/pull/1994))
+- Links in a transcript or an Inbox item open in your browser
+  ([#2300](https://github.com/ReviewStage/luke/pull/2300),
+  [#2352](https://github.com/ReviewStage/luke/pull/2352))
+- Folds and popovers open and close with motion, and every scroller draws one
+  thin scrollbar ([#2253](https://github.com/ReviewStage/luke/pull/2253),
+  [#2311](https://github.com/ReviewStage/luke/pull/2311),
+  [#2321](https://github.com/ReviewStage/luke/pull/2321))
+- One focus ring for every control and every field
+  ([#2304](https://github.com/ReviewStage/luke/pull/2304),
+  [#2357](https://github.com/ReviewStage/luke/pull/2357))
+- Settings › Updates names the commit a build was cut from
+  ([#2408](https://github.com/ReviewStage/luke/pull/2408))
+- A repository is drawn with its owner's picture
+  ([#2026](https://github.com/ReviewStage/luke/pull/2026))
+
+### Fixes
+
+- Fixed a coding agent on Fast failing at its first step: Fast now runs on
+  Luke's Anthropic key, and says it is unavailable on your own key
+  ([#2239](https://github.com/ReviewStage/luke/pull/2239),
+  [#2366](https://github.com/ReviewStage/luke/pull/2366))
+- Fixed Luke not ending the call when you asked him to
+  ([#2054](https://github.com/ReviewStage/luke/pull/2054))
+- Fixed the notetaker leaving out what a call settled unless you said yes to it
+  ([#2040](https://github.com/ReviewStage/luke/pull/2040))
+- Fixed coding agent notifications not arriving
+  ([#2052](https://github.com/ReviewStage/luke/pull/2052))
+- Fixed a deleted plan keeping its calls, its running coding agents, and their
+  sandboxes ([#2298](https://github.com/ReviewStage/luke/pull/2298),
+  [#2303](https://github.com/ReviewStage/luke/pull/2303),
+  [#2326](https://github.com/ReviewStage/luke/pull/2326))
+- Fixed a deleted account keeping its Linear grant
+  ([#2299](https://github.com/ReviewStage/luke/pull/2299))
+- Fixed a coding agent started with only a file never starting
+  ([#2119](https://github.com/ReviewStage/luke/pull/2119))
+- Fixed a coding agent reading as running after its messages were merged into
+  one ([#2048](https://github.com/ReviewStage/luke/pull/2048))
+- Fixed asking for a coding agent also starting a background worker
+  ([#2127](https://github.com/ReviewStage/luke/pull/2127))
+- Fixed a File tab that could not read its file
+  ([#2030](https://github.com/ReviewStage/luke/pull/2030))
+- Fixed a file Luke showed opening at main's head rather than the commit he read
+  ([#2316](https://github.com/ReviewStage/luke/pull/2316))
+- Fixed the File tab copying line numbers with the code
+  ([#2330](https://github.com/ReviewStage/luke/pull/2330))
+- Fixed a coding agent's sandbox too small to run the repository's linter
+  ([#2016](https://github.com/ReviewStage/luke/pull/2016))
+- Fixed the sidebar saying there were no plans before the list was read
+  ([#2294](https://github.com/ReviewStage/luke/pull/2294))
+- Fixed popovers opening under the whiteboard
+  ([#2045](https://github.com/ReviewStage/luke/pull/2045))
+- Fixed the message box's popovers opening away from their button
+  ([#2037](https://github.com/ReviewStage/luke/pull/2037))
+- Fixed Luke failing to read a newer service's answers
+  ([#2210](https://github.com/ReviewStage/luke/pull/2210))
+
+### Misc
+
+- Updated the avatar set with room around the face for profile photos
+  ([#2021](https://github.com/ReviewStage/luke/pull/2021))
+- Added screenshots to the 0.7.0 through 0.11.0 entries, and linked every entry
+  to its pull requests ([#2041](https://github.com/ReviewStage/luke/pull/2041),
+  [#2062](https://github.com/ReviewStage/luke/pull/2062))
+- Updated PRIVACY.md to describe what Luke keeps today
+  ([#2287](https://github.com/ReviewStage/luke/pull/2287))
+- Updated the service to delete a finished agent run's history at once, and to
+  log a failure's kind but never its detail
+  ([#2310](https://github.com/ReviewStage/luke/pull/2310),
+  [#2332](https://github.com/ReviewStage/luke/pull/2332))
+
 ## 0.11.0 — 2026-10-11
 
 ### Coding agents work alongside you
