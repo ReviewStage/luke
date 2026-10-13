@@ -7,7 +7,7 @@ import {
 } from "@sidecar/hosted/board-wire";
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { db } from "../core/query.js";
 import { plan, planBoard } from "../schemas/plan.js";
 import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";

@@ -3,7 +3,7 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createElement, type ReactElement } from "react";
 
 /** `element` under `registry`, as the window's root provides its own. */

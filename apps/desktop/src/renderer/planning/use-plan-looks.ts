@@ -6,7 +6,7 @@ import {
   type PlanSummary,
 } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Option, Schema } from "effect";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { useEffect, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime";
 

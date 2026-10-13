@@ -19,12 +19,7 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { Effect, Layer, Option } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { GitHubApp, type GitHubReadFailure } from "./github/github-app.js";
 import { logGitHubReadFailure } from "./github/github-refusal.js";
 import { hostedNotFoundRoute } from "./hosted/http-effect.js";

@@ -6,16 +6,16 @@ import { drizzle, type PgRemoteDatabase } from "drizzle-orm/pg-proxy";
 import type { JoinNullability, SelectMode } from "drizzle-orm/query-builders/select.types";
 import { QueryPromise } from "drizzle-orm/query-promise";
 import { Cause, type Context, Effect, Effectable, Exit, MutableRef } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { isSqlError, SqlError, UnknownError } from "effect/unstable/sql/SqlError";
+import * as SqlClient from "effect/sql/SqlClient";
+import { isSqlError, SqlError, UnknownError } from "effect/sql/SqlError";
 
 /**
  * The Drizzle query builder as an Effect, ported from `@effect/sql-drizzle`'s
  * `Pg` module and its `internal/patch`.
  *
  * The first-party bridge peers `effect ^3.22` and `@effect/sql`, and this
- * repository pins `effect 4.0.0-rc.115`, where `@effect/sql` is folded into
- * `effect/unstable/sql`; satisfying the peer would put a second copy of
+ * repository pins `effect 4.0.4`, where `@effect/sql` is folded into
+ * `effect/sql`; satisfying the peer would put a second copy of
  * `effect` in the tree, and a `Context.Service` minted in one copy is not the
  * same service in the other. So the mechanism is copied rather than depended
  * on. It is small and it is all here: Drizzle renders the statement, this
@@ -112,16 +112,18 @@ const whereItStands: StandingAsyncContext = (resume) => resume();
  * the fiber that yielded it is running in, and the async context that query's
  * own run left standing, written back by the door below.
  *
- * Why the second half is here at all: a `SqlClient` statement is a wait for
- * the pool's connection, and Effect resumes whoever was waiting inside the
- * stack of whoever released it, so the async context a statement leaves its
- * caller in is the releasing caller's and not the asking caller's. That is
- * what a raw `sql` tagged template does to the fiber that yields it, and a
- * bridged statement has to do the same thing: the bridge renders the
- * statement and nothing else, and a statement converted onto it leaves its
- * caller exactly where the raw one would have. Without this the door's own
- * root fiber absorbs the handoff and the asking fiber resumes in the
- * context it registered its `then` in. Note that no authored file reads
+ * Why the second half is here at all: on `effect 4.0.0-rc.115` a `SqlClient`
+ * statement was a wait for the pool's connection, and Effect resumed whoever
+ * was waiting inside the stack of whoever released it, so the async context a
+ * statement left its caller in was the releasing caller's and not the asking
+ * caller's. A bridged statement has to do what a raw `sql` tagged template
+ * does to the fiber that yields it: the bridge renders the statement and
+ * nothing else, and a statement converted onto it leaves its caller exactly
+ * where the raw one would have. Note that `effect 4.0.4` captures a fiber's
+ * async context when it suspends and resumes it there, so neither a raw
+ * statement nor the snapshot below moves a caller any more, and parity holds
+ * with this half doing nothing; it stays until Drizzle's own Effect driver
+ * replaces this module. Note also that no authored file reads
  * eve's session container out of the context a statement leaves standing:
  * under two sessions in one process that context is the other session's,
  * so each pins its own where it is entered (`hosted/brain-host/pinned-state.ts`), and

@@ -13,8 +13,8 @@ import {
 } from "@sidecar/database/testing";
 import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
 
 /**
  * The store's tests run against the real generated migrations on a real

@@ -6,11 +6,11 @@ import { failureKind } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { FetchHttpClient } from "effect/http";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 

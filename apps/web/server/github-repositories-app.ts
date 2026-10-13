@@ -18,8 +18,8 @@ import {
   HttpRouter,
   HttpServerRequest,
   type HttpServerResponse,
-} from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+} from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";

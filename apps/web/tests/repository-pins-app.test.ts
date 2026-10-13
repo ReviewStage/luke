@@ -8,9 +8,9 @@ import { repositoryPinsAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { repositoryPinsApp } from "../server/repository-pins-app";
 

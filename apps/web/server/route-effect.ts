@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import type { Route, WebRoutes } from "./route.js";
 import { runWeb, type WebServices } from "./runtime.js";
 

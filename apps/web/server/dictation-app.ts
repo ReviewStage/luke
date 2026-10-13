@@ -12,8 +12,8 @@ import {
   HttpRouter,
   HttpServerRequest,
   type HttpServerResponse,
-} from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+} from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {

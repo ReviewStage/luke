@@ -16,7 +16,7 @@
 
 import { useAtomValue } from "@effect/atom-react";
 import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useState } from "react";
 import { rendererRuntime } from "./renderer-runtime";
 

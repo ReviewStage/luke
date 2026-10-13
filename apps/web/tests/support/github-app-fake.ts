@@ -17,7 +17,7 @@ import { account, user } from "@sidecar/database/schemas/auth";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { Clock, Effect, Layer, Redacted } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   GITHUB_PROVIDER_ID,
   GITHUB_REPOSITORY_SELECTION,

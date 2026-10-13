@@ -12,7 +12,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
   MESSAGE_AUTHOR,

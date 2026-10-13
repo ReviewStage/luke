@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withoutTrailingSlash } from "@sidecar/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
-import * as Headers from "effect/unstable/http/Headers";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Headers from "effect/http/Headers";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
 
 /**

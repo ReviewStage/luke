@@ -1,4 +1,4 @@
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpServerResponse } from "effect/http";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**

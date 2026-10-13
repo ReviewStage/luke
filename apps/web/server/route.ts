@@ -1,5 +1,5 @@
 import type { Layer } from "effect";
-import type { HttpRouter } from "effect/unstable/http";
+import type { HttpRouter } from "effect/http";
 
 /**
  * What a route file default-exports: one fetch handler, which is the whole of

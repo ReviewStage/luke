@@ -1,6 +1,6 @@
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { FetchHttpClient, type HttpClient } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { type GitHubApp, githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";

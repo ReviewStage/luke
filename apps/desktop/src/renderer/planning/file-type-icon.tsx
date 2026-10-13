@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileIcon } from "lucide-react";
 import { fileTreeModuleAtom } from "./file-tree-bundle";
 

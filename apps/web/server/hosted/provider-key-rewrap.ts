@@ -9,7 +9,7 @@ import {
   rewrapProviderKeyRow,
 } from "@sidecar/database/models/provider-key-store";
 import { Effect, type Redacted, Result } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import {
   bearerMatchesSecret,
   errorResponse,

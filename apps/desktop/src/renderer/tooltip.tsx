@@ -42,7 +42,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@sidecar/surface";
 import { Duration, Effect } from "effect";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import {
   cloneElement,
   type FocusEventHandler,

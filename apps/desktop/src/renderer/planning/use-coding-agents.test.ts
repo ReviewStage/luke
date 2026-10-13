@@ -8,7 +8,7 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
+import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";

@@ -11,7 +11,7 @@ import {
   type SidebandCloseResult,
 } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";

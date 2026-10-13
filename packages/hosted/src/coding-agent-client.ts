@@ -5,8 +5,9 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Encoding, Result, type Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import { Effect, Result, type Schema } from "effect";
+import { Base64 } from "effect/encoding";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -213,7 +214,7 @@ function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachment
       .then(
         (bytes): CodingAgentInboxAttachmentView => ({
           contentType,
-          base64: Encoding.encodeBase64(new Uint8Array(bytes)),
+          base64: Base64.encode(new Uint8Array(bytes)),
         }),
       )
       .catch(() => UNANSWERED),

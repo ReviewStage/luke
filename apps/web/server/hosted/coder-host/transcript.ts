@@ -39,8 +39,8 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import {
   isSettledToolPartState,
   isStoredToolPart,

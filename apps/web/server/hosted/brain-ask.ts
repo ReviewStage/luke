@@ -23,8 +23,8 @@ import {
   Option,
   Result,
 } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../core.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./brain-host/bounds.js";
 import {

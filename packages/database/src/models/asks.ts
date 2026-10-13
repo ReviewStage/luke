@@ -1,8 +1,8 @@
 import { ASK_ORIGIN, type AskOrigin } from "@sidecar/hosted";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { asks, conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";

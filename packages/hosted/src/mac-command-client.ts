@@ -1,6 +1,6 @@
 import { HTTP_METHOD } from "@sidecar/wire";
 import { Effect } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,

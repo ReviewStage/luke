@@ -5,7 +5,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
 import {

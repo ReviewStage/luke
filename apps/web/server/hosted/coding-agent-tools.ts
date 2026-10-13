@@ -19,8 +19,8 @@ import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire
 import { describeWire } from "@sidecar/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,

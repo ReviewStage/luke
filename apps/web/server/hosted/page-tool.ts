@@ -8,7 +8,7 @@ import {
 } from "@sidecar/hosted/page-wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import type { SandboxSession } from "eve/sandbox";
 import {
   ACTION_RESULT_STATUS,

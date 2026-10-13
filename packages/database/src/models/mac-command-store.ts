@@ -5,7 +5,7 @@ import {
 } from "@sidecar/hosted/mac-command-wire";
 import { and, asc, eq, gte, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/unstable/sql";
+import { SqlSchema } from "effect/sql";
 import { db } from "../core/query.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import type { PlanStoreEffect } from "./plan-store.js";

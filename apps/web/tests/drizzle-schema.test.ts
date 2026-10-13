@@ -4,7 +4,7 @@ import * as schema from "@sidecar/database/schemas";
 import { getTableColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -38,7 +38,7 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 /**
- * The migrator's own bookkeeping, owned by `effect/unstable/sql` and declared
+ * The migrator's own bookkeeping, owned by `effect/sql` and declared
  * by no module of ours; it is the one table in `public` the barrel should not
  * describe.
  */

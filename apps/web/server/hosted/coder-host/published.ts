@@ -8,8 +8,8 @@ import type {
   CodingAgentPullRequestAnswer,
 } from "@sidecar/hosted/coding-agent-wire";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import { GitHubApp, type GitHubUserReadFailure } from "../../github/github-app.js";
 import {
   branchStands,

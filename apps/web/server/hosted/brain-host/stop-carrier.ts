@@ -4,8 +4,8 @@
 
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { describeUnreachable, EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 
 /** What carrying a waiting ask's Stop at its turn's start needs: eve as the carrier reaches it, the writer's stamp, the clock, and where a refusal is said. */

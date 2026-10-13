@@ -4,7 +4,7 @@ import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../server/github/github-app";
 import {
   REPOSITORY_SHELL_REFUSAL,

@@ -28,9 +28,9 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Context, Data, Effect, Layer, Result, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id. */

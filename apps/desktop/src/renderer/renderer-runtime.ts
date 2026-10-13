@@ -14,9 +14,9 @@
 
 import { scheduleTask } from "@effect/atom-react/RegistryContext";
 import { type Context, Layer } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 
 /**
  * No service stands yet: what the runtime is for is holding the fibers the

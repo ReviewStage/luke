@@ -2,7 +2,7 @@ import { useAtom } from "@effect/atom-react";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime";
 import {

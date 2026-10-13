@@ -46,12 +46,12 @@ fi
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
-# `@effect/platform-node` or `effect/unstable/sql` a few files deep.
+# `@effect/platform-node` or `effect/sql` a few files deep.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/platform-node|effect\/unstable\/sql)/;
+  const forbidden = /^(node:|@effect\/platform-node|effect\/sql)/;
   const seen = new Set();
   const offenders = [];
   const walk = async (file) => {
@@ -367,7 +367,7 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# `@effect/platform-node` and `effect/unstable/sql` reach `node:` modules, so an import
+# `@effect/platform-node` and `effect/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
 # the sandboxed renderer. The renderer's `node:` grep above catches the direct
 # reach; this catches the Effect layer that would carry it in behind a bare
@@ -375,10 +375,10 @@ node --input-type=module -e '
 # isolation guard in apps/web/tests/build-output.test.ts is what proves each one
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
-    '"(@effect/platform-node|effect/unstable/sql)' \
+    '"(@effect/platform-node|effect/sql)' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" || true)
 if [[ -n "$node_reaching_effect" ]]; then
-    printf 'error: @effect/platform-node and effect/unstable/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
+    printf 'error: @effect/platform-node and effect/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
     exit 1
 fi

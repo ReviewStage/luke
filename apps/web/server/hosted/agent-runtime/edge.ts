@@ -14,7 +14,7 @@
  */
 
 import { Effect, Result, type Schema } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { WebAgentRun, WebAgentServices } from "../../runtime.js";

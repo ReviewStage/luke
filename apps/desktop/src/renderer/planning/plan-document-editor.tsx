@@ -1,7 +1,7 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 import { bundleAtom } from "../bundle-loader";
 import {

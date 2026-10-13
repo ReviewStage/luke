@@ -8,7 +8,7 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
-import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
+import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";

@@ -9,10 +9,10 @@ import {
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, type Layer } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type { AccountProvider } from "./snapshot.js";
 
 export interface AccountTokens {

@@ -6,7 +6,7 @@ import {
 } from "@sidecar/hosted/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { SqlSchema } from "effect/unstable/sql";
+import { SqlSchema } from "effect/sql";
 import { db } from "../core/query.js";
 import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";

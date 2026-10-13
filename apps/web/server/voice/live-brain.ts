@@ -21,7 +21,7 @@ import {
   type LiveBrainSubmission,
 } from "@sidecar/voice/live-session";
 import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import {
   ASK_ORIGIN,
   isSettledToolPartState,

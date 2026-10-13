@@ -13,8 +13,8 @@ import {
 } from "@sidecar/wire";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../voice-vocabulary.js";

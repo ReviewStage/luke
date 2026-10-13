@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { MIGRATIONS_TABLE, runWebMigrations, webMigrations } from "@sidecar/database/core/migrator";
 import { unmigratedPgliteSqlClient } from "@sidecar/database/testing";
 import { Effect, Layer } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
 
 interface RecordedMigration {
   readonly id: number;

@@ -3,7 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Layer, Redacted } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { test } from "vitest";
 import { GitHubApp, type GitHubAppSettings } from "../server/github/github-app.js";
 import { githubInstallApp } from "../server/github-install-app.js";

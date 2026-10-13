@@ -4,8 +4,8 @@ import {
   type ProviderKeyProvider,
 } from "@sidecar/hosted/provider-key-wire";
 import { Duration, Effect, Option, Redacted } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
  * provider-key-check.ts -- whether a provider accepts a key, asked before an account's own key is kept.

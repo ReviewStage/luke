@@ -10,8 +10,8 @@ import {
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,

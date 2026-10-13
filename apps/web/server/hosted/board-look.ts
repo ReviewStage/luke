@@ -2,7 +2,7 @@ import { readBoardImage } from "@sidecar/database/models/board-store";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import type { ToolModelOutput } from "eve/tools";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 

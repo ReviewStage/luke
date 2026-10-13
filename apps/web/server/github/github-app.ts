@@ -47,11 +47,11 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
 import type { StoreFailure } from "../hosted/store-failure.js";

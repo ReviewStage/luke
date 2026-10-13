@@ -30,9 +30,9 @@ import {
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
   GITHUB_HTTP_STATUS,
   type GitHubSignInRequired,

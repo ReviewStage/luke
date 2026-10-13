@@ -80,6 +80,7 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
+    "@effect/sql-pglite": "catalog:",
     "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
     "@types/node": "catalog:",

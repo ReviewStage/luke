@@ -31,8 +31,8 @@ import {
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
 import { ownKeyProviders } from "../server/hosted/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";

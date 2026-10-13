@@ -7,8 +7,8 @@ import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
 import { causeKind, serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { LiveServerEvent } from "../live.js";
 
 /**

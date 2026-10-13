@@ -10,8 +10,8 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";

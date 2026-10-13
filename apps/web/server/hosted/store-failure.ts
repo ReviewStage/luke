@@ -10,7 +10,7 @@
  */
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, type Schema } from "effect";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlError } from "effect/sql/SqlError";
 
 export type StoreFailure = SqlError | Schema.SchemaError;
 

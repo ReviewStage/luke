@@ -128,16 +128,17 @@ hand-rolled: a Schema that both parses and emits JSON Schema, disposables,
 an event emitter, independent backoff loops, `setInterval` loops, a
 semaphore, single-flight, bounded queues, an idempotency ledger, a worker RPC,
 an injected clock seam, and a fake clock beside it. `effect` is pinned at
-`4.0.0-rc.115` through the pnpm catalog in `pnpm-workspace.yaml` and nowhere
+`4.0.4` through the pnpm catalog in `pnpm-workspace.yaml` and nowhere
 else — every workspace that reaches it declares `"effect": "catalog:"`, so one
 copy resolves across the repository, which is what keeps a `Context.Service`
 minted in one package the same service in another. `@effect/platform`,
 `@effect/rpc`, `@effect/sql`, and `@effect/experimental` are consolidated into
-`effect` itself and reached at `effect/unstable/*`; `@effect/platform-node`,
-`@effect/sql-pg`, `@effect/atom-react`, and `@effect/vitest` stay separate, each
-on the same `4.0.0-rc.115` through the same catalog. The pin is an exact release
-candidate rather than a range, moved deliberately, and re-evaluated once Effect
-ships `4.0.0` stable.
+`effect` itself and reached at its own subpaths (`effect/http`, `effect/sql`,
+`effect/rpc`, `effect/reactivity`, …); `@effect/platform-node`,
+`@effect/sql-pg`, `@effect/sql-pglite`, `@effect/atom-react`, and
+`@effect/vitest` stay separate, each on the same `4.0.4` through the same
+catalog. The pin is an exact release rather than a range, and is moved
+deliberately.
 
 ### Where an Effect may run
 
@@ -243,35 +244,22 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   statement and awaits a promise for its rows, and the callback it awaits
   takes the SQL and nothing else, so the door is `Effect.runPromiseExitWith`
   on the context the yielding fiber was carrying, squashed to the `SqlError`
-  Drizzle re-wraps. One thing about that run is deliberate and is not to be
-  tidied away. A raw `SqlClient` statement is a wait for the pool's
-  connection, and Effect resumes a waiter inside the stack of whoever released
-  it, so a raw statement hands its caller back in the releasing caller's
-  `AsyncLocalStorage` context rather than the one it asked from. Nothing
-  authored under `apps/web/eve/` stands on that context: with two sessions
-  running turns in one process it is the other session's, so the hook and
-  the prompt resolver pin their `defineState` handles where they are entered
-  (`apps/web/server/hosted/brain-host/pinned-state.ts`, held by `apps/web/tests/eve-pinned-state.test.ts`).
-  The door's own root fiber would absorb that handoff and leave the asking
-  fiber in the context it registered its `then` in, so the door reproduces
-  the handoff on purpose: it snapshots the async context in a finalizer
-  inside the run, which is the tick the statement settled on, and the patched
-  `evaluate` resumes the asking fiber inside that snapshot through
-  `Effect.callback`, whose `resume` continues that fiber's loop on the stack
-  it is called from. What the bridge owes is the raw statement's answer
-  and not one of its own, and `apps/web/tests/drizzle-bridge.test.ts` reads
-  one against the other on both dialects. Handing that run to an edge is what
-  cannot be done: the
-  context is the point — an enclosing `sql.withTransaction`'s connection is a
-  service of the running fiber and of no runtime an edge built — so the run
-  has to happen where the fiber is, which is inside the callback Drizzle
-  calls. The handle the bridge hands out is no service and no layer, and
-  minting one would be a regression rather than a tidy-up: it carries no
-  capability, so a `Context.Service` over it would add a requirement to every
-  query module that answers `Effect<A, SqlError | Schema.SchemaError,
-  SqlClient>` today and buy nothing, and reading the client from the fiber
-  instead is the same thing that keeps a bridged query inside the transaction
-  around it.
+  Drizzle re-wraps. The door's async-context snapshot once reproduced a raw
+  statement's handoff of its caller to the releasing caller's
+  `AsyncLocalStorage` context; Effect 4.0.4 resumes each fiber in its own
+  async context, so the handoff no longer happens, and
+  `apps/web/tests/drizzle-bridge.test.ts` still reads the bridge's answer
+  against the raw statement's on both dialects. Handing that run to an edge
+  is what cannot be done: the context is the point — an enclosing
+  `sql.withTransaction`'s connection is a service of the running fiber and of
+  no runtime an edge built — so the run has to happen where the fiber is,
+  which is inside the callback Drizzle calls. The handle the bridge hands out
+  is no service and no layer, and minting one would be a regression rather
+  than a tidy-up: it carries no capability, so a `Context.Service` over it
+  would add a requirement to every query module that answers
+  `Effect<A, SqlError | Schema.SchemaError, SqlClient>` today and buy
+  nothing, and reading the client from the fiber instead is the same thing
+  that keeps a bridged query inside the transaction around it.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,

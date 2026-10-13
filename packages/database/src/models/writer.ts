@@ -50,8 +50,8 @@ import {
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";

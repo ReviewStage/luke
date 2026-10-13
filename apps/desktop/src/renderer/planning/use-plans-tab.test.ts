@@ -16,8 +16,8 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { Duration, Effect, Option, Schema } from "effect";
+import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";

@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

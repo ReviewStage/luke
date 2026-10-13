@@ -41,7 +41,7 @@ connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `effect/unstable/sql`'s own migrator: `packages/database/src/core/migrator.ts`
+What applies them is `effect/sql`'s own migrator: `packages/database/src/core/migrator.ts`
 reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each entry names, in
 order, and records what it applied in its own `effect_sql_migrations` table,
 which is what makes a second deploy a no-op. The older Drizzle-based runner's
@@ -462,7 +462,7 @@ process's others.
 The layer carries what a Vercel function's own platform already offers: an
 `HttpClient` over `fetch`, and the `SqlClient` of `server/db/sql-client.ts` over
 the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
-`repository-checks.sh` refuses that specifier and `effect/unstable/sql` in the
+`repository-checks.sh` refuses that specifier and `effect/sql` in the
 renderer, where there is no Node; a function inlines its whole graph and the
 isolation guard proves it loads. The layer itself is behind
 `server/`, which is what the builder traces. A function is handed no shutdown
@@ -1429,7 +1429,7 @@ with.
 One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
 function hands the service. Both sockets are the platform's:
 `server/voice/socket.ts` reads a `ws` socket through
-`effect/unstable/socket`'s `Socket`, a fiber of that scope filling a mailbox with
+`effect/socket`'s `Socket`, a fiber of that scope filling a mailbox with
 every frame in arrival order, so the opening frame is taken from the same
 reader the relay then streams the rest from and nothing between the two lands
 nowhere. `server/voice/relay.ts` pipes the two streams, settles on a

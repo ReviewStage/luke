@@ -5,8 +5,8 @@ import {
 import { repositoryPinRequestSchema } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,

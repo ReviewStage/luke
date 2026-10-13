@@ -1,8 +1,8 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import { GitHubApp } from "../github/github-app.js";

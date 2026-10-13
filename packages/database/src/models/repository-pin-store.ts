@@ -1,7 +1,7 @@
 import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { db } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { repositoryPin } from "../schemas/repository-pin.js";

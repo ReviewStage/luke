@@ -17,8 +17,8 @@
 
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Effect, Option } from "effect";
-import type { HttpClient } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import type { HttpClient } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { defineSkill } from "eve/skills";
 import { GitHubApp } from "../../github/github-app.js";
 import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
