@@ -64,6 +64,7 @@
   "scripts": {
     "check:migrations": "drizzle-kit check",
     "db:generate": "NODE_OPTIONS='--import tsx' drizzle-kit generate",
+    "migrations:convert": "tsx scripts/convert-journal-migrations.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
