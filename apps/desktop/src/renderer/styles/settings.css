@@ -502,20 +502,36 @@
    trip to the provider's own site. The trash asks instead of acting, and the
    answer is given on the line the question was asked on.
  *
- * The line's controls hold its shape, and the confirm that replaces them
- * stands over the whole line: its question takes the place of the line's own
- * words, which step aside while it is asked. That is what makes the swap free:
- * nothing beside the controls ever re-shapes, and neither layer is mounted or
- * unmounted by the press. Only `transform`, `opacity`, and `visibility` ever
- * change hands. */
-.credential-actions {
+ * The line becomes a grid of two columns, its words and its controls, and
+ * the confirm that replaces the controls spans both: its question takes the
+ * place of the line's own words, which step aside while it is asked. Neither
+ * layer is mounted or unmounted by the press, and only `transform`, `opacity`,
+ * and `visibility` ever change hands. The question stands in the line's flow
+ * while it is asked, so one that wraps grows the line rather than running
+ * over the next; while it rests it stands out of the flow, so a line never
+ * sizes itself to a question nobody asked. Whatever else the line holds, like
+ * a refusal under it, takes a row of its own beneath. */
+.settings-row:has(> .credential-actions) {
+  position: relative;
   display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.credential-actions > * {
+.settings-row:has(> .credential-actions) > * {
+  grid-column: 1 / -1;
+}
+
+.settings-row:has(> .credential-actions) > .settings-copy {
   grid-area: 1 / 1;
+}
+
+.credential-actions {
+  display: contents;
+}
+
+.credential-actions > .credential-controls {
+  grid-area: 1 / 2;
+  justify-self: end;
 }
 
 /* The layer that is leaving fades over `--duration-exit`, the way panel content
@@ -578,23 +594,24 @@
 /* The group is what names the question for the two controls inside it, the same
    way the editor's group names the provider for its own Cancel and Save. None
    of the user-agent frame is wanted, including the `min-inline-size` that would
-   stop it shrinking with the panel. It stands over the whole line, the question
-   at the line's start and the answers where the controls were. */
-.settings-row:has(> .credential-actions) {
-  position: relative;
-}
-
-.credential-confirm {
-  position: absolute;
+   stop it shrinking with the panel. It spans the whole line, the question at
+   the line's start and the answers where the controls were. */
+.credential-actions > .credential-confirm {
   min-inline-size: 0;
   justify-content: flex-end;
   padding: 0;
   border: 0;
   margin: 0;
+  grid-area: 1 / 1 / 2 / 3;
+}
+
+.credential-actions > .credential-confirm[data-drawn="false"] {
+  position: absolute;
   inset: 0;
 }
 
-/* The question reads in the line's own name type, and arrives on the layer's
+/* The question reads in the line's own name type, breaking inside a long
+   address rather than running under the answers, and arrives on the layer's
    fade alone: a line of words springing from its right edge would slide the
    whole sentence rather than unfold two buttons. */
 .credential-actions > .credential-confirm > .credential-question {
@@ -604,6 +621,7 @@
   font-size: 12px;
   font-weight: 620;
   line-height: 1.3;
+  overflow-wrap: anywhere;
   transform: none;
 }
 
