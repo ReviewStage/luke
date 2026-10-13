@@ -1,9 +1,11 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import { InboxIcon } from "lucide-react";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { InboxList } from "../planning/inbox-list";
@@ -118,13 +120,17 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
+/** What a plan's Inbox tab says while its read holds nothing. */
+const NOTHING_WAITS = "Nothing is waiting on you.";
+
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
  * list, with neither head nor groups since they are one plan's, and the
  * chosen item read beside them in the same pane, on the plan's own held
  * read. With nothing chosen, the first item that waits stands chosen, else
- * the newest. The pane's plan crumb chooses the plan's tab and its agent
- * crumb the agent's.
+ * the newest; a plan whose read holds nothing says so under the Inbox's
+ * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
+ * the agent's.
  */
 function PlanInboxTab({
   plans,
@@ -171,7 +177,11 @@ function PlanInboxTab({
         onChoose={({ item }) => setAsked(item.id)}
       />
       {chosen === undefined ? (
-        <section className="inbox-view-items" aria-label="Inbox" />
+        <section className="inbox-view-items" aria-label="Inbox">
+          {inbox.read && items.length === 0 ? (
+            <EmptyState icon={<InboxIcon />}>{NOTHING_WAITS}</EmptyState>
+          ) : null}
+        </section>
       ) : (
         <InboxPane
           plan={plan}

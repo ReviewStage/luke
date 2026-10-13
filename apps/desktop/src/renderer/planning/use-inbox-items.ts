@@ -16,7 +16,8 @@ import type { InboxReader } from "./use-plan-inbox";
  * plan: main's own read is already held open on the account, and is what
  * hears a change. The plan whose item is chosen holds its own read open
  * besides (`use-plan-inbox.ts`), which answers and is drawn in this one's
- * place, so an answer shows at once. A read that did not answer leaves the
+ * place, so an answer shows at once. An answer to a read a newer one
+ * overtook is let go, items and failure alike. A read that did not answer leaves the
  * plan as it was last read, or unread, and says so, with Try again; a
  * later change of the plan's asks again of its own accord.
  */
@@ -49,6 +50,8 @@ export function useInboxItems(input: {
   const [attempt, setAttempt] = useState(0);
   // The read out for each plan, by the moment it asks for, so a plan is asked once per change.
   const asking = useRef(new Map<string, number>());
+  // The latest moment each plan was asked for, so an answer to an earlier ask, landing last, is let go.
+  const newest = useRef(new Map<string, number>());
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -65,12 +68,14 @@ export function useInboxItems(input: {
       if (latest.current.reads.get(planId)?.at === updatedAt) continue;
       if (asking.current.get(planId) === updatedAt) continue;
       asking.current.set(planId, updatedAt);
+      newest.current.set(planId, Math.max(newest.current.get(planId) ?? updatedAt, updatedAt));
       latest.current
         .readInbox({ planId, after: INBOX_CURSOR_START })
         .catch((): CodingAgentInboxAnswerView => UNANSWERED)
         .then((answer) => {
           if (asking.current.get(planId) === updatedAt) asking.current.delete(planId);
-          if (!live.current) return;
+          // Note that a superseded answer moves neither the items nor the failure, because the newer ask's answer says both.
+          if (!live.current || updatedAt < (newest.current.get(planId) ?? updatedAt)) return;
           const failure = "failure" in answer;
           setFailed((was) => {
             if (was.has(planId) === failure) return was;
@@ -80,12 +85,7 @@ export function useInboxItems(input: {
             return next;
           });
           if (failure) return;
-          // A read landing after a newer one for the same plan is let go.
-          setReads((was) =>
-            (was.get(planId)?.at ?? -1) > updatedAt
-              ? was
-              : new Map(was).set(planId, { at: updatedAt, items: answer.items }),
-          );
+          setReads((was) => new Map(was).set(planId, { at: updatedAt, items: answer.items }));
         });
     }
   }, [holdings, attempt]);

@@ -128,13 +128,16 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   });
   // Note that the models come from the open plan's agents where this plan's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? plans.agents.models };
-  // The chosen plan's own held read stands in for the list's once it answered, so an answer shows at once.
+  // The chosen plan's own held read stands in for the list's once it answered, so an answer shows
+  // at once, and only while it holds, since one that failed stops hearing what changed.
   const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
   const entries: InboxPlanItems[] = holdings.flatMap((holding) => {
     const plan = plans.plans.find((each) => each.id === holding.planId);
     if (plan === undefined) return [];
     const items =
-      live.read && holding.planId === planId ? liveItems : read.items.get(holding.planId);
+      live.read && !live.failed && holding.planId === planId
+        ? liveItems
+        : read.items.get(holding.planId);
     return [{ plan, items: items ?? [] }];
   });
   const list = inboxList(entries, {
@@ -143,12 +146,14 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     chosen: view.chosen?.itemId,
   });
   const chosen = listedItems(list).find(({ item }) => item.id === view.chosen?.itemId);
-  // Note that a chosen item whose plan is not read yet keeps its place, because it may be listed once the read lands.
-  const chosenRead = planId !== undefined && (read.items.has(planId) || live.read);
-  const standIn =
-    chosen === undefined && (view.chosen === undefined || chosenRead)
-      ? firstChoice(list)
-      : undefined;
+  // Note that a chosen item whose plan is listed but not read yet keeps its place, because it may
+  // be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
+  const chosenWaits =
+    planId !== undefined &&
+    holdings.some((holding) => holding.planId === planId) &&
+    !read.items.has(planId) &&
+    !live.read;
+  const standIn = chosen === undefined && !chosenWaits ? firstChoice(list) : undefined;
   const { onChoose } = view;
   const choose = useCallback(
     ({ plan, item }: InboxListed) => onChoose({ planId: plan.id, itemId: item.id }),

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type {
-  CodingAgentInboxAnswerView,
-  CodingAgentListAnswer,
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerView,
+  type CodingAgentListAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -97,6 +98,18 @@ let root: Root | undefined;
 let inboxes = new Map<string, readonly InboxItem[]>();
 /** Moves main's list of the plans holding items, as its read of the account would. */
 let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
+/** Moves the account's list of plans, as an archive on another Mac would. */
+let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+/** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
+interface ReadOutcome {
+  readonly status: typeof ACT_OUTCOME_STATUS.DONE;
+  readonly value: CodingAgentInboxAnswerView;
+}
+
+/** How the next held read of a plan, one past the cursor, answers: held open while nothing changes unless a test says. */
+let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
+/** How a read of a plan from the start answers, where a test holds it in its own hands. */
+let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -104,6 +117,8 @@ beforeEach(() => {
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
   ]);
+  heldRead = () => new Promise(() => undefined);
+  startRead = undefined;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -116,8 +131,8 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
-          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-          return done({ items: inboxes.get(planId) ?? [], cursor: "1" });
+          if (after !== INBOX_CURSOR_START) return heldRead(planId);
+          return startRead?.(planId) ?? done({ items: inboxes.get(planId) ?? [], cursor: "1" });
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
@@ -143,10 +158,12 @@ function mount() {
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     const [holding, setHeld] = useState(HOLDING);
+    const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
+    setPlans = setListed;
     return createElement(DesktopInbox, {
       plans: plansControl({
-        plans: [BILLING, INVITES],
+        plans: listed,
         inbox: [
           { planId: BILLING.id, items: [THRESHOLD.id] },
           { planId: INVITES.id, items: [EXPIRY.id] },
@@ -313,4 +330,90 @@ test("a plan main says changed is read again, so an item answered on another Mac
   );
   act(() => waiting?.click());
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+});
+
+/** An answer the act gives the renderer, the view it carries settled now. */
+function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
+  return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+}
+
+/** A read the test answers when it chooses. */
+interface PendingRead {
+  readonly promise: Promise<ReadOutcome>;
+  readonly settle: (value: CodingAgentInboxAnswerView) => void;
+}
+
+/** A read held until the test settles it. */
+function pending(): PendingRead {
+  let settle: PendingRead["settle"] = () => undefined;
+  const promise = new Promise<ReadOutcome>((resolve) => {
+    settle = (value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  });
+  return { promise, settle };
+}
+
+const UNANSWERED_READ: CodingAgentInboxAnswerView = {
+  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+};
+
+test("a chosen item whose plan leaves the account's list, archived on another Mac, gives way to the first item still waiting", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(
+    listed(page).filter((row) => row.startsWith("▸")),
+    ["▸ *Alert at 80%?"],
+  );
+  act(() => {
+    setPlans([INVITES]);
+    setHolding([{ planId: INVITES.id, items: 1, updatedAt: 4_000 }]);
+  });
+  await settle();
+  assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
+  assert.equal(
+    page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
+    "Expire after 7 days?",
+  );
+});
+
+test("once the chosen plan's own held read fails, the list's read of that plan stands again, so an item posted since still lists", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const { page } = mount();
+  await settle();
+  const posted = item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call too?", 7_000);
+  inboxes.set(BILLING.id, [THRESHOLD, RETRY, posted]);
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 3, updatedAt: 7_000 },
+      { planId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  assert.ok(listed(page).includes("*Page on-call too?"), listed(page).join(" | "));
+});
+
+test("an answer to a plan's read that a newer one overtook moves nothing: the newer read's failure still says so with Try again", async () => {
+  const first = pending();
+  const second = pending();
+  const reads = [first, second];
+  startRead = (planId) => (planId === INVITES.id ? reads.shift()?.promise : undefined);
+  const { page } = mount();
+  await settle();
+  act(() =>
+    setHolding([
+      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+    ]),
+  );
+  await settle();
+  second.settle(UNANSWERED_READ);
+  await settle();
+  first.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  const note = page.querySelector<HTMLElement>('.inbox-plans [role="alert"]');
+  assert.match(note?.textContent ?? "", /Some items could not be read\./u);
+  assert.equal(
+    listed(page).includes("*Expire after 7 days?"),
+    false,
+    "the overtaken read lists nothing",
+  );
 });
