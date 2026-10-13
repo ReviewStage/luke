@@ -53,6 +53,7 @@ window.lukeFileTree = {
         tree.narrowed.push(
           `within ${entries.map((entry) => `${entry.name}${entry.folder ? "/" : ""}`).join(", ")}`,
         ),
+      mark: () => undefined,
       unmount: () => undefined,
     };
   },

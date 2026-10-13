@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { FILE_TREE_STYLE_ATTRIBUTE } from "@pierre/trees";
 import { onTestFinished, test } from "vitest";
 import { cssRules } from "#testing/css-rules";
-import type { FolderListing } from "./contract";
+import { FILE_MARK, type FolderListing } from "./contract";
 import "./index";
 
 /** The tree bundle mounted on a host of its own over the listings `answer` gives, every file opened and every count of its rows written down. */
@@ -285,4 +285,38 @@ test("the tree counts out the rows it shows as a folder is listed, opened, and c
   await tree.settled();
   assert.equal(tree.rows.at(-1), 2);
   assert.deepEqual(tree.opened, [], "a folder pressed opens no file");
+});
+
+test("a change set's marks letter each file's row with what became of it, in the narrowed tree too, and none takes them off", async () => {
+  const tree = mounted((path) =>
+    path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }], truncated: false },
+  );
+  await tree.settled();
+  tree.handle.mark([
+    { path: "README.md", status: FILE_MARK.MODIFIED },
+    { path: "src/index.ts", status: FILE_MARK.ADDED },
+  ]);
+  tree.handle.reveal("src/index.ts", { focus: false });
+  await tree.settled();
+  const letter = (path: string) =>
+    tree.row(path).querySelector("[data-item-section='git']")?.textContent ?? "";
+
+  assert.equal(letter("README.md"), "M");
+  assert.equal(letter("src/index.ts"), "A");
+
+  tree.handle.only(["src/index.ts"]);
+  await tree.settled();
+  const narrowed = [...tree.host.querySelectorAll<HTMLElement>(".file-tree-view:not([hidden])")]
+    .map((view) => view.querySelector("file-tree-container")?.shadowRoot)
+    .map((root) =>
+      root?.querySelector("[data-item-path='src/index.ts'] [data-item-section='git']"),
+    );
+  assert.deepEqual(
+    narrowed.map((cell) => cell?.textContent),
+    ["A"],
+  );
+
+  tree.handle.mark([]);
+  await tree.settled();
+  assert.equal(letter("src/index.ts"), "");
 });

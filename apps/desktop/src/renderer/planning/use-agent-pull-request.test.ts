@@ -17,7 +17,11 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PUBLISHED_REREAD_MS } from "./coding-agent-model";
-import { useAgentPullRequest } from "./use-agent-pull-request";
+import {
+  type PlanPullRequests,
+  useAgentPullRequest,
+  usePlanPullRequests,
+} from "./use-agent-pull-request";
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
@@ -181,4 +185,125 @@ test("an answer the service could not give leaves what was drawn, and another ag
   stale.answer(BRANCH_ALONE);
   await settle();
   assert.equal(tab.published(), undefined);
+});
+
+/** The plan's agents as the list holds them: each by id, where it stands. */
+type Listed = readonly { id: string; status: CodingAgentStatus }[] | undefined;
+
+/** The plans the tests open. */
+const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const OTHER_PLAN = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
+
+/** Mounts the plan's pull requests over the agents given, every read held until the test answers it. */
+function mountPlan(initial: Listed) {
+  const reads: HeldRead[] = [];
+  let control: PlanPullRequests | undefined;
+  let relist: ((next: { planId: string; agents: Listed }) => void) | undefined;
+  function Probe() {
+    const [held, setHeld] = useState({ planId: PLAN, agents: initial });
+    relist = setHeld;
+    control = usePlanPullRequests(
+      held.planId,
+      held.agents,
+      (agentId) => new Promise((answer) => reads.push({ agentId, answer })),
+    );
+    return null;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Probe)));
+  const answer = async (
+    agentId: string,
+    answered: CodingAgentPullRequestAnswerView,
+    which: "first" | "last" = "first",
+  ) => {
+    const at =
+      which === "first"
+        ? reads.findIndex((read) => read.agentId === agentId)
+        : reads.findLastIndex((read) => read.agentId === agentId);
+    const [read] = reads.splice(at, 1);
+    assert.ok(read, `a read of ${agentId} is out`);
+    read.answer(answered);
+    await settle();
+  };
+  return {
+    reads,
+    answer,
+    opened: () => [...(control?.pullRequests.keys() ?? [])],
+    list: (next: Listed, planId = PLAN) => act(() => relist?.({ planId, agents: next })),
+    readOwn: (agentId: string) => {
+      assert.ok(control);
+      return control.read(agentId);
+    },
+  };
+}
+
+test("the plan reads each agent's pull request once as the list holds it and once more as it ends, keeps every answer a read lands, and keeps what a failed read leaves", async () => {
+  const running = { id: AGENT, status: CODING_AGENT_STATUS.RUNNING };
+  const plan = mountPlan(undefined);
+  assert.equal(plan.reads.length, 0, "nothing read before the list lands");
+
+  plan.list([running, { id: OTHER, status: CODING_AGENT_STATUS.COMPLETED }]);
+  assert.deepEqual(
+    plan.reads.map((read) => read.agentId),
+    [AGENT, OTHER],
+  );
+  await plan.answer(AGENT, BRANCH_ALONE);
+  await plan.answer(OTHER, OPENED);
+  assert.deepEqual(plan.opened(), [OTHER]);
+
+  // The list read again with nothing moved asks nothing; the agent ending asks once more.
+  plan.list([{ ...running }, { id: OTHER, status: CODING_AGENT_STATUS.COMPLETED }]);
+  assert.equal(plan.reads.length, 0);
+  plan.list([
+    { id: AGENT, status: CODING_AGENT_STATUS.COMPLETED },
+    { id: OTHER, status: CODING_AGENT_STATUS.COMPLETED },
+  ]);
+  assert.deepEqual(
+    plan.reads.map((read) => read.agentId),
+    [AGENT],
+  );
+  await plan.answer(AGENT, OPENED);
+  assert.deepEqual(plan.opened(), [OTHER, AGENT]);
+
+  // An agent's own tab reads through the plan's door: a failure keeps what stands, a pull request gone is let go.
+  const failed = plan.readOwn(OTHER);
+  await plan.answer(OTHER, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(await failed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(plan.opened(), [OTHER, AGENT]);
+  plan.readOwn(OTHER);
+  await plan.answer(OTHER, BRANCH_ALONE);
+  assert.deepEqual(plan.opened(), [AGENT]);
+});
+
+test("a plan opened again reads every agent afresh and drops what an earlier visit kept or still had out", async () => {
+  const ended = { id: AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+  const plan = mountPlan([ended]);
+  await plan.answer(AGENT, OPENED);
+  assert.deepEqual(plan.opened(), [AGENT]);
+
+  plan.list(undefined, OTHER_PLAN);
+  assert.deepEqual(plan.opened(), [], "another plan's agents offer nothing of this one's");
+  plan.list([ended]);
+  assert.deepEqual(plan.opened(), []);
+  assert.deepEqual(
+    plan.reads.map((read) => read.agentId),
+    [AGENT],
+    "read again on the return",
+  );
+  plan.list(undefined, OTHER_PLAN);
+  await plan.answer(AGENT, OPENED);
+  plan.list(undefined);
+  assert.deepEqual(plan.opened(), [], "an answer to an ask from a visit left is let go");
+});
+
+test("of two reads of one agent out at once, only the later one's answer is kept, however late the earlier lands", async () => {
+  const plan = mountPlan([{ id: AGENT, status: CODING_AGENT_STATUS.RUNNING }]);
+  plan.list([{ id: AGENT, status: CODING_AGENT_STATUS.COMPLETED }]);
+  assert.equal(plan.reads.length, 2);
+
+  await plan.answer(AGENT, OPENED, "last");
+  await plan.answer(AGENT, BRANCH_ALONE);
+  assert.deepEqual(plan.opened(), [AGENT]);
 });

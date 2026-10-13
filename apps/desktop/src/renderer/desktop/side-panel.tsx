@@ -1,6 +1,7 @@
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -39,7 +40,13 @@ import {
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
 import { fileName, type ShownFile, shownFiles } from "../planning/code-pane-model";
-import { agentGlyphState, agentStateWords, providerOf } from "../planning/coding-agent-model";
+import {
+  agentGlyphState,
+  agentStateWords,
+  agentTabLabel,
+  providerOf,
+  pullRequestNumberLabel,
+} from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
@@ -217,8 +224,34 @@ const NO_PAGES: readonly PageLine[] = [];
 export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
+  CHANGES: "Changes",
   PAGES: "Pages",
 } as const;
+
+/** An agent's Changes tab as the "+" offers it: the agent, the name its tab wears, and the pull request the tab draws. */
+export interface ChangesOffer {
+  readonly agentId: string;
+  readonly label: string;
+  readonly pullRequest: CodingAgentPullRequest;
+}
+
+/**
+ * The plan's agents' Changes tabs on offer, in the order the agents
+ * started: one for each agent with a pull request, its tab open in the
+ * plan's column or not, and none for an agent that has opened none yet,
+ * whose tab would only say so. Note that two agents on one pull request
+ * offer it once, under the first, because a row is named by the pull
+ * request and both tabs would draw the same files.
+ */
+export function changesOffers(agents: CodingAgentsControl): readonly ChangesOffer[] {
+  const offered = new Set<string>();
+  return (agents.agents ?? []).flatMap((agent) => {
+    const pullRequest = agents.pullRequests.get(agent.id);
+    if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
+    offered.add(pullRequest.url);
+    return [{ agentId: agent.id, label: agentTabLabel(agent, agents.models), pullRequest }];
+  });
+}
 
 /** The empty panel's row that opens a tab of the kind. */
 function kindAction(
@@ -254,19 +287,23 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * "+" and the summary alike. Picking a row whose tab is open
  * chooses that tab rather than opening another, as a browser's tab search
  * does, so no row says it is open; a file not open opens on the newest
- * snippet of it. The plan's coding agents are opened from the plan's
- * column's own "+" (`main-tabs.tsx`).
+ * snippet of it. Then, under Changes, each agent's pull request
+ * (`changesOffers`), by the agent's name with the pull request's number
+ * beside it, which opens the agent's Changes tab. The plan's coding agents
+ * are opened from the plan's column's own "+" (`main-tabs.tsx`).
  */
 export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
   files: readonly ShownFile[];
+  /** The agents' Changes tabs on offer; none where the caller offers none. */
+  changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
   standing: boolean;
 }): AddEntry[] {
-  const { panel, workers, files, pages = [], standing } = input;
+  const { panel, workers, files, changes = [], pages = [], standing } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind),
     onPick: () => panel.onChoose(kind),
@@ -304,6 +341,19 @@ export function panelEntries(input: {
       onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref, ref.commit)),
     };
   });
+  // Note that a pull request's row is named by its page, because an agent's
+  // id already names the agent's own row in the plan's summary.
+  const changesRows = changes.map(({ agentId, label, pullRequest }) => ({
+    row: {
+      id: pullRequest.url,
+      label,
+      icon: <FileDiffIcon />,
+      detail: pullRequestNumberLabel(pullRequest),
+      terms: [label, pullRequest.title, pullRequestNumberLabel(pullRequest)],
+      section: ADD_SECTION.CHANGES,
+    },
+    onPick: () => panel.onChoose({ changes: agentId }),
+  }));
   const pageRows = pages.map((page) => ({
     row: {
       id: page.id,
@@ -313,7 +363,7 @@ export function panelEntries(input: {
     },
     onPick: () => panel.onChoose({ page: page.id }),
   }));
-  return [...kinds, ...subagentRows, ...fileRows, ...pageRows];
+  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows];
 }
 
 /** Every subagent the plan's work holds, with its session, in the order started. */
@@ -527,7 +577,7 @@ function PanelTabs({
   workers: readonly WorkWorkerBlock[];
   /** The open file tabs of files shown on the plan, in the strip's order. */
   files: readonly OpenFile[];
-  /** The open Changes tabs of agents whose tabs stand open, in the order opened. */
+  /** The open Changes tabs of the plan's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
   /** The open page tabs of the plan's pages, in the order opened. */
   pages: readonly DrawnPage[];
@@ -601,6 +651,7 @@ function PanelTabs({
           kinds: SIDE_PANEL_TABS,
           workers,
           files: shownFiles,
+          changes: changesOffers(agents),
           pages: offeredPages,
           standing: false,
         })}
@@ -799,7 +850,7 @@ function TabContent({
   onWorkerHeld: TabViews["onWorkerHeld"];
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
-  /** Whether a File tab's tree is open, which holds for every File tab alike, and its toggle. */
+  /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string, path: string, newTab: boolean) => void;
@@ -826,7 +877,14 @@ function TabContent({
   }
   if (isChangesTab(tab)) {
     return (
-      <AgentChangesTab key={tab.changes} agentId={tab.changes} control={agents} shown={shown} />
+      <AgentChangesTab
+        key={tab.changes}
+        agentId={tab.changes}
+        control={agents}
+        shown={shown}
+        repository={repository}
+        tree={fileTree}
+      />
     );
   }
   if (isFileTab(tab)) {
@@ -1170,8 +1228,9 @@ export function SidePanel({
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const { tab } = panel;
-  // Whether a File tab's tree is open, for every File tab alike and for the
-  // window's life, as an editor's explorer stands across its tabs.
+  // Whether a File or Changes tab's tree is open, for every one of them
+  // alike and for the window's life, as an editor's explorer stands across
+  // its tabs.
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const fileTree = useMemo(
     () => ({ open: fileTreeOpen, onToggle: () => setFileTreeOpen((was) => !was) }),
@@ -1192,8 +1251,10 @@ export function SidePanel({
   const files = panel.files.filter(
     (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
   );
-  // An agent's Changes tab stands while the agent's own tab does.
-  const changes = panel.changes.filter((each) => drawsChanges(each, { agents: openAgents }));
+  // An agent's Changes tab stands while the agent is the plan's.
+  const changes = panel.changes.filter((each) =>
+    drawsChanges(each, { planAgents: agents.agentIds }),
+  );
   // A page's tab stands while the plan lists the page.
   const planPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {

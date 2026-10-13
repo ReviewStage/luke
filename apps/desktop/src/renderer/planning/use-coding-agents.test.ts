@@ -7,10 +7,12 @@ import {
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentSummary,
+  PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -160,7 +162,7 @@ test("the agents are read when a plan opens, and a plan without a repository has
 
   assert.deepEqual(
     tab.asked.map((each) => each.kind),
-    [ACT_KIND.CODING_AGENTS_LIST],
+    [ACT_KIND.CODING_AGENTS_LIST, ACT_KIND.CODING_AGENTS_PULL_REQUEST],
   );
   assert.deepEqual(tab.control().agentIds, [AGENT]);
   assert.equal(tab.control().start.available, false);
@@ -308,7 +310,9 @@ test("a Stop reads the list again, a read that fails keeps the agents drawn, a p
   });
   await settle();
   assert.deepEqual(
-    tab.asked.map((each) => each.kind),
+    tab.asked
+      .map((each) => each.kind)
+      .filter((kind) => kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST),
     [ACT_KIND.CODING_AGENTS_LIST, ACT_KIND.CODING_AGENTS_STOP, ACT_KIND.CODING_AGENTS_LIST],
   );
   // The read after the Stop was not answered: the agents already drawn stand, as cancelled.
@@ -336,7 +340,7 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1", []);
   await settle();
   assert.deepEqual(answer, { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } });
-  assert.deepEqual(tab.asked[1], {
+  assert.deepEqual(tab.asked.at(-1), {
     kind: ACT_KIND.CODING_AGENTS_MESSAGE,
     payload: { agentId: AGENT, text: "Also expire them after a week.", clientKey: "send-1" },
   });
@@ -765,4 +769,36 @@ test("a draft let go is gone, the next is a new one, and a plan without a reposi
   });
   assert.equal(failed, START_NEEDS_REPOSITORY);
   assert.deepEqual(startPayloads(tab.asked), []);
+});
+
+test("each agent's pull request is read as the list lands, again as the agent ends, and the plan holds those that have one", async () => {
+  const opened = {
+    number: 41,
+    title: "Teammate invitations",
+    url: "https://github.com/acme/relay/pull/41",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PENDING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+  };
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_PULL_REQUEST,
+    { repository: "acme/relay", branch: null, pullRequest: null },
+    { repository: "acme/relay", branch: "luke/invites", pullRequest: opened },
+  );
+  await tab.mount();
+  const published = () =>
+    tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST);
+  assert.deepEqual(published(), [
+    { kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST, payload: { agentId: AGENT } },
+  ]);
+  assert.deepEqual([...tab.control().pullRequests], []);
+
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
+  await settle();
+  assert.equal(published().length, 2);
+  assert.deepEqual([...tab.control().pullRequests], [[AGENT, opened]]);
 });

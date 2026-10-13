@@ -119,13 +119,13 @@ function EdgeRow({
   );
 }
 
-/** The attributes every run of a File tab's lines is drawn by: its numbers shown or not, wrapped or not, as the File tabs' settings say. */
+/** The attributes every run of a File tab's lines, or a Changes tab's diff, is drawn by: its numbers shown or not, wrapped or not, as the File tabs' settings say. */
 interface LinesLook {
   readonly "data-line-numbers": string;
   readonly "data-wrap": string;
 }
 
-function useLinesLook(): LinesLook {
+export function useLinesLook(): LinesLook {
   const { settings } = useFileViewSettings();
   return {
     "data-line-numbers": String(settings.lineNumbers),

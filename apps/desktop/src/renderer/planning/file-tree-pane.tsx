@@ -3,11 +3,11 @@ import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import type { FileTreeHandle, FolderEntry } from "../file-tree/contract";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
-import { entriesOf, type ListFolder, listingOf } from "./folder-listings";
+import { entriesOf } from "./folder-listings";
 
 /**
  * file-tree-pane.tsx -- the tree beside a File tab: the plan's repository a folder at a time, drawn by the file tree bundle, the tab's file marked in it.
@@ -25,6 +25,12 @@ import { entriesOf, type ListFolder, listingOf } from "./folder-listings";
  * Luke showed on the plan; ⌘F anywhere in the pane takes the caret to the
  * field. Every name here is the repository's, so the pane is left out of the
  * screen recording (`ph-no-capture`).
+ *
+ * An agent's Changes tab stands the same pane beside its diff
+ * (`agent-changes-tab.tsx`), over its pull request's files alone: the tree
+ * shows only them, every folder open, each row marked with what became of
+ * its file, the search narrowing those rows, no filter beside it, and a
+ * line under the tree counting them.
  */
 
 /**
@@ -95,6 +101,10 @@ function TreeSearch({
 export function FileTreePane({
   file,
   shown,
+  only,
+  marks,
+  label = "Files",
+  foot,
   listFolder,
   readWhole,
   onOpen,
@@ -103,11 +113,19 @@ export function FileTreePane({
 }: {
   /** The File tab's file, revealed in the tree. */
   file: string;
-  /** The files of the repository Luke showed on the plan, which the filter narrows the tree to. */
-  shown: readonly string[];
-  listFolder: ListFolder;
-  /** Lists the whole repository in one read, everything under its root, which the search narrows. */
-  readWhole: () => Promise<PlanningTreeAnswer>;
+  /** The files of the repository Luke showed on the plan, which the filter narrows the tree to; none draws no filter. */
+  shown?: readonly string[] | undefined;
+  /** The only files the tree shows, every folder open, in the filter's place: a change set's. */
+  only?: readonly string[] | undefined;
+  /** What became of each file of a change set, lettered on its row. */
+  marks?: readonly FileMark[] | undefined;
+  /** What the pane is called. */
+  label?: string;
+  /** What stands under the tree, such as a change set's count. */
+  foot?: ReactNode;
+  listFolder: ReadFolder;
+  /** Lists the whole repository in one read, everything under its root, which the search narrows; none narrows the rows as they stand. */
+  readWhole?: (() => Promise<PlanningTreeAnswer>) | undefined;
   /** A file chosen in the tree, to open in the tab, or in a tab of its own where ⌘ was held. */
   onOpen: (path: string, newTab: boolean) => void;
   /** The pane's own box, which its slide in and out plays on (`file-view.tsx`). */
@@ -125,23 +143,25 @@ export function FileTreePane({
   const [onlyShown, setOnlyShown] = useState(false);
   const [scope, setScope] = useState<SearchScope>(SEARCH_SCOPE.UNREAD);
   const everything = useRef<readonly FolderEntry[] | undefined>(undefined);
-  const narrowed = onlyShown && shown.length > 0 ? shown : undefined;
+  const narrowed =
+    only ?? (onlyShown && shown !== undefined && shown.length > 0 ? shown : undefined);
   // Note that the tree is handed doors that read the latest props, so it is
   // mounted once however often the pane is drawn.
-  const latest = useRef({ listFolder, onOpen, file, query, narrowed });
-  latest.current = { listFolder, onOpen, file, query, narrowed };
+  const latest = useRef({ listFolder, onOpen, file, query, narrowed, marks });
+  latest.current = { listFolder, onOpen, file, query, narrowed, marks };
 
   useEffect(() => {
     const element = host.current;
     if (module === undefined || element === null) return undefined;
     const mounted = module.mount(element, {
-      readFolder: (path) => latest.current.listFolder(path).then(listingOf),
+      readFolder: (path) => latest.current.listFolder(path),
       onOpen: (path, newTab) => latest.current.onOpen(path, newTab),
     });
     handle.current = mounted;
     if (everything.current !== undefined) mounted.within(everything.current);
     mounted.search(latest.current.query);
     mounted.only(latest.current.narrowed);
+    mounted.mark(latest.current.marks ?? []);
     revealed.current = latest.current.file;
     mounted.reveal(latest.current.file, { focus: false });
     return () => {
@@ -166,7 +186,7 @@ export function FileTreePane({
       if (scope === SEARCH_SCOPE.MISSED) setScope(SEARCH_SCOPE.UNREAD);
       return;
     }
-    if (scope !== SEARCH_SCOPE.UNREAD) return;
+    if (scope !== SEARCH_SCOPE.UNREAD || readWhole === undefined) return;
     setScope(SEARCH_SCOPE.READING);
     readWhole().then(
       (answer) => {
@@ -186,13 +206,16 @@ export function FileTreePane({
   useEffect(() => {
     handle.current?.only(narrowed);
   }, [narrowed]);
+  useEffect(() => {
+    handle.current?.mark(marks ?? []);
+  }, [marks]);
 
   const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
     <aside
       ref={pane}
       className="file-tree-pane ph-no-capture"
-      aria-label="Files"
+      aria-label={label}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
       onKeyDown={(event) => {
@@ -207,18 +230,20 @@ export function FileTreePane({
     >
       <search className="file-tree-search">
         <TreeSearch field={field} query={query} scope={scope} onQuery={setQuery} />
-        <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
-          <button
-            type="button"
-            className="icon-button file-tree-filter"
-            aria-label="Only files Luke showed"
-            aria-pressed={onlyShown}
-            disabled={shown.length === 0}
-            onClick={() => setOnlyShown((on) => !on)}
-          >
-            <ListFilterIcon aria-hidden="true" />
-          </button>
-        </Tooltip>
+        {shown === undefined ? null : (
+          <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
+            <button
+              type="button"
+              className="icon-button file-tree-filter"
+              aria-label="Only files Luke showed"
+              aria-pressed={onlyShown}
+              disabled={shown.length === 0}
+              onClick={() => setOnlyShown((on) => !on)}
+            >
+              <ListFilterIcon aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
       </search>
       {module === undefined ? (
         <p className="file-tree-notice">
@@ -227,6 +252,7 @@ export function FileTreePane({
       ) : (
         <div className="file-tree-host" ref={host} />
       )}
+      {foot === undefined ? null : <p className="file-tree-foot">{foot}</p>}
     </aside>
   );
 }

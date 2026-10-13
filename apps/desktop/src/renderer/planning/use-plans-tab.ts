@@ -592,6 +592,7 @@ export function usePlansTab(input: {
     workers,
     files,
     pages,
+    agents.agentIds,
   );
   // An agent pinned to the sidebar is named there as its tab is named now,
   // so a pin made before the agent had its title, or before a rename,

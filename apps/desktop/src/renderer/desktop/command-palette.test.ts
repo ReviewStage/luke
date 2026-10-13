@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_TREE_ENTRY,
   type Plan,
@@ -35,7 +40,7 @@ import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { isSubagentTab, tabKey } from "../planning/tab-strip-model";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "../planning/use-side-panel";
 import { settingsRowsInput } from "../settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CommandPalette } from "./command-palette";
@@ -497,6 +502,52 @@ test("a subagent chosen over the version history opens its tab with the history 
   pressFilter("Agents");
   choose("Count the routes.");
   assert.deepEqual(seen, ["history closed", "call-worker"]);
+});
+
+test("an agent's pull request lists its Changes tab, named as the tab is, which shows the panel on it over the version history; an agent with none lists none", () => {
+  const seen: string[] = [];
+  const base = plansControl();
+  const withPullRequest = {
+    history: versionHistoryControl({ open: true, onClose: () => seen.push("history closed") }),
+    sidePanel: { ...base.sidePanel, onChoose: (tab: SidePanelTab) => seen.push(tabKey(tab)) },
+  };
+  mountWindow(PANEL_TAB.PLANS, withPullRequest);
+  openPalette();
+  pressFilter("Agents");
+  assert.equal(
+    rows().some((row) => row.startsWith("Changes")),
+    false,
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  mountWindow(PANEL_TAB.PLANS, {
+    ...withPullRequest,
+    agents: codingAgentsControl({
+      agents: [AGENT],
+      agentIds: [AGENT.id],
+      pullRequests: new Map([
+        [
+          AGENT.id,
+          {
+            number: 41,
+            title: "Invite email template",
+            url: "https://github.com/acme/docs/pull/41",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 3,
+            deletions: 1,
+            changedFiles: 2,
+          },
+        ],
+      ]),
+    }),
+  });
+  openPalette();
+  pressFilter("Agents");
+  assert.ok(rows().includes("Changes: Invite email template · Teammate invitations"));
+  choose("Changes: Invite email template");
+  assert.deepEqual(seen, ["history closed", tabKey({ changes: AGENT.id })]);
 });
 
 test("Show board and the panel's other kinds are listed with the commands, with no chord, and show the panel on the tab over the version history", () => {

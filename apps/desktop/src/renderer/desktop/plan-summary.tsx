@@ -1,10 +1,11 @@
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentPullRequest, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { LinesChanged } from "../planning/agent-published";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
-import { agentTabLabel } from "../planning/coding-agent-model";
+import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import type { InboxBoardView } from "../planning/inbox-model";
 import { sameTab } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -24,7 +25,14 @@ import {
   INBOX_ROW,
   inboxEntry,
 } from "./main-tabs";
-import { ADD_SECTION, panelEntries, planWorkers, workerCardReading } from "./side-panel";
+import {
+  ADD_SECTION,
+  type ChangesOffer,
+  changesOffers,
+  panelEntries,
+  planWorkers,
+  workerCardReading,
+} from "./side-panel";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 
 /**
@@ -34,7 +42,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
  * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
  * `agentEntries`), under quiet headings: the plan's Inbox, counting what
  * waits on the developer, and the panel's kinds the plan has used, its
- * coding agents, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
+ * coding agents, each agent's pull request whose Changes tab the panel
+ * opens, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
  * beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
@@ -107,6 +116,7 @@ const TABS_SECTION = "Tabs";
 const SECTION_ORDER = [
   TABS_SECTION,
   AGENTS_SECTION,
+  ADD_SECTION.CHANGES,
   ADD_SECTION.SUBAGENTS,
   ADD_SECTION.FILES,
   ADD_SECTION.PAGES,
@@ -321,6 +331,27 @@ function FileCard({ path, note }: { path: string; note: string | undefined }): R
   );
 }
 
+/**
+ * A pull request's row's card, in a tab card's look: its title with its
+ * number at the right, and under them how many files it changes and the
+ * lines it adds and removes, as GitHub counts them.
+ */
+function ChangesCard({ pullRequest }: { pullRequest: CodingAgentPullRequest }): React.JSX.Element {
+  const count = pullRequest.changedFiles;
+  return (
+    <div className="tab-card" data-tab-card="">
+      <div className="tab-card-head">
+        <span className="tab-card-name">{pullRequest.title}</span>
+        <span className="tab-card-time">{pullRequestNumberLabel(pullRequest)}</span>
+      </div>
+      <p className="tab-card-note">
+        {count} {count === 1 ? "file" : "files"} changed{" "}
+        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
+      </p>
+    </div>
+  );
+}
+
 /** Luke's note on the newest lines of the file he showed with one, if any. */
 function newestNote(shown: readonly PlanCodeShowing[], path: string): string | undefined {
   return shown.findLast(({ code }) => code.ref.path === path && code.note !== undefined)?.code.note;
@@ -330,8 +361,9 @@ function newestNote(shown: readonly PlanCodeShowing[], path: string): string | u
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a subagent's
  * its tab's card, from the session the plan's work holds; a file's its path
- * and Luke's note; the Inbox's what waits. The panel's kinds hang none, as
- * their tabs hang none, since their names say all there is.
+ * and Luke's note; a pull request's its title, number, and what it
+ * changes; the Inbox's what waits. The panel's kinds hang none, as their
+ * tabs hang none, since their names say all there is.
  */
 function withCards(
   entries: readonly AddEntry[],
@@ -341,9 +373,10 @@ function withCards(
     held: HeldTranscripts;
     workers: ReturnType<typeof planWorkers>;
     files: readonly string[];
+    changes: readonly ChangesOffer[];
   },
 ): SummaryEntry[] {
-  const { plans, inbox, held, workers, files } = input;
+  const { plans, inbox, held, workers, files, changes } = input;
   const { agents, mainTabs } = plans;
   const models = agents.models ?? [];
   const shown = plans.shownCode ?? [];
@@ -364,6 +397,12 @@ function withCards(
         <AgentTabCard name={row.label} untitled={untitled} models={models} read={read} />
       );
       return { ...entry, card };
+    }
+    if (row.section === ADD_SECTION.CHANGES) {
+      // Note that a pull request's row is named by its page (`panelEntries`).
+      const offer = changes.find((each) => each.pullRequest.url === row.id);
+      if (offer === undefined) return entry;
+      return { ...entry, card: <ChangesCard pullRequest={offer.pullRequest} /> };
     }
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
@@ -386,6 +425,7 @@ function summarySections(
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
   const files = shownFiles(plans.shownCode ?? []);
+  const changes = changesOffers(agents);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
     inboxHolds || mainTabs.tabs.includes(MAIN_TAB.INBOX)
@@ -398,13 +438,14 @@ function summarySections(
       kinds: sidePanel.used,
       workers,
       files,
+      changes,
       pages: plans.pages ?? [],
       standing: true,
     }),
     ...agentEntries(mainTabs, agents, true),
   ];
   const paths = files.map((ref) => ref.path);
-  const entries = withCards(rows, { plans, inbox, held, workers, files: paths });
+  const entries = withCards(rows, { plans, inbox, held, workers, files: paths, changes });
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
   return SECTION_ORDER.flatMap((heading) => {

@@ -40,6 +40,8 @@ interface Stood {
   pages?: readonly string[] | undefined;
   /** The open plan and what it holds; one that has used every fixed tab where absent. */
   plan?: OpenPlan;
+  /** Every agent of the plan, its tab open or not; those whose tabs are open where absent. */
+  planAgents?: readonly string[] | undefined;
 }
 
 /** Mounts the panel alone over the plan, agents, subagents, and files the plan has now, answering the control as it stands. */
@@ -53,6 +55,7 @@ function mountStood(stood: Stood) {
       held.subagents,
       held.files,
       held.pages,
+      "planAgents" in held ? held.planAgents : held.agents,
     );
     return null;
   }
@@ -151,8 +154,12 @@ test("a delegated worker's tab is held to the plan's agents: it stands while the
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
-test("an agent's Changes tab opens once and is chosen, stands while the agent's own tab does, closes to the tab viewed before it, and is kept across no launch", () => {
-  const panel = mount([AGENT]);
+test("an agent's Changes tab opens once and is chosen, stands while the agent is the plan's, its own tab open or not, closes to the tab viewed before it, and is kept across no launch", () => {
+  const { control, render } = mountStood({ agents: [], subagents: [], planAgents: [AGENT] });
+  const panel = {
+    control,
+    stand: (planAgents?: readonly string[]) => render({ agents: [], subagents: [], planAgents }),
+  };
   const changes = { changes: AGENT };
   act(() => panel.control().onChoose(changes));
   assert.equal(panel.control().open, true);
@@ -161,7 +168,7 @@ test("an agent's Changes tab opens once and is chosen, stands while the agent's 
   assert.deepEqual(panel.control().changes, [changes]);
   assert.equal(sameTab(changes, { subagent: AGENT }), false);
 
-  // Its agent's tab closed, the panel shows the first tab; while the agents are unread it stands.
+  // Its agent no longer the plan's, the panel shows the first tab; while the agents are unread it stands.
   panel.stand([OTHER]);
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
   panel.stand(undefined);

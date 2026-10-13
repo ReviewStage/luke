@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_RESPONSE,
@@ -131,6 +137,18 @@ const FUNNEL = {
   at: 1,
 };
 
+/** The pull request the plan's agent opened, in the tests that have it open one. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 41,
+  title: "Send invitations by email",
+  url: "https://github.com/acme/relay/pull/41",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 120,
+  deletions: 8,
+  changedFiles: 6,
+};
+
 /** Each archive and unarchive the page asked of its agents, in order. */
 const archives: [string, boolean][] = [];
 
@@ -141,6 +159,7 @@ function Page({
   failed,
   shelved,
   inbox,
+  published,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
@@ -152,6 +171,8 @@ function Page({
   shelved: readonly CodingAgentSummary[];
   /** The plan's inbox items, as its first read answers them. */
   inbox: readonly InboxItem[];
+  /** The pull request the agent opened, none where it has opened none. */
+  published: CodingAgentPullRequest | undefined;
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
@@ -161,6 +182,7 @@ function Page({
     agents: [{ ...AGENT, status }],
     agentIds: [AGENT.id],
     archived: shelved,
+    pullRequests: new Map(published === undefined ? [] : [[AGENT.id, published]]),
     onArchive: (agentId, archive) => {
       archives.push([agentId, archive]);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -211,12 +233,15 @@ function mount(
   failed = false,
   shelved: readonly CodingAgentSummary[] = [],
   inbox: readonly InboxItem[] = [],
+  published: CodingAgentPullRequest | undefined = undefined,
 ): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(Page, { archived, shownCode, resting, failed, shelved, inbox })),
+    root.render(
+      createElement(Page, { archived, shownCode, resting, failed, shelved, inbox, published }),
+    ),
   );
   return container;
 }
@@ -997,4 +1022,50 @@ test("a file's row draws its type's icon in the file tree's own colours, as the 
   );
   assert.deepEqual(icons, ["typescript", "markdown"]);
   assert.ok(document.querySelector("svg symbol"), "the icons draw from the tree's sprite sheet");
+});
+
+test("an agent with a pull request is offered its Changes tab in the summary, under Changes with a card of the pull request, and in the side panel's +, and opens it from either; one with none is offered nothing", () => {
+  installScrollIntoView();
+  const without = mount();
+  assert.equal(
+    listed(summaryOf(without)).some(([heading]) => heading === "Changes"),
+    false,
+    "no pull request, no Changes row",
+  );
+  press(without, ".side-panel-toggle");
+  press(without, '.side-panel button[aria-label="Open a tab"]');
+  assert.equal(document.querySelector('.tab-add-menu [role="group"][aria-label="Changes"]'), null);
+  quit();
+
+  const page = mount(false, SHOWN, false, false, [], [], PULL_REQUEST);
+  const summary = summaryOf(page);
+  assert.deepEqual(
+    listed(summary)
+      .map(([heading]) => heading)
+      .slice(1, 3),
+    ["Coding agents", "Changes"],
+    "Changes stands right after the agents",
+  );
+  assert.deepEqual(listed(summary)[2], ["Changes", [AGENT.title]]);
+  const row = [...summary.querySelectorAll<HTMLElement>('ul[aria-label="Changes"] li button')][0];
+  assert.ok(row, "the Changes row");
+  hover(row);
+  assert.equal(
+    document.querySelector('.tooltip-card[role="tooltip"]')?.textContent,
+    "Send invitations by email#416 files changed +120 −8",
+  );
+  act(() => row.click());
+  const opened = page.querySelector('.side-panel-tabs [role="tab"][aria-selected="true"]');
+  assert.equal(opened?.textContent, `Changes: ${AGENT.title}`);
+
+  press(page, '.side-panel button[aria-label="Open a tab"]');
+  const offered = [
+    ...document.querySelectorAll<HTMLElement>(
+      '.tab-add-menu [role="group"][aria-label="Changes"] [role="option"]',
+    ),
+  ];
+  assert.deepEqual(
+    offered.map((option) => option.textContent),
+    [`${AGENT.title}#41`],
+  );
 });
