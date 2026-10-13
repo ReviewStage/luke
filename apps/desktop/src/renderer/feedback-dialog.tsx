@@ -46,12 +46,12 @@ import { Tooltip } from "./tooltip";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /**
- * Each kind in its own words: the title its dialog and its Settings button
- * carry, the field's name, and the hint the empty field shows. The wire still
+ * Each kind in its own words: the title its dialog carries, the field's
+ * name, and the hint the empty field shows. The wire still
  * calls the second kind a prompt; to the person writing it, it is a feature
  * they would like Luke to have.
  */
-export const FEEDBACK_COPY = {
+const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
     title: "Send feedback",
     field: "Feedback",

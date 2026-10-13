@@ -381,21 +381,23 @@ export function MicrophoneOffIcon(): React.JSX.Element {
   );
 }
 
-/** Words meant to carry: what the feedback section is for. */
-export function MegaphoneIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M3.4 10.2v3.6a1.6 1.6 0 0 0 1.6 1.6h1.8l1.2 4.2a1.3 1.3 0 0 0 1.3 1h.9a1 1 0 0 0 1-1.3l-1.1-3.9h1.7l7.4 3.4a1 1 0 0 0 1.4-.9V6.1a1 1 0 0 0-1.4-.9l-7.4 3.4H5a1.6 1.6 0 0 0-1.6 1.6Z" />
-    </Glyph>
-  );
-}
-
 /** A bell: what the notifications section is for. */
 export function BellIcon(): React.JSX.Element {
   return (
     <Glyph>
       <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.8H4.6Z" />
       <path d="M10 20.4a2.2 2.2 0 0 0 4 0" />
+    </Glyph>
+  );
+}
+
+/** A cube: a model, on the heading of the default a coding agent runs on. */
+export function CubeIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M12 3.2 19.6 7.6v8.8L12 20.8l-7.6-4.4V7.6Z" />
+      <path d="M4.4 7.6 12 12l7.6-4.4" />
+      <path d="M12 12v8.8" />
     </Glyph>
   );
 }

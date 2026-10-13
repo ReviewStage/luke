@@ -519,6 +519,6 @@ test("the model row says the default runs on the account's own key where the pro
   assert.equal(note(luke), "What a click on Start runs an agent on.");
   assert.equal(
     note(unusable),
-    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
+    "What a click on Start runs an agent on. Your Anthropic key needs attention under API keys.",
   );
 });

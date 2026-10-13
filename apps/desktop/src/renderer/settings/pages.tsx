@@ -6,7 +6,6 @@ import {
   DisplayIcon,
   DocumentIcon,
   KeyboardIcon,
-  KeyIcon,
   PlugIcon,
   SpeakerIcon,
 } from "@sidecar/panel";
@@ -45,10 +44,6 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.INTEGRATIONS]: {
     title: "Integrations",
     icon: <PlugIcon />,
-  },
-  [SETTINGS_VIEW.API_KEYS]: {
-    title: "API keys",
-    icon: <KeyIcon />,
   },
 };
 

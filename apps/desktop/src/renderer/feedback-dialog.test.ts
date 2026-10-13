@@ -19,11 +19,12 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
-import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { FeedbackDialog } from "./feedback-dialog";
-import { SettingsPanel } from "./settings/settings-panel";
 import { ToastHost } from "./toast";
+
+/** The two Help items that open the dialog, one per kind of note. */
+type FeedbackCommand = typeof APP_COMMAND.SEND_FEEDBACK | typeof APP_COMMAND.SUGGEST_FEATURE;
 
 const SIGNED_IN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
@@ -74,7 +75,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Settings and the dialog, wired the way the app wires them, menu bar included. */
+/** The dialog, wired the way the app wires it to the menu bar's Help items. */
 function Harness({ account }: { account: AccountSnapshot }): React.JSX.Element {
   const [kind, setKind] = useState<FeedbackKind>();
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setKind(FEEDBACK_KIND.FEEDBACK));
@@ -83,7 +84,6 @@ function Harness({ account }: { account: AccountSnapshot }): React.JSX.Element {
   return createElement(
     Fragment,
     null,
-    createElement(SettingsPanel, settingsPanelProps({ onFeedback: setKind })),
     createElement(FeedbackDialog, { kind, account, onClose: () => setKind(undefined) }),
     createElement(ToastHost),
   );
@@ -112,10 +112,11 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-function openFromSettings(title: string): HTMLElement {
-  act(() => button(title).click());
+/** Help's item for this kind of note, chosen, and the dialog it opened. */
+function openFromHelp(command: FeedbackCommand): HTMLElement {
+  act(() => menuListener?.(command));
   const opened = dialog();
-  assert.ok(opened, `${title} opens the dialog`);
+  assert.ok(opened, `${command} opens the dialog`);
   return opened;
 }
 
@@ -182,29 +183,23 @@ function error(): string | undefined {
   return dialog()?.querySelector('[role="alert"]')?.textContent ?? undefined;
 }
 
-test("each Settings button opens the dialog of its own kind, with the field taking the keyboard", () => {
+test("each of Help's items opens the dialog of its own kind, with the field taking the keyboard", () => {
   mount();
 
-  const feedback = openFromSettings("Send feedback");
+  const feedback = openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(feedback.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(document.activeElement, field());
   assert.equal(field().placeholder, "What happened, and what did you expect?");
   assert.ok(feedback.closest(".ph-no-capture"), "the dialog is left out of the screen recording");
 
   act(() => button("Cancel").click());
-  const prompt = openFromSettings("Suggest a feature");
+  const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.equal(prompt.querySelector("h2")?.textContent, "Suggest a feature");
-});
-
-test("Help's items open the same dialog from anywhere in the window", () => {
-  mount();
-  act(() => menuListener?.(APP_COMMAND.SUGGEST_FEATURE));
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Suggest a feature");
 });
 
 test("Send waits for words: whitespace is not a note", () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(button("Send").disabled, true);
 
   type("  \n ");
@@ -218,9 +213,10 @@ test("Send waits for words: whitespace is not a note", () => {
 
 test("Command-Enter sends the words signed with the account, closes the dialog, and says it went", async () => {
   mount();
-  const opener = button("Send feedback");
+  // Whatever held the keyboard when Help was chosen is what the dialog hands it back to.
+  const opener = document.body.appendChild(document.createElement("button"));
   act(() => opener.focus());
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   type("  The plan lost a question  ");
 
   press("Enter", { metaKey: true });
@@ -245,13 +241,13 @@ test("Command-Enter sends the words signed with the account, closes the dialog, 
   assert.equal(document.activeElement, opener, "focus goes back to what opened the dialog");
 
   // A delivered note is gone: the next opening starts empty.
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(field().value, "");
 });
 
 test("the signature line says who the note is from, and unticking it sends the note unsigned", async () => {
   mount();
-  openFromSettings("Suggest a feature");
+  openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.match(dialog()?.textContent ?? "", /Sending as Ada Lovelace · ada@example\.com/u);
 
   type("Export a plan as a PDF");
@@ -273,7 +269,7 @@ test("the signature line says who the note is from, and unticking it sends the n
 
 test("signed out, there is no one to sign as, so the note goes unsigned", async () => {
   mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(dialog()?.querySelector('input[type="checkbox"]'), null);
 
   type("Sign-in never finished");
@@ -287,7 +283,7 @@ test("signed out, there is no one to sign as, so the note goes unsigned", async 
 
 test("screenshots come along as thumbnails, each removable, and no more than three", async () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
 
   await pick([screenshot("one.png"), screenshot("two.png")], ["one.png", "two.png"]);
 
@@ -313,7 +309,7 @@ test("screenshots come along as thumbnails, each removable, and no more than thr
 
 test("a screenshot pasted into the field or dropped on the dialog comes along too", async () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
 
   const pasted = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(pasted, "clipboardData", { value: { files: [screenshot("paste.png")] } });
@@ -339,17 +335,17 @@ test("Escape closes the dialog alone and keeps the words for next time; Cancel d
   const hear = (event: KeyboardEvent) => windowKeys.push(event.key);
   window.addEventListener("keydown", hear);
   try {
-    openFromSettings("Send feedback");
+    openFromHelp(APP_COMMAND.SEND_FEEDBACK);
     type("Half a thought");
     press("Escape");
     assert.equal(dialog(), null);
     assert.deepEqual(windowKeys, [], "the window behind never hears the Escape");
 
-    openFromSettings("Send feedback");
+    openFromHelp(APP_COMMAND.SEND_FEEDBACK);
     assert.equal(field().value, "Half a thought");
 
     act(() => button("Cancel").click());
-    openFromSettings("Send feedback");
+    openFromHelp(APP_COMMAND.SEND_FEEDBACK);
     assert.equal(field().value, "");
   } finally {
     window.removeEventListener("keydown", hear);
@@ -358,7 +354,7 @@ test("Escape closes the dialog alone and keeps the words for next time; Cancel d
 
 test("a press on the dimmed window closes the dialog like Escape", () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   type("Half a thought");
   const backdrop = dialog()?.parentElement;
   assert.ok(backdrop);
@@ -368,14 +364,14 @@ test("a press on the dimmed window closes the dialog like Escape", () => {
   });
   assert.equal(dialog(), null);
 
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(field().value, "Half a thought");
 });
 
 test("a refused send keeps the dialog, the words, and says why", async () => {
   answer = { delivered: false, reason: "Feedback is turned off for this build." };
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   type("It broke");
   act(() => button("Send").click());
   await settle();
@@ -388,17 +384,17 @@ test("a refused send keeps the dialog, the words, and says why", async () => {
 
 test("each kind keeps its own draft, so a note is sent as the kind it was written as", async () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   type("The plan deleted my question");
   press("Escape");
 
-  openFromSettings("Suggest a feature");
+  openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.equal(field().value, "", "the other kind starts empty");
   type("Export a plan as a PDF");
   act(() => button("Send").click());
   await settle();
 
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   assert.equal(field().value, "The plan deleted my question");
   act(() => button("Send").click());
   await settle();
@@ -414,7 +410,7 @@ test("each kind keeps its own draft, so a note is sent as the kind it was writte
 
 test("a screenshot still being read when its draft is cancelled lands in no draft", async () => {
   mount();
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   const input = dialog()?.querySelector<HTMLInputElement>('input[type="file"]');
   assert.ok(input);
   Object.defineProperty(input, "files", { configurable: true, value: [screenshot("old.png")] });
@@ -423,6 +419,6 @@ test("a screenshot still being read when its draft is cancelled lands in no draf
   });
   act(() => button("Cancel").click());
 
-  openFromSettings("Send feedback");
+  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
   await pick([screenshot("new.png")], ["new.png"]);
 });

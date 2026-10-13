@@ -74,13 +74,22 @@ test("a row a page is not drawing is not offered", () => {
   assert.ok(!signedOut.includes("Delete account"));
 
   // Voice runs on the account alone, so no row offers a key for it: the one
-  // key-shaped query's results are the coding agents' own keys, on their page.
+  // key-shaped query's results are the coding agents' own keys, on the Coding
+  // agents page that holds them as a group.
   const hosted = settingsSearchEntries(searchInput());
   const keyed = found(searchSettings(hosted, "openai api key"));
   assert.deepEqual(labels(keyed), ["OpenAI API key"]);
   assert.deepEqual(
     keyed.map((entry) => entry.page),
-    [SETTINGS_VIEW.API_KEYS],
+    [SETTINGS_VIEW.CODING_AGENTS],
+  );
+  assert.deepEqual(
+    found(searchSettings(hosted, "api keys")).map((entry) => [entry.label, entry.page]),
+    [
+      ["Anthropic API key", SETTINGS_VIEW.CODING_AGENTS],
+      ["OpenAI API key", SETTINGS_VIEW.CODING_AGENTS],
+    ],
+    "the old page's name still finds both keys",
   );
   const signedOutKeys = found(
     searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "api key"),

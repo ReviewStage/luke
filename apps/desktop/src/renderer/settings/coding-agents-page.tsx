@@ -6,6 +6,7 @@ import {
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import { CubeIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -34,10 +35,13 @@ import { PickerRow } from "./picker-row";
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
  *
- * The one value is the account's, kept on the service beside the settings
- * preferences and written by this page and by a Start that named a model
- * alike, so the page reads it afresh as it opens and shows what the last
- * Start wrote. The model row is the same picker every settings row uses,
+ * The page is three groups under their own headings: this file's Default
+ * model, then the account's own API keys (`api-keys-section.tsx`) and the
+ * notification as an agent ends (`notifications-section.tsx`), drawn by the
+ * panel in that order. The default model's one value is the account's, kept
+ * on the service beside the settings preferences and written by this page
+ * and by a Start that named a model alike, so the page reads it afresh as it
+ * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked. Under it a Fast
@@ -82,7 +86,7 @@ function modelRowNote(
   const name = PROVIDER_NAME[provider];
   return status === PROVIDER_KEY_STATUS.VERIFIED
     ? `What a click on Start runs an agent on, on your own ${name} key.`
-    : `${plain} Your ${name} key needs attention in Settings › API keys.`;
+    : `${plain} Your ${name} key needs attention under API keys.`;
 }
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
@@ -126,10 +130,10 @@ function DefaultRows({
   return (
     <>
       <PickerRow
-        label="Default model"
+        label="Model"
         copy={
           <>
-            <strong>Default model</strong>
+            <strong>Model</strong>
             <small>{modelRowNote(listed?.provider, ownKey)}</small>
           </>
         }
@@ -196,14 +200,14 @@ function DefaultRows({
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}
       <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">
-          <strong>Default effort</strong>
+          <strong>Effort</strong>
           <small>How hard the model thinks.</small>
         </span>
         <fieldset
           className="settings-segments"
           {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
         >
-          <legend className="visually-hidden">Default effort</legend>
+          <legend className="visually-hidden">Effort</legend>
           {efforts.map((effort) => (
             <button
               key={effort}
@@ -223,11 +227,11 @@ function DefaultRows({
       {windows === undefined ? null : (
         <div className="settings-row settings-row-wrapping">
           <span className="settings-copy">
-            <strong>Default context</strong>
+            <strong>Context</strong>
             <small>{longWindowNote(windows)}</small>
           </span>
           <fieldset className="settings-segments">
-            <legend className="visually-hidden">Default context</legend>
+            <legend className="visually-hidden">Context</legend>
             {[
               { id: CONTEXT_WINDOW.STANDARD, tokens: windows.standardTokens },
               { id: CONTEXT_WINDOW.LONG, tokens: windows.longTokens },
@@ -252,6 +256,7 @@ function DefaultRows({
   );
 }
 
+/** The Default model group: the model, Fast, effort, and context rows, or why they cannot be drawn. */
 export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
@@ -325,7 +330,11 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   );
 
   return (
-    <section className="settings-section settings-plain">
+    <section className="settings-section">
+      <h2>
+        <CubeIcon />
+        Default model
+      </h2>
       {!signedIn ? (
         <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined ? (

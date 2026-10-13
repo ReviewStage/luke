@@ -23,7 +23,6 @@ export function searchAnchorProps(id: string) {
 export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
   CHANGELOG: "changelog",
-  FEEDBACK: "feedback",
   SIGN_OUT: "sign-out",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",

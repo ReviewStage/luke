@@ -26,10 +26,10 @@ import {
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { ApiKeysSection } from "./api-keys-page";
+import { ApiKeysSection } from "./api-keys-section";
 
 /**
- * Settings › API keys over a bridge answering as the host would: a key is
+ * Settings › Coding agents › API keys over a bridge answering as the host would: a key is
  * pasted into a password field, sent once, and gone from the field once the
  * service keeps it; a kept key is drawn as the service's hint and status
  * alone; a refused save says why; a removal asks first. Synthetic keys.
@@ -249,7 +249,11 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   const signedOut = await mount(false);
 
   assert.equal(failed.querySelector('[role="alert"]')?.textContent, "Your keys could not be read.");
-  assert.equal(signedOut.textContent, "Sign in to add your own API keys.");
+  assert.equal(
+    signedOut.querySelector(".settings-note")?.textContent,
+    "Sign in to add your own API keys.",
+  );
+  assert.equal(signedOut.querySelector("input"), null, "no field without an account to hold a key");
 });
 
 it.effect(

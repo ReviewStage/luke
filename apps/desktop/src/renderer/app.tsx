@@ -494,7 +494,6 @@ export function App(): React.JSX.Element {
             },
             updates,
             settings,
-            onFeedback: setFeedbackKind,
             shortcuts,
           }}
         />
