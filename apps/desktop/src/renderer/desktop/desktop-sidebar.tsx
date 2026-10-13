@@ -279,121 +279,6 @@ function PinnedSection({
   );
 }
 
-/** One plan under the Inbox: the plan, and how many of its items wait. */
-interface InboxRow {
-  readonly plan: PlanSummary;
-  readonly open: number;
-}
-
-/**
- * The Inbox's rows, in main's order, the plan whose item changed latest
- * first: each plan the list holds with items waiting on the developer. A
- * plan out of the list, archived or not yet read, is drawn nowhere, as a
- * pinned tab of one is not.
- */
-function inboxRows(plans: PlansControl): InboxRow[] {
-  return plans.inbox.flatMap((waiting): InboxRow[] => {
-    const plan = plans.plans.find((each) => each.id === waiting.planId);
-    return plan === undefined ? [] : [{ plan, open: waiting.items.length }];
-  });
-}
-
-/**
- * One plan under the Inbox, in a plan row's shape: its name, cut short
- * where it must, with how many of its items wait at the row's end, muted
- * in even figures as a row's time is. A press
- * opens the plan on its Inbox tab, and the row is current while that tab
- * is on screen.
- */
-function SidebarInboxPlan({
-  row,
-  shown,
-  onOpen,
-}: {
-  row: InboxRow;
-  shown: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  const { plan, open } = row;
-  return (
-    <li className="sidebar-plan-item sidebar-inbox-plan">
-      <button
-        type="button"
-        className="sidebar-plan"
-        aria-current={shown ? "page" : undefined}
-        onClick={onOpen}
-      >
-        <span className="sidebar-plan-line">
-          <span className="sidebar-plan-name">{plan.name}</span>
-          <span className="sidebar-inbox-count">
-            {open}
-            <span className="visually-hidden"> {open === 1 ? ITEM_NOUN.one : ITEM_NOUN.many}</span>
-          </span>
-        </span>
-      </button>
-    </li>
-  );
-}
-
-/**
- * The Inbox, at the head of the list while anything waits on the
- * developer: every plan with an inbox item open, whichever plan is open,
- * each counting its items, so where the developer is needed is seen
- * without opening each plan. Its header is drawn as Pinned's is: the
- * Inbox's tray in the picture's place, giving way to the fold's chevron
- * while hovered or reached from the keyboard, and folded, the count of
- * every waiting item after its name. The fold is kept across launches, and
- * folded, the plan whose Inbox is on show still stands under it. It draws
- * nothing while nothing waits.
- */
-function InboxSection({
-  rows,
-  folds,
-  shown,
-  onOpen,
-}: {
-  rows: readonly InboxRow[];
-  folds: FoldedGroups;
-  /** Whether a plan's Inbox is on show, which a fold leaves standing. */
-  shown: (planId: string) => boolean;
-  onOpen: (planId: string) => void;
-}): React.JSX.Element {
-  const folded = folds.inboxFolded;
-  const drawn = folded ? rows.filter((row) => shown(row.plan.id)) : rows;
-  const total = rows.reduce((sum, row) => sum + row.open, 0);
-  return (
-    <nav className="sidebar-group" aria-label="Inbox">
-      <div className="sidebar-repository-header">
-        <button
-          type="button"
-          className="sidebar-repository-toggle"
-          aria-expanded={!folded}
-          onClick={folds.toggleInbox}
-        >
-          <span className="sidebar-repository-glyph">
-            <InboxIcon />
-            <ChevronRightIcon />
-          </span>
-          <span className="sidebar-repository-name">Inbox</span>
-          {folded ? <FoldedCount count={total} noun={ITEM_NOUN} /> : null}
-        </button>
-      </div>
-      {drawn.length === 0 ? null : (
-        <ul className="sidebar-plans">
-          {drawn.map((row) => (
-            <SidebarInboxPlan
-              key={row.plan.id}
-              row={row}
-              shown={shown(row.plan.id)}
-              onOpen={() => onOpen(row.plan.id)}
-            />
-          ))}
-        </ul>
-      )}
-    </nav>
-  );
-}
-
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
@@ -436,8 +321,8 @@ const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
-/** The Inbox counts what waits on the developer, so its counts are read as items. */
-const ITEM_NOUN: CountNoun = { one: "item", many: "items" };
+/** The Inbox row counts what the developer has not seen, so its count is read as unread items. */
+const UNREAD_NOUN: CountNoun = { one: "unread item", many: "unread items" };
 
 /**
  * A folded group's count of what it holds, shown after its name while the
@@ -638,11 +523,56 @@ function ListSkeleton(): React.JSX.Element {
 }
 
 /**
+ * The Inbox's row, last of the rows heading the list and drawn as they are:
+ * the tray, its name, and how many waiting items the developer has not
+ * seen at its end, muted in even figures as a group's count is, and nothing
+ * at none. Its chord takes the count's place while the row is hovered or
+ * reached from the keyboard, as New plan's and Search's show theirs. A press
+ * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
+ * shown while it stands.
+ */
+function SidebarInboxRow({
+  unread,
+  current,
+  disabled,
+  onOpen,
+}: {
+  unread: number;
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-inbox"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <InboxIcon />
+      Inbox
+      {unread === 0 ? null : (
+        <span className="sidebar-inbox-unread">
+          {unread}
+          <span className="visually-hidden">
+            {" "}
+            {unread === 1 ? UNREAD_NOUN.one : UNREAD_NOUN.many}
+          </span>
+        </span>
+      )}
+      <ShortcutGlyphs command={APP_COMMAND.INBOX} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan the account owns, and the account's
- * row, whose menu and gear lead to Settings and the rest. While anything
- * waits on the developer, the Inbox heads the list, a row for each plan
- * with an inbox item open. The pinned plans, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. The Inbox's row
+ * follows Search above the rule, counting what waits unseen, and opens the
+ * window's Inbox. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -684,7 +614,9 @@ export function DesktopSidebar({
   call: CallCardInput | undefined;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
-  const composing = onPlans && plans.page === PLANS_PAGE.NEW;
+  // The window's Inbox stands in the plan's place, so while it does no plan, nor the new-plan page, is the place shown.
+  const inInbox = onPlans && plans.inboxView.open;
+  const composing = onPlans && !inInbox && plans.page === PLANS_PAGE.NEW;
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -699,9 +631,9 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onOpenPinnedTab(pin);
   };
-  const openInbox = (planId: string) => {
+  const openInbox = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
-    plans.onShowInbox(planId);
+    plans.inboxView.onOpen();
   };
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
@@ -714,11 +646,9 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
-  const waiting = inboxRows(plans);
+  const current = (planId: string) =>
+    onPlans && !inInbox && !composing && planId === plans.activePlanId;
   const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
-  // A plan's Inbox is on show where main is told it is: open and in sight, nothing over it.
-  const inboxShown = (planId: string) => plans.inboxShown === planId;
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
   // The pin the open plan was opened from is marked in its plan's place,
@@ -816,14 +746,17 @@ export function DesktopSidebar({
         Search
         <ShortcutGlyphs command={APP_COMMAND.COMMAND_PALETTE} className="row-shortcut" />
       </button>
+      <SidebarInboxRow
+        unread={plans.signedIn ? plans.inboxReads.total : 0}
+        current={inInbox}
+        disabled={!plans.signedIn}
+        onOpen={openInbox}
+      />
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
-        {plans.signedIn && waiting.length > 0 ? (
-          <InboxSection rows={waiting} folds={folds} shown={inboxShown} onOpen={openInbox} />
-        ) : null}
         {plans.signedIn && pinnedSection.length > 0 ? (
           <PinnedSection
             rows={pinnedSection}

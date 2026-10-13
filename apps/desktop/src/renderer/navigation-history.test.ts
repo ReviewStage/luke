@@ -80,6 +80,7 @@ const HISTORY_SOURCE: PlanHistorySource = {
 /** What the window shows for a place: a Settings page's title, the new-plan page, a plan's version history, or the open plan's name. */
 const NEW_PLAN_PAGE = "new plan";
 const VERSION_HISTORY = "version history";
+const INBOX = "inbox";
 
 /** The menu bar's one listener, as the bridge hands it to the window. */
 let menuListener: ((command: AppCommand) => void) | undefined;
@@ -111,6 +112,7 @@ function Window({
   const [historyFor, setHistoryFor] = useState<
     { planId: string; spot: HistorySpot | undefined } | undefined
   >(undefined);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const sidebar = useSidebarCollapse(false);
   useAppKeymap(true);
   useMenuCommands(true);
@@ -118,7 +120,8 @@ function Window({
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) {
         if (!runAppCommand(APP_COMMAND.EXIT_SETTINGS)) {
-          runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+          if (!runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY))
+            runAppCommand(APP_COMMAND.EXIT_INBOX);
         }
       }
     };
@@ -149,9 +152,28 @@ function Window({
     plans: listed,
     archived,
     activePlanId: shown,
-    onSelect: setOpen,
-    onLeavePlan: () => setOpen(undefined),
-    onNewPlan: () => setOpen(undefined),
+    // Opening a plan, or leaving one, leaves the Inbox, as the plans' own control does.
+    onSelect: (planId) => {
+      setInboxOpen(false);
+      setOpen(planId);
+    },
+    onLeavePlan: () => {
+      setInboxOpen(false);
+      setOpen(undefined);
+    },
+    onNewPlan: () => {
+      setInboxOpen(false);
+      setOpen(undefined);
+    },
+    inboxView: {
+      ...plansControl().inboxView,
+      open: inboxOpen,
+      onOpen: () => {
+        setHistoryFor(undefined);
+        setInboxOpen(true);
+      },
+      onClose: () => setInboxOpen(false),
+    },
     history: {
       ...versions,
       open: historyOpen,
@@ -211,6 +233,7 @@ function where(): string {
   const page = document.body.querySelector(".settings-page")?.getAttribute("aria-label");
   if (page) return page;
   if (document.body.querySelector("nav.version-log")) return VERSION_HISTORY;
+  if (document.body.querySelector(".inbox-view")) return INBOX;
   if (document.body.querySelector("button[aria-label='Start plan']")) return NEW_PLAN_PAGE;
   const current = document.body.querySelector(
     ".sidebar-plan[aria-current='page'] .sidebar-plan-name",
@@ -647,6 +670,26 @@ test("an archived plan's version history goes back to the archived plan it was o
   // The sidebar comes back with its archived plans folded, as it opens.
   click(document.body.querySelector<HTMLButtonElement>(".sidebar-archived-row"));
   assert.equal(where(), BILLING.name);
+});
+
+test("the Inbox is one step over the plan it was opened on: Back and Escape return to that plan, Forward brings it back, and a plan opened from the sidebar leaves it", () => {
+  show();
+  openPlan(BILLING);
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-inbox"));
+  assert.equal(where(), INBOX);
+
+  click(historyButton("Back"));
+  assert.equal(where(), BILLING.name);
+  click(historyButton("Forward"));
+  assert.equal(where(), INBOX);
+  pressEscape();
+  assert.equal(where(), BILLING.name);
+
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-inbox"));
+  openPlan(EXPORTS);
+  assert.equal(where(), EXPORTS.name);
+  click(historyButton("Back"));
+  assert.equal(where(), INBOX);
 });
 
 test("the mouse's back and forward buttons and the menu bar's Go move as the chords do", () => {

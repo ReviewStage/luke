@@ -28,7 +28,11 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
-import { type AppInboxPlan, RUN_PROFILE } from "#shared/messages/app-state";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+} from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -84,6 +88,7 @@ interface Standing {
   voice: VoiceView;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxPlan[];
+  inboxPlans: readonly AppInboxPlanHolding[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
 }
@@ -116,6 +121,7 @@ function mount(
     voice: IDLE_VOICE_VIEW,
     unseenAgents: [],
     inboxWaiting: [],
+    inboxPlans: [],
     signedIn: true,
     ...initial,
   };
@@ -156,6 +162,7 @@ function mount(
       shown: held.shown,
       unseenAgents: held.unseenAgents,
       inboxWaiting: held.inboxWaiting,
+      inboxPlans: held.inboxPlans,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
     });
     return null;
@@ -2121,4 +2128,86 @@ test("an agent main says ended unseen dots its tab beside the arrivals", () => {
 
   tab.stand({ unseenAgents: [] });
   assert.deepEqual(tab.control().unreadTabs, []);
+});
+
+test("the window's Inbox stands over the open plan without opening another, tells main the plan chosen in it is the Inbox on screen, and opening a plan leaves it", async () => {
+  const other = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.open, true);
+  act(() => tab.control().inboxView.onChoose(other));
+  act(() => tab.control().inboxView.onUnreadOnly(true));
+  assert.equal(tab.control().inboxView.planId, other);
+  assert.equal(tab.control().inboxView.unreadOnly, true);
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_SELECT), false, "the open plan stands");
+  assert.deepEqual(tab.shownInboxes, [null, other]);
+
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().inboxView.open, false);
+  assert.deepEqual(tab.shownInboxes, [null, other, null]);
+
+  // Opened again, it starts on the list's first plan and lists every plan.
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.planId, undefined);
+  assert.equal(tab.control().inboxView.unreadOnly, false);
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.control().inboxView.open, false);
+});
+
+test("an inbox item's code opens its file in the side panel, on a plan not yet open once the host has opened it, leaving the Inbox", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+    },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onShowFile(PLAN.id, ref, "4f2a9c1d"));
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined }, "nothing of the other plan's");
+
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: true, tab: { file: ref.path } });
+});
+
+test("New plan pressed on the new-plan page under the window's Inbox leaves the Inbox for the page", () => {
+  const tab = mount({ shown: true, planning: IDLE_PLANNING_VIEW });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().newPlan.presses, 1);
+});
+
+test("an inbox item's file asked on a plan the host refused to open is let go, so opening that plan later opens no file", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const onOther = {
+    ...OPEN,
+    activePlanId: other.id,
+    document: { status: PLANNING_READ.READY, plan: other },
+  };
+  const tab = mount(
+    { shown: true, planning: onOther },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  act(() =>
+    tab
+      .control()
+      .onShowFile(PLAN.id, { path: "src/invite.ts", startLine: 3, endLine: 5 }, "4f2a9c1d"),
+  );
+  await settle();
+
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 });

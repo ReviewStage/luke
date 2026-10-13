@@ -209,6 +209,18 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     inbox: [],
     inboxShown: null,
+    inboxPlans: [],
+    inboxReads: { unread: () => 0, total: 0, onSeen: ignore },
+    inboxView: {
+      open: false,
+      planId: undefined,
+      unreadOnly: false,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+      onUnreadOnly: ignore,
+    },
+    onShowFile: ignore,
     onOpenPinnedTab: ignore,
     chosenPin: undefined,
     repositories: {
