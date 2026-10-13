@@ -80,9 +80,11 @@ export function callWindowPosition(input: {
 
 /**
  * The window's frame for what it draws, from where the card stands: the card
- * itself, or the video tile grown up from the card's bottom-left corner and
- * pulled back onto the work area where growing took it off. The card's place
- * is never moved by the tile, so the card comes back where it was.
+ * itself, or the video tile grown up from the card's bottom-left corner.
+ * Either is pulled back onto the work area where it would leave it, which
+ * moves the card only when a display changed under it, since the card was
+ * on screen where it was placed. The card's place is never moved by the
+ * tile, so the card comes back where it was.
  */
 export function callWindowFrame(input: {
   card: CallWindowPoint;
@@ -90,9 +92,8 @@ export function callWindowFrame(input: {
   workArea: CallWindowArea;
 }): CallWindowArea {
   const { card, video, workArea } = input;
-  if (!video)
-    return { ...card, width: CALL_WINDOW_BOUNDS.WIDTH, height: CALL_WINDOW_BOUNDS.HEIGHT };
-  const { WIDTH: width, HEIGHT: height } = CALL_VIDEO_BOUNDS;
+  const width = video ? CALL_VIDEO_BOUNDS.WIDTH : CALL_WINDOW_BOUNDS.WIDTH;
+  const height = video ? CALL_VIDEO_BOUNDS.HEIGHT : CALL_WINDOW_BOUNDS.HEIGHT;
   return {
     x: clamp(card.x, workArea.x, workArea.x + workArea.width - width),
     y: clamp(

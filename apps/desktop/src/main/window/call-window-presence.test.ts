@@ -105,4 +105,12 @@ describe("the call window's frame", () => {
     });
     assert.deepEqual(callWindowFrame({ card: place, video: false, workArea }), card(1170, 30));
   });
+
+  it("pulls the card back onto a work area that shrank while the tile was up", () => {
+    const shrunk = { x: 0, y: 25, width: 1440, height: 725 };
+    assert.deepEqual(
+      callWindowFrame({ card: { x: 8, y: 775 }, video: false, workArea: shrunk }),
+      card(8, 750 - CALL_WINDOW_BOUNDS.HEIGHT),
+    );
+  });
 });
