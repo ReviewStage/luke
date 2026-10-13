@@ -146,12 +146,47 @@ const TRANSCRIPT_COMPONENTS: Components = {
   img: () => null,
 };
 
-/** A turn's words as markdown. */
-export function TranscriptWords({ text }: { text: string }): ReactNode {
+/**
+ * An element of the transcript's own the words are drawn with, as a skill
+ * named in a sent message is drawn as its chip (`skill-chip.tsx`): the words
+ * with the element written in where it stands, its tag and the attributes it
+ * carries, and what draws it. Its words are taken as they are, never as
+ * markdown.
+ */
+export interface TranscriptElement {
+  readonly markdown: string;
+  readonly tag: string;
+  readonly attributes: readonly string[];
+  readonly components: Components;
+}
+
+/** A turn's words as markdown, with an element of the transcript's own written in where one is given. */
+export function TranscriptWords({
+  text,
+  element,
+}: {
+  text: string;
+  element?: TranscriptElement | undefined;
+}): ReactNode {
+  if (element === undefined) {
+    return (
+      <TranscriptMarkdownSource markdown={text}>
+        <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
+          {text}
+        </MessageResponse>
+      </TranscriptMarkdownSource>
+    );
+  }
+  // Note that the source stays the words as written, because a code block's copy reads it.
   return (
     <TranscriptMarkdownSource markdown={text}>
-      <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
-        {text}
+      <MessageResponse
+        mode="static"
+        components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
+        allowedTags={{ [element.tag]: [...element.attributes] }}
+        literalTagContent={[element.tag]}
+      >
+        {element.markdown}
       </MessageResponse>
     </TranscriptMarkdownSource>
   );

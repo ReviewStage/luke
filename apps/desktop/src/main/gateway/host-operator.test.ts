@@ -166,7 +166,13 @@ it.effect(
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [{ name: "release", description: "Cut a release of the relay." }],
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release of the relay.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
         },
       };
       const answers = [carried(skills), carried({ skills: "none" })];

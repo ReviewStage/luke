@@ -59,6 +59,7 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { SentWords, useSkillFile } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import {
   AGENT_TOOL,
@@ -108,7 +109,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
- * is the developer's bubble, as the Call tab draws one; and while
+ * is the developer's bubble, as the Call tab draws one, each skill it
+ * names the chip that opens the skill's file (`skill-chip.tsx`), as a
+ * "Loaded skill" row opens it too; and while
  * the agent may still write, a shimmering line stands at the end saying
  * what it is doing, "Starting…" until its turn opens, "Thinking…" until
  * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
@@ -324,6 +327,17 @@ function TodosDock({
   );
 }
 
+/** A call that loaded a skill: the one button that opens the skill's `SKILL.md`, where it is one of the plan's skills, and a call's row otherwise. */
+function LoadedSkillView({
+  part,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+}): ReactNode {
+  const onOpen = useSkillFile(toolCallView(part).subject);
+  if (onOpen === undefined) return <ToolCallView part={part} />;
+  return <OpeningCallView part={part} onOpen={onOpen} />;
+}
+
 /** A call that started a coding agent, once it began: the one button that opens the agent's tab, saying what it did. */
 function OpeningCallView({
   part,
@@ -366,8 +380,11 @@ function AgentPartView({
       if (agent !== undefined && openAgent !== undefined) {
         return <OpeningCallView part={part} onOpen={() => openAgent(agent)} />;
       }
-      return part.tool === AGENT_TOOL.WRITE_TODOS ? (
-        <TodosRow part={part} open={part.callId === todos.open} />
+      if (part.tool === AGENT_TOOL.WRITE_TODOS) {
+        return <TodosRow part={part} open={part.callId === todos.open} />;
+      }
+      return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
+        <LoadedSkillView part={part} />
       ) : (
         <ToolCallView part={part} />
       );
@@ -438,7 +455,7 @@ export function AgentMessage({
         {words === "" ? null : (
           <>
             <MessageContent>
-              <TranscriptWords text={words} />
+              <SentWords text={words} />
             </MessageContent>
             <CopyMessageAction words={words} />
           </>

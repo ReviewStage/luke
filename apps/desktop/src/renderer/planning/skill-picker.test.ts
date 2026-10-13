@@ -26,9 +26,21 @@ import { SKILL_MENU_NOTE, type SkillSource, type SkillsRead } from "./skill-pick
 
 const SKILLS: SkillsRead = {
   skills: [
-    { name: "release-notes", description: "Use when the developer asks for release notes." },
-    { name: "testing", description: "Use for Vitest tests, mocks, coverage." },
-    { name: "drizzle", description: "Use for Drizzle schemas and queries." },
+    {
+      name: "release-notes",
+      description: "Use when the developer asks for release notes.",
+      path: ".agents/skills/release-notes/SKILL.md",
+    },
+    {
+      name: "testing",
+      description: "Use for Vitest tests, mocks, coverage.",
+      path: ".agents/skills/testing/SKILL.md",
+    },
+    {
+      name: "drizzle",
+      description: "Use for Drizzle schemas and queries.",
+      path: ".agents/skills/drizzle/SKILL.md",
+    },
   ],
 };
 

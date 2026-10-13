@@ -12,10 +12,11 @@
  * end. Nothing here draws.
  */
 
-/** A skill as the composer offers it: its name and what it is for. */
+/** A skill as the composer offers it: its name, what it is for, and its `SKILL.md`, named from the repository's root. */
 export interface SkillOption {
   readonly name: string;
   readonly description: string;
+  readonly path: string;
 }
 
 /** A `/` word the caret stands at the end of: where its slash is, and the letters typed after it. */
