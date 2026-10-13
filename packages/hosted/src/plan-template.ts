@@ -35,13 +35,10 @@ import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./
  * into another. A note's words are contained where they land: a line that
  * would open a heading or an HTML block is escaped, and a code fence left
  * open is closed, so no note can open a section of its own or swallow the
- * ones after it. A note's list items land at the level of the section they
- * join: an item's indentation and markers stacked on it are flattened to one
- * marker, and a correction of an item's words drops a marker of its own, so a
- * note never draws a point a bullet deeper than the items beside it. A point
- * added to a section that still holds exactly what the plan's template put
- * there, one paragraph of guidance, takes the place of that guidance, so a
- * filled section never keeps its prompt above its answer. The schema
+ * ones after it. A point added to a section that still holds exactly what
+ * the plan's template put there, one paragraph of guidance, takes the place
+ * of that guidance, so a filled section never keeps its prompt above its
+ * answer. The schema
  * guarantees shape only; whether a note is understood or agreed is the
  * model's judgment.
  */
@@ -138,40 +135,7 @@ function contained(text: string): string {
   return lines.join("\n");
 }
 
-/**
- * A line opening a list item, behind any indentation, with every marker
- * stacked on it; the first group is its first marker.
- */
-const STACKED_ITEM_LINE = /^[ \t]*([-*+]|\d{1,9}[.)])[ \t]+(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*/u;
-
-/** A line of three or more `-`, `*`, or `_`, which draws a rule rather than nested items. */
-const THEMATIC_BREAK_LINE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/u;
-
-/**
- * A note's text with every list item it holds at one level: no indentation
- * before its marker and one marker on its line. Note that we flatten the
- * note's own nesting and stacked markers, because a note lands at the level
- * of the section it joins, and a `- - point` or an indented `- point` would
- * draw the point a bullet deeper than every item beside it. A fence's lines
- * are code, and kept as written.
- */
-function levelled(text: string): string {
-  const lines: string[] = [];
-  let fence: OpenFence | undefined;
-  for (const line of text.split(/\r\n?|\n/u)) {
-    if (fence !== undefined) {
-      if (fenceCloses(line, fence)) fence = undefined;
-      lines.push(line);
-      continue;
-    }
-    fence = fenceOpened(line);
-    const item =
-      fence === undefined && !THEMATIC_BREAK_LINE.test(line) ? STACKED_ITEM_LINE.exec(line) : null;
-    lines.push(item === null ? line : `${item[1]} ${line.slice(item[0].length)}`);
-  }
-  return lines.join("\n");
-}
-
+/** Text a heading carries on its one line. */
 /** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
 function listItem(marker: string, text: string): string {
   const [first, ...rest] = contained(text).split("\n");
@@ -450,9 +414,6 @@ const STARTER_CONTENT_LINE = /^\s*(?:(?:[-*+]|\d{1,9}[.)])(?:\s|$)|`{3,}|~{3,}|>
 /** The list markers a list item's text opens with, which the formatter draws itself. */
 const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
 
-/** The start of a line that holds nothing yet but an item's indentation and markers. */
-const ITEM_MARKERS_ONLY = /^[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+$/u;
-
 /** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
 const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
 
@@ -558,7 +519,7 @@ function addedToText(
   started: string | undefined,
 ): string {
   const heading = note.section;
-  const added = contained(levelled(note.text));
+  const added = contained(note.text);
   const section = planSections(text).find((each) => each.heading === heading);
   if (section === undefined) {
     const head = fenceClosed(text.trimEnd());
@@ -598,18 +559,6 @@ function struckFromText(text: string, at: Span): string {
 }
 
 /**
- * What a correction writes over a span: its text, without the list markers
- * it opens with where the span starts an item's words. Note that we drop
- * them, because the item's own marker stands before the span, and the
- * correction's would nest the item one bullet deeper with each correction.
- */
-function correction(text: string, at: Span, words: string): string {
-  const lineStart = text.lastIndexOf("\n", at.from - 1) + 1;
-  const inItem = ITEM_MARKERS_ONLY.test(text.slice(lineStart, at.from));
-  return inItem ? words.replace(LEADING_LIST_MARKERS, "") : words;
-}
-
-/**
  * A document's text with one note taken, or nothing where the note cannot
  * be: an addition at the end of the first section under its heading, in
  * place of the template's guidance where the section holds only that, or as
@@ -634,10 +583,7 @@ function applyNoteToText(
   if (at === undefined || touchesHeading(text, at)) return undefined;
   if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
   // A correction inside a fence is code, written as given rather than contained as prose.
-  const words =
-    openFenceAt(text, at.from) === undefined
-      ? contained(levelled(correction(text, at, note.text)))
-      : note.text;
+  const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
   return text.slice(0, at.from) + words + text.slice(at.to);
 }
 
