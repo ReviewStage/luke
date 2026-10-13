@@ -63,15 +63,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
       yield* completeIntegrationSignIn(mine, LINEAR, "state-own");
       yield* beginIntegrationSignIn(theirs, LINEAR, "state-other");
 
-      assert.deepEqual(yield* readIntegrationConnections(mine), [
-        {
-          userId: mine,
-          provider: LINEAR,
-          status: INTEGRATION_ROW_STATUS.CONNECTED,
-          state: undefined,
-          stateIssuedAt: undefined,
-        },
-      ]);
+      const mineRows = yield* readIntegrationConnections(mine);
+      assert.deepEqual(
+        mineRows.map((row) => [row.userId, row.provider, row.status, row.state]),
+        [[mine, LINEAR, INTEGRATION_ROW_STATUS.CONNECTED, undefined]],
+      );
+      assert.ok(mineRows[0]?.connectedAt instanceof Date, "a completed sign-in names its grant");
       const theirRows = yield* readIntegrationConnections(theirs);
       assert.deepEqual(
         theirRows.map((row) => [row.userId, row.status]),

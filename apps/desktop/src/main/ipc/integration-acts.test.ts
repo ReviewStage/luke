@@ -38,6 +38,11 @@ function fixture() {
           asked.push(`connect ${provider}`);
           return { failure: INTEGRATION_CALL_FAILURE.NOT_OPENED };
         }),
+      integrationsTools: ({ provider }) =>
+        Effect.sync(() => {
+          asked.push(`tools ${provider}`);
+          return { tools: [{ name: "list_issues", description: "List issues." }] };
+        }),
       integrationsDisconnect: ({ provider }) =>
         Effect.sync(() => {
           asked.push(`disconnect ${provider}`);
@@ -73,7 +78,14 @@ it.effect("the panel's integration acts carry the host's answers to it, whole", 
       yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_DISCONNECT, payload: LINEAR }, PANEL),
       { status: ACT_OUTCOME_STATUS.DONE, value: { status: INTEGRATION_STATUS.DISCONNECTED } },
     );
-    assert.deepEqual(asked, ["status", "connect linear", "disconnect linear"]);
+    assert.deepEqual(
+      yield* router.performAct({ kind: ACT_KIND.INTEGRATIONS_TOOLS, payload: LINEAR }, PANEL),
+      {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { tools: [{ name: "list_issues", description: "List issues." }] },
+      },
+    );
+    assert.deepEqual(asked, ["status", "connect linear", "disconnect linear", "tools linear"]);
   }),
 );
 
@@ -88,7 +100,11 @@ it.effect(
           status: ACT_OUTCOME_STATUS.REFUSED,
           reason: ACT[ACT_KIND.INTEGRATIONS_STATUS].refusal,
         });
-        for (const kind of [ACT_KIND.INTEGRATIONS_CONNECT, ACT_KIND.INTEGRATIONS_DISCONNECT]) {
+        for (const kind of [
+          ACT_KIND.INTEGRATIONS_CONNECT,
+          ACT_KIND.INTEGRATIONS_DISCONNECT,
+          ACT_KIND.INTEGRATIONS_TOOLS,
+        ]) {
           assert.deepEqual(yield* router.performAct({ kind, payload: LINEAR }, sender), {
             status: ACT_OUTCOME_STATUS.REFUSED,
             reason: ACT[kind].refusal,

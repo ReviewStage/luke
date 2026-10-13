@@ -818,6 +818,16 @@ that table.
   where the provider allows it; otherwise its token stands until it expires,
   though Luke no longer uses it. Deleting the account revokes every
   provider's grant the same way.
+- `GET /api/account/integrations/{provider}/tools` answers the tools the
+  provider's server offers the account's agents, `{ tools: [{ name,
+  description }] }`, for the composer's MCP popover. It reads them as an MCP
+  client does (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list`
+  page by page, JSON or event-stream answers), with the account's token from
+  Connect. The list is narrowed to the provider's `ALLOWED_TOOLS` where it
+  has them, and each description is cut to its first line. It is held in the
+  instance's memory for five minutes per account and provider. A provider
+  the account has not connected is refused as unavailable before any token
+  is read.
 - `GET /api/account/integrations/connected` is where Connect returns the
   browser from any provider. The state names the account and the provider,
   Connect is asked for a token afresh, and the browser lands on

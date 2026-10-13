@@ -76,9 +76,11 @@ import {
   type IntegrationProviderParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
+  type IntegrationToolsView,
   integrationConnectViewSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
+  integrationToolsViewSchema,
 } from "@sidecar/hosted/integration-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
@@ -244,6 +246,8 @@ export interface HostOperator {
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
+  /** The tools one provider's server offers the account's agents; or why there is no answer. */
+  integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
@@ -431,6 +435,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, { provider: params.provider }),
         integrationAnswer(integrationConnectViewSchema),
+      ),
+    integrationsTools: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, { provider: params.provider }),
+        integrationAnswer(integrationToolsViewSchema),
       ),
     integrationsDisconnect: (params) =>
       Effect.map(

@@ -2127,17 +2127,20 @@ body,
 }
 
 /* A switch row: the panel's own switch at the row's end, keyed off the
-   row, which is the switch for the keyboard; a row that cannot be pressed
-   is muted and takes no highlight. */
+   row, which is the switch for the keyboard, or off the switch's own button
+   where the row holds other controls too (the MCP popover's); a row that
+   cannot be pressed is muted and takes no highlight. */
 .plan-compose-menu-switch {
   margin-left: auto;
 }
 
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch,
+.agent-servers-switch[aria-checked="true"] .switch {
   background: var(--switch-on);
 }
 
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb,
+.agent-servers-switch[aria-checked="true"] .switch-thumb {
   transform: translateX(14px);
 }
 

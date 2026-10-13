@@ -15,6 +15,7 @@ import {
   type IntegrationCallFailure,
   type IntegrationStatusesView,
   type IntegrationStatusView,
+  type IntegrationToolsView,
 } from "./integration-view.js";
 import {
   INTEGRATION_PROVIDER_LIST,
@@ -24,11 +25,13 @@ import {
   type IntegrationStatus,
   integrationConnectAnswerSchema,
   integrationStatusAnswerSchema,
+  integrationToolsAnswerSchema,
 } from "./integration-wire.js";
 import {
   HOSTED_SERVICE_PATH,
   integrationConnectPath,
   integrationDisconnectPath,
+  integrationToolsPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 
@@ -138,6 +141,16 @@ export class HostedIntegrationsClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.POST, path: integrationConnectPath(provider) }),
       (answer) => readAnswer(answer, integrationConnectAnswerSchema),
+    );
+  }
+
+  /** The tools one provider's server offers the account's agents. */
+  tools(
+    provider: IntegrationProvider,
+  ): Effect.Effect<IntegrationToolsView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: integrationToolsPath(provider) }),
+      (answer) => readAnswer(answer, integrationToolsAnswerSchema),
     );
   }
 

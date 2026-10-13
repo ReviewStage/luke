@@ -5,6 +5,7 @@ import {
   type IntegrationConnectView,
   type IntegrationStatusesView,
   type IntegrationStatusView,
+  type IntegrationToolsView,
   integrationProviderParamsSchema,
 } from "@sidecar/hosted/integration-view";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
@@ -33,7 +34,7 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the integrations, as this concern asks it. */
 export type IntegrationsClient = Pick<
   HostedIntegrationsClient,
-  "statuses" | "connect" | "disconnect"
+  "statuses" | "connect" | "disconnect" | "tools"
 >;
 
 export interface IntegrationsDependencies {
@@ -91,6 +92,11 @@ function composed(dependencies: IntegrationsDependencies): IntegrationsComposer 
       Effect.gen(function* () {
         const provider = yield* providerOf(params);
         return carried<IntegrationConnectView>(yield* connect(provider));
+      }),
+    [GATEWAY_METHOD.INTEGRATIONS_TOOLS]: (params) =>
+      Effect.gen(function* () {
+        const provider = yield* providerOf(params);
+        return carried<IntegrationToolsView>(yield* asked(client.tools(provider)));
       }),
     [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: (params) =>
       Effect.gen(function* () {

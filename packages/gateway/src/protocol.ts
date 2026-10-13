@@ -106,6 +106,8 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */
   INTEGRATIONS_CONNECT: "integrations.connect",
+  /** The tools one provider's server offers the account's agents, read from the service now. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
   /** The account's connection to one provider ended on the service; where it then stands. */
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */

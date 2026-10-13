@@ -17,6 +17,12 @@
  *   every agent's next token read, then asks Connect to revoke the grant; a
  *   revoke that fails is logged, and the account is disconnected all the
  *   same.
+ * - `GET /api/account/integrations/{provider}/tools` answers the tools the
+ *   provider's server offers the account's agents, read from the server with
+ *   the account's token as an MCP client reads them, narrowed to the ones its
+ *   table entry allows, and held for a few minutes per account and provider
+ *   so a popover opened again asks the server nothing. A provider the account
+ *   has not connected is refused before any token is read.
  * - `GET /api/account/integrations/connected` is where Connect returns the
  *   browser from any provider: the sign-in's state names the account and the
  *   provider, Connect is asked for a token afresh, and the browser is sent
@@ -42,8 +48,9 @@ import {
   integrationLandingPath,
   integrationProviderFromWire,
 } from "@sidecar/hosted/integration-wire";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -66,6 +73,8 @@ import {
   type IntegrationConnectionRow,
   type IntegrationStoreEffect,
 } from "./hosted/integration-store.js";
+import { INTEGRATION, type IntegrationDefinition } from "./hosted/integrations.js";
+import { listMcpTools, type McpTool } from "./hosted/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
@@ -79,9 +88,34 @@ const INTEGRATIONS_PATH = {
   CONNECT: "/api/account/integrations/connect",
   /** POST ends a connection; the rewrite moves the path's provider into the `provider` query. */
   DISCONNECT: "/api/account/integrations/disconnect",
+  /** GET reads the tools a provider's server offers; the rewrite moves the path's provider into the `provider` query. */
+  TOOLS: "/api/account/integrations/tools",
   /** GET is Connect's return from any provider's sign-in. */
   CONNECTED: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
 } as const;
+
+/** How long a provider's tools stay read for an account before the next ask reads the server again. */
+export const INTEGRATION_TOOLS_TTL_MS = 5 * 60 * 1000;
+
+/** One provider's tools as read for an account, when, and under which grant: a sign-in completed since names another. */
+interface ToolsRead {
+  readonly at: number;
+  readonly connectedAt: number | undefined;
+  readonly tools: readonly McpTool[];
+}
+
+/** The tools read lately, by account and then by provider, for as long as the instance stands. */
+type ToolsCache = Map<string, Map<IntegrationProvider, ToolsRead>>;
+
+/** Every read past its time let go, so an instance that stands long holds the lists of no account that stopped asking. */
+function heldToolsSwept(cache: ToolsCache, now: number): void {
+  for (const [userId, reads] of cache) {
+    for (const [provider, read] of reads) {
+      if (now - read.at >= INTEGRATION_TOOLS_TTL_MS) reads.delete(provider);
+    }
+    if (reads.size === 0) cache.delete(userId);
+  }
+}
 
 /** The query the rewrite carries the provider in. */
 const PROVIDER_QUERY = "provider";
@@ -229,6 +263,66 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { integrations });
 });
 
+/**
+ * GET: the tools one provider's server offers the account's agents. A
+ * provider with no connector here, one the account has not connected, a
+ * token Connect will not give, and a server that cannot be read are all the
+ * one unavailable refusal: the desktop draws no count for any of them.
+ */
+const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+  cache: ToolsCache,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  | HttpServerRequest.HttpServerRequest
+  | SqlClient.SqlClient
+  | IntegrationConnect
+  | HttpClient.HttpClient
+> {
+  yield* hostedMethod(HTTP_METHOD.GET);
+  const provider = yield* requestedProvider();
+  const userId = yield* resolvedUserId(seams);
+  const connector = (yield* IntegrationConnect)[provider];
+  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  const row = rows.find((each) => each.provider === provider);
+  if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  const held = cache.get(userId)?.get(provider);
+  const grant = row.connectedAt?.getTime();
+  if (
+    held !== undefined &&
+    held.connectedAt === grant &&
+    seams.now() - held.at < INTEGRATION_TOOLS_TTL_MS
+  ) {
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
+  }
+  const name = INTEGRATION_NAME[provider];
+  const issued = yield* connector.token(userId, { fresh: false }).pipe(
+    Effect.tapError((failure) =>
+      Effect.logWarning(`Vercel Connect gave no ${name} token for its tools`, failure.message),
+    ),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  const definition: IntegrationDefinition = INTEGRATION[provider];
+  const listed = yield* listMcpTools(definition.MCP_URL, Redacted.value(issued.token)).pipe(
+    Effect.tapError((failure) =>
+      Effect.logWarning(`${name}'s MCP server listed no tools: ${failure.reason}`),
+    ),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  const allowed = definition.ALLOWED_TOOLS;
+  const tools =
+    allowed === undefined ? listed : listed.filter((tool) => allowed.includes(tool.name));
+  heldToolsSwept(cache, seams.now());
+  const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
+  accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
+  cache.set(userId, accountReads);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools });
+});
+
 /** The callback Connect returns the browser to, on the host the desktop asked through. */
 function callbackUrl(requestUrl: string, state: string): string {
   const url = new URL(INTEGRATIONS_PATH.CONNECTED, requestUrl);
@@ -365,11 +459,13 @@ function refusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
 export function integrationsApp(
   seams: IntegrationsAppSeams,
-): WebRoutes<SqlClient.SqlClient | IntegrationConnect> {
+): WebRoutes<SqlClient.SqlClient | IntegrationConnect | HttpClient.HttpClient> {
+  const tools: ToolsCache = new Map();
   return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.TOOLS, refusing(toolsEndpoint(seams, tools))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.STATUSES, refusing(statusesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECT, refusing(connectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),

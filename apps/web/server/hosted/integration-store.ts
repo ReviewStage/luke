@@ -50,6 +50,8 @@ export interface IntegrationConnectionRow {
   readonly state: string | undefined;
   /** When the sign-in under way began; nothing when none is. */
   readonly stateIssuedAt: Date | undefined;
+  /** When a sign-in last completed, which names the grant the row stands for; nothing until one has. */
+  readonly connectedAt: Date | undefined;
 }
 
 const IntegrationRowSchema = Schema.Struct({
@@ -58,6 +60,7 @@ const IntegrationRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
+  connectedAt: Schema.NullOr(InstantColumnSchema),
 });
 
 const ROW_COLUMNS = {
@@ -66,6 +69,7 @@ const ROW_COLUMNS = {
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
+  connectedAt: integrationConnection.connectedAt,
 };
 
 function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow {
@@ -75,6 +79,7 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
+    connectedAt: row.connectedAt ?? undefined,
   };
 }
 

@@ -50,6 +50,11 @@ function fakeService(script: ServiceScript) {
           ? { failure: INTEGRATION_CALL_FAILURE.UNAVAILABLE }
           : { url: SIGN_IN };
       }),
+    tools: (provider) =>
+      Effect.sync(() => {
+        asked.push(provider);
+        return { tools: [{ name: "list_issues", description: "List issues." }] };
+      }),
     disconnect: (provider) =>
       Effect.sync(() => {
         asked.push(provider);
@@ -146,6 +151,16 @@ it.effect("the statuses and a Disconnect are the service's answers, whole", () =
   }),
 );
 
+it.effect("one provider's tools are the service's answer, whole", () =>
+  Effect.gen(function* () {
+    const { call, asked } = yield* subject({ status: INTEGRATION_STATUS.CONNECTED });
+    assert.deepEqual(yield* call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, LINEAR), {
+      tools: [{ name: "list_issues", description: "List issues." }],
+    });
+    assert.deepEqual(asked, [INTEGRATION_PROVIDER.LINEAR]);
+  }),
+);
+
 it.effect("a Connect or a Disconnect naming no provider this build knows is refused unasked", () =>
   Effect.gen(function* () {
     const script = { status: INTEGRATION_STATUS.CONNECTED };
@@ -153,6 +168,7 @@ it.effect("a Connect or a Disconnect naming no provider this build knows is refu
     for (const method of [
       GATEWAY_METHOD.INTEGRATIONS_CONNECT,
       GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
+      GATEWAY_METHOD.INTEGRATIONS_TOOLS,
     ]) {
       const refusal = yield* Effect.flip(call(method, { provider: "myspace" }));
       assert.equal(refusal.code, GATEWAY_ERROR.INVALID_PARAMS);
@@ -174,6 +190,7 @@ it.effect(
           GATEWAY_METHOD.INTEGRATIONS_STATUS,
           GATEWAY_METHOD.INTEGRATIONS_CONNECT,
           GATEWAY_METHOD.INTEGRATIONS_DISCONNECT,
+          GATEWAY_METHOD.INTEGRATIONS_TOOLS,
         ]) {
           assert.deepEqual(yield* call(method, LINEAR), {
             failure: INTEGRATION_CALL_FAILURE.UNANSWERED,

@@ -3,6 +3,7 @@ import {
   integrationProviderSchema,
   integrationStatusAnswerSchema,
   integrationStatusesAnswerSchema,
+  integrationToolsAnswerSchema,
 } from "./integration-wire.js";
 
 /**
@@ -53,6 +54,14 @@ export const integrationStatusViewSchema = EffectSchema.Union([
 ]);
 
 export type IntegrationStatusView = typeof integrationStatusViewSchema.Type;
+
+/** One provider's tools as the window hears them, or why there are none to draw. */
+export const integrationToolsViewSchema = EffectSchema.Union([
+  integrationToolsAnswerSchema,
+  failed,
+]);
+
+export type IntegrationToolsView = typeof integrationToolsViewSchema.Type;
 
 /** A Connect as the window hears it: the browser sent to sign in, or why not. */
 export const integrationConnectViewSchema = EffectSchema.Union([

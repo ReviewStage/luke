@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
@@ -18,10 +19,12 @@ import {
 } from "../server/hosted/integration-store.js";
 import {
   INTEGRATION_SIGN_IN_WINDOW_MS,
+  INTEGRATION_TOOLS_TTL_MS,
   type IntegrationsAppSeams,
   integrationsApp,
 } from "../server/integrations-app.js";
 import { integrationConnectOf } from "./support/integration-connect.js";
+import { type McpServerFake, mcpServerFake } from "./support/mcp-server-fake.js";
 import { noDatabase } from "./support/no-database.js";
 import {
   type RecordedResponse,
@@ -57,6 +60,8 @@ interface StoredRow {
   readonly status: IntegrationRowStatus;
   readonly state: string | undefined;
   readonly stateIssuedAt: number | undefined;
+  /** When the sign-in the row stands for completed, where the case names one. */
+  readonly connectedAt?: number;
 }
 
 /** Every row the store holds, by account and then by provider. */
@@ -76,6 +81,8 @@ interface ConnectState {
   authorized: { provider: IntegrationProvider; userId: string; callbackUrl: string }[];
   /** Connect cannot be asked at all. */
   unavailable: boolean;
+  /** The provider's MCP server, which accepts the token the double issues. */
+  server: McpServerFake;
   /** Runs while Connect answers a token, the way a press elsewhere lands meanwhile. */
   meanwhile?: () => void;
 }
@@ -85,7 +92,14 @@ function backing(overrides: Partial<Backing> = {}): Backing {
 }
 
 function connectState(overrides: Partial<ConnectState> = {}): ConnectState {
-  return { configured: true, grants: new Set(), authorized: [], unavailable: false, ...overrides };
+  return {
+    configured: true,
+    grants: new Set(),
+    authorized: [],
+    unavailable: false,
+    server: mcpServerFake({ token: ISSUED_TOKEN, pages: [LINEAR_TOOLS] }),
+    ...overrides,
+  };
 }
 
 function row(status: IntegrationRowStatus, issuedAgo?: number): StoredRow {
@@ -118,6 +132,7 @@ function rowOf(
     status: stored.status,
     state: stored.state,
     stateIssuedAt: stored.stateIssuedAt === undefined ? undefined : new Date(stored.stateIssuedAt),
+    connectedAt: stored.connectedAt === undefined ? undefined : new Date(stored.connectedAt),
   };
 }
 
@@ -225,6 +240,7 @@ function groupAnswer(state: Backing, connect: ConnectState, request: Request): P
       HttpRouter.provideRequest(
         integrationConnectOf((provider) => connectorDouble(connect, provider)),
       ),
+      HttpRouter.provideRequest(fakeHttpClientLayer(connect.server.respond)),
       HttpRouter.provideRequest(noDatabase),
     ),
     { disableLogger: true },
@@ -241,6 +257,13 @@ const STATUSES = signedIn("GET", "/api/account/integrations");
 /** Linear's Connect and Disconnect, as the rewrite of `/api/account/integrations/linear/…` hands them on. */
 const CONNECT = signedIn("POST", "/api/account/integrations/connect?provider=linear");
 const DISCONNECT = signedIn("POST", "/api/account/integrations/disconnect?provider=linear");
+const TOOLS = signedIn("GET", "/api/account/integrations/tools?provider=linear");
+
+/** The tools Linear's scripted server lists. */
+const LINEAR_TOOLS = [
+  { name: "list_issues", description: "List issues in the workspace." },
+  { name: "create_issue", description: "Create a new issue.\nTitle and team are required." },
+];
 
 /** The browser's return from Connect, carrying no bearer. */
 function callback(state: string | undefined): () => Request {
@@ -444,6 +467,43 @@ const EXCHANGES: readonly Exchange[] = [
     finalGrants: [USER_ID],
   },
   {
+    name: "tools-connected",
+    state: () => backing({ rows: ROWS(CONNECTED)() }),
+    connect: () => connectState({ grants: new Set([USER_ID]) }),
+    request: TOOLS,
+    finalRows: ROWS(CONNECTED),
+    finalGrants: [USER_ID],
+  },
+  // A provider the account has not connected is refused before any token is read.
+  {
+    name: "tools-not-connected",
+    state: () => backing(),
+    connect: () => connectState({ grants: new Set([USER_ID]) }),
+    request: TOOLS,
+    finalRows: NO_ROWS,
+    finalGrants: [USER_ID],
+  },
+  {
+    name: "tools-unconfigured",
+    state: () => backing({ rows: ROWS(CONNECTED)() }),
+    connect: () => connectState({ configured: false }),
+    request: TOOLS,
+    finalRows: ROWS(CONNECTED),
+  },
+  // The server refuses the bearer: the same unavailable, and nothing of the server's words.
+  {
+    name: "tools-server-refuses",
+    state: () => backing({ rows: ROWS(CONNECTED)() }),
+    connect: () =>
+      connectState({
+        grants: new Set([USER_ID]),
+        server: mcpServerFake({ token: "someone-else", pages: [] }),
+      }),
+    request: TOOLS,
+    finalRows: ROWS(CONNECTED),
+    finalGrants: [USER_ID],
+  },
+  {
     name: "callback-connected",
     state: () => backing({ rows: ROWS(PENDING)() }),
     connect: () => connectState({ grants: new Set([USER_ID]) }),
@@ -523,6 +583,71 @@ test.for(EXCHANGES)("$name", async (exchange) => {
   assert.deepEqual([...connect.grants].sort(), [...(exchange.finalGrants ?? [])].sort());
   assert.deepEqual(connect.authorized, exchange.finalAuthorized ?? []);
   await settleResponseGolden(GOLDEN_ROOT, exchange.name, carried);
+});
+
+test("a provider's tools are read from its server once, and served from what was read until it is a few minutes old", async () => {
+  const state = backing({ rows: ROWS(CONNECTED)() });
+  const connect = connectState({ grants: new Set([USER_ID]) });
+  let now = NOW;
+  const { handler } = HttpRouter.toWebHandler(
+    integrationsApp({ ...groupSeams(state), now: () => now }).pipe(
+      HttpRouter.provideRequest(
+        integrationConnectOf((provider) => connectorDouble(connect, provider)),
+      ),
+      HttpRouter.provideRequest(fakeHttpClientLayer(connect.server.respond)),
+      HttpRouter.provideRequest(noDatabase),
+    ),
+    { disableLogger: true },
+  );
+  const sessions = () => connect.server.methods.filter((method) => method === "initialize").length;
+
+  assert.equal((await handler(TOOLS())).status, HOSTED_HTTP_STATUS.OK);
+  now += INTEGRATION_TOOLS_TTL_MS - 1;
+  const again = await handler(TOOLS());
+  assert.deepEqual(await again.json(), {
+    tools: [
+      { name: "list_issues", description: "List issues in the workspace." },
+      { name: "create_issue", description: "Create a new issue." },
+    ],
+  });
+  assert.equal(sessions(), 1);
+  now += 2;
+  await handler(TOOLS());
+  assert.equal(sessions(), 2);
+
+  // A sign-in completed since names another grant, whose tools are read afresh however soon.
+  state.rows.set(USER_ID, new Map([[LINEAR, { ...CONNECTED, connectedAt: now }]]));
+  await handler(TOOLS());
+  assert.equal(sessions(), 3);
+});
+
+test("a provider read-only by its allow-list answers only the tools it allows, whatever its server lists", async () => {
+  const slack = INTEGRATION_PROVIDER.SLACK;
+  const state = backing({ rows: new Map([[USER_ID, new Map([[slack, CONNECTED]])]]) });
+  const connect = connectState({
+    grants: new Set([USER_ID]),
+    server: mcpServerFake({
+      token: ISSUED_TOKEN,
+      pages: [
+        [
+          { name: "slack_search_public", description: "Search public channels." },
+          { name: "slack_send_message", description: "Send a message." },
+          { name: "slack_read_thread", description: "Read a thread." },
+        ],
+      ],
+    }),
+  });
+  const answer = await groupAnswer(
+    state,
+    connect,
+    signedIn("GET", "/api/account/integrations/tools?provider=slack")(),
+  );
+  assert.deepEqual(await answer.json(), {
+    tools: [
+      { name: "slack_search_public", description: "Search public channels." },
+      { name: "slack_read_thread", description: "Read a thread." },
+    ],
+  });
 });
 
 test("a path the group declares no route for is refused", async () => {
