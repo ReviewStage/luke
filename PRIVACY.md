@@ -376,10 +376,10 @@ prompts, or error text.
 **Screen recordings.** Luke records what his own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
-label, description, and picture address a page carries for itself, is
-replaced with blocks of the same length, so a plan's document, a caption of
-what you or Luke said, your name and email address, and anything you type all
-appear as blocks. As a second line, some parts are left out whole: the
+label, description, picture address, and link address a page carries for
+itself, is replaced with blocks of the same length, so a plan's document, a
+caption of what you or Luke said, your name and email address, and anything
+you type all appear as blocks. As a second line, some parts are left out whole: the
 feedback form, since a screenshot you attach could carry another app's words;
 a plan's name, its document while you edit it, its whiteboard, transcript,
 Work, Code, and File tabs with their tree, and its version history with the
