@@ -11,7 +11,10 @@ import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
-export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js";
+export {
+  claimRuntimeSession,
+  conversationOwnedBy,
+} from "@sidecar/database/models/recorded-session";
 
 /**
  * The host's own check of who a session is for. eve authenticates a request

@@ -1,4 +1,5 @@
 import { childConversationId } from "@sidecar/database/models/ids";
+import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import {
   base64Chars,
   CODING_AGENT_BOUNDS,
@@ -51,7 +52,6 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
-import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import { childTitlesOf } from "./hosted/child-titles.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
