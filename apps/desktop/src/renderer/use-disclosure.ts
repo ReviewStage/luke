@@ -14,9 +14,19 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * takes nothing away. Reduced motion and a capture run zero the tokens an
  * exit is timed on, and an element that runs no motion is taken out at once.
  *
- * The motion itself is the stylesheet's. Carried here from #2311, less the
- * fold layer it draws, until that PR lands and this file becomes its own.
+ * The motion itself is the stylesheet's. base.css also draws an optional
+ * layer for a disclosure that opens downward over content, which a caller
+ * asks for by marking the root `data-disclosure` (`disclosureMotion`) and
+ * its body `.disclosure-body`, the root's own child: `opening` unrolls
+ * the body from its top edge as it fades in, `closing` fades it out.
  */
+
+/** The marks base.css's disclosure layer reads from a root's `data-disclosure`. */
+const DISCLOSURE_MOTION = {
+  OPENING: "opening",
+  CLOSING: "closing",
+} as const;
+export type DisclosureMotion = (typeof DISCLOSURE_MOTION)[keyof typeof DISCLOSURE_MOTION];
 
 export interface Disclosure {
   /** Whether to draw it: open, or closed and still leaving. */
@@ -25,6 +35,12 @@ export interface Disclosure {
   readonly leaving: boolean;
   /** The ref for the element whose motions the hold waits on. */
   readonly ref: (element: HTMLElement | null) => void;
+}
+
+/** The mark for the disclosure layer: closing while it leaves, opening while it stands open from an open that is to unroll. */
+export function disclosureMotion(opened: boolean, leaving: boolean): DisclosureMotion | undefined {
+  if (leaving) return DISCLOSURE_MOTION.CLOSING;
+  return opened ? DISCLOSURE_MOTION.OPENING : undefined;
 }
 
 /** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */

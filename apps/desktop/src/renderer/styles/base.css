@@ -896,6 +896,10 @@ svg.working-mark[viewBox] {
 
 [data-disclosure="closing"] > .disclosure-body {
   animation: disclosure-leave var(--duration-exit) var(--motion-exit) forwards;
+  /* Note that the hold waits on every motion the body runs, and a body that
+     held focus would start the scrollbar's own fade (desktop.css) as it
+     lost it, so the exit is the one motion it has. */
+  transition: none;
 }
 
 @keyframes disclosure-fade {

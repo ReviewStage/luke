@@ -124,6 +124,8 @@ function keyframeBodies(source) {
 // over `--duration-quick` and any travel on the spring, and content leaving
 // goes first, over `--duration-exit` (docs/DESIGN.md). A keyframes block that
 // holds a `from` alone is an arrival, one that holds a `to` alone an exit.
+// Travel may ride the panes' curve instead, the vocabulary's one exception,
+// for what moves with a pane's edge or a clip unrolled on it.
 const TRAVEL = /\b(?:transform|translate|scale|rotate)\s*:/u;
 const OPACITY = /\bopacity\s*:/u;
 const KEYFRAMES_KIND = { ARRIVAL: "arrival", EXIT: "exit", OTHER: "other" };
@@ -183,7 +185,11 @@ function motionPairFailures(name, selector, value, keyframes) {
         found.push(`${where} arrives fading and travelling in one keyframes; split the pair`);
       } else if (frames.fades && !part.includes("var(--duration-quick)")) {
         found.push(`${where} fades in over another time than --duration-quick`);
-      } else if (frames.travels && !part.includes("var(--spring")) {
+      } else if (
+        frames.travels &&
+        !part.includes("var(--spring") &&
+        !part.includes("var(--motion-pane)")
+      ) {
         found.push(`${where} travels in on another curve than the spring`);
       }
     }
