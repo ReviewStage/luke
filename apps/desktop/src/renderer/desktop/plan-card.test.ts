@@ -126,7 +126,7 @@ const drawnCard = (plan: PlanSummary) =>
       );
     return {
       head: container.querySelector(".plan-card-head")?.textContent,
-      repository: container.querySelector(".plan-card-repository")?.textContent,
+      repository: container.querySelector(".plan-card-detail")?.textContent,
       agents: lines("Agents"),
       pullRequests: lines("Pull requests"),
       // Each agent's glyph as a reader and an eye meet it: what it says, the harness mark it wears, whether the working mark stands in its place, and what the mark after its label says.

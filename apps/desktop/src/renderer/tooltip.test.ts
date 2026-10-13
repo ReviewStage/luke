@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installExits, uninstallExits } from "#testing/exits";
+import { relayout } from "#testing/resize-observer";
 import { Tooltip } from "./tooltip";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -445,6 +446,36 @@ test("a card hung beside a control at the window's right edge turns to stand bef
   assert.equal(pill()?.dataset.side, "start");
   assert.equal(pill()?.style.left, `${left - 6 - 280}px`);
   assert.equal(pill()?.style.top, "100px");
+});
+
+test("a card that grows once it is placed, as a read it made lands, is placed again inside the window", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      createElement(Tooltip, {
+        label: "Invite flow",
+        card: createElement("p", null, "Invite flow"),
+        cardBeside: true,
+        children: button({}, "Invite flow"),
+      }),
+    );
+  });
+  vi.spyOn(control("Invite flow"), "getBoundingClientRect").mockReturnValue(
+    new DOMRect(8, window.innerHeight - 130, 240, 40),
+  );
+  let height = 80;
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "tooltip" ? height : 0;
+  });
+
+  hover("Invite flow");
+  assert.equal(pill()?.style.top, `${window.innerHeight - 130}px`);
+  height = 200;
+  act(() => relayout());
+  assert.equal(pill()?.style.top, `${window.innerHeight - 200 - 6}px`);
 });
 
 it.effect(

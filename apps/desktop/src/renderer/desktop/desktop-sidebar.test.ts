@@ -983,12 +983,16 @@ function restOn(row: HTMLElement | undefined): HTMLElement {
   return card;
 }
 
-/** A pinned tab's card as it reads: its name, its kind, then each of its lines. */
+/** A pinned tab's card as it reads: its name, then each line under it, a button's marked `[…]`. */
 function pinCard(card: HTMLElement): string[] {
+  const lines = card.querySelectorAll(
+    ".plan-card-detail, .plan-card-more, .plan-card-lines > li > :first-child",
+  );
   return [
     card.querySelector(".plan-card-name")?.textContent ?? "",
-    card.querySelector(".plan-card-repository")?.textContent ?? "",
-    ...[...card.querySelectorAll(".plan-card-lines > li")].map((line) => line.textContent ?? ""),
+    ...[...lines].map((line) =>
+      line.tagName === "BUTTON" ? `[${line.textContent}]` : (line.textContent ?? ""),
+    ),
   ];
 }
 
@@ -1033,44 +1037,76 @@ test("the pin the open plan was opened from is marked in its plan's place, stand
   window.localStorage.clear();
 });
 
-test("a pinned agent's card names its model and where it stands, read from the open plan's agents or else its plan's row", () => {
-  const billing = listedPlan("Billing");
-  const invites = {
-    ...listedPlan("Invites"),
-    agents: agentsSummary({
-      agents: [
-        {
-          id: "agent-2",
-          title: "Search",
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
-        },
-      ],
-    }),
-  };
+test("a pinned tab's card names the tab, then its plan and its repository, each a button that opens it, and no word for the tab's kind", () => {
+  const billing = { ...listedPlan("Billing"), repository: "acme/relay" };
+  const opened: string[] = [];
+  const github: string[] = [];
   const container = mount(DEAN, {
     plans: withPins(
       [
-        { plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 2 },
-        { plan: invites.id, tab: { agent: "agent-2" }, label: "Search", at: 1 },
+        { plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 2 },
+        { plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 1 },
       ],
       {
-        plans: [billing, invites],
-        page: PLANS_PAGE.DOCUMENT,
-        activePlanId: billing.id,
-        agents: codingAgentsControl({ agents: [agentOn("agent-1")] }),
+        plans: [billing],
+        onSelect: (planId) => opened.push(planId),
+        repositories: { ...plansControl().repositories, openGitHub: (page) => github.push(page) },
       },
     ),
   });
   const rows = container.querySelectorAll<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
 
-  const open = restOn(rows[0]);
-  assert.deepEqual(pinCard(open).slice(0, 3), ["Invite flow", "Coding agent", "Billing"]);
-  assert.match(pinCard(open)[3] ?? "", /Opus.*High.*Working$/u);
-  const listed = restOn(rows[1]);
-  assert.deepEqual(pinCard(listed).slice(0, 3), ["Search", "Coding agent", "Invites"]);
-  assert.match(pinCard(listed)[3] ?? "", /Opus.*High.*Done$/u);
+  assert.deepEqual(pinCard(restOn(rows[1])), ["Invite flow", "[Billing]", "[acme/relay]"]);
+  const card = restOn(rows[0]);
+  assert.deepEqual(pinCard(card), ["Board", "[Billing]", "[acme/relay]"]);
+  assert.doesNotMatch(card.textContent ?? "", /Coding agent|File|Working|Done/u);
+  const choose = (line: string) => {
+    const button = [...restOn(rows[0]).querySelectorAll<HTMLElement>("button")].find(
+      (each) => each.textContent === line,
+    );
+    assert.ok(button, `no button says ${line}`);
+    act(() => button.click());
+    assert.equal(document.body.querySelector('[role="tooltip"]'), null, "the card went");
+  };
+  choose("Billing");
+  choose("acme/relay");
+  assert.deepEqual(opened, [billing.id]);
+  assert.deepEqual(github, ["https://github.com/acme/relay"]);
+});
+
+test("a pinned agent's card draws the pull request it opened once the one read of it lands, which opens it on GitHub", async () => {
+  const billing = listedPlan("Billing");
+  const url = "https://github.com/acme/relay/pull/128";
+  const asked: string[] = [];
+  const github: string[] = [];
+  const container = mount(DEAN, {
+    plans: withPins(
+      [{ plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 1 }],
+      {
+        plans: [billing],
+        agents: codingAgentsControl({
+          readPullRequest: (agentId) => {
+            asked.push(agentId);
+            return Promise.resolve({
+              repository: "acme/relay",
+              branch: "invites",
+              pullRequest: { ...pullRequest(PULL_REQUEST_STATE.OPEN), url, changedFiles: 4 },
+            });
+          },
+        }),
+        repositories: { ...plansControl().repositories, openGitHub: (page) => github.push(page) },
+      },
+    ),
+  });
+  const row = container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
+
+  assert.deepEqual(pinCard(restOn(row ?? undefined)), ["Invite flow", "[Billing]"]);
+  await act(async () => undefined);
+  const card = restOn(row ?? undefined);
+  assert.deepEqual(pinCard(card), ["Invite flow", "[Billing]", "[#128 Invite by email+12 −3]"]);
+  assert.deepEqual(asked, ["agent-1"]);
+  act(() => card.querySelector<HTMLElement>('[aria-label="Pull request"] button')?.click());
+  assert.deepEqual(github, [url]);
 });
 
 test("a tab pinned to the sidebar stands under Pinned on one line, its glyph and its name, among the pinned plans by when each was pinned", () => {
@@ -1090,7 +1126,7 @@ test("a tab pinned to the sidebar stands under Pinned on one line, its glyph and
 
   assert.deepEqual(pinnedSection(container), ["◆ Invite flow", "Invites", "◆ roles.ts"]);
   const rows = container.querySelectorAll<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
-  assert.deepEqual(pinCard(restOn(rows[2])), ["roles.ts", "File · src/team/roles.ts", "Billing"]);
+  assert.deepEqual(pinCard(restOn(rows[2])), ["roles.ts", "[Billing]"]);
   assert.deepEqual(
     sections(container).at(-1),
     ["Plans", ["Billing"]],
@@ -1207,12 +1243,7 @@ test("on the open plan, a pinned agent its plan no longer holds stands dimmed wi
   assert.deepEqual(pinnedSection(container), ["◆ Old run", "◆ Invite flow"]);
   const rows = container.querySelectorAll<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
   assert.equal(rows[0]?.getAttribute("aria-disabled"), "true");
-  assert.deepEqual(pinCard(restOn(rows[0])), [
-    "Old run",
-    "Coding agent",
-    "Billing",
-    "No longer on this plan",
-  ]);
+  assert.deepEqual(pinCard(restOn(rows[0])), ["Old run", "[Billing]", "No longer on this plan"]);
   act(() => rows[0]?.click());
   act(() => rows[1]?.click());
   assert.deepEqual(opened, [held]);
@@ -1419,8 +1450,7 @@ test("a pinned Inbox stands under Pinned with its glyph, its card naming it the 
   const card = restOn(
     container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan") ?? undefined,
   );
-  assert.equal(card.querySelector(".plan-card-repository")?.textContent, "Inbox");
-  assert.equal(card.querySelector(".plan-card-label")?.textContent, "Billing");
+  assert.deepEqual(pinCard(card), ["Inbox", "[Billing]"]);
 
   act(() => pinnedToggle(container).click());
   assert.deepEqual(pinnedSection(container), ["◆ Inbox"], "on show");

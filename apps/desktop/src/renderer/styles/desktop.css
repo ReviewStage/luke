@@ -4664,34 +4664,38 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* A sidebar plan's card: its name wrapped to two lines with how long ago it
    was updated muted at the head's right, its repository under the name, then
    a few rows each for its agents and its pull requests, each list under a
-   hairline. A row is the plan summary's (`.plan-summary-row`): its height,
-   type size, glyph, and gap, so an agent reads here as it does there, with a
-   muted corner at its end. The repository, an agent, and a pull request are
-   buttons that look like the rows around them until the pointer is on one,
-   which washes it as a menu's row is washed, bled into the card's inset so
-   its words stay in line with the rest. */
+   rule. It is set as a menu is (`.plan-menu`): the card stands its rows the
+   menu's inset from its edge, and each row is a menu row's height, inset,
+   and corner, so the wash on the repository, an agent, or a pull request
+   under the pointer sits off the card's edge as a menu item's does. A line
+   a press does nothing on keeps a row's place, so every word starts on the
+   rows' column. A pinned tab's card (`sidebar-pinned-tab.tsx`) is this
+   card. */
+.tooltip-card:has(> .plan-card) {
+  padding: var(--menu-inset);
+}
+
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-2) 0;
 }
 
 .plan-card-heading {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
 }
 
 .plan-card-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--glyph-gap);
+  padding: var(--space-6) var(--row-inset) var(--space-4);
 }
 
 .plan-card-name {
   display: -webkit-box;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   font-size: 13px;
   font-weight: 500;
@@ -4715,71 +4719,71 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   flex: none;
 }
 
-.plan-card-repository {
-  display: flex;
-  min-width: 0;
-  align-self: flex-start;
-  align-items: center;
-  gap: var(--space-6);
-  height: 22px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.plan-card-repository,
+.plan-card-detail,
 .plan-card-line {
-  margin: 0 calc(-1 * var(--space-6));
-  padding: 0 var(--space-6);
-  border-radius: 6px;
+  display: flex;
+  width: 100%;
+  height: var(--menu-row-height);
+  min-width: 0;
+  align-items: center;
+  gap: var(--glyph-gap);
+  padding: 0 var(--row-inset);
+  border-radius: var(--menu-row-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
-:is(button.plan-card-repository, button.plan-card-line):hover {
+:is(button.plan-card-detail, button.plan-card-line):hover {
   background: var(--raised-strong);
 }
 
-.plan-card-repository :is(.repository-picture, .account-mark) {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.plan-card-lines {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: var(--space-6) 0 0;
-  border-top: 1px solid var(--hairline);
-  list-style: none;
+.plan-card-detail {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .plan-card-line {
-  display: flex;
-  width: calc(100% + 2 * var(--space-6));
-  height: 28px;
-  min-width: 0;
-  align-items: center;
-  gap: var(--glyph-gap);
   color: var(--text-primary);
   font-size: 13px;
 }
 
-/* A glyph takes the summary's footprint, the working mark and a harness's
-   mark wearing where it stands alike, so every row's label starts on one
-   edge. */
+/* A list's rule is a menu's (`.plan-menu-rule`), off the card's sides by a
+   row's inset. */
+.plan-card-lines {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-card-lines::before {
+  height: 1px;
+  margin: var(--menu-inset) var(--row-inset);
+  background: var(--hairline);
+  content: "";
+}
+
+/* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
+   wearing where it stands, and an owner's picture alike, so every row's
+   label starts on one edge. */
 .plan-card-glyph {
   display: inline-flex;
-  width: var(--control-glyph);
+  width: var(--menu-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: var(--control-glyph);
+  --state-glyph-size: var(--menu-glyph);
 }
 
 .plan-card-glyph > svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+}
+
+.plan-card-detail .plan-card-glyph > :is(.repository-picture, .account-mark) {
+  width: 14px;
+  height: 14px;
 }
 
 .plan-card-label {
@@ -4799,7 +4803,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
+  padding-left: calc(var(--row-inset) + var(--menu-glyph) + var(--glyph-gap));
 }
 
 /* A finished turn's card, hung from its "Worked for" line: the model it

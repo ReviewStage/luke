@@ -269,7 +269,13 @@ function TooltipPill({
     // Note that its layout size is read rather than its box, because the box
     // is still scaled short by the fade it waits to play.
     const placed = carded ? { beside: cardBeside } : undefined;
-    setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+    const measure = () => setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+    measure();
+    // Note that it is placed again whenever it resizes, because a card grows
+    // as a read it made lands, and must stay inside the window as it does.
+    const observer = new ResizeObserver(measure);
+    observer.observe(drawn);
+    return () => observer.disconnect();
   }, [shown, label, carded, cardBeside]);
 
   return createPortal(

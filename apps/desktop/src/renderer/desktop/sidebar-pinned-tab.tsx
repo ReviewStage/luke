@@ -1,20 +1,19 @@
+import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanAgentLine, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CopyIcon, DocumentIcon, UnpinIcon } from "@sidecar/panel";
 import { ScrollTextIcon } from "lucide-react";
-import { useRef } from "react";
-import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
+import { useEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
-import { agentStateWords } from "../planning/coding-agent-model";
-import { ModelLabel } from "../planning/model-label";
 import { isAgentTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
-import { MAIN_TAB } from "../planning/use-main-tabs";
+import type { PullRequestReader } from "../planning/use-agent-pull-request";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { type PinnedTab, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
+import type { PinnedTab } from "../planning/use-side-panel";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
+import { CardDetail, PullRequestLine, RepositoryDetail } from "./plan-card";
 import { pinnedTabIcon } from "./side-panel";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 
@@ -25,10 +24,12 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  * agent's from its menu in the plan's column, stands under Pinned beside
  * the pinned plans, as a row in the plan rows' own shape: the tab's glyph,
  * an agent's its harness's mark wearing where it stands as its tab does,
- * and its name on one line, cut short with a fade as a tab is. Its hover card,
- * in the plan card's look (`plan-card.tsx`), says the rest: the tab's whole
- * name, its kind under its glyph, the plan it is of, and an agent's model
- * and where it stands. A press opens the plan, where it is not the open one, and the tab
+ * and its name on one line, cut short with a fade as a tab is. Its hover card
+ * is a plan card (`plan-card.tsx`), drawn from its rows: the tab's whole
+ * name after its glyph, then the plan it is of, which opens the plan, and
+ * the plan's repository, which opens on GitHub, and for an agent's pin the
+ * pull request it opened, which opens on GitHub too, once the one read of
+ * it the card makes as it opens lands. A press opens the plan, where it is not the open one, and the tab
  * in its column: an agent's in the plan's column, any other in the side
  * panel, opening either where it is closed. The row it opened from is
  * then the one the sidebar marks, in its plan's row's place, for as long
@@ -47,16 +48,6 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 
 /** What a pin's card says once its plan no longer holds what it opens. */
 const GONE_NOTE = "No longer on this plan";
-
-/** What a pin's card calls its kind, beside the fixed tabs' own names (`SIDE_PANEL_TAB_KIND`). */
-const PIN_KIND = {
-  AGENT: "Coding agent",
-  INBOX: "Inbox",
-  FILE: "File",
-} as const;
-
-/** What an agent's line on a pin's card says of an agent at rest, which its glyph does not tell from any other. */
-const AGENT_DONE = "Done";
 
 /** Whether the open plan has said the pin's agent or file is gone from it; another plan's pins and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
@@ -112,14 +103,6 @@ function pinActionGroups(
   ];
 }
 
-/** What a pin's card says its kind is: a fixed tab's name, or an agent's, the Inbox's, or a file's word, with a file's path after it. */
-function pinKind(pin: PinnedTab): string {
-  const { tab } = pin;
-  if (isAgentTab(tab)) return PIN_KIND.AGENT;
-  if (tab === MAIN_TAB.INBOX) return PIN_KIND.INBOX;
-  return isFileTab(tab) ? `${PIN_KIND.FILE} · ${tab.file}` : SIDE_PANEL_TAB_KIND[tab].label;
-}
-
 /**
  * The agent an agent's pin opens, as the window last read it: the open
  * plan's own list where the pin is on it, else the few agents its plan's
@@ -137,11 +120,41 @@ function pinAgent(
 }
 
 /**
- * The card a pin's row hangs, in a plan card's look: the tab's name,
- * wrapped to two lines, its glyph and kind under it, then the plan it is
- * of, or a note that the plan no longer holds it, and for an agent's pin
- * the agent's model, its harness's mark wearing where it stands, and the
- * word for where it stands at the line's end.
+ * The pull request an agent's pin's agent opened, read once from the service
+ * as the card opens, which keeps its own answer a short while: nothing for
+ * any other pin, before the answer lands, where it did not, or where the
+ * agent opened none.
+ */
+function usePinPullRequest(
+  pin: PinnedTab,
+  read: PullRequestReader,
+): CodingAgentPullRequest | undefined {
+  const { tab } = pin;
+  const agentId = isAgentTab(tab) ? tab.agent : undefined;
+  const [held, setHeld] = useState<CodingAgentPullRequest | undefined>(undefined);
+  const reader = useRef(read);
+  reader.current = read;
+  useEffect(() => {
+    if (agentId === undefined) return;
+    let live = true;
+    reader.current(agentId).then(
+      (answer) => {
+        if (live && !("failure" in answer)) setHeld(answer.pullRequest ?? undefined);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [agentId]);
+  return held;
+}
+
+/**
+ * The card a pin's row hangs, a plan card's own rows: the tab's name after
+ * its glyph as its row draws it, wrapped to two lines, then the plan it is of and the plan's
+ * repository, each opening where it says, a note where the plan no longer
+ * holds the tab, and under a rule an agent's pull request.
  */
 function PinnedTabCard({
   pin,
@@ -149,51 +162,36 @@ function PinnedTabCard({
   agent,
   gone,
   plans,
+  onOpenPlan,
 }: {
   pin: PinnedTab;
   plan: PlanSummary;
   agent: PlanAgentLine | undefined;
   gone: boolean;
   plans: PlansControl;
+  onOpenPlan: () => void;
 }): React.JSX.Element {
+  const pullRequest = usePinPullRequest(pin, plans.agents.readPullRequest);
+  const { repository } = plan;
+  const { openGitHub, pictures } = plans.repositories;
   return (
     <div className="plan-card" data-pinned-tab-card="">
       <div className="plan-card-heading">
         <div className="plan-card-head">
+          <span className="plan-card-glyph">{pinnedTabIcon(pin, agent)}</span>
           <span className="plan-card-name">{pin.label}</span>
         </div>
-        <span className="plan-card-repository">
-          {pinnedTabIcon(pin, agent)}
-          {pinKind(pin)}
-        </span>
-      </div>
-      <ul className="plan-card-lines">
-        <li>
-          <span className="plan-card-line">
-            <span className="plan-card-glyph">
-              <DocumentIcon />
-            </span>
-            <span className="plan-card-label">{plan.name}</span>
-          </span>
-        </li>
-        {agent === undefined ? null : (
-          <li>
-            <span className="plan-card-line">
-              <span className="plan-card-glyph">
-                <AgentGlyph agent={agent} />
-              </span>
-              <span className="plan-card-label">
-                <ModelLabel choice={agent} models={plans.agents.models ?? []} />
-              </span>
-              {agentEndMark(agent, false)}
-              <span className="plan-card-corner">
-                {agentStateWords(agent.status) ?? AGENT_DONE}
-              </span>
-            </span>
-          </li>
+        <CardDetail glyph={<DocumentIcon />} label={plan.name} onPress={onOpenPlan} />
+        {repository === null ? null : (
+          <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
         )}
-        {gone ? <li className="plan-card-more">{GONE_NOTE}</li> : null}
-      </ul>
+        {gone ? <p className="plan-card-more">{GONE_NOTE}</p> : null}
+      </div>
+      {pullRequest === undefined ? null : (
+        <ul className="plan-card-lines" aria-label="Pull request">
+          <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
+        </ul>
+      )}
     </div>
   );
 }
@@ -211,6 +209,7 @@ export function SidebarPinnedTab({
   current,
   inSight,
   onOpen,
+  onOpenPlan,
 }: {
   plans: PlansControl;
   pin: PinnedTab;
@@ -221,6 +220,8 @@ export function SidebarPinnedTab({
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
+  /** Opens the plan the tab is of, as its own row does. */
+  onOpenPlan: () => void;
 }): React.JSX.Element {
   const [words, clipped] = useClipped();
   const copied = useTranscriptCopier();
@@ -239,7 +240,16 @@ export function SidebarPinnedTab({
     <li className="sidebar-plan-item sidebar-pinned-tab">
       <Tooltip
         label={pin.label}
-        card={<PinnedTabCard pin={pin} plan={plan} agent={agent} gone={gone} plans={plans} />}
+        card={
+          <PinnedTabCard
+            pin={pin}
+            plan={plan}
+            agent={agent}
+            gone={gone}
+            plans={plans}
+            onOpenPlan={onOpenPlan}
+          />
+        }
         cardBeside
       >
         <button

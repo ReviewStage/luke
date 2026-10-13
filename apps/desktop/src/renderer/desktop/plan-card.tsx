@@ -35,7 +35,9 @@ import { WorkingMark } from "../working-mark";
  * repository and a pull request open their pages on GitHub, and an agent
  * opens the plan on its tab. Each is also offered where the card is not:
  * the plan's menu opens the repository, and the agent's tab its pull
- * request. The rest are facts, left as text.
+ * request. The rest are facts, left as text. Its rows are set as a menu's
+ * rows are, and a pinned tab's card (`sidebar-pinned-tab.tsx`) is drawn
+ * from the same rows (`CardDetail`, `RepositoryDetail`, `PullRequestLine`).
  */
 
 /** The most rows each of the card's lists draws before it counts the rest. */
@@ -94,6 +96,78 @@ export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Eleme
   }
 }
 
+/**
+ * One row of a card's lists, set as a menu's row is: its glyph, its words,
+ * and what stands at its end. It is a button where a press does something,
+ * and text where nothing does, in the same place either way.
+ */
+function CardLine({
+  glyph,
+  label,
+  end,
+  onPress,
+}: {
+  glyph: React.ReactNode;
+  label: React.ReactNode;
+  end?: React.ReactNode;
+  onPress?: (() => void) | undefined;
+}): React.JSX.Element {
+  const line = (
+    <>
+      <span className="plan-card-glyph">{glyph}</span>
+      <span className="plan-card-label">{label}</span>
+      {end}
+    </>
+  );
+  return onPress === undefined ? (
+    <span className="plan-card-line">{line}</span>
+  ) : (
+    <button type="button" className="plan-card-line" onClick={onPress}>
+      {line}
+    </button>
+  );
+}
+
+/** One of the quieter lines under a card's name, which a press opens: a plan, or a repository on GitHub. */
+export function CardDetail({
+  glyph,
+  label,
+  onPress,
+}: {
+  glyph: React.ReactNode;
+  label: string;
+  onPress: () => void;
+}): React.JSX.Element {
+  return (
+    <button type="button" className="plan-card-detail" onClick={onPress}>
+      <span className="plan-card-glyph">{glyph}</span>
+      <span className="plan-card-label">{label}</span>
+    </button>
+  );
+}
+
+/** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
+export function RepositoryDetail({
+  repository,
+  pictures,
+  onOpenGitHub,
+}: {
+  repository: string;
+  /** Whether owners' pictures are drawn at all: not in a fixture run. */
+  pictures: boolean;
+  onOpenGitHub: (url: string) => void;
+}): React.JSX.Element {
+  return (
+    <CardDetail
+      glyph={
+        <RepositoryPicture repository={repository} pictures={pictures} fallback={<GitHubMark />} />
+      }
+      label={repository}
+      onPress={() => onOpenGitHub(repositoryPageUrl(repository))}
+    />
+  );
+}
+
 /** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
 function AgentLine({
   agent,
@@ -106,13 +180,12 @@ function AgentLine({
 }): React.JSX.Element {
   return (
     <li data-plan-card-agent="">
-      <button type="button" className="plan-card-line" onClick={onShow}>
-        <span className="plan-card-glyph">
-          <AgentGlyph agent={agent} />
-        </span>
-        <span className="plan-card-label">{agentTabLabel(agent, models)}</span>
-        {agentEndMark(agent, false)}
-      </button>
+      <CardLine
+        glyph={<AgentGlyph agent={agent} />}
+        label={agentTabLabel(agent, models)}
+        end={agentEndMark(agent, false)}
+        onPress={onShow}
+      />
     </li>
   );
 }
@@ -123,7 +196,7 @@ function AgentLine({
  * the pull request on GitHub, where the service said its page; a row from
  * a service before it did is text.
  */
-function PullRequestLine({
+export function PullRequestLine({
   pullRequest,
   onOpenGitHub,
 }: {
@@ -131,29 +204,23 @@ function PullRequestLine({
   onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
   const { url } = pullRequest;
-  const line = (
-    <>
-      <span className="plan-card-glyph">
-        <PullRequestGlyph pullRequest={pullRequest} />
-      </span>
-      <span className="plan-card-label">
-        <span className="plan-card-number">#{pullRequest.number}</span> {pullRequest.title}
-      </span>
-      <span className="plan-card-corner">
-        <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
-        <span className="agent-published-removed">−{pullRequest.deletions}</span>
-      </span>
-    </>
-  );
   return (
     <li data-plan-card-pull-request="">
-      {url === undefined ? (
-        <span className="plan-card-line">{line}</span>
-      ) : (
-        <button type="button" className="plan-card-line" onClick={() => onOpenGitHub(url)}>
-          {line}
-        </button>
-      )}
+      <CardLine
+        glyph={<PullRequestGlyph pullRequest={pullRequest} />}
+        label={
+          <>
+            <span className="plan-card-number">#{pullRequest.number}</span> {pullRequest.title}
+          </>
+        }
+        end={
+          <span className="plan-card-corner">
+            <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
+            <span className="agent-published-removed">−{pullRequest.deletions}</span>
+          </span>
+        }
+        onPress={url === undefined ? undefined : () => onOpenGitHub(url)}
+      />
     </li>
   );
 }
@@ -203,18 +270,11 @@ export function PlanCard({
           </time>
         </div>
         {repository === null ? null : (
-          <button
-            type="button"
-            className="plan-card-repository"
-            onClick={() => onOpenGitHub(repositoryPageUrl(repository))}
-          >
-            <RepositoryPicture
-              repository={repository}
-              pictures={pictures}
-              fallback={<GitHubMark />}
-            />
-            {repository}
-          </button>
+          <RepositoryDetail
+            repository={repository}
+            pictures={pictures}
+            onOpenGitHub={onOpenGitHub}
+          />
         )}
       </div>
       {agents === undefined || agentRows.length === 0 ? null : (
