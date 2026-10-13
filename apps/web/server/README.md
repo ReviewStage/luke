@@ -877,8 +877,8 @@ vercel link
 vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect create mcp.sentry.dev --name sentry   # Sentry
-vercel connect create slack --name slack             # Slack: Vercel's managed Slack app; then its user scopes, below
-vercel connect attach <connector-uid> --yes          # production, preview, and development
+vercel connect attach <connector-uid> --yes          # each of the above: production, preview, and development
+# Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
 ```
 
 Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
@@ -895,33 +895,70 @@ runs every agent without that provider, and Settings shows its row as
 unavailable. Every token request is billed by Connect and rate-limited per
 team.
 
-**Slack's user scopes.** `vercel connect create slack` makes a Slack bot app
-with bot scopes and no user scopes, but Luke asks Connect for the
-developer's own grant (`subject: { type: "user" }`, no scopes, so Connect's
-default of the app's configured user scopes), and Slack's MCP server serves
-user tokens alone. A Connect with no user scopes on the app ends on Slack's
-"Invalid permissions requested". `vercel connect update` changes only
-branding, so set them through the API, with the connector's `scl_` id
-(`vercel connect list`):
+**Slack's connector.** Slack's MCP server serves user tokens alone, and only
+ones issued by its own authorization server
+(`https://mcp.slack.com/.well-known/oauth-authorization-server`: Slack's
+`oauth/v2_user/authorize` and `oauth.v2.user.access`). Vercel's managed
+Slack connector (`vercel connect create slack`) signs in through Slack's
+classic app OAuth instead, so its tokens are refused by the server
+(`invalid_token`), and its app's default user scopes mix Sign in with
+Slack's `identity.*` scopes with the rest, which Slack refuses to grant in
+one authorization ("Invalid permissions requested"). Slack's connector is
+therefore a plain OAuth connector against the MCP server's own
+authorization server, credentialed by a Slack app of the team's workspace:
+
+1. The app is internal, never publicly distributed, since the server serves
+   Marketplace and internal apps alone.
+2. Its Redirect URLs (OAuth & Permissions) include Connect's callback,
+   `https://connect.vercel.com/callback`, which is the one a connector uses
+   unless its own `redirectUri` names another (`vercel api
+   /v1/connect/connectors/<connector-id>`).
+3. Its User Token Scopes are the ones below, and none is an `identity.*`
+   scope.
+4. Its Model Context Protocol switch is on (Agents & AI Apps,
+   `https://api.slack.com/apps/<appId>/app-assistant`). Without it the
+   server answers every request 400 ("App is not enabled for Slack MCP
+   server access", which Settings shows on Slack's row), and a token issued
+   before the switch went on keeps that 400, so whoever connected before
+   connects again.
+5. Its App Credentials go into `~/slack-mcp.json`, outside the checkout so
+   an interrupted setup cannot leave the secret where a commit picks it up,
+   and written by hand rather than through a shell command so it stays out
+   of shell history; the connector is created from it and linked to the
+   project:
+
+```json
+{
+  "serverUrl": "https://mcp.slack.com",
+  "clientId": "<Client ID>",
+  "clientSecret": "<Client Secret>",
+  "tokenEndpointAuthMethod": "client_secret_post",
+  "pkceRequired": true,
+  "userAuthorization": {
+    "enabled": true,
+    "scopes": [
+      "search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
+      "search:read.files", "search:read.users",
+      "channels:history", "groups:history", "mpim:history", "im:history",
+      "canvases:read", "files:read", "users:read", "users:read.email"
+    ]
+  },
+  "refreshTokens": { "enabled": true }
+}
+```
 
 ```
-vercel api /v1/connect/connectors/<connector-id>   # userTokens.scopes, data.botScopes, data.appId
-cat > slack-user-scopes.json <<'JSON'
-{"data":{"userScopes":["search:read.public","search:read.private","search:read.mpim","search:read.im","search:read.files","search:read.users","channels:history","groups:history","mpim:history","im:history","canvases:read","files:read","users:read","users:read.email"]}}
-JSON
-vercel api /v2/connect/connectors/<connector-id> -X PATCH --input slack-user-scopes.json
+vercel connect create mcp.slack.com --name slack-mcp --connector-type oauth --data @"$HOME/slack-mcp.json" --json
+rm "$HOME/slack-mcp.json"
+vercel connect attach mcp.slack.com/slack-mcp --yes   # production, preview, and development
 ```
 
-Those are what the read and search tools `integrations.ts` offers need, and
-none of them writes, so the token is read-only at Slack as well as in the
-offer. Carry the GET's `botScopes` in the same `data` object unchanged. The
-PATCH answers whether Connect synced the change to the Slack app
-(`serviceSync`) and whether a workspace owner must reinstall it
-(`reinstallNeeded`); a developer who connected before signs in again to
-pick the new scopes up. Slack's MCP server also serves only Marketplace and
-internal apps, never an unlisted one, so the app
-(`https://api.slack.com/apps/<appId>/distribute`) must not be publicly
-distributed.
+Those scopes are what the read and search tools `integrations.ts` offers
+need, and none of them writes, so the token is read-only at Slack as well
+as in the offer. `SLACK_CONNECTOR_UID` is the UID this create prints
+(`mcp.slack.com/slack-mcp`). A developer who connected under another
+connector disconnects and connects again, because a grant belongs to the
+connector it was made under.
 
 ## The models group
 
