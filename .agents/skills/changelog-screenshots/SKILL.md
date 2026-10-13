@@ -82,6 +82,11 @@ Every picture, whatever it shows:
   `acme/ledger`, `acme/web`), its teal two-peak mark as the owner picture,
   believable plans, agents, diffs, and dialogue about one feature
   ("Teammate invitations"). Model ids from the repository's real catalog.
+- Positive states: everything connected, checks passing, work done or
+  moving. An error, an empty list, a disconnected service, or a "Connect"
+  button goes in only when that state is what the section announces; a state
+  the release really ships that the notes leave out (0.12.0's Slack "Not
+  available") stays rather than being faked away.
 - Real UI only. Stage data and state the app already draws; never add a row,
   label, or control the release does not have (0.12.0's first Integrations
   shot invented a GitHub row and was rejected). Something the release shows
@@ -127,19 +132,30 @@ Frame with the repository's own script, from the synced checkout:
 
 ```sh
 bash $S/scripts/changelog-screenshot.sh out/the-call-tab.png --from ~/luke-shots/<v>/call.png
-bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 30,230,860,830
+LUKE_SHOT_ZOOM=2 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/skills.png --profile shot-skills
+bash $S/scripts/changelog-screenshot.sh out/skills.png --from ~/luke-shots/<v>/skills.png --crop 30,230,860,830 --zoom 2
 ```
 
+Capture a close-up zoomed, so it is sharp: `LUKE_SHOT_ZOOM=2 window.sh …`
+opens the window twice as large in points (past the screen, which
+`patch-dist.sh` allows) with its page zoomed to match, so the layout is the
+same 1600 by 1000 points drawn at 4 pixels a point; frame it with `--zoom 2`
+and the same crop. macOS's own chrome does not zoom, so the traffic lights,
+corners, and shadow come out half size: take a close-up that shows the
+window's edge (the sidebar's corner) unzoomed, and make it tall enough not to
+need the pixels.
+
 A crop is `x,y,width,height` in window points from the window's top-left
-corner; go negative or past the window, up to 90 points, to take in
-wallpaper. It is cut from the framed picture and scaled to the whole
-picture's height (1591 pixels), so it can be no wider than about 1.5 times its
-height, and at under about 800 points tall it is enlarged past the capture's
-pixels: keep it above about 600 so text stays sharp. Find the numbers from a
-preview of the raw capture, which is 2 pixels a point on a Retina display, its
-window body starting 112 by 76 pixels in from the shadow. A close-up that
-shows empty space is a staging problem as often as a cropping one: 0.12.0's
-skill picker needed more transcript above it, not a tighter crop.
+corner; go negative or past the window, up to 90 points, to take in wallpaper.
+It is cut from the framed picture and scaled to the whole picture's height
+(1591 pixels), so it can be no wider than about 1.5 times its height.
+Unzoomed, a crop under about 800 points tall is enlarged past the capture's
+pixels and goes soft; at `--zoom 2` that floor is about 400. Find the numbers
+from a preview of the raw capture, which is 2 pixels a point on a Retina
+display, its window body starting 112 by 76 pixels in from the shadow. A
+close-up that shows empty space is a staging problem as often as a cropping
+one: 0.12.0's skill picker needed more transcript above it, not a tighter
+crop.
 
 Review every picture in the cloud before showing anyone: make small JPEG
 previews on the Mac (`sips -s format jpeg -Z 1500`), `tar` and `base64` them

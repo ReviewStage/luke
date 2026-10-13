@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/bundle-budget.json b/apps/desktop/bundle-budget.json
-index ceb07287..d6667244 100644
+index ceb07287..48b642b7 100644
 --- a/apps/desktop/bundle-budget.json
 +++ b/apps/desktop/bundle-budget.json
 @@ -1,10 +1,10 @@
@@ -10,7 +10,7 @@ index ceb07287..d6667244 100644
 -    "renderer/whiteboard.js": 467697,
 -    "renderer/file-tree.js": 70635,
 -    "renderer/plan-editor.js": 161390,
-+    "renderer/renderer.js": 787105,
++    "renderer/renderer.js": 787099,
 +    "renderer/whiteboard.js": 468605,
 +    "renderer/file-tree.js": 71587,
 +    "renderer/plan-editor.js": 161414,
@@ -2841,12 +2841,12 @@ index 00000000..9c38a934
 +}
 diff --git a/apps/desktop/src/renderer/shots/integrations.ts b/apps/desktop/src/renderer/shots/integrations.ts
 new file mode 100644
-index 00000000..830f9862
+index 00000000..71d62567
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/integrations.ts
 @@ -0,0 +1,70 @@
 +/**
-+ * integrations.ts -- shot I, "Integrations": Settings › Integrations over the whole window, GitHub, Linear, and Notion connected, each naming its account, and Sentry not, offering Connect.
++ * integrations.ts -- shot I, "Integrations": Settings › Integrations, Linear, Notion, and Sentry connected, since a screenshot shows the state a feature is for.
 + *
 + * Throwaway (`README.md`). Slack is hidden in this release, so the shot
 + * leaves its row out. The statuses and each provider's tools are canned
@@ -2890,7 +2890,7 @@ index 00000000..830f9862
 +    integrations: {
 +      linear: "connected",
 +      notion: "connected",
-+      sentry: "disconnected",
++      sentry: "connected",
 +      slack: "unavailable",
 +    },
 +  };

@@ -48,8 +48,10 @@
      closed, open, or full screen, a menu or card held open) is whatever puts
      the feature in front, as the whole window at 1600 by 1000 points or, with
      `--crop`, a close-up cut from that same framed picture, inside the app and
-     as tall as every other screenshot, only narrower. Every picture is signed
-     in as Dean Stratakos with his GitHub photo, shows no Update pill or other
+     as tall as every other screenshot, only narrower. Each shows the state a
+     feature is for, everything connected, passing, and done, never an error or
+     empty state unless that state is the news. Every picture is signed in as
+     Dean Stratakos with his GitHub photo, shows no Update pill or other
      development chrome, and dates everything minutes or days before the
      capture, never the fixture's 1970 or an hours-long timer. Its data is
      synthetic: the acme organisation, its teal mark, and its repositories,
@@ -234,7 +236,7 @@ server off for that chat, and connects one in place.
 [#2336](https://github.com/ReviewStage/luke/pull/2336),
 [#2358](https://github.com/ReviewStage/luke/pull/2358))
 
-![Settings › Integrations with Linear and Notion connected and Sentry offering Connect.](apps/web/public/changelog/0.12.0/integrations.png)
+![Settings › Integrations with Linear, Notion, and Sentry connected.](apps/web/public/changelog/0.12.0/integrations.png)
 
 ### The call follows you
 

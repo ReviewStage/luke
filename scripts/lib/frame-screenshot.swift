@@ -1,6 +1,6 @@
 // frame-screenshot.swift -- frames a macOS window capture on the Golden Gate Sunset aerial for CHANGELOG.md.
 //
-//   frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height]
+//   frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height [zoom]]
 //
 // The capture is a window as macOS's own window capture takes it: the window
 // body opaque, its shadow fading to transparent around it. The window body is
@@ -11,7 +11,9 @@
 // height the whole one would have, so a close-up stands beside the full
 // windows at their height, narrower and nearer. It is composed at the
 // capture's own resolution, so a crop at least 800 points tall is never
-// enlarged past its pixels. The wallpaper is the first
+// enlarged past its pixels, and a capture taken zoomed (the window that many
+// times larger, its page zoomed to match) holds that many times the pixels
+// for a crop of the same points. The wallpaper is the first
 // frame of macOS's Golden Gate Sunset aerial (Marshall's Beach), read once from
 // Apple's servers and cached, since macOS keeps the aerial as a video, not a
 // still.
@@ -170,10 +172,12 @@ func windowBody(_ image: CGImage) throws -> CGRect {
 }
 
 /// The window on the wallpaper: the wallpaper scaled to cover the canvas and centred, the window drawn shadow and all.
-func frame(capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT_WIDTH) throws -> CGImage {
+func frame(
+    capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT_WIDTH, margin: Int = MARGIN
+) throws -> CGImage {
     let body = try windowBody(capture)
-    let canvasWidth = body.width + CGFloat(2 * MARGIN)
-    let canvasHeight = body.height + CGFloat(2 * MARGIN)
+    let canvasWidth = body.width + CGFloat(2 * margin)
+    let canvasHeight = body.height + CGFloat(2 * margin)
     let scale = CGFloat(outputWidth) / canvasWidth
     let outputHeight = Int((canvasHeight * scale).rounded())
     let context = try wallpaperCanvas(width: outputWidth, height: outputHeight, wallpaper: wallpaper)
@@ -181,8 +185,8 @@ func frame(capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT
     // Note that we place the capture from the top, because the body was measured top-down and Core Graphics draws bottom-up.
     let captureWidth = CGFloat(capture.width) * scale
     let captureHeight = CGFloat(capture.height) * scale
-    let left = (CGFloat(MARGIN) - body.minX) * scale
-    let top = (CGFloat(MARGIN) - body.minY) * scale
+    let left = (CGFloat(margin) - body.minX) * scale
+    let top = (CGFloat(margin) - body.minY) * scale
     context.draw(
         capture,
         in: CGRect(
@@ -192,14 +196,19 @@ func frame(capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT
     return output
 }
 
-/// Part of the framed picture: the window on the wallpaper composed at the capture's resolution, cut to the crop, and scaled to the whole picture's height.
-func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, wallpaper: CGImage) throws -> CGImage {
+/// Part of the framed picture: the window on the wallpaper composed at the capture's resolution, cut to the crop, and scaled to the height a whole unzoomed picture has.
+///
+/// Note that the margin grows with the zoom, because it is wallpaper in the window's points, not the capture's pixels.
+func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, zoom: CGFloat, wallpaper: CGImage) throws -> CGImage {
     let body = try windowBody(capture)
-    let nativeWidth = Int(body.width) + 2 * MARGIN
-    let whole = try frame(capture: capture, wallpaper: wallpaper, width: nativeWidth)
-    let outputHeight = Int((CGFloat(whole.height) * CGFloat(OUTPUT_WIDTH) / CGFloat(nativeWidth)).rounded())
+    let margin = Int((CGFloat(MARGIN) * zoom).rounded())
+    let nativeWidth = Int(body.width) + 2 * margin
+    let whole = try frame(capture: capture, wallpaper: wallpaper, width: nativeWidth, margin: margin)
+    let outputHeight = Int(
+        ((body.height / zoom + CGFloat(2 * MARGIN)) * CGFloat(OUTPUT_WIDTH) / (body.width / zoom + CGFloat(2 * MARGIN)))
+            .rounded())
     let cut = CGRect(
-        x: CGFloat(MARGIN) + crop.minX * scale, y: CGFloat(MARGIN) + crop.minY * scale,
+        x: CGFloat(margin) + crop.minX * scale, y: CGFloat(margin) + crop.minY * scale,
         width: crop.width * scale, height: crop.height * scale
     ).integral
     let outputWidth = Int((cut.width * CGFloat(outputHeight) / cut.height).rounded())
@@ -224,9 +233,9 @@ func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, wallpaper: CGImag
 }
 
 let arguments = CommandLine.arguments
-guard arguments.count == 4 || arguments.count == 5 else {
+guard (4...6).contains(arguments.count) else {
     FileHandle.standardError.write(
-        "usage: frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height]\n".data(
+        "usage: frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height [zoom]]\n".data(
             using: .utf8)!)
     exit(2)
 }
@@ -234,11 +243,13 @@ do {
     let captureURL = URL(fileURLWithPath: arguments[1])
     let capture = try loadImage(captureURL)
     let backdrop = try await wallpaper(cache: URL(fileURLWithPath: arguments[3]))
+    let zoom = arguments.count == 6 ? CGFloat(Double(arguments[5]) ?? 0) : 1
+    guard zoom >= 1 else { throw FrameError(description: "a zoom is a number of at least 1") }
     let framed =
-        arguments.count == 5
+        arguments.count >= 5
         ? try frameCrop(
-            capture: capture, crop: try parseCrop(arguments[4]), scale: pixelsPerPoint(captureURL),
-            wallpaper: backdrop)
+            capture: capture, crop: try parseCrop(arguments[4]), scale: pixelsPerPoint(captureURL) * zoom,
+            zoom: zoom, wallpaper: backdrop)
         : try frame(capture: capture, wallpaper: backdrop)
     try writePNG(framed, to: URL(fileURLWithPath: arguments[2]))
 } catch {

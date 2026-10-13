@@ -34,7 +34,8 @@ if [[ $id == 0 ]]; then
     pkill -f "user-data-dir=$profile" || true
     exit 1
 fi
-expected=$((${LUKE_SHOT_SIZE%x*} * 2))
+export LUKE_SHOT_ZOOM=${LUKE_SHOT_ZOOM:-1}
+expected=$(awk -v w="${LUKE_SHOT_SIZE%x*}" -v z="$LUKE_SHOT_ZOOM" 'BEGIN { printf "%d", w * z * 2 }')
 for attempt in 1 2 3 4 5; do
     osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $owner) to true" >/dev/null 2>&1 || true
     sleep 1.2
