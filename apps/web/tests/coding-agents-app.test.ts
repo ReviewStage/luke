@@ -516,10 +516,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(starting.pollUnsafe(), undefined);
         yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        // The steps are bounded well inside the starting grace, so a read whose queries are slow to
+        // land is joined at a clock that still reads it starting rather than failed.
         const empty = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(starting, CODER.MESSAGES_POLL),
+          yield* driven(starting, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
         );
         assert.deepEqual(empty.messages, []);
         assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
