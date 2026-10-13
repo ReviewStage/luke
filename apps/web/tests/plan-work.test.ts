@@ -2,21 +2,30 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
-import { hostTurnId } from "@sidecar/database/models/ids";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { listJournals } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
+  PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
   type PlanWorkAnswer,
+  type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
-import type { WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { TURN_STATUS } from "../server/core";
+import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
+import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -24,10 +33,13 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { readPlanWork } from "../server/hosted/plan-work-store";
+import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
+import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation } from "./support/store-rows";
 
 /**
  * One planning turn's work as the Work tab is sent it, over the real
@@ -188,6 +200,29 @@ function shownBy(read: Option.Option<PlanWorkAnswer>) {
   return (read.value.code ?? []).map(({ callId, turnId, code }) => [callId, turnId, code]);
 }
 
+async function conversation(): Promise<ConversationTarget> {
+  const userId = await database.createUser();
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
+}
+
+/** The turn's work as its record and journal now stand, read the way the voice session reads them. */
+async function worked(target: ConversationTarget, standing: RelayStanding): Promise<PlanWorkTurn> {
+  const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
+  const [turn] = await database.run(database.store.turns.named(target.userId, [turnId]));
+  assert.ok(turn);
+  const journal = await database.run(
+    database.store.messages.byClientId(
+      target.userId,
+      turn.conversationId,
+      HOSTED_TOOL_SET,
+      turn.id,
+    ),
+  );
+  assert.ok(journal.ok);
+  return planWorkOf(turn, journal.value[0]?.message);
+}
+
 test("a plan's work reads back from its conversation after the call: its turns oldest first and every code shown with Luke's note, several of one file included, for the account that owns it alone", async () => {
   const target = await planConversation();
   const first = standingFor(target);
@@ -286,4 +321,145 @@ test("a plan never planned on reads as no work, and a secret file a journal hold
   assert.ok(Option.isSome(read));
   assert.equal(read.value.turns.length, 1);
   assert.deepEqual(read.value.code, []);
+});
+
+test("a turn carries its own journal as the agent tab reads one, and each worker it delegated to in the background beside it: running while the worker's own session runs though the call answered at its receipt, its session's parts as stored, and done once it answers", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const task = "Compare the two queue libraries.";
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "I've asked a worker to compare them."),
+    ],
+    standing,
+  );
+  const callId = "call-0-0";
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, callId),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  const work = async (records: ReadonlyMap<string, TurnRecord> = new Map(), failed = false) => {
+    const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
+    const [stored] = await database.run(database.store.turns.named(target.userId, [turnId]));
+    assert.ok(stored);
+    const turn = failed ? { ...stored, status: TURN_STATUS.FAILED } : stored;
+    const journal = await database.run(
+      database.store.messages.byClientId(
+        target.userId,
+        turn.conversationId,
+        HOSTED_TOOL_SET,
+        turnId,
+      ),
+    );
+    const journals = await database.run(
+      listJournals(child.userId, child.conversationId, HOSTED_TOOL_SET, 10),
+    );
+    assert.ok(journal.ok && journals.ok);
+    return planWorkOf(
+      turn,
+      journal.value[0]?.message,
+      new Map([[callId, journals.value]]),
+      new Map(),
+      records,
+    );
+  };
+  const typed = (journal: readonly WireValue[] | undefined) =>
+    journal?.map((part) => (isRecord(part) ? [part.type, part.text ?? part.state] : part));
+
+  const running = await work();
+  assert.equal(running.state, PLAN_WORK_STATE.DONE);
+  assert.deepEqual(typed(running.journal), [
+    [`tool-${PLANNER_DELEGATE_TOOL.name}`, "output-available"],
+    ["text", "I've asked a worker to compare them."],
+  ]);
+  const [worker] = running.workers ?? [];
+  assert.equal(worker?.callId, callId);
+  assert.equal(worker?.taskId, "delegate-7k2m9q");
+  assert.equal(worker?.task, task);
+  assert.equal(worker?.state, PLAN_WORK_STATE.RUNNING);
+  assert.deepEqual(typed(worker?.journal), [
+    [`tool-${RUN_IN_REPOSITORY_TOOL.name}`, "input-available"],
+  ]);
+  // A turn that failed after its receipt leaves its worker standing as its own session does.
+  const [outlived] = (await work(new Map(), true)).workers ?? [];
+  assert.equal(outlived?.state, PLAN_WORK_STATE.RUNNING);
+
+  await play(
+    answeringStep(FIRST_EVE_TURN, 1, "Both libraries let an admin revoke."),
+    childStanding,
+  );
+  const [answered] = (await work()).workers ?? [];
+  assert.equal(answered?.state, PLAN_WORK_STATE.DONE);
+  assert.deepEqual(typed(answered?.journal)?.at(-1), [
+    "text",
+    "Both libraries let an admin revoke.",
+  ]);
+  const [failed] = (await work(new Map([[callId, { ending: TURN_ENDING.FAILED }]]))).workers ?? [];
+  assert.equal(failed?.state, PLAN_WORK_STATE.FAILED);
+});
+
+test("a turn's journal keeps its newest parts and says older ones were left out, every string in a call cut to the bound with the call's shape kept", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const long = "x".repeat(PLAN_WORK_BOUNDS.TEXT_CHARS + 50);
+  const calls = Array.from({ length: PLAN_WORK_BOUNDS.PARTS + 1 }, () => ({
+    toolName: RUN_IN_REPOSITORY_TOOL.name,
+    input: { command: long },
+    output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: "ok", stderr: "" },
+  }));
+  await play([...opening(FIRST_EVE_TURN), ...callingStep(FIRST_EVE_TURN, 0, calls)], standing);
+
+  const work = await worked(target, standing);
+  assert.equal(work.journal?.length, PLAN_WORK_BOUNDS.PARTS);
+  assert.equal(work.earlierOmitted, true);
+  const [first] = work.journal ?? [];
+  assert.ok(isRecord(first) && isRecord(first.input) && isWireString(first.input.command));
+  assert.ok(first.input.command.length <= PLAN_WORK_BOUNDS.TEXT_CHARS);
+  assert.equal(first.toolCallId, "call-0-1");
+});
+
+test("a turn's journal leaves out what the Mac is not sent: a page's HTML, which only the frame drawing the page reads, and the image a board look answered with", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_PAGE_TOOL_NAME,
+          input: { title: "Invite funnel", html: "<!doctype html><p>secret-looking page body</p>" },
+          output: { status: "accepted", page: { id: "page-1", version: 1 } },
+        },
+        { toolName: LOOK_AT_BOARD_TOOL_NAME, input: {}, output: { image: "iVBORw0KGgo" } },
+      ]),
+    ],
+    standing,
+  );
+
+  const { journal } = await worked(target, standing);
+  const [page, look] = journal ?? [];
+  assert.ok(isRecord(page) && isRecord(look));
+  assert.deepEqual(page.input, { title: "Invite funnel" });
+  assert.equal(look.type, `tool-${LOOK_AT_BOARD_TOOL_NAME}`);
+  assert.equal(look.output, undefined);
 });

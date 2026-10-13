@@ -13,8 +13,15 @@ import {
   type PlanWorkState,
   type PlanWorkTool,
   type PlanWorkTurn,
+  type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
-import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  MESSAGE_ROLE,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -369,6 +376,96 @@ function jobsOf(turns: readonly PlanWorkTurn[]): JobsByTask {
   return jobs;
 }
 
+/** The tool states of a call that has not answered, in the AI SDK's words. */
+const UNANSWERED: ReadonlySet<string> = new Set([
+  TOOL_STATE.INPUT_STREAMING,
+  TOOL_STATE.INPUT_AVAILABLE,
+]);
+
+/**
+ * A journal's parts as the turn draws them: as the AI SDK stored them while
+ * the turn moves, and once it stopped moving with no call still turning,
+ * since nothing more of it will be told. Note that a call the turn ended
+ * without answering is never called failed, because it may have run.
+ */
+function settledJournal(journal: readonly WireValue[], moving: boolean): readonly WireValue[] {
+  if (moving) return journal;
+  return journal.map((part) =>
+    isRecord(part) && isWireString(part.state) && UNANSWERED.has(part.state)
+      ? { ...part, state: TOOL_STATE.OUTPUT_AVAILABLE }
+      : part,
+  );
+}
+
+/**
+ * A worker as the wire sends it beside the call that started it: its job,
+ * where it stands as its own session reads, and that session as a journal.
+ * Note that it moves while the call stands whether or not its turn still
+ * does, because a worker in the background outlives the turn that started it.
+ */
+function workerOfWire(worker: PlanWorkWorker, callLive: boolean): WorkWorkerBlock {
+  const running = callLive && worker.state === PLAN_WORK_STATE.RUNNING;
+  const call: WorkCallRow = {
+    id: worker.callId,
+    kind: CALL_KIND.WORKER,
+    subject: worker.task,
+    state: worker.state,
+    running,
+  };
+  const record = recordOf(worker);
+  return {
+    call,
+    task: worker.task,
+    session: {
+      earlierOmitted: worker.earlierOmitted,
+      message: messageOf({
+        id: worker.callId,
+        parts: settledJournal(worker.journal, running),
+        startedAt: worker.startedAt,
+        endedAt: running ? undefined : worker.endedAt,
+        record,
+      }),
+      ...(worker.startedAt === undefined ? undefined : { startedAt: worker.startedAt }),
+      ...(worker.endedAt === undefined ? undefined : { endedAt: worker.endedAt }),
+      ...(worker.title === undefined ? undefined : { title: worker.title }),
+      record,
+    },
+  };
+}
+
+/**
+ * A worker's call as the turn's journal draws it: where the worker stands
+ * as its own session reads rather than where the call stood, since a call
+ * that delegates to the background answers the moment the worker is under
+ * way, and answering the pair its session ran on, as a coding agent's
+ * delegation answers it, so its row names the pair.
+ */
+function workerCallPart(part: WireRecord, worker: WorkWorkerBlock): WireValue {
+  const choice = workerChoice(worker);
+  const { output: _receipt, ...call } = part;
+  return {
+    ...call,
+    state: toolStateOf(worker.call),
+    ...(choice === undefined
+      ? undefined
+      : { output: { model: choice.model, effort: choice.effort } }),
+  };
+}
+
+/** A turn's journal as its message carries it, each worker's call standing where that worker does. */
+function journalParts(
+  journal: readonly WireValue[],
+  workers: readonly WorkWorkerBlock[],
+  moving: boolean,
+): readonly WireValue[] {
+  const byCall = new Map(workers.map((worker) => [worker.call.id, worker]));
+  return settledJournal(journal, moving).map((part) => {
+    if (!isRecord(part) || !isWireString(part.toolCallId)) return part;
+    const worker = byCall.get(part.toolCallId);
+    return worker === undefined ? part : workerCallPart(part, worker);
+  });
+}
+
 /**
  * The open plan's turns as the tab draws them, oldest first, each one of
  * Luke's messages. A turn moves only while the call it ran on stands: a
@@ -383,15 +480,21 @@ export function workRowsOf(
   return (turns ?? []).map((turn) => {
     const moving = callLive && turn.state === PLAN_WORK_STATE.RUNNING;
     const left = turn.state === PLAN_WORK_STATE.RUNNING && !moving;
-    const workers: WorkWorkerBlock[] = [];
-    const parts = turn.parts.map((part) => {
-      if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) {
-        return sdkPartOf(part, moving, jobs);
-      }
-      const worker = workerOfPart(part, moving, jobs);
-      workers.push(worker);
-      return sdkPartOf(part, moving, jobs, worker);
-    });
+    const raw = turn.journal !== undefined && turn.workers !== undefined;
+    const workers: WorkWorkerBlock[] = raw
+      ? (turn.workers ?? []).map((worker) => workerOfWire(worker, callLive))
+      : [];
+    // A service that sends the turn's own journal is read as the agent tab reads one; an older one through its reading.
+    const parts = raw
+      ? journalParts(turn.journal ?? [], workers, moving)
+      : turn.parts.map((part) => {
+          if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) {
+            return sdkPartOf(part, moving, jobs);
+          }
+          const worker = workerOfPart(part, moving, jobs);
+          workers.push(worker);
+          return sdkPartOf(part, moving, jobs, worker);
+        });
     const record = recordOf(turn);
     return {
       key: turn.turnId,

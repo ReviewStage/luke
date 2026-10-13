@@ -4,7 +4,7 @@ import type {
   StoredTurnRecord,
 } from "@sidecar/database/models/message-reads";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
@@ -15,7 +15,9 @@ import {
   type PlanWorkState,
   type PlanWorkTool,
   type PlanWorkTurn,
+  type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
+import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
 import { Schema } from "effect";
 import {
   isStoredToolPart,
@@ -357,6 +359,54 @@ function partsOf(journals: readonly StoredUIMessage[], state: PlanWorkState): Wa
   return parts;
 }
 
+function isWireArray(value: WireValue): value is readonly WireValue[] {
+  return Array.isArray(value);
+}
+
+/** A value with every string in it cut to the text bound, its shape kept, so a call's input and answer still read as what they are. */
+function boundedValue(value: WireValue): WireValue {
+  if (isWireString(value)) return cut(value, PLAN_WORK_BOUNDS.TEXT_CHARS);
+  if (isWireArray(value)) return value.map(boundedValue);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, inner]) => [key, boundedValue(inner)]),
+  );
+}
+
+/**
+ * A stored part as the Mac is sent it: a `show_page` call without its page's
+ * HTML (`withoutPageHtml`), and a board look without the image it answered
+ * with, which is nothing to read; any other part as it was stored.
+ */
+function shownPart(part: StoredUIMessage["parts"][number]) {
+  if (!isStoredToolPart(part)) return part;
+  const name = storedToolName(part);
+  if (name === SHOW_PAGE_TOOL_NAME) return withoutPageHtml(part);
+  if (name !== LOOK_AT_BOARD_TOOL_NAME) return part;
+  const { output: _image, ...call } = part;
+  return call;
+}
+
+/**
+ * Journals as the agent tab reads them: their words, reasoning, and calls as
+ * the AI SDK stored them, the step markers left out, the newest kept and
+ * every string cut to the bound; and whether older parts were left out.
+ */
+function journalOf(messages: readonly StoredUIMessage[]) {
+  const parts = messages.flatMap((message) =>
+    message.parts.filter(
+      (part) =>
+        isStoredToolPart(part) ||
+        part.type === UI_PART_TYPE.TEXT ||
+        part.type === UI_PART_TYPE.REASONING,
+    ),
+  );
+  const kept = parts.slice(-PLAN_WORK_BOUNDS.PARTS).map(shownPart);
+  // SAFETY: a stored part is the JSON object the writer held to the wire's own values.
+  const journal = kept.map((part) => boundedValue(part as WireValue));
+  return { earlierOmitted: parts.length > PLAN_WORK_BOUNDS.PARTS, journal };
+}
+
 /** The newest parts of a walk, and whether older ones were left out. */
 function newest<Part>(parts: readonly Part[]) {
   return {
@@ -468,6 +518,29 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
   };
 }
 
+/**
+ * Where a worker stands as its own session reads, rather than as the call
+ * that started it does, since that call answers the moment the worker is
+ * under way: running while its newest task is still written, failed where
+ * that task failed or ran past its bound, and done once it answered or
+ * ended any other way, however the turn that started it ended. A worker
+ * whose session has written nothing yet stands as its call reads off the
+ * turn's steps, a call that failed included.
+ */
+function workerStateOf(
+  call: PlanWorkState,
+  journals: readonly SubagentJournal[],
+  record: TurnRecord | undefined,
+): PlanWorkState {
+  const task = journals.at(-1);
+  if (task === undefined) return call;
+  if (record?.ending === TURN_ENDING.FAILED || record?.ending === TURN_ENDING.ABANDONED) {
+    return PLAN_WORK_STATE.FAILED;
+  }
+  const ended = task.finishedAt !== undefined || record?.ending !== undefined;
+  return ended ? PLAN_WORK_STATE.DONE : PLAN_WORK_STATE.RUNNING;
+}
+
 /** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound, and where each began where its row says; nothing where none stands. */
 function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "askedAt"> {
   const rows = asked
@@ -528,12 +601,39 @@ export function planWorkOf(
     };
   });
   const ended = turnState === PLAN_WORK_STATE.RUNNING ? null : turn.settledAt;
+  const stored = new Map(
+    (journal?.parts ?? []).filter(isStoredToolPart).map((part) => [part.toolCallId, part]),
+  );
+  // Each worker as its own session reads, beside the call that started it, which answered the moment it started.
+  const shown = newest(parts);
+  const workers: PlanWorkWorker[] = shown.parts.flatMap((part) => {
+    if (part.type !== PLAN_WORK_PART.TOOL || part.tool !== PLAN_WORK_TOOL.WORKER) return [];
+    const journals = subagents.get(part.id) ?? [];
+    const message = workerInputOf(stored.get(part.id)?.input)?.message ?? part.subject ?? "";
+    const title = titles.get(part.id);
+    return [
+      {
+        callId: part.id,
+        ...(part.task === undefined ? undefined : { taskId: part.task }),
+        task: cut(message, PLAN_WORK_BOUNDS.TEXT_CHARS),
+        state: workerStateOf(part.state, journals, records.get(part.id)),
+        ...journalOf(journals.map((each) => each.message)),
+        ...sessionSpanOf(journals),
+        ...(title === undefined ? undefined : { title }),
+        ...records.get(part.id),
+      },
+    ];
+  });
+  const own = journalOf(journal === undefined ? [] : [journal]);
   return {
     turnId: turn.id,
     startedAt: (turn.startedAt ?? turn.queuedAt).getTime(),
     ...(ended === null ? undefined : { endedAt: ended.getTime() }),
     state: turnState,
-    ...newest(parts),
+    parts: shown.parts,
+    earlierOmitted: shown.earlierOmitted || own.earlierOmitted,
+    journal: own.journal,
+    workers,
     ...askedOf(asked),
     ...turnRecordOf(turn),
   };
