@@ -82,7 +82,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             name: "Ada Lovelace",
             personal: true,
             role: WORKSPACE_ROLE.OWNER,
-            active: true,
+            github: null,
           },
         ]);
       }),
@@ -117,7 +117,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           name: "Grace Hopper",
           personal: true,
           role: WORKSPACE_ROLE.OWNER,
-          active: true,
+          github: null,
         },
       ]);
     }),
@@ -147,7 +147,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             name: "Grace Hopper",
             personal: true,
             role: WORKSPACE_ROLE.OWNER,
-            active: true,
+            github: null,
           },
         ]);
       }),
@@ -172,10 +172,10 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             name: "Owner",
             personal: true,
             role: WORKSPACE_ROLE.OWNER,
-            active: true,
+            github: null,
           },
-          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER, active: true },
-          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.OWNER, active: true },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER, github: null },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.OWNER, github: null },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
@@ -183,10 +183,10 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             name: "Teammate",
             personal: true,
             role: WORKSPACE_ROLE.OWNER,
-            active: true,
+            github: null,
           },
-          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.OWNER, active: true },
-          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.MEMBER, active: true },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.OWNER, github: null },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.MEMBER, github: null },
         ]);
       }),
   );
@@ -250,7 +250,7 @@ it.effect(
             name: "Grace Hopper",
             personal: true,
             role: WORKSPACE_ROLE.OWNER,
-            active: true,
+            github: null,
           },
         ]);
       }).pipe(Effect.provide(database));

@@ -7,7 +7,6 @@ import {
   workspaceOf,
 } from "@sidecar/database/models/workspace-store";
 import {
-  WORKSPACE_ROLE,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
 } from "@sidecar/hosted/workspace-wire";
@@ -20,8 +19,13 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type { GitHubApp } from "./github/github-app.js";
-import { disconnectInstallation } from "./hosted/github-installations.js";
+import { GitHubApp } from "./github/github-app.js";
+import { logGitHubReadFailure } from "./github/github-refusal.js";
+import {
+  createConnectIntent,
+  disconnectInstallation,
+  GITHUB_CONNECT_ROLES,
+} from "./hosted/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -45,7 +49,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * ensured first, so an account's first read makes it. `POST` creates a
  * workspace with the name given through the organization plugin's
  * server-only create, the account its owner. `POST /api/workspaces/github/connect`
- * answers where the browser goes to connect a GitHub organization, and
+ * answers where the browser goes to connect a GitHub organization: the
+ * Luke GitHub App's install address with a single-use intent as its `state`,
+ * which the Setup URL spends (`github-install-app.ts`); and
  * `.../disconnect` removes the workspace's connected installation; both take
  * an owner or admin of the workspace, and a workspace the account is not in
  * answers as none does. The bearer is resolved before any row is touched.
@@ -57,11 +63,11 @@ const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 
+/** The query GitHub carries back to the Setup URL, which is the connect intent's state. */
+const INSTALL_STATE_PARAM = "state";
+
 /** A workspace's name or id is a few dozen characters, so a body past this is not one. */
 const MAXIMUM_BODY_BYTES = 1_024;
-
-/** The roles that connect and disconnect a workspace's GitHub organization. */
-const GITHUB_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export interface WorkspacesAppSeams {
   resolveUserId: UserIdResolver;
@@ -109,7 +115,7 @@ const administeredWorkspace = Effect.fn("web/administeredWorkspace")(function* (
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, asked.success.workspaceId));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (!GITHUB_ROLES.has(workspace.value.role)) {
+  if (!GITHUB_CONNECT_ROLES.has(workspace.value.role)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return workspace.value;
@@ -158,9 +164,17 @@ const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const userId = yield* accountOf(seams);
-  yield* administeredWorkspace(userId);
-  // The intent that binds GitHub's return to the account and the workspace lands in the next commit.
-  return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const workspace = yield* administeredWorkspace(userId);
+  const app = yield* GitHubApp;
+  const installUrl = yield* app.installUrl.pipe(
+    Effect.catch((failure) =>
+      Effect.andThen(logGitHubReadFailure(failure), Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
+    ),
+  );
+  const state = yield* hostedStoreOrUnavailable(createConnectIntent(userId, workspace.id));
+  const url = new URL(installUrl);
+  url.searchParams.set(INSTALL_STATE_PARAM, state);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url: url.toString() });
 });
 
 /** POST: the workspace's connected installation removed, answering the workspace. */
