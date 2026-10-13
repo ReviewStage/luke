@@ -8,7 +8,7 @@ import {
   type PlanningEditAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import type { Workspace } from "@sidecar/hosted/workspace-wire";
+import type { AvailableWorkspace, Workspace } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -171,8 +171,14 @@ export interface PlansControl {
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new plan in it. */
   onChooseWorkspace: (workspaceId: string) => void;
-  /** Opens the service's Workspaces page in the browser, where workspaces are made and their members added. */
-  onManageWorkspaces: () => void;
+  /** The workspaces of GitHub App installations the account reaches and may join; none before the first read lands. */
+  available: readonly AvailableWorkspace[];
+  /** Joins an installation's workspace and lists it, or says in a toast why it could not. */
+  onJoinWorkspace: (installationId: number) => void;
+  /** Lists the personal workspace again, once the one listed is left. */
+  onLeftWorkspace: () => void;
+  /** Opens the Luke GitHub App's installation page in the browser, read as the repository chip reads it. */
+  onInstallApp: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -956,14 +962,39 @@ export function usePlansTab(input: {
     ...input.unseenAgents.map((agent) => ({ agent })),
   ];
 
-  // A fixture's repositories are read from nowhere, as its plans are.
+  // A fixture's repositories are read from nowhere, as its plans are. The
+  // chip lists the repositories of the workspace its plan is in: the open
+  // plan's, else the one New plan starts in.
+  const repositoriesOf =
+    region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : chosen?.id;
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
     fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
-      : act(ACT_KIND.PLANNING_REPOSITORIES, {}).catch(() => ({
+      : act(
+          ACT_KIND.PLANNING_REPOSITORIES,
+          repositoriesOf === undefined ? {} : { workspaceId: repositoriesOf },
+        ).catch(() => ({
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // The installation page is the one the repository chip offers, read with
+  // the account's repositories; a read that answers none opens nothing.
+  const installApp = () => {
+    readRepositories().then((answer) => {
+      if ("repositories" in answer) openGitHub(answer.repositories.installationUrl);
+    });
+  };
+  // A fixture's workspaces are joined nowhere. A join lists the workspace it
+  // answers, which main's view then holds too; a refusal says why in a toast,
+  // since the menu that asked has closed.
+  const joinWorkspace = (installationId: number) => {
+    if (fixture !== undefined) return;
+    act(ACT_KIND.WORKSPACE_JOIN, { installationId }).then(
+      (joined) => workspace.choose(joined.id),
+      (refused: Error) =>
+        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    );
+  };
 
   // A fixture's plans are given no repository, as they are read from nowhere.
   const setRepository = (
@@ -1119,10 +1150,13 @@ export function usePlansTab(input: {
     workspaces: viewed.workspaces,
     workspace: chosen,
     onChooseWorkspace: workspace.choose,
-    // A fixture's workspaces are managed nowhere, as its plans are read from nowhere.
-    onManageWorkspaces: () => {
-      if (fixture === undefined) tell(ACT_KIND.WORKSPACES_MANAGE);
+    available: viewed.available,
+    onJoinWorkspace: joinWorkspace,
+    onLeftWorkspace: () => {
+      const personal = viewed.workspaces.find((each) => each.personal);
+      if (personal !== undefined) workspace.choose(personal.id);
     },
+    onInstallApp: installApp,
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
