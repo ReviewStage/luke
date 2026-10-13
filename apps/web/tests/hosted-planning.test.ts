@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -91,7 +92,6 @@ import {
   RUN_IN_REPOSITORY_TOOL,
 } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import {
   GITHUB_APP_SETTINGS,

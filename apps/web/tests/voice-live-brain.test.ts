@@ -5,6 +5,7 @@ import { askRecord } from "@sidecar/database/models/asks";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -54,7 +55,6 @@ import {
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,

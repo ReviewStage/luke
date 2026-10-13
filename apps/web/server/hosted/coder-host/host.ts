@@ -1,3 +1,4 @@
+import { promptHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
@@ -30,7 +31,6 @@ import {
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { promptHashOf } from "../store/index.js";
 import { logStoreFailure } from "../store-failure.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {

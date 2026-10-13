@@ -1,4 +1,5 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
+import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
@@ -9,7 +10,6 @@ import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleModel } from "../coder-host/model.js";
 import { HostedEnvironment } from "../environment.js";
 import { spendHostedMeter } from "../quota.js";
-import { type StoreWriter, storeWriter } from "../store/index.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";

@@ -1,4 +1,5 @@
 import { listJournals } from "@sidecar/database/models/message-reads";
+import type { StoreWriter } from "@sidecar/database/models/writer";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -43,7 +44,6 @@ import {
 import type { HostedRefusal } from "./http-effect.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
-import type { StoreWriter } from "./store/index.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**

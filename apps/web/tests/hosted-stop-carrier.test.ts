@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
 import { Effect, Result } from "effect";
 import { EVE_CANCEL_OUTCOME } from "../server/hosted/brain-host/eve-sessions";
 import { carryStop, type StopCarrierSeams } from "../server/hosted/brain-host/stop-carrier";
-import { STORE_WRITE_EFFECT } from "../server/hosted/store";
 import { noDatabase } from "./support/no-database";
 
 const NOW = 1_800_000_000_000;

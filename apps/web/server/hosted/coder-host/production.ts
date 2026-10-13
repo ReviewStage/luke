@@ -1,3 +1,4 @@
+import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
@@ -8,7 +9,6 @@ import { conversationOwnedBy, runtimeSessionOwner } from "../brain-host/conversa
 import type { SessionOwnership } from "../brain-host/door.js";
 import { HostedEnvironment } from "../environment.js";
 import type { PlanStoreEffect } from "../plan-store.js";
-import { type StoreWriter, storeWriter } from "../store/index.js";
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";

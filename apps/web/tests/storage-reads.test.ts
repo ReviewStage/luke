@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
+import {
+  listRecentMessages,
+  type StoredMessageRecord,
+} from "@sidecar/database/models/message-reads";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "@sidecar/database/models/soft-delete";
 import { messages as messagesTable, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -18,7 +22,6 @@ import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
-import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,

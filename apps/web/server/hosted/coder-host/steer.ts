@@ -1,6 +1,7 @@
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
+import type { StoreWriter } from "@sidecar/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, Effect, Option, Result } from "effect";
@@ -19,7 +20,6 @@ import type { CodingAgent } from "../coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
 import { readPlan } from "../plan-store.js";
-import type { StoreWriter } from "../store/index.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
@@ -32,7 +33,6 @@ import {
   openPlanConversation,
   readPlan,
 } from "../server/hosted/plan-store";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,

@@ -13,6 +13,7 @@
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
     "./models/columns": "./src/models/columns.js",
     "./models/content-addressed": "./src/models/content-addressed.js",
+    "./models/hosted-store": "./src/models/hosted-store.js",
     "./models/ids": "./src/models/ids.js",
     "./models/message-reads": "./src/models/message-reads.js",
     "./models/recorded-session": "./src/models/recorded-session.js",

@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { type SpokenRowWrite, VOICE_WRITE_REFUSAL } from "@sidecar/database/models/voice-writer";
+import {
+  type SpokenRowWrite,
+  VOICE_WRITE_REFUSAL,
+  type VoiceTarget,
+  type VoiceWriteResult,
+  type VoiceWriter,
+  voiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { Effect, Result, Schema } from "effect";
@@ -13,15 +25,6 @@ import {
   type UserMessageMetadata,
 } from "../server/core";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  storeWriter,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  type VoiceWriter,
-  voiceWriter,
-} from "../server/hosted/store";
 import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

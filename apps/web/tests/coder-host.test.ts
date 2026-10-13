@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
+import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
@@ -76,13 +82,6 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
-import {
-  type ConversationTarget,
-  listMessagesPast,
-  type MessageCursor,
-  STORE_WRITE_EFFECT,
-  storeWriter,
-} from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";

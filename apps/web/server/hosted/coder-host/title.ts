@@ -1,4 +1,9 @@
-import { turnsBefore } from "@sidecar/database/models/message-reads";
+import {
+  listMessagesPast,
+  listRecentMessages,
+  turnsBefore,
+} from "@sidecar/database/models/message-reads";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
@@ -7,7 +12,6 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { childTitlesOf, fillChildTitle } from "../child-titles.js";
 import { type CodingAgent, fillCodingAgentTitle } from "../coding-agent-store.js";
-import { type ConversationTarget, listMessagesPast, listRecentMessages } from "../store/index.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";

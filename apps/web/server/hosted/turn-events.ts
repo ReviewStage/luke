@@ -1,3 +1,4 @@
+import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -24,7 +25,6 @@ import {
 } from "./queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
-import type { StoredTurnRecord } from "./store/index.js";
 
 /**
  * One turn's run seams as the voice session hears them while the turn runs:

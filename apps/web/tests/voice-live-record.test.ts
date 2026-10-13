@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { VOICE_WRITE_REFUSAL } from "@sidecar/database/models/voice-writer";
+import {
+  VOICE_WRITE_REFUSAL,
+  type VoiceTarget,
+  type VoiceWriteResult,
+  voiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -31,14 +41,6 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  storeWriter,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  voiceWriter,
-} from "../server/hosted/store";
 import {
   LIVE_CLIENT_EVENT,
   type LiveAppendEvent,

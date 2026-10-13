@@ -4,7 +4,11 @@ import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId, reasoningItemId } from "@sidecar/database/models/ids";
 import { awaitingLinesOf } from "@sidecar/database/models/message-reads";
-import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
+import {
+  type ConversationTarget,
+  STORE_WRITE_REFUSAL,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
@@ -35,7 +39,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

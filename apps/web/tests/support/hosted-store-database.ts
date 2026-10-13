@@ -4,6 +4,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { db } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
+import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
 import { user } from "@sidecar/database/schemas/auth";
 import {
   cloneStoreTestPostgres,
@@ -14,7 +15,6 @@ import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { type HostedStore, hostedStore } from "../../server/hosted/store";
 
 /**
  * The store's tests run against the real generated migrations on a real
