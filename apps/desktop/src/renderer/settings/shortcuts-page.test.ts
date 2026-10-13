@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement } from "react";
@@ -215,6 +217,25 @@ test("a talk key that would take one of the window's own shortcuts is refused, a
   await chord({ key: "j", code: "KeyJ", metaKey: true, altKey: true });
   assert.equal(stored.length, 1, "a chord the window leaves free is stored");
   assert.equal(document.body.querySelector('[role="alert"]'), null);
+});
+
+test("the talk row's ⋯ stands drawn at rest, not only under the pointer, so the row ends in it rather than in a gap", () => {
+  // The sheets the row's rules stand on, which jsdom does not load on its own.
+  const sheet = document.createElement("style");
+  sheet.textContent = ["desktop.css", "settings.css"]
+    .map((name) => readFileSync(join(import.meta.dirname, "..", "styles", name), "utf8"))
+    .join("\n");
+  document.head.append(sheet);
+  mountPage();
+
+  const more =
+    document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="Talk to Luke shortcut actions"]',
+    ) ?? assert.fail("the talk row offers its menu");
+  const style = getComputedStyle(more);
+  assert.notEqual(style.opacity, "0");
+  assert.notEqual(style.visibility, "hidden");
+  document.head.innerHTML = "";
 });
 
 test("the talk row's ⋯ offers Change shortcut, which records in the chord's own field", () => {

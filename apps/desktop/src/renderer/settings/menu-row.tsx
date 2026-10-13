@@ -16,8 +16,8 @@ import { Tooltip } from "../tooltip";
  * The row's acts live in the window's own menu rather than in buttons along
  * the row, the way a sidebar plan's do: a ⋯ at the row's end opens it, and a
  * right-click anywhere on the row opens the same menu at the pointer. The ⋯
- * is drawn while the row is hovered, holds the keyboard, or has its menu
- * open, and keeps its room otherwise, so the row never shifts as it shows. A
+ * is always drawn, muted as a toolbar's glyphs are until the pointer is on it,
+ * because a ⋯ shown only on hover leaves an empty gap at the end of the row. A
  * row with no act that applies now draws no ⋯ and answers no right-click. An
  * act that cannot be taken back asks first through the confirm dialog, which
  * hands focus back to the ⋯ the menu returned it to.
@@ -46,7 +46,6 @@ export function MenuRow({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
       <div
         className="settings-row menu-row"
-        data-menu-open={String(menu.open !== undefined)}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         onContextMenu={(event) => {
           if (!acting) return;
@@ -60,7 +59,7 @@ export function MenuRow({
             <button
               ref={ellipsis}
               type="button"
-              className="icon-button menu-row-more"
+              className="icon-button"
               aria-label={label}
               aria-haspopup="menu"
               aria-expanded={menu.open !== undefined}
