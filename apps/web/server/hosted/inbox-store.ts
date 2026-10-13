@@ -5,7 +5,7 @@ import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { inboxItem } from "@sidecar/database/schemas/inbox";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
 import { plan } from "@sidecar/database/schemas/plan";
-import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
+import type { AccountInboxEntry, AccountInboxPlan } from "@sidecar/hosted/account-inbox-wire";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -22,7 +22,7 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, max, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -489,6 +489,35 @@ const findWaitingStamps = SqlSchema.findAll({
       .orderBy(...LATEST_FIRST),
 });
 
+/** One plan holding items as the account's read lists it: how many, and when the latest changed. */
+const PlanItemsRowSchema = Schema.Struct({
+  planId: Schema.String,
+  items: Schema.Number,
+  updatedAt: InstantColumnSchema,
+});
+
+/** When a plan's latest item changed, which orders the plans holding items. */
+const LATEST_ITEM = max(inboxItem.updatedAt);
+
+/**
+ * Every plan of the account's it has not archived that holds an item, open
+ * or settled, the plan whose item changed latest first. Note that it is
+ * read from the account's own index, as the open items are, the plan joined
+ * by its key from each item found.
+ */
+const findPlansWithItems = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: PlanItemsRowSchema,
+  execute: ({ userId }) =>
+    db
+      .select({ planId: inboxItem.planId, items: count(), updatedAt: LATEST_ITEM })
+      .from(inboxItem)
+      .innerJoin(plan, eq(plan.id, inboxItem.planId))
+      .where(and(eq(inboxItem.userId, userId), isNull(plan.archivedAt)))
+      .groupBy(inboxItem.planId)
+      .orderBy(desc(LATEST_ITEM), desc(inboxItem.planId)),
+});
+
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
 function scopeItems(
   scope: InboxScope,
@@ -756,6 +785,17 @@ export function accountWaitingItems(
 /** Where each item `accountWaitingItems` reads stands, the same items and none of their words: what a held read of the account compares between looks. */
 export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(findWaitingStamps({ userId }), (rows) =>
+    rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
+  );
+}
+
+/**
+ * Every plan the account has not archived that holds an inbox item,
+ * waiting or settled, with how many and when the latest changed, the
+ * plan whose item changed latest first: what the desktop's Inbox lists.
+ */
+export function accountInboxPlans(userId: string): InboxStoreEffect<readonly AccountInboxPlan[]> {
+  return Effect.map(findPlansWithItems({ userId }), (rows) =>
     rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }

@@ -7,7 +7,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * A plan's inbox is read while that plan is open (`inbox-wire.ts`); this is
  * the one read that stands whichever plan is open, or none, so the desktop
  * can say an item landed while the developer was elsewhere, badge the Dock
- * with what waits, and count each plan's open items in the sidebar. It
+ * with what waits, count each plan's open items, and list every plan
+ * holding an item, open or settled, in its Inbox. It
  * carries no item whole, only what those three draw: the item's id, plan,
  * agent, title, revision, and instants, and the agent as its row names it
  * now, its title or else its model, so an agent this Mac has never listed,
@@ -39,15 +40,28 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
 
+/** One plan the account's read lists as holding inbox items: the plan, how many it holds, open and settled alike, and when the latest of them changed. */
+export const accountInboxPlanSchema = EffectSchema.Struct({
+  planId: wireUuidSchema,
+  items: countedNumber,
+  updatedAt: countedNumber,
+});
+
+export type AccountInboxPlan = typeof accountInboxPlanSchema.Type;
+
 /**
  * Every item that waits on the developer across the account's plans, the
  * latest changed first, the cursor to read on from, and when the service
  * read them, by its own clock: an item that changed after one answer's
  * `readAt` is one that opened since, where one only now back in the answer,
- * its plan brought back from the archive, changed before it.
+ * its plan brought back from the archive, changed before it. Beside them,
+ * every plan holding any item, waiting or settled, the plan whose item
+ * changed latest first, which the desktop's Inbox lists: a plan whose
+ * items were all answered holds no open one, so only this names it.
  */
 export const accountInboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(accountInboxEntrySchema),
+  plans: EffectSchema.Array(accountInboxPlanSchema),
   cursor: EffectSchema.String,
   readAt: countedNumber,
 });

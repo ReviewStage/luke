@@ -19,7 +19,7 @@ import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import type { AppInboxPlan } from "#shared/messages/app-state";
+import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import {
   type AgentEndToast,
   type AgentNotice,
@@ -58,6 +58,16 @@ function agent(
   };
 }
 
+/** An inbox read's answer as a test gives it: its plans holding items left out where none does. */
+type InboxAnswerGiven =
+  | Exclude<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>
+  | (Omit<Extract<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
+      readonly plans?: Extract<
+        CodingAgentAccountInboxAnswerView,
+        { readonly plans: unknown }
+      >["plans"];
+    });
+
 /**
  * The notices over a scripted host: each plan's list answers from its own
  * queue, the last answer standing, the account's inbox read holds until the
@@ -81,6 +91,7 @@ function fixture() {
   });
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxPlan[])[] = [];
+  const holding: (readonly AppInboxPlanHolding[])[] = [];
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -136,7 +147,10 @@ function fixture() {
           return Queue.take(inboxAnswers);
         }),
       accounts: Stream.fromQueue(accounts),
-      onWaitingChanged: (next) => waiting.push(next),
+      onInboxChanged: (next) => {
+        waiting.push(next.waiting);
+        holding.push(next.plans);
+      },
       openInbox: (planId) => openedInboxes.push(planId),
       watchInterval: WATCH,
       report: () => undefined,
@@ -167,13 +181,14 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox read answered, as the host answers the one standing. */
-    answerInbox: (answer: CodingAgentAccountInboxAnswerView) => {
+    /** The account's inbox read answered, as the host answers the one standing; no plan holds an item but where the answer says. */
+    answerInbox: (answer: InboxAnswerGiven) => {
       assert.ok(inboxAnswers);
-      Queue.offerUnsafe(inboxAnswers, answer);
+      Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
     },
     inboxReads,
     waiting,
+    holding,
     badges,
     inboxToasted,
     openedInboxes,
@@ -959,5 +974,40 @@ it.effect(
       });
       yield* settled;
       assert.equal(f.posted.length, 1);
+    }),
+);
+
+it.effect(
+  "every plan holding an item is written beside what waits; an answer at the same cursor whose plans moved writes them alone and announces nothing, and another account lets them go",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      const holding = [
+        { planId: OTHER_PLAN_ID, items: 3, updatedAt: READ_AT },
+        { planId: PLAN_ID, items: 1, updatedAt: READ_AT - 1_000 },
+      ];
+      f.answerInbox({ items: [waitingItem(ITEM_A)], plans: holding, cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.holding.at(-1), holding);
+
+      // The settled plan went to the archive: nothing waiting moved, so the cursor stands.
+      const [, open] = holding;
+      assert.ok(open);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], plans: [open], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.holding.at(-1), [open]);
+      assert.deepEqual(f.waiting.at(-1), [{ planId: PLAN_ID, items: [ITEM_A] }]);
+      assert.equal(f.holding.length, 3, "the start, the first answer, and the plans alone");
+      assert.deepEqual(f.posted, []);
+
+      f.answerInbox({ items: [waitingItem(ITEM_A)], plans: [open], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.equal(f.holding.length, 3, "the same plans again write nothing");
+
+      f.changeAccount(OTHER_ACCOUNT);
+      yield* settled;
+      assert.deepEqual(f.holding.at(-1), []);
     }),
 );

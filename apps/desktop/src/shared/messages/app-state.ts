@@ -113,6 +113,13 @@ export interface AppInboxPlan {
   items: readonly string[];
 }
 
+/** One plan holding inbox items, waiting or settled: the plan, how many, and when the latest changed, by the service's clock. */
+export interface AppInboxPlanHolding {
+  planId: string;
+  items: number;
+  updatedAt: number;
+}
+
 /**
  * What waits on the developer across the account's plans, as main's own
  * read of it last answered (`main/agent-notices.ts`): each plan with an
@@ -121,8 +128,10 @@ export interface AppInboxPlan {
  * no longer waits. Main's, because main holds that read whichever plan is
  * open, and empty while nobody is signed in.
  */
-interface AppInboxSlice {
+export interface AppInboxSlice {
   waiting: readonly AppInboxPlan[];
+  /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
+  plans: readonly AppInboxPlanHolding[];
 }
 
 /**
