@@ -1404,7 +1404,7 @@ test("a press folds Pinned for the next launch too, counting its pins, and the o
   assert.equal(pinnedToggle(relaunched).querySelector(".sidebar-repository-count"), null);
 });
 
-test("a pinned Inbox stands under Pinned with its glyph and its plan's name, and still stands under the folded header while its plan is open on it", () => {
+test("a pinned Inbox stands under Pinned with its glyph, its card naming it the Inbox of its plan, and still stands under the folded header while its plan is open on it", () => {
   const billing = listedPlan("Billing");
   const pin: PinnedTab = { plan: billing.id, tab: MAIN_TAB.INBOX, label: "Inbox", at: 1 };
   const onTab = (tab: PlansControl["mainTabs"]["tab"]) =>
@@ -1416,6 +1416,11 @@ test("a pinned Inbox stands under Pinned with its glyph and its plan's name, and
     });
   const container = mount(DEAN, { plans: onTab(MAIN_TAB.INBOX) });
   assert.deepEqual(pinnedSection(container), ["◆ Inbox"]);
+  const card = restOn(
+    container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan") ?? undefined,
+  );
+  assert.equal(card.querySelector(".plan-card-repository")?.textContent, "Inbox");
+  assert.equal(card.querySelector(".plan-card-label")?.textContent, "Billing");
 
   act(() => pinnedToggle(container).click());
   assert.deepEqual(pinnedSection(container), ["◆ Inbox"], "on show");
