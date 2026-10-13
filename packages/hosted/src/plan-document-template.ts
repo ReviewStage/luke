@@ -17,9 +17,11 @@ import {
  * preference.
  *
  * The template is plain Markdown. Its guidance sentences are ordinary text the
- * developer and Luke both read: nothing draws them muted and no code replaces
- * them. Every new plan starts as a copy of it (`plan-store.ts`'s
- * `createPlan`; `docs/PLANNING.md`, "The template").
+ * developer and Luke both read, and nothing draws them muted. Every new plan
+ * starts as a copy of it (`plan-store.ts`'s `createPlan`; `docs/PLANNING.md`,
+ * "The template"), and a note Luke adds to a section that still holds exactly
+ * what the template put there takes the place of those words
+ * (`plan-template.ts`'s `applyNotesToText`).
  *
  * Every write that changes the template is kept as a revision, read and
  * restored the way a plan's are: `GET /api/account/plan-template/revisions`
