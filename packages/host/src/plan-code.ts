@@ -215,11 +215,12 @@ export function highlightFile(window: PlanFileWindow): PlanFileShown {
   return { ...window, lines: colouredLines(languageOfPath(window.path), window.lines) };
 }
 
-/** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from, with Luke's note where he wrote one. */
+/** The code as the screen draws it: the lines the service sent, coloured, under the place, the repository, and the commit they came from, with Luke's note where he wrote one. */
 export function highlightCode(code: ShownCode): PlanCode {
   return {
     ref: code.ref,
     repository: code.repository,
+    ...(code.commit === undefined ? undefined : { commit: code.commit }),
     firstLine: code.firstLine,
     lineCount: code.lineCount,
     lines: colouredLines(languageOfPath(code.ref.path), code.lines),

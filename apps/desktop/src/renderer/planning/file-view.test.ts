@@ -132,6 +132,7 @@ function shownLines(
   endLine: number,
   note: string | undefined,
   repository = REPOSITORY,
+  commit?: string,
 ): PlanCodeShowing {
   return {
     callId,
@@ -140,6 +141,7 @@ function shownLines(
     code: {
       ref: { path: FILE, startLine, endLine },
       repository,
+      ...(commit === undefined ? undefined : { commit }),
       firstLine: 1,
       lineCount: 40,
       lines: [[]],
@@ -296,6 +298,11 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
       button.getAttribute("aria-label"),
     ),
     ["Back", "Forward", "Open on GitHub", "File actions", "Show files"],
+  );
+  assert.equal(
+    view.container.querySelector(".file-view-commit"),
+    null,
+    "no commit pins a read of main",
   );
   assert.equal(view.container.querySelector(".file-tree-pane"), null, "the tree starts closed");
   await view.press(view.button("Show files"));
@@ -490,7 +497,7 @@ test("the GitHub button opens the file on the branch it was read on, its lit lin
   assert.equal(refused.button("Open on GitHub")?.disabled, true);
 });
 
-test("a file opened at a commit is read at it, opened on GitHub there, and said missing there in the commit's words; opened at another commit it is read afresh, no line of the first kept", async () => {
+test("a file opened at a commit is read at it, named quietly in the bar by its short SHA, opened on GitHub there, and said missing there in the commit's words; opened at another commit it is read afresh, no line of the first kept", async () => {
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -522,6 +529,7 @@ test("a file opened at a commit is read at it, opened on GitHub there, and said 
   };
   const view = mounted([], undefined, readFile);
   await view.draw(FILE, { startLine: 2, endLine: 2 }, 1, first);
+  assert.equal(view.container.querySelector(".file-view-commit")?.textContent, "0123456");
   await view.press(view.button("Open on GitHub"));
   assert.deepEqual(view.github, [
     `https://github.com/acme/relay/blob/${first}/apps/web/server/plans-app.ts#L2`,
@@ -932,21 +940,22 @@ test("a range Luke showed with a note stands his note over its first line: his m
   assert.equal(card?.nextElementSibling?.getAttribute("data-pointed"), "true");
 });
 
-test("a file opened at a commit, as an inbox item's code opens it, stands none of Luke's notes, since his lines are his own checkout's", async () => {
+test("a file opened at a commit stands only the notes Luke wrote on lines his checkout read at that commit", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const other = "89abcdef0123456789abcdef0123456789abcdef";
   const view = mounted(
-    [shownLines("call-guard", 4, 6, "The invite guard.")],
+    [
+      shownLines("call-here", 4, 6, "The invite guard.", REPOSITORY, commit),
+      shownLines("call-before", 10, 12, "Read before commits were recorded."),
+      shownLines("call-elsewhen", 14, 14, "Read at another commit.", REPOSITORY, other),
+    ],
     undefined,
     numberedFile(40),
   );
-  await view.draw(
-    FILE,
-    { startLine: 4, endLine: 6 },
-    1,
-    "0123456789abcdef0123456789abcdef01234567",
-  );
+  await view.draw(FILE, { startLine: 4, endLine: 6 }, 1, commit);
 
   assert.ok(view.container.querySelector(".code-line"), "the file is drawn");
-  assert.deepEqual(noteCards(view.container), []);
+  assert.deepEqual(noteCards(view.container), ["Luke's note on lines 4–6 over 4"]);
 });
 
 it.effect(

@@ -297,6 +297,8 @@ const planCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
   /** The repository the lines were read from, `owner/name`. */
   repository: EffectSchema.String,
+  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
+  commit: EffectSchema.optionalKey(EffectSchema.String),
   /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
   firstLine: EffectSchema.Int,
   /** How many lines the whole file has. */

@@ -32,10 +32,12 @@ import type { OpenFile } from "./use-side-panel";
  * snippet's lines, then the window above or below as the developer scrolls
  * to the top or the bottom of what is drawn, so a long file costs one
  * window until it is read further. A file an inbox item's code opened is
- * read at the commit the agent named, so its lines are the ones it meant.
- * Note that the service otherwise reads the file from GitHub as it stands
- * now on the repository's default branch, not from the checkout the
- * snippet was read from: a file changed since is drawn as
+ * read at the commit the agent named, so its lines are the ones it meant,
+ * and one a snippet opened at the commit Luke's checkout stood at when he
+ * read it, so a file main has since moved or deleted still reads as he
+ * showed it. Note that the service otherwise reads the file from GitHub as
+ * it stands now on the repository's default branch, as a snippet shown
+ * before its commit was recorded is read: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
  * showed of it where the plan holds them. Over the first line of each
