@@ -71,7 +71,7 @@ const HEADING_LINE = /^( {0,3}(?:(?:>|[-*+]|\d{1,9}[.)])[ \t]*)*)(?=#{1,6}(?:[ \
 /** A line that would underline the paragraph above it into a setext heading. */
 const SETEXT_LINE = /^( {0,3}(?:>[ \t]*)*)(?=(?:=+|-+)[ \t]*$)/u;
 
-/** A line that would open an HTML block, which the panel draws as nothing and which runs past its field. */
+/** A line that would open an HTML block, which the panel draws as nothing and which runs past its section. */
 const HTML_LINE = /^( {0,3})(?=<)/u;
 
 /** The one fence a field has open, which its closing line must match. */
@@ -107,7 +107,7 @@ function escapedLine(line: string, afterText: boolean): string {
 }
 
 /**
- * Field text as Markdown that stays inside its field. Note that we leave a
+ * Note text as Markdown that stays inside its section. Note that we leave a
  * fence's own lines as written, because a `#` inside code is code, and that
  * we close a fence the text left open, because an open fence would turn
  * every heading after it into code.
@@ -131,7 +131,6 @@ function contained(text: string): string {
   return lines.join("\n");
 }
 
-/** Text a heading carries on its one line. */
 /** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
 function listItem(marker: string, text: string): string {
   const [first, ...rest] = contained(text).split("\n");
@@ -463,7 +462,7 @@ function located(text: string, find: string): Span | undefined {
   return spans.length === 1 ? spans[0] : undefined;
 }
 
-/** Text added after a field's answer: on the next line within a list, and as a new paragraph otherwise. */
+/** Text added after a section's words: on the next line within a list, and as a new paragraph otherwise. */
 function appended(current: string | null, text: string): string {
   if (current === null) return text;
   const lastLine = current.slice(current.lastIndexOf("\n") + 1);

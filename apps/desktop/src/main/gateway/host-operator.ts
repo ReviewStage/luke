@@ -216,7 +216,7 @@ export interface HostOperator {
   planningSetRepository(
     params: PlanningSetRepositoryParams,
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
-  /** The developer's edit of one field of a plan; saved, a conflict with what the field holds now, or why nothing was saved. */
+  /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;

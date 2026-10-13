@@ -51,10 +51,9 @@
 }
 
 /* A plan is a document rather than a message, so its sections breathe. Every
-   unit after the header block opens on a section or field heading. Note that
-   the gap is the body's children's rather than `.plan-unit`'s own, because a
-   unit is drawn inside a wrapper where it can be edited or carries a byline,
-   and an editor stands in its place while it is open. */
+   unit after the header block opens on a section heading. Note that the gap
+   is the body's children's rather than `.plan-unit`'s own, because a unit is
+   drawn inside a wrapper where it carries a byline. */
 .plan-body > * + * {
   margin-top: 1.1em;
 }
@@ -91,7 +90,7 @@
   animation-play-state: var(--loop-motion);
 }
 
-/* The field the caret is typing in: a small ring in the accent turning after
+/* The unit the caret is typing in: a small ring in the accent turning after
    its heading on the window's one spinner turn (`spinner.tsx`), held by
    `--loop-motion` like every animation with no end of its own and still
    reading as work under way while held. */
@@ -110,7 +109,7 @@
   content: "";
 }
 
-/* A unit or assumption as it settles: a tint behind it that fades, on
+/* A unit as it settles: a tint behind it that fades, on
    opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
    leave nothing lit. */
 .plan-fresh {

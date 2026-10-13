@@ -123,7 +123,6 @@ const insertRevision = SqlSchema.void({
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  // Note that the fixed template's fields and assumptions are left to their columns' defaults, null and empty, until the migration that drops them.
   execute: (revision) => db.insert(planRevision).values(revision),
 });
 

@@ -76,8 +76,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * about plans the caller does not hold. The developer writes a document in
  * two ways here, each through the plan's one write (`hosted/plan-notes.ts`)
  * that the notetaker and the coding agents save their notes through: `POST
- * /api/plans/{id}/edit` is their edit of one field, saved, or answered as a
- * conflict with what the field holds now where Luke wrote it meanwhile and
+ * /api/plans/{id}/edit` is their edit of the document, saved, or answered as
+ * a conflict with the text as it stands now where Luke wrote it meanwhile and
  * the edit no longer lands, with nothing saved; and a restore puts back an
  * earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
@@ -144,7 +144,7 @@ const PLANS_PATH = {
   REVISION: "/api/plans/revision",
   /** POST restores one revision as the plan's content; the rewrite moves the path's id and number into the `id` and `seq` queries. */
   RESTORE: "/api/plans/restore",
-  /** POST saves the developer's edit of one field; the rewrite moves the path's id into the `id` query. */
+  /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
 } as const;
 
@@ -651,9 +651,8 @@ const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedR
 ]);
 
 /**
- * POST saves the developer's edit of one field, or of a document plan's
- * whole text: answered with the plan as saved, with the field or the text
- * as it now stands where the edit conflicts with it,
+ * POST saves the developer's edit of the plan's document: answered with the
+ * plan as saved, with the text as it now stands where the edit conflicts with it,
  * or as refused where the plan would be longer than a plan may be. An
  * archived plan is refused outright, as no plan is, since a desktop that
  * knows archiving draws no editor on one.

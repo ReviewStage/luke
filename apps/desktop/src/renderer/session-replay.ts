@@ -19,18 +19,17 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
  * every input is masked, the attributes that carry words or an image are
  * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. Ten elements also block
- * their whole subtree with the library's fixed `ph-no-capture` class as a
- * second line: the feedback dialog, whose screenshots are pictures of the
- * person's screen, the Settings tab's Memory page, a plan's whiteboard,
- * a plan's transcript, a plan's Work tab, the code on screen, a plan's
- * version history's list, the version of the plan drawn beside it, each
- * coding agent's tab, and the editor a field of a plan is edited in, whose masked value
- * would still record the rhythm of the typing. The whiteboard is the one
- * surface that draws its words on a canvas, which the text masking cannot
- * reach, so its block is its only
- * line, and canvas recording is held off by name rather than by the
- * library's default.
+ * positions, and asterisks of the right length. The surfaces that hold the
+ * most of a person's words also block their whole subtree with the library's
+ * fixed `ph-no-capture` class as a second line, each named where it is drawn
+ * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
+ * pictures of the person's screen, a plan's title and the editor its document
+ * is edited in, whose masked value would still record the rhythm of the
+ * typing, and its whiteboard, transcript, Work, Code, and File tabs, version
+ * history, Inbox, and coding agents' tabs, among others. The whiteboard is
+ * the one surface that draws its words on a canvas, which the text masking
+ * cannot reach, so its block is its only line, and canvas recording is held
+ * off by name rather than by the library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.

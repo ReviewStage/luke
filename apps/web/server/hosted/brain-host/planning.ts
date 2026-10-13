@@ -346,7 +346,7 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 /**
  * What a planning turn is handed beside its instructions every turn: the
  * plan's name, the saved document as JSON, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), the fields
+ * made on it (so Luke can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the

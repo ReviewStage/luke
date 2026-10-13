@@ -186,8 +186,8 @@ export class HostedPlanClient {
   }
 
   /**
-   * Saves the developer's edit of one field, answering the plan as saved,
-   * the field as it now stands where the edit no longer lands in it, or why
+   * Saves the developer's edit of the document, answering the plan as saved,
+   * the text as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
    * the plan is gone, or it is archived. An edit the service would refuse by shape is
    * refused here without traveling at all.
@@ -506,7 +506,7 @@ export class HostedPlanClient {
   }
 
   /**
-   * Starts a plan with the fixed template untouched, on the repository the
+   * Starts a plan from the account's template, on the repository the
    * request names where it names one; a request the service would refuse by
    * shape is refused here without traveling at all, and a repository the
    * service refused is answered as the refusal it was.
