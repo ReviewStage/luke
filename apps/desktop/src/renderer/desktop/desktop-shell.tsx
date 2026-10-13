@@ -1,4 +1,4 @@
-import { ACCOUNT_STATUS, type SignInProvider } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { ComposeIcon, SidebarIcon } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
@@ -32,9 +32,11 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 export interface DesktopGates {
   accountRequired: boolean;
   /** Whose sign-in the gate is waiting on in the browser. */
-  signInWait?: SignInProvider | undefined;
+  signInWait?: AccountProvider | undefined;
   signInFailure?: string | undefined;
-  onBeginSignIn: (provider: SignInProvider) => void;
+  /** The provider this Mac last signed in with, which the gate marks. */
+  lastSignIn?: AccountProvider | undefined;
+  onBeginSignIn: (provider: AccountProvider) => void;
   onCancelSignIn: () => void;
   /** The signed-out Luke's introduction cycle, walked over the sign-in. */
   signInFace: { play: number; motion?: FaceMotion };
@@ -218,6 +220,7 @@ export function DesktopShell({
           face={gates.signInFace}
           {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
+          {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
           onBegin={gates.onBeginSignIn}
           onCancel={gates.onCancelSignIn}
         />

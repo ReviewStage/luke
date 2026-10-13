@@ -187,6 +187,7 @@ export const ADMIN_INTEGRATION = {
   ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
   ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
   HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },
+  GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
   GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
 } as const;
 
@@ -195,6 +196,7 @@ export interface AdminIntegrationPresence {
   analyticsRecording: boolean;
   analyticsErasure: boolean;
   hostedTier: boolean;
+  googleSignIn: boolean;
   githubSignIn: boolean;
 }
 
@@ -204,6 +206,7 @@ export function adminIntegrations(present: AdminIntegrationPresence): AdminInteg
     { ...ADMIN_INTEGRATION.HOSTED_TIER, configured: present.hostedTier },
     { ...ADMIN_INTEGRATION.ANALYTICS_RECORDING, configured: present.analyticsRecording },
     { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
+    { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },
     { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
   ];
 }
