@@ -24,7 +24,7 @@ import {
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
 /** The update item's one act in each state, as the Updates row words it. */
-export const UPDATE_MENU_ACT = {
+const UPDATE_MENU_ACT = {
   /** Ask for the latest build, with Settings brought forward, where the answer is drawn. */
   CHECK: "check",
   /** Nothing to choose: a check is already out. */

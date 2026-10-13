@@ -13,15 +13,30 @@ function supported(update: Partial<UpdateSnapshot> & Pick<UpdateSnapshot, "statu
 
 test("each state says where the build stands in a few words and offers its one next step, a failure in the failure's words", () => {
   const rows: [UpdateSnapshot, string, string, boolean][] = [
-    [supported({ status: UPDATE_STATUS.IDLE, upToDate: false }), "Not checked yet", UPDATE_ROW_ACTION.CHECK, false],
-    [supported({ status: UPDATE_STATUS.IDLE, upToDate: true }), "Up to date", UPDATE_ROW_ACTION.CHECK, false],
+    [
+      supported({ status: UPDATE_STATUS.IDLE, upToDate: false }),
+      "Not checked yet",
+      UPDATE_ROW_ACTION.CHECK,
+      false,
+    ],
+    [
+      supported({ status: UPDATE_STATUS.IDLE, upToDate: true }),
+      "Up to date",
+      UPDATE_ROW_ACTION.CHECK,
+      false,
+    ],
     [
       supported({ status: UPDATE_STATUS.IDLE, upToDate: false, unreachable: true }),
       "Couldn't reach GitHub",
       UPDATE_ROW_ACTION.RETRY,
       true,
     ],
-    [supported({ status: UPDATE_STATUS.CHECKING }), "Checking for updates…", UPDATE_ROW_ACTION.CHECKING, false],
+    [
+      supported({ status: UPDATE_STATUS.CHECKING }),
+      "Checking for updates…",
+      UPDATE_ROW_ACTION.CHECKING,
+      false,
+    ],
     [
       supported({ status: UPDATE_STATUS.READY, latestVersion: "0.2.0" }),
       "0.2.0 is ready to install",
@@ -40,7 +55,12 @@ test("each state says where the build stands in a few words and offers its one n
       UPDATE_ROW_ACTION.GET,
       true,
     ],
-    [supported({ status: UPDATE_STATUS.ERROR }), "Couldn't check for updates", UPDATE_ROW_ACTION.RETRY, true],
+    [
+      supported({ status: UPDATE_STATUS.ERROR }),
+      "Couldn't check for updates",
+      UPDATE_ROW_ACTION.RETRY,
+      true,
+    ],
     [
       { ...supported({ status: UPDATE_STATUS.IDLE, upToDate: false }), installSupported: false },
       "This copy can't update itself",
@@ -67,7 +87,10 @@ test("a download under way names its version and how far along it is, with nothi
   assert.equal(row.action, UPDATE_ROW_ACTION.DOWNLOADING);
   assert.equal(row.progress, 41.7);
 
-  const begun = updateRow(supported({ status: UPDATE_STATUS.DOWNLOADING, latestVersion: "0.2.0" }), RELEASE);
+  const begun = updateRow(
+    supported({ status: UPDATE_STATUS.DOWNLOADING, latestVersion: "0.2.0" }),
+    RELEASE,
+  );
   assert.equal(begun.detail, "Downloading 0.2.0…");
   assert.equal(begun.progress, 0, "a download not yet counted draws an empty bar");
 });
@@ -75,7 +98,10 @@ test("a download under way names its version and how far along it is, with nothi
 test("the sidebar carries a release only while it has something to press: its restart, or the download once installing it failed", () => {
   const ready = supported({ status: UPDATE_STATUS.READY, latestVersion: "0.2.0" });
   assert.equal(updateInSidebar(ready), true);
-  assert.equal(updateInSidebar(supported({ status: UPDATE_STATUS.ERROR, latestVersion: "0.2.0" })), true);
+  assert.equal(
+    updateInSidebar(supported({ status: UPDATE_STATUS.ERROR, latestVersion: "0.2.0" })),
+    true,
+  );
   // Note that a download runs silently: nothing is pressed until it lands.
   assert.equal(
     updateInSidebar(supported({ status: UPDATE_STATUS.DOWNLOADING, latestVersion: "0.2.0" })),
