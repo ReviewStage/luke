@@ -106,6 +106,10 @@ async function mount(answer: string | undefined = undefined) {
         (heading) => heading.textContent,
       ),
     note: () => container.querySelector('[role="alert"]')?.textContent ?? undefined,
+    buttons: () =>
+      [...container.querySelectorAll("button")].map(
+        (button) => button.getAttribute("aria-label") ?? button.textContent,
+      ),
   };
 }
 
@@ -113,6 +117,11 @@ test("the page reads Untitled plan and draws the account's own template's sectio
   const page = await mount();
   assert.equal(page.field.placeholder, "Untitled plan");
   assert.deepEqual(page.sections(), ["Why", "Risks"]);
+});
+
+test("the name is typed, never dictated: the repository and Create plan are the page's only controls", async () => {
+  const page = await mount();
+  assert.deepEqual(page.buttons(), ["acme/web", "Create plan⏎"]);
 });
 
 test("a template the host cannot read leaves the page without sections, and the plan can still be created", async () => {

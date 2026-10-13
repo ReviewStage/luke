@@ -6,10 +6,7 @@ import { useAct } from "../act";
 import { MarkdownMessage } from "../markdown-message";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
-import { dictationKeywords } from "./dictation-keywords";
-import { DictateButton, DictationStrip } from "./dictation-strip";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip";
-import { DICTATION_PHASE, useDictation } from "./use-dictation";
 import type { PlansControl } from "./use-plans-tab";
 
 /**
@@ -30,12 +27,9 @@ import type { PlansControl } from "./use-plans-tab";
  * see, and the planning model reads that repository for the plan's whole
  * life. A plan can start with none and be given one later. A refusal keeps
  * the page with the reason under the button, which can be pressed again.
- * The name can be dictated with the agent composer's own microphone and
- * strip (`dictation-strip.tsx`), the repository's name among the words to
- * listen for. The template is read as the page opens and on each press of
- * New plan, so an edit in Settings or on another Mac shows on the next
- * visit; until it is read, or where the last read failed, the page draws no
- * sections.
+ * The template is read as the page opens and on each press of New plan, so
+ * an edit in Settings or on another Mac shows on the next visit; until it is
+ * read, or where the last read failed, the page draws no sections.
  */
 
 /** The longest name the field takes. */
@@ -60,8 +54,6 @@ interface NewPlanFormViewProps {
   onName: (name: string) => void;
   onRepository: (repository: string) => void;
   onStart: () => void;
-  /** Says why a dictation left nothing under the button, or clears it. */
-  onNote: (note: string | undefined) => void;
 }
 
 /** The template's sections, drawn as the plan's will be, faint and inert because none of it is the developer's yet. */
@@ -81,21 +73,6 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   const nameField = useRef<HTMLTextAreaElement>(null);
   const canStart = props.name.trim().length > 0 && !props.starting;
   const { focusRequest } = props;
-  const latest = useRef(props);
-  latest.current = props;
-  const dictation = useDictation({
-    field: nameField,
-    draft: () => latest.current.name,
-    setDraft: (next) => latest.current.onName(next),
-    maxLength: NAME_MAX_CHARS,
-    keywords: dictationKeywords({
-      repository: props.repository,
-      title: undefined,
-      body: undefined,
-    }),
-    onNote: props.onNote,
-  });
-  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
 
   // Note that we focus on arrival as well as on each press of New plan,
   // because the page is the window's home and typing the name is its one job.
@@ -106,7 +83,6 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   // Return creates the plan with any modifier held, since the name has no
   // second line to begin; an input method still composing keeps its own.
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (dictation.onFieldKey(event)) return;
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
     if (canStart) props.onStart();
@@ -125,7 +101,6 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
           value={props.name}
           placeholder="Untitled plan"
           maxLength={NAME_MAX_CHARS}
-          readOnly={dictating}
           spellCheck
           onChange={(event) => props.onName(event.currentTarget.value)}
           onKeyDown={onFieldKey}
@@ -141,27 +116,19 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
         />
       </div>
       <div className="new-plan-actions">
-        {dictating ? (
-          <DictationStrip dictation={dictation} />
-        ) : (
-          <>
-            <button
-              type="button"
-              className="primary-button"
-              aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-              aria-busy={props.starting}
-              disabled={!canStart}
-              onClick={props.onStart}
-            >
-              <BusyLabel busy={props.starting} label="Creating">
-                Create plan
-              </BusyLabel>
-              <Shortcut chord={CREATE_CHORD} />
-            </button>
-            <DictateButton dictation={dictation} disabled={props.starting} />
-            <p className="new-plan-hint">Luke joins to talk it through once the plan exists.</p>
-          </>
-        )}
+        <button
+          type="button"
+          className="primary-button"
+          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+          aria-busy={props.starting}
+          disabled={!canStart}
+          onClick={props.onStart}
+        >
+          <BusyLabel busy={props.starting} label="Creating">
+            Create plan
+          </BusyLabel>
+          <Shortcut chord={CREATE_CHORD} />
+        </button>
       </div>
       {props.note !== undefined ? (
         <p className="new-plan-note" role="alert">
@@ -243,7 +210,6 @@ export function NewPlanForm({
       onName={setName}
       onRepository={setChosen}
       onStart={start}
-      onNote={setNote}
     />
   );
 }
