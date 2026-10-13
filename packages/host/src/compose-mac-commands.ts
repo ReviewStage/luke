@@ -1,6 +1,6 @@
 import type { HostedMacCommandClient } from "@sidecar/hosted";
 import type { MacCommand, MacCommandResult } from "@sidecar/hosted/mac-command-wire";
-import { Config, Duration, Effect, Option, type Scope } from "effect";
+import { Config, Duration, Effect, FiberSet, Option } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process";
@@ -21,7 +21,8 @@ import type { RunMode } from "./run-mode.js";
  * back, so a long command holds up neither the next read nor the others.
  * A Mac holding the read is what the service counts as listening, so the
  * setting switched off, a sign-out, or a run that sends nothing stops the
- * reads and the agents' calls are told no Mac listens. When two Macs of one
+ * reads and the agents' calls are told no Mac listens, and stops every
+ * command still running, its process group killed. When two Macs of one
  * account hold the read, whichever read takes a command runs it, and only
  * that one: the service claims it once. Quitting closes the scope, which
  * kills every command still running with its process group.
@@ -47,6 +48,15 @@ export interface MacCommandsDependencies {
 }
 
 export type MacCommandsComposer = Composer;
+
+/** What a command taken as the setting was switched off, or the account signed out, answers. */
+const SWITCHED_OFF: MacCommandResult = {
+  exitCode: null,
+  stdout: "",
+  stderr: "Not run: commands on this Mac were switched off as it arrived.",
+  truncated: false,
+  timedOut: false,
+};
 
 /** What a command answers where the environment names no home folder to run it from. */
 const NO_HOME: MacCommandResult = {
@@ -93,27 +103,42 @@ export function composeMacCommands(
         (result) => Effect.asVoid(asked(client.settle(command.id, result))),
       ).pipe(Effect.provideContext(services));
 
-    /** One turn of the loop: a held read and a fiber per command it took, or a rest while the gate is shut. */
-    const turn = (scope: Scope.Scope) =>
+    /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
+    const gateOpen = Effect.map(
+      enabled,
+      (on) => on && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
+    );
+
+    /**
+     * One turn of the loop: a held read and a fiber per command it took, or,
+     * with the gate shut, every command still running stopped (its process
+     * group killed as its scope closes) and a rest. Note that the gate is read
+     * again once the read answers, because it may have shut while the read was
+     * held, and a command taken then is answered as not run rather than run.
+     */
+    const turn = (running: FiberSet.FiberSet) =>
       Effect.gen(function* () {
-        const open = kernel.runMode.sendsNetwork && account.capabilitiesActive();
-        if (!open || !(yield* enabled)) return yield* Effect.sleep(IDLE);
+        if (!(yield* gateOpen)) {
+          yield* FiberSet.clear(running);
+          return yield* Effect.sleep(IDLE);
+        }
         const commands = yield* asked(client.waiting());
         // Note that an unanswered read rests before the next, so a service that is down is not asked in a tight loop.
         if (commands === undefined) return yield* Effect.sleep(IDLE);
-        for (const command of commands) yield* Effect.forkIn(run(command), scope);
+        if (!(yield* gateOpen)) {
+          yield* FiberSet.clear(running);
+          for (const command of commands) yield* asked(client.settle(command.id, SWITCHED_OFF));
+          return;
+        }
+        for (const command of commands) yield* FiberSet.run(running, run(command));
       });
 
     const lifetime = Effect.gen(function* () {
-      const scope = yield* Effect.scope;
+      const running = yield* FiberSet.make();
       // A turn that died is reported and the reads rest before the next, as a shut gate does.
-      const guarded = Effect.catchDefect(turn(scope), (defect) =>
+      const guarded = Effect.catchDefect(turn(running), () =>
         Effect.andThen(
-          Effect.sync(() =>
-            report(
-              `the Mac command read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-            ),
-          ),
+          Effect.sync(() => report("the Mac command read failed")),
           Effect.sleep(IDLE),
         ),
       );

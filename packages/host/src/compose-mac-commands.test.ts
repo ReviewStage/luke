@@ -20,8 +20,15 @@ const COMMAND: MacCommand = {
   timeoutSeconds: 60,
 };
 
-/** A service that hands one read its commands and holds every read after it, keeping what it is told. */
-function scriptedService(commands: readonly MacCommand[]) {
+/**
+ * A service that hands the first read its commands and answers every read
+ * after it with none once its hold of twenty seconds ends, keeping what it is
+ * told; `onFirstRead` runs as the first read answers.
+ */
+function scriptedService(
+  commands: readonly MacCommand[],
+  onFirstRead: Effect.Effect<void> = Effect.void,
+) {
   return Effect.gen(function* () {
     const reads = yield* Ref.make(0);
     const settled = yield* Deferred.make<{
@@ -32,7 +39,10 @@ function scriptedService(commands: readonly MacCommand[]) {
       waiting: () =>
         Effect.flatMap(
           Ref.getAndUpdate(reads, (count) => count + 1),
-          (count) => (count === 0 ? Effect.succeed(commands) : Effect.never),
+          (count) =>
+            count === 0
+              ? Effect.as(onFirstRead, commands)
+              : Effect.as(Effect.sleep("20 seconds"), []),
         ),
       settle: (id, result) => Effect.as(Deferred.succeed(settled, { id, result }), true),
     };
@@ -97,5 +107,60 @@ it.effect("with the setting off, or no account signed in, the service is never r
       assert.equal(yield* Ref.get(service.reads), 0, JSON.stringify(gate));
       assert.deepEqual(spawner.spawned, []);
     }
+  }),
+);
+
+it.effect(
+  "a command taken as the setting was switched off is answered as not run, and never runs",
+  () =>
+    Effect.gen(function* () {
+      const enabled = yield* Ref.make(true);
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = yield* scriptedService([COMMAND], Ref.set(enabled, false));
+      const composer = yield* composeMacCommands({
+        kernel: { runMode: { sendsNetwork: true } },
+        account: { capabilitiesActive: () => true },
+        enabled: Ref.get(enabled),
+        client: service.client,
+      }).pipe(Effect.provide(machine(spawner)));
+
+      const settled = yield* Effect.scoped(
+        Effect.andThen(composer.lifetime, Deferred.await(service.settled)),
+      );
+
+      assert.equal(settled.id, COMMAND.id);
+      assert.equal(settled.result.exitCode, null);
+      assert.match(settled.result.stderr, /^Not run: commands on this Mac were switched off/);
+      assert.deepEqual(spawner.spawned, []);
+    }),
+);
+
+it.effect("switching the setting off stops a command still running, its process group killed", () =>
+  Effect.gen(function* () {
+    const enabled = yield* Ref.make(true);
+    const spawner = scriptedSpawner(() => ({ stdout: "watching for changes\n" }));
+    const service = yield* scriptedService([{ ...COMMAND, command: "pnpm dev" }]);
+    const composer = yield* composeMacCommands({
+      kernel: { runMode: { sendsNetwork: true } },
+      account: { capabilitiesActive: () => true },
+      enabled: Ref.get(enabled),
+      client: service.client,
+    }).pipe(Effect.provide(machine(spawner)));
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* composer.lifetime;
+        yield* TestClock.adjust("1 second");
+        assert.equal(spawner.spawned[0]?.ended, "running");
+
+        yield* Ref.set(enabled, false);
+        yield* TestClock.adjust("20 seconds");
+
+        assert.deepEqual(spawner.spawned[0]?.ended, {
+          killSignal: "SIGTERM",
+          forceKillAfterMillis: 3_000,
+        });
+      }),
+    );
   }),
 );

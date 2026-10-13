@@ -24,7 +24,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/unstable/process"
 export const MAC_COMMAND_RUN = {
   /** How long the group has to end after SIGTERM before it is sent SIGKILL. */
   KILL_GRACE: Duration.seconds(3),
-  /** How long the streams may stay open once the command exited, held by a child it left running. */
+  /** How long the streams are read once the command exited or timed out, for what it wrote just before. */
   DRAIN_GRACE: Duration.seconds(1),
 } as const;
 
@@ -107,10 +107,8 @@ function runned(
         handle.exitCode,
         Duration.seconds(command.timeoutSeconds),
       );
-      // Note that the streams are waited on only briefly, because a child the command left running holds them open.
-      if (Option.isSome(exited)) {
-        yield* Effect.ignore(Effect.timeoutOption(Fiber.join(drains), MAC_COMMAND_RUN.DRAIN_GRACE));
-      }
+      // Note that the streams are waited on only briefly, because a child the command left running, or the command itself past its timeout, holds them open; what it wrote just before the end is read either way.
+      yield* Effect.ignore(Effect.timeoutOption(Fiber.join(drains), MAC_COMMAND_RUN.DRAIN_GRACE));
       const out = capturedText(yield* Ref.get(stdout));
       const err = capturedText(yield* Ref.get(stderr));
       return {
