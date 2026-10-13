@@ -41,6 +41,7 @@ artifacts/
 .repos/
 
 # Local build and agent state, never inputs
+.turbo/
 .vercel/
 .eve/
 .output/

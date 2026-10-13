@@ -34,7 +34,7 @@
     "package:dir": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --dir --publish never",
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
-    "test": "vitest run",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {

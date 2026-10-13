@@ -22,7 +22,7 @@
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
-    "test": "node scripts/test-shards.mjs",
+    "test": "node scripts/turbo.mjs run test:vitest test:vitest:1 test:vitest:2 test:vitest:3 --concurrency=1",
     "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
@@ -38,6 +38,7 @@
     "lint-staged": "17.3.0",
     "oxlint": "1.79.0",
     "tsx": "catalog:",
+    "turbo": "2.11.8",
     "typescript": "catalog:web",
     "vitest": "catalog:"
   }

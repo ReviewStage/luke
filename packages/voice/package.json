@@ -12,7 +12,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "vitest run",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
