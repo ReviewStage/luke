@@ -604,6 +604,30 @@
   font-size: 12px;
 }
 
+/* A row's words that say something failed, in the failure's red over the
+   muted ink every other detail wears. */
+.settings-copy .error-message {
+  color: var(--danger-text);
+}
+
+/* Settings › Updates: how far a download is, a thin bar under the row's
+   words, which say the same in numbers. */
+.update-progress {
+  display: block;
+  width: 160px;
+  height: 3px;
+  margin-top: var(--space-4);
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--raised-strong);
+}
+
+.update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--state-working);
+}
+
 /* Settings › Coding agents › API keys: a key being added or edited grows its
    row a field, Cancel, and Save, under the row's words and inside its rule.
    The hint is the key's own characters, so it reads in the code face. */

@@ -1,5 +1,6 @@
 import type { RunMode } from "@sidecar/host";
 import type { BuildCommit } from "#shared/messages/update";
+import type { UpdateMenu } from "../app-menu";
 
 /**
  * What the launch's own arguments said, parsed once in `main` and never read
@@ -45,4 +46,6 @@ export interface DesktopConfig {
    */
   readonly openExternal: (url: string) => Promise<void>;
   readonly quit: () => void;
+  /** Draws the menu bar again, holding the update item `update` describes, or none. */
+  readonly showMenuBar: (update?: UpdateMenu) => void;
 }

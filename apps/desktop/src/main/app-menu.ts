@@ -10,6 +10,7 @@
 
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import { channels } from "#shared/bridge";
+import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -21,6 +22,39 @@ import {
 } from "#shared/shortcuts";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
+
+/** The update item's one act in each state, as the Updates row words it. */
+export const UPDATE_MENU_ACT = {
+  /** Ask for the latest build, and open Settings, where the answer is drawn. */
+  CHECK: "check",
+  /** Nothing to choose: a check is already out. */
+  CHECKING: "checking",
+  /** Nothing to choose: a newer build is downloading itself. */
+  DOWNLOADING: "downloading",
+  /** Restart into the downloaded release. */
+  RESTART: "restart",
+  /** Open the latest release's page, for a build that cannot install one itself. */
+  GET: "get",
+} as const;
+
+export type UpdateMenuAct = (typeof UPDATE_MENU_ACT)[keyof typeof UPDATE_MENU_ACT];
+
+/** The item's name for each act, in the title case a Mac menu writes. */
+const UPDATE_MENU_LABELS = {
+  [UPDATE_MENU_ACT.CHECK]: "Check for Updates…",
+  [UPDATE_MENU_ACT.CHECKING]: "Checking for Updates…",
+  [UPDATE_MENU_ACT.DOWNLOADING]: "Downloading Update…",
+  [UPDATE_MENU_ACT.RESTART]: "Restart to Update",
+  [UPDATE_MENU_ACT.GET]: "Download Latest Version…",
+} as const satisfies Record<UpdateMenuAct, string>;
+
+/** What the app menu's update item does, and the presses it hands on. */
+export interface UpdateMenu {
+  act: UpdateMenuAct;
+  onCheck: () => void;
+  onInstall: () => void;
+  onOpenLatest: () => void;
+}
 
 /** The short words a title leaves lower case after its first. */
 const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "or", "the", "to"]);
@@ -107,8 +141,58 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 }
 
 /**
+ * The update item's act for where the updater stands, or none for a
+ * development build, which no release is newer than. A packaged build that
+ * cannot install in place offers the releases page, as its Updates row does.
+ */
+export function updateMenuAct(
+  update: UpdateSnapshot,
+  packaged: boolean,
+): UpdateMenuAct | undefined {
+  if (!update.installSupported) return packaged ? UPDATE_MENU_ACT.GET : undefined;
+  switch (update.status) {
+    case UPDATE_STATUS.CHECKING:
+      return UPDATE_MENU_ACT.CHECKING;
+    case UPDATE_STATUS.DOWNLOADING:
+      return UPDATE_MENU_ACT.DOWNLOADING;
+    case UPDATE_STATUS.READY:
+      return UPDATE_MENU_ACT.RESTART;
+    default:
+      return UPDATE_MENU_ACT.CHECK;
+  }
+}
+
+/**
+ * The app menu's update item, under About as a Mac app keeps it. Note that a
+ * check also opens Settings in the window it was chosen over, because the
+ * answer is drawn on the Updates row there, and a check that answers
+ * "nothing newer" would otherwise say nothing at all.
+ */
+function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
+  const label = UPDATE_MENU_LABELS[menu.act];
+  switch (menu.act) {
+    case UPDATE_MENU_ACT.CHECK: {
+      const openSettings = sendCommand(APP_COMMAND.SETTINGS);
+      return {
+        label,
+        click: (item, window, event) => {
+          openSettings(item, window, event);
+          menu.onCheck();
+        },
+      };
+    }
+    case UPDATE_MENU_ACT.RESTART:
+      return { label, click: () => menu.onInstall() };
+    case UPDATE_MENU_ACT.GET:
+      return { label, click: () => menu.onOpenLatest() };
+    default:
+      return { label, enabled: false };
+  }
+}
+
+/**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
- * own menu as macOS puts it; the plan's commands are File's, with New Tab,
+ * own menu as macOS puts it, under the update item while there is one; the plan's commands are File's, with New Tab,
  * Close Tab, and Close Window as Chrome's File keeps them; Edit is the
  * system's own, spelt out so its Find submenu can hold the window's find as
  * every Mac app's Edit does; the window's
@@ -118,12 +202,16 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's.
  */
-export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
+export function appMenuTemplate(
+  appName: string,
+  update?: UpdateMenu,
+): MenuItemConstructorOptions[] {
   return [
     {
       label: appName,
       submenu: [
         { role: "about" },
+        ...(update ? [updateItem(update)] : []),
         SEPARATOR,
         // A Mac app's own menu names Settings with an ellipsis, as a window
         // it opens.

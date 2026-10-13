@@ -11,12 +11,14 @@ export const UPDATE_ROW_ACTION = {
   CHECK: "check",
   /** Nothing to press: a check is already out. */
   CHECKING: "checking",
-  /** Nothing to press: a newer build is downloading itself. */
+  /** Nothing to press: a newer build is downloading itself, and the row draws how far along. */
   DOWNLOADING: "downloading",
   /** Restart into the downloaded release. */
   RESTART: "restart",
   /** Open the latest release's page in the browser. */
   GET: "get",
+  /** Ask the release manifest again, after a check that answered nothing. */
+  RETRY: "retry",
   /** Nothing to press: a development build is newer than any release. */
   NONE: "none",
 } as const;
@@ -33,6 +35,8 @@ export interface UpdateRow {
   current: boolean;
   /** Whether the detail says a check or an install failed, which Settings announces as an alert. */
   failed: boolean;
+  /** How far a download is, from 0 to 100, while one runs. */
+  progress?: number;
 }
 
 /**
@@ -49,15 +53,18 @@ function updateAvailable(update: UpdateSnapshot): boolean {
 }
 
 /**
- * Whether the sidebar carries the release itself, above the account row:
- * whenever a newer one is known to a build that installs in place, so the
- * news is said there alone rather than by a dot on Settings' gear. Its row
- * offers the release's own next step: wait while it downloads, restart once
- * it is downloaded, or get it from the releases page once installing it
- * failed. A build that updates by hand has no news to carry.
+ * Whether the sidebar carries the release, between the account and the gear:
+ * only while it has something to press — the restart once the release is
+ * downloaded, or the releases page once installing it failed. A download
+ * runs silently, as a browser's does, and a build that updates by hand has
+ * no news to carry.
  */
 export function updateInSidebar(update: UpdateSnapshot): boolean {
-  return update.installSupported && updateAvailable(update);
+  return (
+    update.installSupported &&
+    updateAvailable(update) &&
+    update.status !== UPDATE_STATUS.DOWNLOADING
+  );
 }
 
 /**
@@ -97,8 +104,33 @@ function developmentDetail(commit: BuildCommit | undefined): string {
 }
 
 function downloadingDetail(update: UpdateSnapshot & { status: "downloading" }): string {
-  const percent = update.progress ? ` (${Math.round(update.progress.percent)}%)` : "";
-  return `Downloading version ${update.latestVersion}…${percent}`;
+  const percent = update.progress ? ` ${Math.round(update.progress.percent)}%` : "";
+  return `Downloading ${update.latestVersion}…${percent}`;
+}
+
+/** Where an idle updater stands: positively current, unable to reach the feed when asked, or not yet asked. */
+function idleRow(
+  update: UpdateSnapshot & { status: typeof UPDATE_STATUS.IDLE },
+): Omit<UpdateRow, "title"> {
+  if (update.upToDate) {
+    return { detail: "Up to date", action: UPDATE_ROW_ACTION.CHECK, current: true, failed: false };
+  }
+  if (update.unreachable) {
+    return {
+      detail: "Couldn't reach GitHub",
+      action: UPDATE_ROW_ACTION.RETRY,
+      current: false,
+      failed: true,
+    };
+  }
+  // Not an answer: nothing has been learned yet, so the row only offers to
+  // ask rather than posing an unknown as up to date.
+  return {
+    detail: "Not checked yet",
+    action: UPDATE_ROW_ACTION.CHECK,
+    current: false,
+    failed: false,
+  };
 }
 
 /** A packaged build's row, from where its updater stands. */
@@ -107,7 +139,7 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
   // network or off macOS; the browser is still its way to the latest.
   if (!update.installSupported) {
     return {
-      detail: "This build can't update itself. Download the latest release instead.",
+      detail: "This copy can't update itself",
       action: UPDATE_ROW_ACTION.GET,
       current: false,
       failed: false,
@@ -116,7 +148,7 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
   switch (update.status) {
     case UPDATE_STATUS.CHECKING:
       return {
-        detail: "Checking the latest release…",
+        detail: "Checking for updates…",
         action: UPDATE_ROW_ACTION.CHECKING,
         current: false,
         failed: false,
@@ -127,55 +159,49 @@ function releaseRow(update: UpdateSnapshot): Omit<UpdateRow, "title"> {
         action: UPDATE_ROW_ACTION.DOWNLOADING,
         current: false,
         failed: false,
+        progress: update.progress?.percent ?? 0,
       };
     case UPDATE_STATUS.READY:
       return {
-        detail: `Version ${update.latestVersion} is downloaded.`,
+        detail: `${update.latestVersion} is ready to install`,
         action: UPDATE_ROW_ACTION.RESTART,
         current: false,
         failed: false,
       };
     case UPDATE_STATUS.UPDATED:
       return {
-        detail: `Updated from version ${update.previousVersion}.`,
+        detail: `Updated from ${update.previousVersion}`,
         action: UPDATE_ROW_ACTION.CHECK,
         current: true,
         failed: false,
       };
     case UPDATE_STATUS.ERROR:
-      return {
-        detail: update.latestVersion
-          ? `The update could not be installed. Get version ${update.latestVersion} from the releases page instead.`
-          : "The update check failed. The releases page has the latest build.",
-        action: UPDATE_ROW_ACTION.GET,
-        current: false,
-        failed: true,
-      };
-    default:
-      return update.status === UPDATE_STATUS.IDLE && update.upToDate
+      // Note that an install that failed is fetched by hand, while a check
+      // that failed is most likely answered by asking again.
+      return update.latestVersion
         ? {
-            detail: "This is the latest release.",
-            action: UPDATE_ROW_ACTION.CHECK,
-            current: true,
-            failed: false,
+            detail: `Couldn't install ${update.latestVersion}`,
+            action: UPDATE_ROW_ACTION.GET,
+            current: false,
+            failed: true,
           }
         : {
-            // Not an answer: nothing has been learned yet, so the row only
-            // offers to ask rather than posing an unknown as up to date.
-            detail: "The latest release has not been checked for yet.",
-            action: UPDATE_ROW_ACTION.CHECK,
+            detail: "Couldn't check for updates",
+            action: UPDATE_ROW_ACTION.RETRY,
             current: false,
-            failed: false,
+            failed: true,
           };
+    default:
+      return idleRow(update);
   }
 }
 
 /**
  * Reads the row from the last learned answer. The row only ever says where
  * the build stands and offers the next honest step: check again, wait for
- * the check or download already out, restart into a build already fetched —
- * or, where installing in place is impossible or has failed, go get it in
- * the browser instead. A build that cannot install itself never offers a
+ * the check or download already out, restart into a build already fetched,
+ * try a check that failed again — or, where installing in place is
+ * impossible or has failed, go get it in the browser instead. A build that cannot install itself never offers a
  * check it could do nothing with. A development build — run from source,
  * so newer than any release — names its commit and offers nothing, since a
  * release would only be older.

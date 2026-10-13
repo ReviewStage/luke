@@ -3,6 +3,7 @@ import { jsonStateFile } from "@sidecar/host";
 import { text } from "@sidecar/wire";
 import { Effect, type Scope } from "effect";
 import type { UpdateSnapshot } from "#shared/messages/update";
+import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
 import type { AppStateStore } from "../app-state";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";
@@ -45,7 +46,8 @@ interface UpdateServiceHostDependencies {
 
 /**
  * The updater's lifecycle and the four actions the Updates row offers, built
- * on the ambient scope: `UpdateService`'s timed check and first check fork
+ * on the ambient scope, with the menu bar's update item drawn from every
+ * state it moves to: `UpdateService`'s timed check and first check fork
  * into it directly, so they are interrupted by the
  * launch's own scope closing at quit rather than a scope this function made
  * and had to give back itself. `UpdateService` holds the feed and the
@@ -71,11 +73,31 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       report: config.report,
     });
 
+    // The menu bar is drawn again only when its item's act changes, not on
+    // every download tick.
+    let shownAct: UpdateMenuAct | undefined | null = null;
+    const showMenu = (update: UpdateSnapshot) => {
+      const act = updateMenuAct(update, config.packaged);
+      if (act === shownAct) return;
+      shownAct = act;
+      config.showMenuBar(
+        act === undefined
+          ? undefined
+          : {
+              act,
+              onCheck: () => void host.check(),
+              onInstall: () => host.install(),
+              onOpenLatest: () => host.openLatestRelease(),
+            },
+      );
+    };
+
     const engine = dependencies.engine;
     const service = yield* UpdateService.make({
       currentVersion: config.appVersion,
       onChange: (update) => {
         dependencies.state.update({ update });
+        showMenu(update);
       },
       engine:
         engine === undefined
@@ -98,7 +120,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
     // fixed feed for a build that is leaving.
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
 
-    return {
+    const host: UpdateServiceHost = {
       start: () => {
         if (config.runMode.sendsNetwork) service.start();
       },
@@ -106,7 +128,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
           update_action: PRODUCT_UPDATE_ACTION.CHECK,
         });
-        return service.check();
+        return service.check({ asked: true });
       },
       install: () => {
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
@@ -127,5 +149,8 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
         void config.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
       },
     };
+    // A build whose updater never moves still shows where it stands.
+    showMenu(service.snapshot());
+    return host;
   },
 );

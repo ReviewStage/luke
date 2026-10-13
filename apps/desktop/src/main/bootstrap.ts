@@ -2,6 +2,7 @@ import path from "node:path";
 import { type RunMode, runModeFor } from "@sidecar/host";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import type { UpdateMenu } from "./app-menu";
 import { buildCommit } from "./build-commit";
 import type { DesktopConfig } from "./services/desktop-config";
 
@@ -28,6 +29,7 @@ export interface BootstrapDependencies {
   report: (message: string) => void;
   openExternal: (url: string) => Promise<void>;
   quit: () => void;
+  showMenuBar: (update?: UpdateMenu) => void;
   /**
    * The crash reporter, begun here rather than inside a service: Electron
    * spawns its GPU process during bootstrap, and the reporter has to stand
@@ -99,5 +101,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     report: dependencies.report,
     openExternal: dependencies.openExternal,
     quit: dependencies.quit,
+    showMenuBar: dependencies.showMenuBar,
   };
 }
