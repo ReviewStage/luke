@@ -176,13 +176,14 @@ export function heardCalls(input: {
   return standing === undefined ? [...kept, live] : kept;
 }
 
-/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id. */
+/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id, which names its row as a line on record does. */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   const messages = heard.transcript.lines.flatMap((line) => {
     const message = settledMessage({
       id: line.rowId,
       role: line.speaker,
       parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
+      metadata: { rowId: line.rowId },
     });
     return message === undefined ? [] : [message];
   });
