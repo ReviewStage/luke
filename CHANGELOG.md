@@ -68,7 +68,8 @@ long it ran, and its card says why it ended and the model it ran on.
 [#2404](https://github.com/ReviewStage/luke/pull/2404),
 [#2242](https://github.com/ReviewStage/luke/pull/2242),
 [#2246](https://github.com/ReviewStage/luke/pull/2246),
-[#2410](https://github.com/ReviewStage/luke/pull/2410))
+[#2410](https://github.com/ReviewStage/luke/pull/2410),
+[#2417](https://github.com/ReviewStage/luke/pull/2417))
 
 ![The Call tab mid-call, with Luke's reading and his subagent under the question that asked for them.](apps/web/public/changelog/0.12.0/the-call-tab.png)
 
@@ -372,6 +373,8 @@ the open plan's repository, with a filter for each kind.
   ([#2408](https://github.com/ReviewStage/luke/pull/2408))
 - A repository is drawn with its owner's picture
   ([#2026](https://github.com/ReviewStage/luke/pull/2026))
+- Actions in Luke's own menus are named without a trailing ellipsis
+  ([#2416](https://github.com/ReviewStage/luke/pull/2416))
 
 ### Fixes
 
