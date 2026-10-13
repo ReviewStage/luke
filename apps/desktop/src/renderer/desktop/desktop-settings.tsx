@@ -9,6 +9,7 @@ import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/cal
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { SETTINGS_PAGE } from "../settings/pages";
+import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
 import {
@@ -46,7 +47,9 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * the Voice row's attention mark, and its back buttons are this list's job
  * here, and a page's reset rides the toolbar's right edge beside the page's
  * title. The plan template is the one page drawn apart from the panel: it is
- * a plan's page, document and all (`../settings/plan-template-page.tsx`).
+ * a plan's page, document and all (`../settings/plan-template-page.tsx`), and
+ * its version history takes the whole window as a plan's does, Back and
+ * Escape leaving it for the page.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -78,7 +81,9 @@ export function DesktopSettings({
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
-  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  const [templateHistory, setTemplateHistory] = useState(false);
+  // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
   const voiceNote = voicePageAttention(settings.microphone);
@@ -118,6 +123,17 @@ export function DesktopSettings({
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
 
+  // The template's version history takes the whole window as a plan's does, and leaves for the template.
+  if (templateHistory && settings.view === SETTINGS_VIEW.PLAN_TEMPLATE) {
+    return (
+      <TemplateVersionHistory
+        sidebar={sidebar}
+        history={history}
+        account={settings.account}
+        onExit={() => setTemplateHistory(false)}
+      />
+    );
+  }
   return (
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages">
@@ -175,7 +191,10 @@ export function DesktopSettings({
         <SidebarResizeEdge edge={edge} />
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
-        <PlanTemplatePage signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN} />
+        <PlanTemplatePage
+          signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN}
+          onShowHistory={() => setTemplateHistory(true)}
+        />
       ) : (
         <section className="settings-page" aria-label={shown.title}>
           <header className="desktop-toolbar">

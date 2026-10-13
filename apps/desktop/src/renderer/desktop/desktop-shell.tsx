@@ -21,7 +21,7 @@ import { useColumnDock } from "./column-dock";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { DesktopVersionHistory } from "./desktop-version-history";
+import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
@@ -235,7 +235,7 @@ export function DesktopShell({
         <DesktopVersionHistory
           sidebar={sidebar}
           history={history}
-          plans={plans}
+          subject={planVersionSubject(plans)}
           account={account}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
           onRestored={history.onLeaveVersionHistory}

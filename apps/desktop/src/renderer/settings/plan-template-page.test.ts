@@ -6,7 +6,9 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
+  type PlanTemplateRevisionLine,
 } from "@sidecar/hosted/plan-document-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -42,6 +44,10 @@ let refuseWrites = false;
 let holdWrites = false;
 /** The held writes' answers, each landing when called. */
 let heldWrites: (() => void)[] = [];
+/** How many times the page asked for the template's version history. */
+let historyAsked = 0;
+/** The template's newest revision as the service lists it; none for a template never edited. */
+let newest: PlanTemplateRevisionLine | undefined;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -59,6 +65,8 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.PLAN_TEMPLATE_READ:
       return Promise.resolve(done(refuseRead ? failed : answered()));
+    case ACT_KIND.PLAN_TEMPLATE_REVISIONS:
+      return Promise.resolve(done({ revisions: newest === undefined ? [] : [newest] }));
     case ACT_KIND.PLAN_TEMPLATE_WRITE: {
       if (refuseWrites) return Promise.resolve(done(failed));
       const { template } = request.payload;
@@ -117,6 +125,8 @@ beforeEach(() => {
   refuseWrites = false;
   holdWrites = false;
   heldWrites = [];
+  historyAsked = 0;
+  newest = undefined;
   built.length = 0;
   installScrollIntoView();
   // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
@@ -150,7 +160,12 @@ async function mount(signedIn = true, registry?: AtomRegistry) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(PlanTemplatePage, { signedIn });
+  const page = createElement(PlanTemplatePage, {
+    signedIn,
+    onShowHistory: () => {
+      historyAsked += 1;
+    },
+  });
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return { container, root };
@@ -252,8 +267,8 @@ test("the page draws the template as a plan's document under the page's own titl
   const { container } = await mount();
 
   assert.deepEqual(
-    sent.map((request) => request.kind),
-    [ACT_KIND.PLAN_TEMPLATE_READ],
+    sent.map((request) => request.kind).sort(),
+    [ACT_KIND.PLAN_TEMPLATE_READ, ACT_KIND.PLAN_TEMPLATE_REVISIONS].sort(),
   );
   assert.deepEqual(sections(container), DEFAULT_HEADINGS);
   const title = container.querySelector<HTMLElement>(".plan-body .plan-title");
@@ -486,4 +501,40 @@ test("words queued behind a save as the reset is asked never land after it", asy
   assert.deepEqual(writes(), [`${CUSTOM}\n## Risks\n`, null]);
   assert.equal(stored, null);
   assert.deepEqual(sections(container), DEFAULT_HEADINGS);
+});
+
+test("the toolbar's Version history, and the line over the document naming the newest revision, each open the template's version history", async () => {
+  stored = CUSTOM;
+  newest = {
+    seq: 3,
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 0, duringCall: false },
+    startedAt: 0,
+    changes: 2,
+  };
+  const { container } = await mount();
+
+  const toolbar = container.querySelector<HTMLElement>(".desktop-toolbar");
+  assert.ok(toolbar);
+  assert.equal(
+    [...toolbar.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")).join(),
+    "Version history",
+    "the history is the toolbar's one action",
+  );
+  act(() => button(toolbar, "")?.click());
+  const edited = container.querySelector<HTMLButtonElement>(".plan-edit-link");
+  assert.match(edited?.textContent ?? "", /^Edited by you · \d+d ago$/u);
+  act(() => edited?.click());
+
+  assert.equal(historyAsked, 2);
+});
+
+test("a template never edited has no line over it, and while it is read, no history to open", async () => {
+  refuseRead = true;
+  const failedRead = await mount();
+  assert.equal(failedRead.container.querySelector('[aria-label="Version history"]'), null);
+
+  refuseRead = false;
+  const { container } = await mount();
+  assert.equal(container.querySelector(".plan-edit-note"), null);
+  assert.ok(container.querySelector('[aria-label="Version history"]'));
 });

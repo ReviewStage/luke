@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
@@ -17,6 +18,7 @@ import {
   opensSections,
   REVISION_AUTHOR,
   type RevisionAuthor,
+  type RevisionSource,
   revisionAuthorOf,
   revisionSource,
   revisionSummary,
@@ -30,6 +32,7 @@ import { DOCUMENT_REGION } from "../planning/planning-model";
 import {
   HISTORY_READ,
   type OpenedSections,
+  type PlanHistoryControl,
   type ViewedVersion,
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -80,10 +83,38 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * it restored, where the window's toast offers its Undo. Every row and the version beside them name what
  * the plan held, so both are left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
+ *
+ * What the history is of is handed in as its subject: the open plan's
+ * (`planVersionSubject`), or the account's plan template's, whose versions
+ * are the developer's alone (`../settings/plan-template-history.tsx`).
  */
 
-/** What the page says while the plan has no revision yet. */
-const NO_HISTORY_LINE = "Versions appear here as the plan is written.";
+/**
+ * What a version history is of, as the view draws it: the history as read
+ * and its presses, the words it names what the versions are of in, the title
+ * every version is drawn under, and what applies to its versions.
+ */
+export interface VersionSubject {
+  readonly versions: PlanHistoryControl;
+  /** What the versions are of, in the view's own words: "plan", or "template". */
+  readonly noun: string;
+  readonly title: string | undefined;
+  /** Whether a version may be restored: not an archived plan's. */
+  readonly restorable: boolean;
+  /** Whether the view is on screen, which the restore's question stands on. */
+  readonly shown: boolean;
+  /** The coding agents whose harness a revision of theirs wears. */
+  readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
+  /** What a revision did, in a few words. */
+  readonly summary: (line: PlanRevisionLine) => string;
+  /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
+  readonly onShowSource: ((source: RevisionSource) => void) | undefined;
+}
+
+/** What the page says while the subject has no revision yet. */
+function noHistoryLine(noun: string): string {
+  return `Versions appear here as the ${noun} is written.`;
+}
 
 /** What the menu item that opens a revision's sections says. */
 const SECTIONS_LABEL = "Show changes";
@@ -172,6 +203,7 @@ function RevisionRow({
   onOpenSections,
   source,
   onRestore,
+  summary,
 }: {
   line: PlanRevisionLine;
   author: RevisionAuthor;
@@ -185,6 +217,8 @@ function RevisionRow({
   source: SourceDoor | undefined;
   /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived plan's. */
   onRestore: (() => void) | undefined;
+  /** What the revision did, in a few words. */
+  summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
   const menu = useActionMenu(true);
@@ -231,7 +265,7 @@ function RevisionRow({
               {sinceText(lastEdit.at, now)}
             </time>
           </span>
-          <span className="version-row-summary">{revisionSummary(line)}</span>
+          <span className="version-row-summary">{summary}</span>
         </span>
       </button>
       {offered ? (
@@ -504,29 +538,29 @@ function openedSections(
  * restored.
  */
 function VersionPage({
-  plans,
+  subject,
   restore,
   section,
 }: {
-  plans: PlansControl;
+  subject: VersionSubject;
   restore: DialogConfirm;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
 }): React.JSX.Element {
-  const { history, region } = plans;
-  if (history.viewing !== undefined) {
-    const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const { versions } = subject;
+  if (versions.viewing !== undefined) {
     return (
       <VersionView
-        viewing={history.viewing}
+        viewing={versions.viewing}
         restore={restore}
-        restorable={plan?.archivedAt === undefined}
-        title={plan?.name}
+        restorable={subject.restorable}
+        title={subject.title}
+        noun={subject.noun}
         section={section}
       />
     );
   }
-  const { list } = history;
+  const { list } = versions;
   // A list read that holds versions is still finding the one the view opened on.
   const finding = list.kind === HISTORY_READ.READY && list.revisions.length > 0;
   if (list.kind === HISTORY_READ.READING || finding) {
@@ -552,40 +586,57 @@ function VersionPage({
         {list.kind === HISTORY_READ.FAILED ? (
           <>
             <p role="alert">The history could not be read.</p>
-            <RetryButton onRetry={history.onRetry} />
+            <RetryButton onRetry={versions.onRetry} />
           </>
         ) : (
-          <p>{NO_HISTORY_LINE}</p>
+          <p>{noHistoryLine(subject.noun)}</p>
         )}
       </div>
     </>
   );
 }
 
+/** The open plan's history as the view's subject: its name, whether it is archived, its agents, and the places in the window its revisions were written. */
+export function planVersionSubject(plans: PlansControl): VersionSubject {
+  const { region, boundFor } = plans;
+  const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  return {
+    versions: plans.history,
+    noun: "plan",
+    title: plan?.name,
+    restorable: plan?.archivedAt === undefined,
+    shown: plans.shown,
+    agents: plans.agents.agents ?? [],
+    summary: revisionSummary,
+    onShowSource:
+      boundFor === undefined ? undefined : (source) => plans.onShowSource(boundFor, source),
+  };
+}
+
 /**
- * The open plan's version history over the whole window: the versions where
- * the sidebar stands, with the way back at their head, and the version
- * chosen beside them. `onExit` leaves for wherever it was opened from, and
- * `onRestored` for the plan a restore landed on.
+ * A version history over the whole window: the versions where the sidebar
+ * stands, with the way back at their head, and the version chosen beside
+ * them. `onExit` leaves for wherever it was opened from, and `onRestored`
+ * for what a restore landed on.
  */
 export function DesktopVersionHistory({
   sidebar,
   history,
-  plans,
+  subject,
   account,
   onExit,
   onRestored,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
-  plans: PlansControl;
+  subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
   onExit: () => void;
   onRestored: () => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const versions = plans.history;
+  const { versions, agents, restorable } = subject;
   const { list } = versions;
   const revisions = list.kind === HISTORY_READ.READY ? list.revisions : [];
   const rows = useRef(new Map<number, HTMLButtonElement>()).current;
@@ -594,18 +645,14 @@ export function DesktopVersionHistory({
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
   const reader = readerOf(account);
-  const agents = plans.agents.agents ?? [];
-  const { region } = plans;
-  const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
-  const restorable = plan?.archivedAt === undefined;
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
-  const restore = useVersionRestore(versions, plans.shown, restorable, onRestored);
+  const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: RevisionAuthor): SourceDoor | undefined => {
     const source = revisionSource(line);
-    const planId = plans.boundFor;
-    if (source === undefined || planId === undefined) return undefined;
-    return { label: sourceLabel(source, author), onOpen: () => plans.onShowSource(planId, source) };
+    const { onShowSource } = subject;
+    if (source === undefined || onShowSource === undefined) return undefined;
+    return { label: sourceLabel(source, author), onOpen: () => onShowSource(source) };
   };
   const openedLine = revisions.find((line) => line.seq === opened?.seq);
   const chosenSection =
@@ -695,6 +742,7 @@ export function DesktopVersionHistory({
                         opensSections(line) ? () => openSections(line.seq) : undefined
                       }
                       onRestore={restoreOf(line)}
+                      summary={subject.summary(line)}
                     />
                   );
                 })}
@@ -741,7 +789,7 @@ export function DesktopVersionHistory({
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
         <VersionPage
-          plans={plans}
+          subject={subject}
           restore={restore}
           section={opened === undefined ? undefined : unit}
         />

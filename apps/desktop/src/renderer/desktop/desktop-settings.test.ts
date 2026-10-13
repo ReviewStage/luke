@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
@@ -15,11 +16,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { useAppKeymap } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
 import { MICROPHONE_UNGRANTED_NOTE } from "../microphone-access";
 import type { MicrophoneControl } from "../settings/controls";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
@@ -514,4 +516,82 @@ test("the plan template stands as a plan's page beside the list, under its own t
     container.querySelector(".settings-page")?.textContent ?? "",
     /Sign in to edit the template/u,
   );
+});
+
+test("the template's version history takes the whole window from the page's toolbar, and Escape and Back leave it for the template rather than leaving Settings", async () => {
+  let exits = 0;
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: ignore,
+      act: (request: Act) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "## Why\n", custom: true } }
+            : request.kind === ACT_KIND.PLAN_TEMPLATE_REVISIONS
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: { revisions: [] } }
+              : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+        ),
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted.push(root);
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+    });
+  act(() =>
+    root.render(
+      createElement(DesktopSettings, {
+        sidebar: {
+          collapsed: false,
+          width: SIDEBAR_WIDTH.DEFAULT,
+          onToggle: ignore,
+          onResize: ignore,
+          staged: false,
+        },
+        history: navigationHistory(),
+        call: undefined,
+        settings: settingsPanelProps({
+          view: SETTINGS_VIEW.PLAN_TEMPLATE,
+          onViewChange: ignore,
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: "dean@luke.test",
+            name: "Dean",
+            provider: ACCOUNT_PROVIDER.GITHUB,
+          },
+        }),
+        onExit: () => {
+          exits += 1;
+        },
+      }),
+    ),
+  );
+  await settle();
+  const open = container.querySelector<HTMLButtonElement>(
+    '.desktop-toolbar button[aria-label="Version history"]',
+  );
+  assert.ok(open, "the template's toolbar offers its version history");
+
+  act(() => open.click());
+  await settle();
+  assert.equal(container.querySelector(".settings-pages"), null, "the page list gives way");
+  assert.ok(container.querySelector(".desktop-version-history"));
+  assert.equal(runAppCommand(APP_COMMAND.EXIT_SETTINGS), false);
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+  });
+  await settle();
+  assert.ok(container.querySelector(".settings-pages"), "Escape leaves for the template");
+  assert.equal(shownPage(container), "Plan template");
+
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="Version history"]')?.click());
+  await settle();
+  act(() => container.querySelector<HTMLButtonElement>(".version-log-back")?.click());
+  await settle();
+  assert.equal(shownPage(container), "Plan template", "Back leaves for the template too");
+  assert.equal(exits, 0, "Settings was never left");
 });

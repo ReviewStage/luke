@@ -4,11 +4,11 @@ import {
   type PlanTemplateAnswer,
 } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
-import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { ResetIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { InfoIcon } from "lucide-react";
+import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
@@ -18,13 +18,16 @@ import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_TONE, useToast } from "../toast";
+import { Tooltip } from "../tooltip";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
  *
  * The template is a plan's text before it is a plan, so the page is a plan's
- * page beside Settings' page list: the toolbar names it, and the document is
+ * page beside Settings' page list: the toolbar names it and opens its
+ * version history, as the "Edited by" line over the document does
+ * (`plan-template-history.tsx`), and the document is
  * the plan's own (`../planning/plan-body.tsx`), at the plan's width and in
  * its type, read as sections until a click or Return opens the same editor
  * on the same words with the same keyboard. Its title is the page's name,
@@ -32,8 +35,9 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * edited. A quiet note over the document, placed as an archived plan's
  * banner is, says what the template is for, and offers Reset to default
  * while the account holds a template of its own; the reset asks first,
- * since the words it replaces are kept nowhere, and waits for a save
- * already out so the default lands last.
+ * since it replaces every word of the account's, kept since only in the
+ * template's history, and waits for a save already out so the default
+ * lands last.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
@@ -48,9 +52,11 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * neither the words nor the rhythm of the typing.
  */
 
+/** The page's name, which the template is drawn under as a plan's title, and its versions too. */
+export const TEMPLATE_TITLE = "Plan template";
+
 /** What the page says. */
 const PAGE_LINE = {
-  TITLE: "Plan template",
   NOTE: "New plans start as a copy of this template.",
   NOTE_DETAIL: "Editing it doesn't change existing plans.",
   SIGNED_OUT: "Sign in to edit the template your new plans start from.",
@@ -60,7 +66,10 @@ const PAGE_LINE = {
 } as const;
 
 /** The id the template is drawn under as a plan's document, which names no plan of the account's. */
-const TEMPLATE_DOCUMENT_ID = "plan-template";
+export const TEMPLATE_DOCUMENT_ID = "plan-template";
+
+/** What the toolbar's button that opens the template's version history says, as a plan's menu item says it. */
+const HISTORY_LABEL = "Version history";
 
 /** Where the page stands with the service's template. */
 const TEMPLATE_READ = {
@@ -73,7 +82,7 @@ type TemplateRead = (typeof TEMPLATE_READ)[keyof typeof TEMPLATE_READ];
 
 const RESET_QUESTION: DialogQuestion = {
   title: "Reset plan template?",
-  body: "Your template is replaced by the default, and your edits to it are lost. Existing plans don't change. This can't be undone.",
+  body: "Your template is replaced by the default. Existing plans don't change, and your template stays in its version history, so you can restore it.",
   verb: "Reset",
   running: "Resetting",
 };
@@ -90,22 +99,26 @@ function written(
 
 /**
  * The template as the plan's document draws it: the page's name as its
- * title, the template as its text, and, once the developer has changed it
- * here, their edit as its last, so the document takes their own words in at
- * once as it takes a plan's, rather than typing them in again.
+ * title, the template as its text, and its newest revision as its last
+ * edit, which the "Edited by" line over it says, and which the developer's
+ * own edit here moves on, so the document takes their words in at once as
+ * it takes a plan's, rather than typing them in again.
  */
-function templateDocument(text: string, editedAt: number | undefined): Plan {
+function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Plan {
   return {
     id: TEMPLATE_DOCUMENT_ID,
-    name: PAGE_LINE.TITLE,
+    name: TEMPLATE_TITLE,
     createdAt: 0,
     updatedAt: 0,
     repository: null,
     document: { body: text, assumptions: [] },
-    ...(editedAt === undefined
-      ? undefined
-      : { lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: editedAt, duringCall: false } }),
+    ...(lastEdit === undefined ? undefined : { lastEdit }),
   };
+}
+
+/** The developer's edit of the template here, now, as the document's last. */
+function editedNow(): PlanLastEdit {
+  return { actor: PLAN_ACTOR.DEVELOPER, at: Date.now(), duringCall: false };
 }
 
 /** The template as the page holds it, and its doors. */
@@ -114,8 +127,8 @@ interface TemplateControl {
   retry: () => void;
   text: string;
   custom: boolean;
-  /** When the developer last changed it on this page; none until they do. */
-  editedAt: number | undefined;
+  /** Its newest revision, or the developer's edit here since; none for a template never edited. */
+  lastEdit: PlanLastEdit | undefined;
   edit: PlanEditDoor;
   reset: () => Promise<ActionResult>;
 }
@@ -139,8 +152,8 @@ interface HeldWrites {
  * The service's template, read as the page opens and again on Retry, and
  * written through the document's edit door. Note that an edit written from
  * a template the service no longer keeps is dropped, because it was queued
- * behind a reset whose question said the edits go, and landing after the
- * reset it would undo it. Words whose save failed are sent once more as the
+ * behind a reset the developer confirmed, and landing after the reset it
+ * would undo it. Words whose save failed are sent once more as the
  * page goes, because the editor holds a failed save back from its own
  * leaving; and a save that fails once the page has gone is said in a toast
  * whose Retry sends the same words, because the page and its Retry are gone
@@ -151,7 +164,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   const [attempt, setAttempt] = useState(0);
   const [text, setText] = useState("");
   const [custom, setCustom] = useState(false);
-  const [editedAt, setEditedAt] = useState<number | undefined>(undefined);
+  const [lastEdit, setLastEdit] = useState<PlanLastEdit | undefined>(undefined);
   const held = useRef<HeldWrites>({
     kept: "",
     flight: undefined,
@@ -161,25 +174,30 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   });
   const toast = useToast();
 
-  const take = useCallback((answer: PlanTemplateAnswer, edited: number | undefined) => {
+  const take = useCallback((answer: PlanTemplateAnswer, edited: PlanLastEdit | undefined) => {
     held.current.kept = answer.template;
     setText(answer.template);
     setCustom(answer.custom);
-    setEditedAt(edited);
+    setLastEdit(edited);
   }, []);
 
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
     setRead(TEMPLATE_READ.READING);
-    act(ACT_KIND.PLAN_TEMPLATE_READ)
-      .catch((): PlanTemplateAnswerView | undefined => undefined)
-      .then((answer) => {
-        if (!live) return;
-        const failed = answer === undefined || "failure" in answer;
-        if (!failed) take(answer, undefined);
-        setRead(failed ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ);
-      });
+    // The newest revision is read beside the template, so its "Edited by" line stands as the document does rather than a beat after.
+    const newest = act(ACT_KIND.PLAN_TEMPLATE_REVISIONS, {})
+      .then((page) => ("failure" in page ? undefined : page.revisions[0]?.lastEdit))
+      .catch((): PlanLastEdit | undefined => undefined);
+    const template = act(ACT_KIND.PLAN_TEMPLATE_READ).catch(
+      (): PlanTemplateAnswerView | undefined => undefined,
+    );
+    Promise.all([template, newest]).then(([answer, edited]) => {
+      if (!live) return;
+      const failed = answer === undefined || "failure" in answer;
+      if (!failed) take(answer, edited);
+      setRead(failed ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ);
+    });
     return () => {
       live = false;
     };
@@ -193,7 +211,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     }
     const sent = written(act, words).then((answer): PlanningEditAnswer => {
       if (answer !== undefined) {
-        if (writes.standing) take(answer, Date.now());
+        if (writes.standing) take(answer, editedNow());
         return { saved: true };
       }
       if (writes.standing) {
@@ -230,7 +248,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     retry: () => setAttempt((count) => count + 1),
     text,
     custom,
-    editedAt,
+    lastEdit,
     edit: (request) => {
       const writes = held.current;
       if (writes.resetting || request.document.base !== writes.kept) {
@@ -249,7 +267,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
       if (answer === undefined) {
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
       }
-      take(answer, Date.now());
+      take(answer, editedNow());
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     },
   };
@@ -291,16 +309,23 @@ function TemplateNote({
 }
 
 /** The template read: the note, the template as a plan's document, and the reset's question. */
-function TemplateDocument({ template }: { template: TemplateControl }): React.JSX.Element {
+function TemplateDocument({
+  template,
+  onShowHistory,
+}: {
+  template: TemplateControl;
+  onShowHistory: () => void;
+}): React.JSX.Element {
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
       <TemplateNote custom={template.custom} onReset={reset.ask} />
       <div className="desktop-document ph-no-capture">
         <PlanBody
-          plan={templateDocument(template.text, template.editedAt)}
+          plan={templateDocument(template.text, template.lastEdit)}
           live={false}
           onEdit={template.edit}
+          onShowHistory={onShowHistory}
         />
       </div>
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
@@ -338,19 +363,46 @@ function TemplateState({
   );
 }
 
-/** Settings › Plan template beside Settings' page list: its toolbar, then the template as a plan's document. */
-export function PlanTemplatePage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+/**
+ * Settings › Plan template beside Settings' page list: its toolbar, with
+ * the button that opens the template's version history where there is a
+ * template to have one, then the template as a plan's document.
+ * `onShowHistory` opens the history, from the button or the "Edited by"
+ * line, a section's opening it on the template as it stands.
+ */
+export function PlanTemplatePage({
+  signedIn,
+  onShowHistory,
+}: {
+  signedIn: boolean;
+  onShowHistory: () => void;
+}): React.JSX.Element {
   const { act } = useAct();
   const template = useTemplate(signedIn, act);
+  const drawn = signedIn && template.read === TEMPLATE_READ.READ;
   return (
-    <section className="settings-page" aria-label={PAGE_LINE.TITLE}>
+    <section className="settings-page" aria-label={TEMPLATE_TITLE}>
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{PAGE_LINE.TITLE}</h1>
+          <h1 className="desktop-toolbar-title">{TEMPLATE_TITLE}</h1>
         </div>
+        {drawn ? (
+          <div className="desktop-toolbar-actions">
+            <Tooltip label={HISTORY_LABEL}>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={HISTORY_LABEL}
+                onClick={onShowHistory}
+              >
+                <HistoryIcon />
+              </button>
+            </Tooltip>
+          </div>
+        ) : null}
       </header>
-      {signedIn && template.read === TEMPLATE_READ.READ ? (
-        <TemplateDocument template={template} />
+      {drawn ? (
+        <TemplateDocument template={template} onShowHistory={() => onShowHistory()} />
       ) : (
         <TemplateState signedIn={signedIn} template={template} />
       )}
