@@ -621,13 +621,20 @@ outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
 
-The organization plugin is served in the group like the rest, with
-`ORGANIZATION_OPTIONS` (`server/auth-policy.ts`): no workspace is deleted, and
-its invitation endpoints are in `DISABLED_AUTH_PATHS` and answer 404, because
-Luke sends no invitation mail and the plugin would otherwise write an
-invitation nobody is told about. A browser signed in on the site reaches the
-rest — creating a workspace, reading its members, removing one — with its
-session cookie.
+The organization plugin is served in the group with `ORGANIZATION_OPTIONS`
+(`server/auth-policy.ts`): no workspace is deleted, and no signed-in user
+creates one (`allowUserToCreateOrganization: false`). Every organization
+write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
+because a workspace is adopted by its slug, and a session free to create an
+organization or rename its own could take a team's slug first. That covers
+create, update, delete, check-slug, set-active, member removal, role changes,
+leave, every invitation endpoint (Luke sends no invitation mail), and the
+team and role endpoints this deployment does not mount. `disabledPaths` is
+read by the HTTP router alone, so the server-only `auth.api` calls a hosted
+route makes still run, and a create that names a `userId` and carries no
+session passes the creation rule as a system action.
+`auth-database.test.ts` holds both sides with an account signed up through
+`auth.api.signUpEmail`.
 
 ## The events and maintenance groups
 
