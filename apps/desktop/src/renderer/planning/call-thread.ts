@@ -11,15 +11,16 @@
  * stands under the last of them, since that is where the ask was complete.
  * A turn no line on screen asked for, one typed, one whose lines are not
  * read yet, or one whose lines are past what the transcript holds, stands
- * where it started: inside the call it started on, after its lines, or
- * between calls when it started after one ended, or ahead of every call.
+ * where it started: inside the call it started on, after its lines, while
+ * that call stands or before its recorded end; between calls once it had
+ * ended, or where its end is not on record; or ahead of every call.
  * Nothing here draws or knows what a turn is beyond its key, start, and
  * ask, so the thread takes a turn in whatever shape its wire reads it.
  */
 
 import type { UIMessage } from "ai";
 import { Option, Schema } from "effect";
-import type { TranscriptCallRow } from "./transcript-model";
+import { callStart, type TranscriptCallRow } from "./transcript-model";
 
 /** What the thread is made of: a call with its lines and the work under them, a line, and a turn's work. */
 export const THREAD_ITEM = {
@@ -89,17 +90,23 @@ function anchorsOf<T>(
   return anchors;
 }
 
-/** Where a turn no line asked for stands: the index of the last call that started before it, and whether it started after that call ended. */
+/** Where a turn no line asked for stands: the index of the last call that started before it, and whether it stands after that call rather than inside it. */
 interface Slot {
   readonly call: number;
   readonly after: boolean;
 }
 
+/**
+ * The slot a turn no line asked for takes. Note that a call that ended with
+ * no end on record holds none, because a turn spoken on it would have named
+ * its lines, so one that did not is the developer's or Luke's own, after it.
+ */
 function slotOf<T>(calls: readonly TranscriptCallRow[], turn: CallTurn<T>): Slot {
-  const call = calls.findLastIndex((each) => each.startedAt <= turn.startedAt);
-  const endedAt = calls[call]?.record?.endedAt;
-  const after = endedAt !== undefined && !calls[call]?.live && turn.startedAt > endedAt;
-  return { call, after };
+  const index = calls.findLastIndex((each) => callStart(each) <= turn.startedAt);
+  const call = calls[index];
+  const endedAt = call?.record?.endedAt;
+  const inside = call?.live === true || (endedAt !== undefined && turn.startedAt <= endedAt);
+  return { call: index, after: call !== undefined && !inside };
 }
 
 /** The thread: each call with its lines and the work under them, and the work that stands between calls, oldest first. */

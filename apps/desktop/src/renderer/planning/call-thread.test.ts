@@ -171,3 +171,20 @@ test("a line read back as one though the call wrote it as two rows takes the wor
     ],
   ]);
 });
+
+test("a call that ended with no end on record holds no turn no line asked for, which stands after it, and the call standing now holds one begun a little before it was first heard", () => {
+  const unrecorded: TranscriptCallRow = {
+    ...call("call-1", FIRST_CALL, [line("0", USER, "Invites expire.")], FIRST_CALL + MINUTE),
+    record: {},
+  };
+  const live = call("call-2", SECOND_CALL, [line("0", USER, "Seven days.")]);
+  const thread = callThread(
+    [unrecorded, live],
+    [turn("typed-after", FIRST_CALL + 30_000), turn("begun-early", SECOND_CALL - 5_000)],
+  );
+  assert.deepEqual(read(thread), [
+    ["call-1", ["user: Invites expire."]],
+    "work typed-after",
+    ["call-2", ["user: Seven days.", "work begun-early"]],
+  ]);
+});
