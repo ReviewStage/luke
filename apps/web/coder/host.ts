@@ -1,8 +1,10 @@
-import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { UnparsedWireValue } from "../server/core.js";
+import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
+import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
+import { turnServers } from "../server/hosted/agent-runtime/servers.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
@@ -12,14 +14,9 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
-import { switchableConnection, turnServer } from "../server/hosted/coder-host/servers.js";
 import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-  integrationConnection,
-} from "../server/hosted/integration-connection.js";
+import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -149,20 +146,19 @@ export function sessionSkills(
 }
 
 /**
- * One integration's connection under one of this project's ownership
- * checks, the agent's or the worker's, for each one's own
- * `connections/<provider>.ts`, on the same terms as the planning project's
- * (`../eve/host.ts`), handed to a turn only while the agent has it
- * switched on (`server/hosted/coder-host/servers.ts`).
+ * Every integration one of this project's agents is handed, for that
+ * agent's own `connections/integrations.ts`, on the same terms as the
+ * planning project's (`../eve/host.ts`): a turn is handed only the servers
+ * the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
  */
-export function integrationConnectionFor(
-  provider: IntegrationProvider,
-  admit: (auth: SessionAuth, sessionId: string) => IntegrationAdmission,
+export function integrationConnectionsFor(
+  role: typeof AGENT_ROLE.CODER | typeof AGENT_ROLE.CODER_WORKER,
 ) {
-  return switchableConnection(
-    (auth, sessionId) => runWeb(turnServer(admit(auth, sessionId), provider)),
-    integrationConnection(provider, (auth, sessionId) =>
+  const profile = ROLE_PROFILE[role];
+  const admit = profile.delegated ? host.admitDelegated : host.admit;
+  return integrationConnections({
+    servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
+    token: (provider) => (auth, sessionId) =>
       runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
-    ),
-  );
+  });
 }

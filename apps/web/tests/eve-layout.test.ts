@@ -30,10 +30,10 @@ const SERVER_CHUNK = join(
   "_chunks",
   "vercel.web.mjs",
 );
-/** The Linear connection each root and its worker register, by the path under the root. */
-const LINEAR_CONNECTION_FILES = [
-  join("connections", "linear.ts"),
-  join("subagents", "worker", "connections", "linear.ts"),
+/** The integrations' connection each root and its worker register, by the path under the root. */
+const CONNECTION_FILES = [
+  join("connections", "integrations.ts"),
+  join("subagents", "worker", "connections", "integrations.ts"),
 ] as const;
 
 const BuildOutputConfig = Schema.Struct({ version: Schema.Number });
@@ -43,7 +43,7 @@ function mtimeOrAbsent(path: string): number | undefined {
 }
 
 test.for(Object.entries(EVE_ROOTS))(
-  "eve resolves the %s root as a flat app root and writes its Vercel output there, with the root's and its worker's Linear connections",
+  "eve resolves the %s root as a flat app root and writes its Vercel output there, with the root's and its worker's integrations",
   { timeout: 180_000 },
   ([, root]) => {
     const parentConfig = join(WEB, VERCEL_OUTPUT);
@@ -69,7 +69,7 @@ test.for(Object.entries(EVE_ROOTS))(
 
     // eve hands a declared worker none of its root's connections, so the build carries each one's own.
     const server = readFileSync(join(root, SERVER_CHUNK), "utf8");
-    for (const connection of LINEAR_CONNECTION_FILES) {
+    for (const connection of CONNECTION_FILES) {
       assert.ok(server.includes(`"sourcePath": "${join(root, connection)}"`), connection);
     }
   },

@@ -1,12 +1,11 @@
 /**
- * integration-connection.ts -- the one connection per integration every agent of Luke's registers.
+ * integration-connection.ts -- the one connection per integration every agent of Luke's is handed.
  *
  * The planning assistant, the coding agent, and each one's declared worker
- * are four eve agents, and eve hands a declared subagent none of its
- * parent's connections, so each registers `connections/<provider>.ts` of its
- * own for every provider; every one of those files is this definition over
- * its provider and its own ownership check, the root's or the delegated one,
- * and nothing else.
+ * are four eve agents, and each is handed this definition for every
+ * integration a turn has on (`agent-runtime/connections.ts`), over its
+ * provider and that agent's own ownership check, the root's or the
+ * delegated one, and nothing else.
  *
  * A connection is the provider's own hosted MCP server, every tool it lists
  * or the ones its table entry allows, and no approval: a write runs the

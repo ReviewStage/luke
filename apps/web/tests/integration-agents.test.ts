@@ -1,70 +1,98 @@
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
+import { Result } from "effect";
 import type { McpClientConnectionDefinition } from "eve/connections";
+import type { SessionAuth, SessionContext } from "eve/context";
 import { test } from "vitest";
-import coderLinear from "../coder/connections/linear";
-import coderNotion from "../coder/connections/notion";
-import coderSentry from "../coder/connections/sentry";
-import coderSlack from "../coder/connections/slack";
-import coderWorkerLinear from "../coder/subagents/worker/connections/linear";
-import coderWorkerNotion from "../coder/subagents/worker/connections/notion";
-import coderWorkerSentry from "../coder/subagents/worker/connections/sentry";
-import coderWorkerSlack from "../coder/subagents/worker/connections/slack";
-import planningLinear from "../eve/connections/linear";
-import planningNotion from "../eve/connections/notion";
-import planningSentry from "../eve/connections/sentry";
-import planningSlack from "../eve/connections/slack";
-import planningWorkerLinear from "../eve/subagents/worker/connections/linear";
-import planningWorkerNotion from "../eve/subagents/worker/connections/notion";
-import planningWorkerSentry from "../eve/subagents/worker/connections/sentry";
-import planningWorkerSlack from "../eve/subagents/worker/connections/slack";
-import type { switchableConnection } from "../server/hosted/coder-host/servers";
+import coderIntegrations from "../coder/connections/integrations";
+import coderWorkerIntegrations from "../coder/subagents/worker/connections/integrations";
+import planningIntegrations from "../eve/connections/integrations";
+import planningWorkerIntegrations from "../eve/subagents/worker/connections/integrations";
+import {
+  type ConnectionReads,
+  integrationConnections,
+} from "../server/hosted/agent-runtime/connections";
+import type { ServerStanding } from "../server/hosted/agent-runtime/servers";
 import { INTEGRATION, type IntegrationDefinition } from "../server/hosted/integrations";
 
 /**
- * Each of the four agents registers every integration's one connection under
- * its own ownership check, since eve hands a declared worker none of its
- * parent's: the planning model, the planning worker, the coding agent, and
- * the coding agent's worker. Which check each runs under is the token read's
- * to show (`integration-connection.test.ts`); this holds that each planning
- * agent registers the provider's own server, every tool on it or the ones its
- * entry allows, and a credential resolved per session, and that each coding agent resolves its
- * connection as each turn starts, since the developer may switch a server off
- * for one agent between turns (`coder-servers.test.ts` holds what the
- * resolution hands a turn).
+ * Each of the four agents registers one connection for every integration,
+ * since eve hands a declared worker none of its parent's: the planning
+ * model, the planning worker, the coding agent, and the coding agent's
+ * worker. Each resolves as every turn starts, handing the turn the provider's
+ * own server for each integration its standing has on, under the provider's
+ * name, every tool on it or the ones its entry allows, credentialed per
+ * session and keyed by the account. Which servers a standing has on is
+ * `agent-servers.test.ts`'s to show, and which check a token read runs
+ * under is `integration-connection.test.ts`'s.
  */
 
-const PLANNING: readonly (readonly [string, IntegrationProvider, McpClientConnectionDefinition])[] =
-  [
-    ["planning", INTEGRATION_PROVIDER.LINEAR, planningLinear],
-    ["planning worker", INTEGRATION_PROVIDER.LINEAR, planningWorkerLinear],
-    ["planning", INTEGRATION_PROVIDER.NOTION, planningNotion],
-    ["planning worker", INTEGRATION_PROVIDER.NOTION, planningWorkerNotion],
-    ["planning", INTEGRATION_PROVIDER.SENTRY, planningSentry],
-    ["planning worker", INTEGRATION_PROVIDER.SENTRY, planningWorkerSentry],
-    ["planning", INTEGRATION_PROVIDER.SLACK, planningSlack],
-    ["planning worker", INTEGRATION_PROVIDER.SLACK, planningWorkerSlack],
-  ];
+const AGENTS = [
+  ["planning model", planningIntegrations],
+  ["planning worker", planningWorkerIntegrations],
+  ["coding agent", coderIntegrations],
+  ["coding agent's worker", coderWorkerIntegrations],
+] as const;
 
-const CODING: readonly (readonly [
-  string,
-  IntegrationProvider,
-  ReturnType<typeof switchableConnection>,
-])[] = [
-  ["coding agent", INTEGRATION_PROVIDER.LINEAR, coderLinear],
-  ["coding agent's worker", INTEGRATION_PROVIDER.LINEAR, coderWorkerLinear],
-  ["coding agent", INTEGRATION_PROVIDER.NOTION, coderNotion],
-  ["coding agent's worker", INTEGRATION_PROVIDER.NOTION, coderWorkerNotion],
-  ["coding agent", INTEGRATION_PROVIDER.SENTRY, coderSentry],
-  ["coding agent's worker", INTEGRATION_PROVIDER.SENTRY, coderWorkerSentry],
-  ["coding agent", INTEGRATION_PROVIDER.SLACK, coderSlack],
-  ["coding agent's worker", INTEGRATION_PROVIDER.SLACK, coderWorkerSlack],
-];
+test.for(AGENTS)("the %s resolves its integrations as each turn starts", ([, registered]) => {
+  assert.ok(registered.events["turn.started"] instanceof Function);
+});
 
-test.for(PLANNING)(
-  "the %s registers %s's own server, credentialed per session",
-  ([, provider, definition]) => {
+const ACCOUNT = "user-1";
+
+/** What eve resolves for one turn of a session from one agent's connection, over the standing its reads answer. */
+async function turnConnectionsOf(standing: ServerStanding) {
+  const seen: [SessionAuth, string][] = [];
+  const tokensAsked: IntegrationProvider[] = [];
+  const reads: ConnectionReads = {
+    servers: (auth, sessionId) => {
+      seen.push([auth, sessionId]);
+      return Promise.resolve(standing);
+    },
+    token: (provider) => () => {
+      tokensAsked.push(provider);
+      return Promise.resolve(Result.succeed({ token: "minted", expiresAt: 0 }));
+    },
+  };
+  const resolve = integrationConnections(reads).events["turn.started"];
+  if (resolve === undefined) throw new Error("the connection resolves no turn");
+  const principal = {
+    principalId: ACCOUNT,
+    principalType: "user",
+    authenticator: "test",
+    attributes: {},
+  };
+  const auth: SessionAuth = { current: principal, initiator: principal };
+  const session: SessionContext["session"] = {
+    id: "wrun_01SERVERS000000000000000",
+    auth,
+    turn: { id: "turn_1", sequence: 1 },
+  };
+  // SAFETY: the resolver reads the session alone; the rest of eve's context is not its to read.
+  const resolved = await resolve({}, { session, channel: {} } as never);
+  assert.deepEqual(seen, [[auth, session.id]]);
+  // Resolving a turn hands each connection its token read and reads no token itself.
+  assert.deepEqual(tokensAsked, []);
+  // SAFETY: the resolver answers a map of connections by name, or none.
+  return resolved as Readonly<Record<string, McpClientConnectionDefinition>> | null;
+}
+
+test("a turn is handed every integration its standing has on, each under its provider's name, its own server and tool filter, keyed by the account", async () => {
+  const handed = await turnConnectionsOf({
+    on: true,
+    account: ACCOUNT,
+    providers: INTEGRATION_PROVIDER_LIST,
+  });
+  assert.ok(handed !== null);
+  assert.deepEqual(Object.keys(handed), [...INTEGRATION_PROVIDER_LIST]);
+  for (const provider of INTEGRATION_PROVIDER_LIST) {
     const integration: IntegrationDefinition = INTEGRATION[provider];
+    const definition: McpClientConnectionDefinition | undefined = handed[provider];
+    assert.ok(definition !== undefined, provider);
     assert.equal(definition.url, integration.MCP_URL);
     assert.equal(definition.description, integration.DESCRIPTION);
     assert.deepEqual(
@@ -72,12 +100,20 @@ test.for(PLANNING)(
       integration.ALLOWED_TOOLS === undefined ? undefined : { allow: integration.ALLOWED_TOOLS },
     );
     assert.equal(definition.approval, undefined);
+    assert.equal(definition.instanceKey, ACCOUNT);
     assert.ok(definition.auth instanceof Function);
-  },
-);
+  }
+});
 
-test.for(CODING)("the %s resolves its %s connection as each turn starts", ([, , registered]) => {
-  assert.ok(registered.events["turn.started"] instanceof Function);
+test("a turn is handed only the integrations its standing has on, and none when it has none on or none at all", async () => {
+  const notion = await turnConnectionsOf({
+    on: true,
+    account: ACCOUNT,
+    providers: [INTEGRATION_PROVIDER.NOTION],
+  });
+  assert.deepEqual(Object.keys(notion ?? {}), [INTEGRATION_PROVIDER.NOTION]);
+  assert.equal(await turnConnectionsOf({ on: true, account: ACCOUNT, providers: [] }), null);
+  assert.equal(await turnConnectionsOf({ on: false }), null);
 });
 
 test("Slack is offered its search and read tools alone, so no agent can post, schedule, react, or write a canvas", () => {
