@@ -18,7 +18,14 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/w
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
-import { CALL_KIND, type CallKind, commandDescription, pageName, type SaidCall } from "./turn-rows";
+import {
+  CALL_KIND,
+  type CallKind,
+  commandDescription,
+  isCommandKind,
+  pageName,
+  type SaidCall,
+} from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -118,6 +125,22 @@ function commandOutput(output: WireValue): ToolBlock {
 
 /** What an answer cut short by its tool says at its end. */
 const TRUNCATED_NOTE = "(output truncated)";
+
+/** What a command the Mac killed at its timeout says at its end. */
+const TIMED_OUT_NOTE = "(killed at its timeout)";
+
+/** The status `run_on_mac` answers with when the Mac ran nothing. */
+const MAC_COMMAND_NOT_RUN = "not-run";
+
+/** A command the Mac ran: as a terminal would have shown it, its timeout said where it was killed; or why it was not run. */
+function macCommandOutput(output: WireValue): ToolBlock {
+  if (stringAt(output, "status") === MAC_COMMAND_NOT_RUN) {
+    return textBlock(stringAt(output, "reason") ?? "");
+  }
+  const shown = commandOutput(output);
+  const timedOut = isRecord(output) && output.timedOut === true;
+  return timedOut ? textBlock(`${shown.text}\n${TIMED_OUT_NOTE}`.trimStart()) : shown;
+}
 
 /** A patch's answer: the files it changed, one a line, then every problem it reported. */
 function patchOutput(output: WireValue): ToolBlock {
@@ -337,6 +360,17 @@ function knownToolView(
         output: output === undefined ? undefined : commandOutput(output),
       };
     }
+    case AGENT_TOOL.RUN_ON_MAC: {
+      const command = stringAt(input, "command") ?? "";
+      const description = commandDescription(stringAt(input, "description"));
+      return {
+        kind: CALL_KIND.MAC_COMMAND,
+        subject: command,
+        ...(description === undefined ? undefined : { description }),
+        input: { kind: TOOL_BLOCK.COMMAND, text: command },
+        output: output === undefined ? undefined : macCommandOutput(output),
+      };
+    }
     case AGENT_TOOL.READ_FILE:
       return {
         kind: CALL_KIND.READ_FILE,
@@ -437,7 +471,7 @@ function saidToolView(
   input: WireValue | undefined,
   output: WireValue | undefined,
 ): ToolCallView {
-  const command = said.kind === CALL_KIND.COMMAND ? stringAt(input, "command") : undefined;
+  const command = isCommandKind(said.kind) ? stringAt(input, "command") : undefined;
   return {
     kind: said.kind,
     subject: said.subject ?? "",

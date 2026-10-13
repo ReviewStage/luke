@@ -18,7 +18,14 @@ import {
   workerLines,
 } from "./coding-agent-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
-import { CALL_KIND, CALL_WORDS, type CallKind, TURN_ROW, type TurnRow } from "./turn-rows";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  type CallKind,
+  callPlace,
+  TURN_ROW,
+  type TurnRow,
+} from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type WorkWorkerBlock, workerJob } from "./work-model";
 
@@ -263,8 +270,11 @@ function oneLine(text: string): string {
  */
 function callParts(call: CopiedCall) {
   const worker = call.call === CALL_KIND.WORKER;
+  const said = call.description ?? CALL_WORDS[call.call].verb;
+  const place = callPlace(call.call);
   return {
-    verb: call.description ?? CALL_WORDS[call.call].verb,
+    verb:
+      place === undefined ? said : `${said} (${place.charAt(0).toLowerCase()}${place.slice(1)})`,
     subject: oneLine(call.subject),
     joiner: worker || call.description !== undefined ? ": " : " ",
     code: !worker && CALL_WORDS[call.call].code,

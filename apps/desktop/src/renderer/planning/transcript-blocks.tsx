@@ -19,6 +19,7 @@ import {
   GlobeIcon,
   HourglassIcon,
   InboxIcon,
+  LaptopIcon,
   ListIcon,
   ListTodoIcon,
   type LucideIcon,
@@ -69,7 +70,9 @@ import {
   CALL_WORDS,
   type CallKind,
   callLine,
+  callPlace,
   groupSummary,
+  isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "./turn-rows";
@@ -234,6 +237,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
 /** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
+  [CALL_KIND.MAC_COMMAND]: LaptopIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
   [CALL_KIND.WRITE_FILE]: FilePenIcon,
   [CALL_KIND.EDIT]: FilePenIcon,
@@ -293,7 +297,7 @@ export function TranscriptTool({
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
   const line = callLine(kind, subject, description);
-  const command = kind === CALL_KIND.COMMAND;
+  const command = isCommandKind(kind);
   return (
     <Tool {...props}>
       <ToolHeader
@@ -303,6 +307,7 @@ export function TranscriptTool({
         subject={line.subject}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
+        place={callPlace(kind)}
       />
       <ToolContent>
         <ToolInput block={input} />

@@ -214,6 +214,92 @@ test.each(surfaces(false, DESCRIPTION))(
   },
 );
 
+/** One finished turn on each tab whose one call ran on the developer's Mac, described. */
+function macSurfaces(): readonly (readonly [string, ReactElement])[] {
+  const work = createElement(PlanCall, {
+    region: NO_CALLS,
+    onRetry: () => undefined,
+    callLive: false,
+    earlier: undefined,
+    onLoadEarlier: () => Promise.resolve(),
+    onOpenSubagent: () => undefined,
+    shown: true,
+    turns: [
+      {
+        turnId: "turn-1",
+        startedAt: 1_000,
+        state: PLAN_WORK_STATE.DONE,
+        earlierOmitted: false,
+        parts: [
+          {
+            type: PLAN_WORK_PART.TOOL,
+            id: "call-1",
+            tool: PLAN_WORK_TOOL.MAC_COMMAND,
+            name: "run_on_mac",
+            state: PLAN_WORK_STATE.DONE,
+            subject: COMMAND,
+            input: JSON.stringify({ command: COMMAND, description: DESCRIPTION }),
+            output: OUTPUT,
+          },
+          { type: PLAN_WORK_PART.TEXT, text: "One file." },
+        ],
+      },
+    ],
+  });
+  const agent = createElement(AgentTranscriptView, {
+    messages: [
+      {
+        id: "m-turn",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-run_on_mac",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { command: COMMAND, description: DESCRIPTION },
+            output: {
+              status: "ran",
+              exitCode: 0,
+              stdout: `${OUTPUT}\n`,
+              stderr: "",
+              truncated: false,
+              timedOut: false,
+            },
+          },
+          { type: "text", text: "One file." },
+        ],
+      },
+    ],
+    reading: false,
+    failed: false,
+    working: false,
+    onRetry: () => undefined,
+  });
+  return [
+    ["the Work tab", work],
+    ["an agent's tab", agent],
+  ];
+}
+
+test.each(macSurfaces())(
+  "on %s a command run on the developer's Mac is a row saying what it is for, its command, and On your Mac, and opens onto the command and what it printed",
+  (_surface, element) => {
+    const container = mounted(element);
+    const turn = container.querySelector<HTMLDetailsElement>("details");
+    if (turn && !turn.querySelector('details[data-call-id="call-1"]'))
+      act(() => turn.querySelector("summary")?.click());
+
+    const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
+    assert.ok(call);
+    const line = call.querySelector("summary");
+    assert.equal(line?.textContent, `${DESCRIPTION} ${COMMAND} On your Mac`);
+    act(() => line?.click());
+    assert.equal(line?.textContent, `${DESCRIPTION} On your Mac`);
+    assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
+    assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
+  },
+);
+
 test("a described command's closed row previews the command's first line alone, while an undescribed command's row still says it all", () => {
   const command = "\ncd apps/web\npnpm test --filter web";
   const row = (description: string | undefined) =>
