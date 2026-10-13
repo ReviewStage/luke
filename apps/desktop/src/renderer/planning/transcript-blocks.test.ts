@@ -475,19 +475,19 @@ test("every call's line says what it did in full ink and its icon and subject in
 });
 
 test.each(surfaces(true))(
-  "on %s a finished turn's fold and its thought say what they are in full ink, the thought's preview muted",
+  "on %s a finished turn's fold counting its rows is all muted, while the thought, a row of its own, says it is one in full ink and previews it muted",
   async (_surface, element) => {
     const inkOf = await inkReader();
     const container = mounted(element);
     const lead = foldSaying(container, "2 tool calls");
     act(() => lead.querySelector("summary")?.click());
-    const thought = foldSaying(container, "Thought");
-    for (const line of [lead, thought]) {
-      const summary = line.querySelector("summary");
-      assert.ok(summary);
-      assertTitleThenPreview(summary, inkOf);
+    for (const text of texts(lead.querySelector("summary") ?? lead)) {
+      assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
     }
-    assert.equal(texts(thought.querySelector("summary") ?? thought).length, 2, "a preview");
+    const thought = foldSaying(container, "Thought").querySelector("summary");
+    assert.ok(thought);
+    assertTitleThenPreview(thought, inkOf);
+    assert.equal(texts(thought).length, 2, "a preview");
   },
 );
 
