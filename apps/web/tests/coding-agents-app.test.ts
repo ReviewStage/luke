@@ -39,7 +39,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
@@ -115,11 +115,7 @@ import {
   postInboxItem,
   readInboxItem,
 } from "../server/hosted/inbox-store";
-import {
-  CODING_AGENT_DEFAULT_CHOICE,
-  modelCatalogOf,
-  type OfferedModel,
-} from "../server/hosted/model-catalog";
+import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, savePlanText, updatePlan } from "../server/hosted/plan-store";
 import {
   type FakeGitHub,

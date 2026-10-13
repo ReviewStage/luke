@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   HTTP_STATUS,
   type JsonValue,
@@ -11,7 +11,6 @@ import {
 import { Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  CODING_AGENT_DEFAULT_CHOICE,
   MODEL_CATALOG_TTL,
   MODEL_CATALOG_URL,
   MODEL_CHOICE_REFUSAL,

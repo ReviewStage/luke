@@ -4,7 +4,12 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  type CatalogModel,
+  CODING_AGENT_DEFAULT_CHOICE,
+  MODEL_PROVIDER,
+  type ModelChoice,
+} from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
@@ -28,7 +33,7 @@ import {
 } from "../server/hosted/account-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
+import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { noNetwork } from "./support/no-network";
 
 /**

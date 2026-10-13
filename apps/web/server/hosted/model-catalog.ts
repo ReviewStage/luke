@@ -42,12 +42,6 @@ export const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 /** How long one instance keeps a read catalog before asking again. */
 export const MODEL_CATALOG_TTL = Duration.hours(1);
 
-/** What a first-time account starts an agent on, until it chooses. */
-export const CODING_AGENT_DEFAULT_CHOICE = {
-  model: "anthropic/claude-opus-5.5",
-  effort: "high",
-} as const;
-
 /** Every tag a model must carry to be offered. */
 const REQUIRED_TAGS: readonly string[] = ["tool-use", "reasoning"];
 

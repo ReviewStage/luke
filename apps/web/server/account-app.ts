@@ -1,5 +1,6 @@
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
@@ -35,11 +36,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import {
-  acceptedModelChoice,
-  CODING_AGENT_DEFAULT_CHOICE,
-  type ModelCatalog,
-} from "./hosted/model-catalog.js";
+import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
