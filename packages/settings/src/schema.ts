@@ -99,7 +99,7 @@ export const APP_SETTING_SCHEMA = {
       "Sent only while Luke's window is in the background. System Settings can also turn off " +
       "Luke's notifications and the Dock's Inbox count.",
     default: true,
-    page: SETTINGS_PAGE.ROOT,
+    page: SETTINGS_PAGE.CODING_AGENTS,
     order: 1,
     // Nothing to run per write: main reads the setting as each end or inbox item is announced.
     sideEffect: SETTING_SIDE_EFFECT.NONE,

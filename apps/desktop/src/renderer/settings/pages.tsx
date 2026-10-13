@@ -2,13 +2,12 @@ import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import {
   BackIcon,
   ChevronIcon,
-  CodingAgentsIcon,
   DisplayIcon,
   DocumentIcon,
   KeyboardIcon,
-  KeyIcon,
   PlugIcon,
   SpeakerIcon,
+  TerminalIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
@@ -40,15 +39,11 @@ export const SETTINGS_PAGE = {
   },
   [SETTINGS_VIEW.CODING_AGENTS]: {
     title: "Coding agents",
-    icon: <CodingAgentsIcon />,
+    icon: <TerminalIcon />,
   },
   [SETTINGS_VIEW.INTEGRATIONS]: {
     title: "Integrations",
     icon: <PlugIcon />,
-  },
-  [SETTINGS_VIEW.API_KEYS]: {
-    title: "API keys",
-    icon: <KeyIcon />,
   },
 };
 

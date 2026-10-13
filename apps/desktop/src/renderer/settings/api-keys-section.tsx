@@ -7,7 +7,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
-import { CheckIcon } from "@sidecar/panel";
+import { CheckIcon, KeyIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -20,9 +20,10 @@ import { useConfirm } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 
 /**
- * api-keys-page.tsx -- Settings › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
+ * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
  *
- * One row per provider. A provider with no key of the account's draws a
+ * A group of the Coding agents page, under the default model it runs. One
+ * row per provider. A provider with no key of the account's draws a
  * password field and Save; one with a key draws its hint — its prefix and
  * last four characters, as the service answers it — when it was added, and
  * how the provider last answered it, with Replace and Remove beside. The
@@ -32,7 +33,7 @@ import { ConfirmSwap } from "./confirm-swap";
  * service refuses says why under the row and leaves the field as pasted.
  * One change runs at a time across the rows, since every answer is the
  * account's keys whole and two in flight could land out of order.
- * Remove asks first, in place. The whole page is kept out of the screen
+ * Remove asks first, in place. The whole group is kept out of the screen
  * recording, which masks a field's characters but not their count.
  */
 
@@ -257,7 +258,15 @@ function ProviderKeyRow({
   );
 }
 
-export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+/** The API keys group: what an own key does, and a row per provider, or why they cannot be drawn. */
+export function ApiKeysSection({
+  signedIn,
+  onKeys,
+}: {
+  signedIn: boolean;
+  /** The keys as last read or changed, none while they are being read or could not be. */
+  onKeys: (keys: readonly ProviderKeySummary[]) => void;
+}): React.JSX.Element {
   const { act } = useAct();
   const [keys, setKeys] = useState<readonly ProviderKeySummary[] | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
@@ -285,6 +294,9 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
       live = false;
     };
   }, [act, signedIn, attempt]);
+
+  // The page beside the group hears every answer, so nothing there says what a key used to be.
+  useEffect(() => onKeys(keys ?? []), [keys, onKeys]);
 
   const save = useCallback(
     (provider: ProviderKeyProvider, key: string): Promise<string | undefined> => {
@@ -321,7 +333,11 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
   );
 
   return (
-    <section className={`settings-section settings-plain ${NO_CAPTURE}`}>
+    <section className={`settings-section ${NO_CAPTURE}`}>
+      <h2>
+        <KeyIcon />
+        API keys
+      </h2>
       {!signedIn ? (
         <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : keys !== undefined ? (

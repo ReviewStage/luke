@@ -7,14 +7,19 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { settingsPanelProps } from "#testing/settings-panel-props";
+import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { NOTIFICATIONS_REFUSED_NOTE } from "./notifications-section";
 import { SettingsPanel } from "./settings-panel";
 
 const ignore = () => undefined;
 const mounted: Root[] = [];
 
-/** The front page, with macOS refusing notifications or not, and the presses of its System Settings button counted. */
-function mount(refused: boolean, settings: AppSettingsView = settingsView()) {
+/** Settings › Coding agents, with macOS refusing notifications or not, and the presses of its System Settings button counted. */
+function mount(
+  refused: boolean,
+  settings: AppSettingsView = settingsView(),
+  view: SettingsView = SETTINGS_VIEW.CODING_AGENTS,
+) {
   const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -25,6 +30,7 @@ function mount(refused: boolean, settings: AppSettingsView = settingsView()) {
       createElement(
         SettingsPanel,
         settingsPanelProps({
+          view,
           settings,
           notifications: { refused, onOpenSettings: () => opened.push("System Settings") },
         }),
@@ -36,7 +42,7 @@ function mount(refused: boolean, settings: AppSettingsView = settingsView()) {
 
 function notificationsSwitch(container: ParentNode): HTMLButtonElement {
   const control = container.querySelector<HTMLButtonElement>("button[role='switch']");
-  assert.ok(control, "the front page draws the notifications switch");
+  assert.ok(control, "Coding agents draws the notifications switch");
   return control;
 }
 
@@ -54,7 +60,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the front page offers notifications for a coding agent's end, on until turned off", () => {
+test("Coding agents offers notifications for a coding agent's end, on until turned off, and the front page does not", () => {
+  const front = mount(false, settingsView(), SETTINGS_VIEW.ROOT);
+  assert.doesNotMatch(front.container.textContent ?? "", /Notify me when a coding agent finishes/);
+
   const { container } = mount(false);
   const section = notificationsSwitch(container).closest("section");
   assert.match(section?.querySelector("h2")?.textContent ?? "", /Notifications/);

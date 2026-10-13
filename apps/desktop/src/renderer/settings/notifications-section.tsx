@@ -9,7 +9,8 @@ export const NOTIFICATIONS_REFUSED_NOTE = "Notifications are off for Luke in Sys
 
 /**
  * Whether Luke posts a notification as a coding agent ends behind his
- * window, standing on the front page. While macOS refuses them the switch
+ * window, the last group of the Coding agents page, since it is the agents'
+ * ends it announces. While macOS refuses them the switch
  * alone would be a promise nothing keeps, so a quiet line under it says
  * where they are turned back on, and takes the developer there; it stands
  * only while the switch is on, as off needs nothing from macOS.
@@ -29,7 +30,7 @@ export function NotificationsSection({
         <BellIcon />
         Notifications
       </h2>
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.ROOT} view={view} writes={writes} />
+      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS} view={view} writes={writes} />
       {control.refused && view.settings.agentNotifications ? (
         <div className="settings-row">
           <span className="settings-copy">

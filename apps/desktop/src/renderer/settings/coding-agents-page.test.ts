@@ -28,7 +28,7 @@ import {
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { CodingAgentsSection } from "./coding-agents-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 
 const MODELS: readonly CatalogModel[] = [
   {
@@ -130,6 +130,19 @@ function answer(request: Act): Promise<ActOutcome> {
           })),
         }),
       );
+    case ACT_KIND.PROVIDER_KEYS_SAVE:
+      ownKeys = [...ownKeys, request.payload.provider];
+      return Promise.resolve(
+        done({
+          keys: ownKeys.map((provider) => ({
+            provider,
+            hint: "sk-…test",
+            addedAt: 1,
+            status: ownKeyStatus,
+            statusAt: 1,
+          })),
+        }),
+      );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
         return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE }));
@@ -177,7 +190,7 @@ async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElem
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(CodingAgentsSection, { signedIn });
+  const page = createElement(CodingAgentsPage, { signedIn });
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;
@@ -228,8 +241,8 @@ test("the page reads the default and the models as it opens, and draws the model
     sent.map((request) => request.kind),
     [
       ACT_KIND.CODING_AGENTS_DEFAULT_READ,
-      ACT_KIND.PROVIDER_KEYS_READ,
       ACT_KIND.CODING_AGENTS_MODELS,
+      ACT_KIND.PROVIDER_KEYS_READ,
     ],
   );
   assert.equal(chip(page).textContent, "Opus 5.5");
@@ -459,6 +472,21 @@ test("a write the service refused leaves the default as it was and says so under
   assert.match(page.querySelector('[role="alert"]')?.textContent ?? "", /could not be saved/u);
 });
 
+test("a key saved in the API keys group is what the model row says at once", async () => {
+  const page = await mount();
+  const note = () => page.querySelector(".settings-copy small")?.textContent;
+  assert.equal(note(), "What a click on Start runs an agent on.");
+
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  field.value = "sk-ant-api03-synthetic-0000000000000000wxyz";
+  const form = field.closest("form") ?? assert.fail("no form around the field");
+  act(() => form.requestSubmit());
+  await settle();
+  assert.equal(note(), "What a click on Start runs an agent on, on your own Anthropic key.");
+});
+
 test("with no account signed in the page asks nothing and says to sign in", async () => {
   const page = await mount(false);
   assert.deepEqual(sent, []);
@@ -519,6 +547,6 @@ test("the model row says the default runs on the account's own key where the pro
   assert.equal(note(luke), "What a click on Start runs an agent on.");
   assert.equal(
     note(unusable),
-    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
+    "What a click on Start runs an agent on. Your Anthropic key needs attention under API keys.",
   );
 });

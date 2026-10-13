@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 test("every schema control is named by the words drawn beside it", () => {
-  for (const view of [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.VOICE, SETTINGS_VIEW.APPEARANCE]) {
+  for (const view of [SETTINGS_VIEW.CODING_AGENTS, SETTINGS_VIEW.VOICE, SETTINGS_VIEW.APPEARANCE]) {
     const drawn = rows(mount(view));
     assert.ok(drawn.size > 0, `${view} draws schema rows`);
     for (const [name, row] of drawn) {

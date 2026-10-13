@@ -87,7 +87,6 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
   [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
-  [SETTINGS_VIEW.API_KEYS]: "API keys",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */
@@ -126,12 +125,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       label: "Changelog",
       page: SETTINGS_VIEW.ROOT,
       haystack: ["Changelog", "release notes version history what's new what changed"],
-    },
-    {
-      id: SETTINGS_SEARCH_ROW.FEEDBACK,
-      label: "Feedback",
-      page: SETTINGS_VIEW.ROOT,
-      haystack: ["Feedback", "send feedback submit a prompt bug idea founders"],
     },
     input.accountDrawn
       ? {
@@ -203,17 +196,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
-          label: "Default model",
+          label: "Model",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default model", "coding agent model claude gpt start"],
+          haystack: ["Model", "default model coding agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
-          label: "Default effort",
+          label: "Effort",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default effort", "coding agent effort reasoning low medium high max"],
+          haystack: ["Effort", "default effort coding agent reasoning low medium high max"],
         }
       : undefined,
     input.accountDrawn
@@ -229,16 +222,22 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
           label: "Anthropic API key",
-          page: SETTINGS_VIEW.API_KEYS,
-          haystack: ["Anthropic API key", "byok own key claude billing provider credential"],
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "Anthropic API key",
+            "api keys byok own key claude billing provider credential",
+          ],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
           label: "OpenAI API key",
-          page: SETTINGS_VIEW.API_KEYS,
-          haystack: ["OpenAI API key", "byok own key gpt codex billing provider credential"],
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "OpenAI API key",
+            "api keys byok own key gpt codex billing provider credential",
+          ],
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.

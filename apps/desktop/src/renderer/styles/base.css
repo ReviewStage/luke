@@ -939,14 +939,6 @@ svg.working-mark[viewBox] {
   }
 }
 
-/* Feedback --------------------------------------------------------------- */
-
-/* The settings section's two offers share one row, side by side. */
-.feedback-offers {
-  display: flex;
-  gap: 7px;
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.

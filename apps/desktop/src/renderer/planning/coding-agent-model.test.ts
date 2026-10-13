@@ -542,7 +542,7 @@ test("the plan edits that have answered are counted, not the ones still out or t
 test("a turn failed on the account's own API key ends saying so and where to replace it", () => {
   assert.equal(
     endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
-    "Failed: your API key was refused or can't be read; check Settings › API keys",
+    "Failed: your API key was refused or can't be read; check Settings › Coding agents › API keys",
   );
 });
 

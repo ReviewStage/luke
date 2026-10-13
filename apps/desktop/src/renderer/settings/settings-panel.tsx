@@ -1,6 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { FeedbackKind } from "@sidecar/feedback";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
@@ -13,16 +12,14 @@ import {
   settingsNavRowId,
 } from "../settings-views";
 import { AccountSection } from "./account-section";
-import { ApiKeysSection } from "./api-keys-page";
 import { AppearanceSection } from "./appearance-page";
-import { CodingAgentsSection } from "./coding-agents-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 import type {
   MicrophoneControl,
   NotificationsControl,
   ShortcutControl,
   UpdateControl,
 } from "./controls";
-import { FeedbackSection } from "./feedback-section";
 import { IntegrationsSection } from "./integrations-page";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
@@ -55,8 +52,6 @@ export interface SettingsPanelProps {
   notifications: NotificationsControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  /** Opens the dialog that writes a note of this kind to the people who make Luke. */
-  onFeedback: (kind: FeedbackKind) => void;
   shortcuts: ShortcutControl;
 }
 
@@ -111,7 +106,6 @@ export function SettingsPanel({
   notifications,
   updates,
   settings,
-  onFeedback,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
@@ -173,11 +167,12 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? (
-        <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
-      ) : null}
-
-      {view === SETTINGS_VIEW.API_KEYS ? (
-        <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+        <>
+          <CodingAgentsPage signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+          {panelView ? (
+            <NotificationsSection view={panelView} writes={writes} control={notifications} />
+          ) : null}
+        </>
       ) : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
@@ -198,13 +193,7 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          {panelView ? (
-            <NotificationsSection view={panelView} writes={writes} control={notifications} />
-          ) : null}
-
           <UpdatesSection control={updates} />
-
-          <FeedbackSection onOpen={onFeedback} />
 
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
             <AccountSection

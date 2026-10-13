@@ -2,9 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+} from "@sidecar/credentials/snapshot";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
+import { TerminalIcon } from "@sidecar/panel";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, AppSettingsView } from "@sidecar/settings/wire";
@@ -13,6 +18,7 @@ import { Effect } from "effect";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -43,9 +49,11 @@ let turnPage: (view: SettingsView) => void = ignore;
 function Harness({
   settings,
   microphone,
+  account,
 }: {
   settings?: AppSettingsView;
   microphone?: MicrophoneControl;
+  account?: AccountSnapshot;
 }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
@@ -64,6 +72,7 @@ function Harness({
       onViewChange: setView,
       ...(settings ? { settings } : undefined),
       ...(microphone ? { microphone } : undefined),
+      ...(account ? { account } : undefined),
     }),
     onExit: ignore,
   });
@@ -77,6 +86,7 @@ function mount(
   settings?: AppSettingsView,
   registry?: AtomRegistry,
   microphone?: MicrophoneControl,
+  account?: AccountSnapshot,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -88,6 +98,7 @@ function mount(
     createElement(Harness, {
       ...(settings ? { settings } : undefined),
       ...(microphone ? { microphone } : undefined),
+      ...(account ? { account } : undefined),
     }),
     createElement(ToastHost),
   );
@@ -208,7 +219,6 @@ test("typing in the sidebar search turns the page list into results grouped unde
     "Plan template",
     "Coding agents",
     "Integrations",
-    "API keys",
   ]);
 
   type(field(container), "hotkey");
@@ -261,20 +271,78 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.equal(shownPage(container), first.page);
 });
 
-test("searching for notifications finds the switch on General, and pressing it lands on the switch", () => {
+test("searching for notifications finds the switch on Coding agents, and pressing it lands on the switch", () => {
   const container = mount();
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
   type(field(container), "notifications");
   assert.deepEqual(results(container), [
-    { page: "General", rows: ["Notify me when a coding agent finishes or needs me"] },
+    { page: "Coding agents", rows: ["Notify me when a coding agent finishes or needs me"] },
   ]);
 
   act(() => result(container, "Notify me when a coding agent finishes or needs me").click());
-  assert.equal(shownPage(container), "General");
+  assert.equal(shownPage(container), "Coding agents");
   const row = container.querySelector(
     `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.AGENT_NOTIFICATIONS}"]`,
   );
   assert.equal(row?.getAttribute("role"), "switch");
+});
+
+test("Coding agents holds the default model, the API keys, and notifications as three groups, and General holds none of them", () => {
+  const container = mount();
+  const headings = () =>
+    [...container.querySelectorAll(".settings-page .settings-section > h2")].map(
+      (heading) => heading.textContent,
+    );
+  assert.ok(!pageList(container).includes("API keys"), "API keys is no page of its own");
+  const codingAgents = [...sidebar(container).querySelectorAll("li > button")].find(
+    (button) => button.textContent === "Coding agents",
+  );
+  assert.equal(
+    codingAgents?.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(TerminalIcon)),
+    "the page wears the terminal it always had",
+  );
+  assert.ok(!headings().includes("Notifications"));
+  assert.ok(!headings().includes("Feedback"), "feedback is the account menu's and Help's");
+
+  act(() => turnPage(SETTINGS_VIEW.CODING_AGENTS));
+  assert.deepEqual(headings(), ["Default model", "API keys", "Notifications"]);
+});
+
+test("searching for an API key finds it on Coding agents, and pressing it lands on the key's row", async () => {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: ignore,
+      act: (request: Act) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PROVIDER_KEYS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { keys: [] } }
+            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+        ),
+    },
+  });
+  const signedIn: AccountSnapshot = {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    provider: ACCOUNT_PROVIDER.GITHUB,
+  };
+  const container = mount(undefined, undefined, undefined, signedIn);
+  type(field(container), "api key");
+  assert.deepEqual(results(container), [
+    { page: "Coding agents", rows: ["Anthropic API key", "OpenAI API key"] },
+  ]);
+
+  act(() => result(container, "OpenAI API key").click());
+  await act(async () => {
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+  assert.equal(shownPage(container), "Coding agents");
+  const row = container.querySelector(
+    `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SEARCH_ROW.API_KEY_OPENAI}"]`,
+  );
+  assert.equal(row?.closest("section")?.querySelector("h2")?.textContent, "API keys");
 });
 
 test("clearing the query restores the page list, and Escape clears before it lets go", () => {
@@ -294,7 +362,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   act(() => clear.click());
   assert.equal(input.value, "");
   assert.equal(document.activeElement, input, "the cleared field keeps the caret");
-  assert.equal(pageList(container).length, 8);
+  assert.equal(pageList(container).length, 7);
 
   type(input, "voice");
   // An Escape spent dismissing an input method's candidates leaves the query.
@@ -302,7 +370,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   assert.equal(input.value, "voice");
   press(input, "Escape");
   assert.equal(input.value, "");
-  assert.equal(pageList(container).length, 8);
+  assert.equal(pageList(container).length, 7);
   assert.equal(document.activeElement, input, "the first Escape only clears");
 
   press(input, "Escape");
