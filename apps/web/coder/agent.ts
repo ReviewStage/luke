@@ -22,6 +22,10 @@ export default defineAgent({
   defaultTools: false,
   compaction: { thresholdPercent: CODER.COMPACTION_THRESHOLD_SHARE },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
+  // Note that a finished run's history is deleted at once rather than kept under Vercel's
+  // retention, because Luke reads every transcript from its own store, written while the run is
+  // live; a session finishes only when it is retired (`server/hosted/retire-sessions.ts`).
+  experimental: { workflow: { retention: 0 } },
   model: defineDynamic({
     events: {
       "step.started": async (_event, ctx) => {
