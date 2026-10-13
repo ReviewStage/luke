@@ -18,11 +18,10 @@ import {
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import { InboxIcon } from "lucide-react";
+import { ChevronRightIcon } from "@sidecar/panel";
+import { CircleCheckIcon, ClockIcon, InboxIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
-import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -31,8 +30,8 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
-import { TOOL_LINE_CLASS } from "../ai-elements/tool";
-import { cn } from "../ai-elements/utils";
+import { useWaitingFold } from "../desktop/folded-groups";
+import { type CountNoun, SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EmptyState } from "../empty-state";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
@@ -92,16 +91,20 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * own Send. A block or a response of a type this build does not know, one
  * a newer service wrote, is drawn as a line naming a newer Luke, so the
  * rest of the inbox still reads. A card whose agent need not hear back
- * says so, since answering it messages nobody. What waits stands first;
- * what is settled, answered or taken back by its agent, folds under one
- * line as a finished turn's steps fold, each a closed card saying what came
- * of it and when, or a line alone where nothing more was said. Every time
- * shows its moment in the shared tooltip, and an agent this window does not
- * list, one started on another Mac, still leads with a glyph. The tab's own label names it and counts what waits, so no head
- * repeats either. An inbox that holds nothing at all says so under the
- * tab's own glyph, drawn large (`empty-state.tsx`). The agent's name opens
- * its tab. Every card shows words an agent wrote, a code block the
- * repository's lines, and an image block a picture of what it rendered, so
+ * says so, since answering it messages nobody. What waits stands first,
+ * under Waiting; what is settled, answered or taken back by its agent,
+ * under Settled, each a row in the plan summary's shape saying what came
+ * of it and when, the note and the item's context unfolding under it. Both headers are the sidebar's own group header
+ * (`sidebar-group-header.tsx`), folding their section and, folded,
+ * counting it while hovered; Waiting starts open and is kept folded or
+ * open across launches as a sidebar group is, and Settled starts folded,
+ * as the sidebar's Archived does. Every time shows its moment in the
+ * shared tooltip, and an agent this window does not list, one started on
+ * another Mac, still leads with a glyph. An inbox that holds nothing at
+ * all says so under the tab's own glyph, drawn large (`empty-state.tsx`).
+ * A card's head and a settled row each open the agent's tab, the
+ * agent's own transcript holding the item as it was posted. Every card
+ * shows words an agent wrote, a code block the repository's lines, and an image block a picture of what it rendered, so
  * the board is out of the session recording (`ph-no-capture`), and the
  * viewer, drawn over the window outside the board, is out of it on its own.
  */
@@ -111,6 +114,10 @@ const IMAGE_NOT_LOADED = "The image could not be loaded.";
 
 /** What an empty inbox says. */
 const NOTHING_WAITS = "Nothing is waiting on you.";
+
+/** What each section's folded count is read as. */
+const WAITING_NOUN: CountNoun = { one: "item waiting", many: "items waiting" };
+const SETTLED_NOUN: CountNoun = { one: "item settled", many: "items settled" };
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
 const NOTE_PLACEHOLDER = {
@@ -183,7 +190,12 @@ function Moment({ at, now }: { at: number; now: number }): React.JSX.Element {
   );
 }
 
-/** Who posted the item and when: the agent's mark, its name opening its tab, a failure's mark where it failed, and how long ago. */
+/**
+ * Who posted the item and when, as the card's head: a row in the summary's
+ * own shape and hover (`plan-summary.tsx`), the agent's mark, its name, a
+ * failure's mark where it failed, and how long ago at its end, the whole row
+ * opening the agent's tab.
+ */
 function Poster({
   item,
   agent,
@@ -198,18 +210,20 @@ function Poster({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2 px-3 pt-2 text-muted-foreground">
-      <AuthorGlyph agent={agent} />
-      <button
-        type="button"
-        className="plan-edit-link font-medium"
-        onClick={() => onOpenAgent(item.agentId)}
-      >
+    <button
+      type="button"
+      className="plan-summary-row inbox-card-head"
+      onClick={() => onOpenAgent(item.agentId)}
+    >
+      <span className="plan-summary-glyph">
+        <AuthorGlyph agent={agent} />
+      </span>
+      <span className="plan-summary-label">
         {agent === undefined ? "Coding agent" : agentTabLabel(agent, models)}
-      </button>
+      </span>
       {agent === undefined ? null : agentEndMark(agent, true)}
       <Moment at={item.postedAt} now={now} />
-    </div>
+    </button>
   );
 }
 
@@ -831,11 +845,28 @@ function OpenCard({
   );
 }
 
-/** One item settled, as a closed card: what came of it before its title, and the note and the item's context inside. */
-function SettledCard({
+/** What a settled row's disclosure says, open and shut. */
+const DETAILS = {
+  SHOW: "Show details",
+  HIDE: "Hide details",
+} as const;
+
+/**
+ * One item settled, as a row in the summary's own shape: the agent's mark,
+ * the item's title with what came of it after, and when at its end. A press
+ * on the row opens the agent's tab, as the head of a waiting card does.
+ * Where the developer wrote a note or the agent gave context, a chevron at
+ * the row's end, beside the row rather than inside it so pressing it opens
+ * nothing, unfolds them under the row: the note as it was written, its
+ * lines kept and selectable, then the item's blocks, muted, a picture among
+ * them read only once unfolded. A row with nothing to unfold keeps the
+ * chevron's room, so the times stand in one column.
+ */
+function SettledRow({
   item,
   agent,
   now,
+  onOpenAgent,
   images,
   onImage,
   onRetryImage,
@@ -845,59 +876,75 @@ function SettledCard({
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
   now: number;
+  onOpenAgent: (agentId: string) => void;
   images: PlanInboxControl["images"];
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
   openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
+  const [unfolded, setUnfolded] = useState(false);
   const words = settledWords(item);
-  const line = (
-    <>
-      <AuthorGlyph agent={agent} />
-      <PlanTitle label={words.lead}>{cardTitle(item.title)}</PlanTitle>
-      {agent === undefined ? null : agentEndMark(agent, true)}
-      <Moment at={item.updatedAt} now={now} />
-    </>
-  );
-  // Note that a card with nothing inside is a line rather than a fold, because a fold opening on nothing reads as broken.
-  if (words.note === undefined && item.blocks.length === 0) {
-    return (
-      <article
-        className="flex h-8 items-center gap-2 overflow-clip rounded-lg border border-border bg-muted px-3 text-[12.5px]"
-        data-item-id={item.id}
-        aria-label={cardTitle(item.title)}
-      >
-        <span className="size-4 shrink-0" aria-hidden="true" />
-        {line}
-      </article>
-    );
-  }
+  const holds = words.note !== undefined || item.blocks.length > 0;
+  const details = unfolded ? DETAILS.HIDE : DETAILS.SHOW;
   return (
-    <Plan data-item-id={item.id} aria-label={cardTitle(item.title)}>
-      <PlanHeader>{line}</PlanHeader>
-      <PlanContent className="flex flex-col gap-2">
-        {words.note === undefined ? null : (
-          <p className="m-0 whitespace-pre-line select-text">{words.note}</p>
+    <li className="inbox-settled" data-item-id={item.id}>
+      <div className="inbox-settled-line">
+        <button
+          type="button"
+          className="plan-summary-row"
+          onClick={() => onOpenAgent(item.agentId)}
+        >
+          <span className="plan-summary-glyph">
+            <AuthorGlyph agent={agent} />
+          </span>
+          <span className="plan-summary-label">
+            {cardTitle(item.title)}
+            <span className="plan-summary-detail">{words.lead}</span>
+          </span>
+          {agent === undefined ? null : agentEndMark(agent, true)}
+          <Moment at={item.updatedAt} now={now} />
+        </button>
+        {holds ? (
+          <Tooltip label={details}>
+            <button
+              type="button"
+              className="sidebar-plan-mark inbox-settled-more"
+              aria-label={details}
+              aria-expanded={unfolded}
+              onClick={() => setUnfolded((was) => !was)}
+            >
+              <ChevronRightIcon />
+            </button>
+          </Tooltip>
+        ) : (
+          <span className="inbox-settled-more" aria-hidden="true" />
         )}
-        {item.blocks.length === 0 ? null : (
-          <div className="text-muted-foreground">
-            <Blocks
-              item={item}
-              images={images}
-              onImage={onImage}
-              onRetryImage={onRetryImage}
-              openLink={openLink}
-              code={code}
-            />
-          </div>
-        )}
-      </PlanContent>
-    </Plan>
+      </div>
+      {holds && unfolded ? (
+        <div className="inbox-settled-body">
+          {words.note === undefined ? null : (
+            <p className="m-0 whitespace-pre-line select-text">{words.note}</p>
+          )}
+          {item.blocks.length === 0 ? null : (
+            <div className="text-muted-foreground">
+              <Blocks
+                item={item}
+                images={images}
+                onImage={onImage}
+                onRetryImage={onRetryImage}
+                openLink={openLink}
+                code={code}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
-/** The board: what waits on the developer, then what is settled under one fold. */
+/** The board: what waits on the developer, then what is settled, each under a header that folds it as a sidebar group's does. */
 export function InboxBoard({
   control,
   agents,
@@ -913,6 +960,9 @@ export function InboxBoard({
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const now = useMinute();
+  const waitingFold = useWaitingFold();
+  // Note that Settled starts folded each time the board is drawn, as the sidebar's Archived does, because what is settled is out of the way.
+  const [settledFolded, setSettledFolded] = useState(true);
   const { open, settled } = control.board;
   const agentOf = (item: InboxItem) => agents.agents?.find((agent) => agent.id === item.agentId);
   if (open.length === 0 && settled.length === 0) {
@@ -934,52 +984,72 @@ export function InboxBoard({
     );
   }
   return (
-    <div className="inbox-board ph-no-capture min-h-0 flex-1 space-y-3 overflow-y-auto pt-(--section-gap) pb-5">
-      {open.length === 0 ? (
-        <p className="m-0 text-[12.5px] text-muted-foreground">{NOTHING_WAITS}</p>
-      ) : null}
-      {open.map((item) => (
-        <OpenCard
-          key={item.id}
-          item={item}
-          agent={agentOf(item)}
-          models={agents.models}
-          now={now}
-          sending={control.sending.has(item.id)}
-          note={control.notes.get(item.id)}
-          draftOf={control.draftOf}
-          onDraft={control.onDraft}
-          onAnswer={control.onAnswer}
-          images={control.images}
-          onImage={control.onImage}
-          onRetryImage={control.onRetryImage}
-          onOpenAgent={onOpenAgent}
-          openLink={openLink}
-          code={code}
+    <div className="inbox-board ph-no-capture min-h-0 flex-1 overflow-y-auto pt-(--section-gap) pb-5">
+      <section className="inbox-section" aria-label="Waiting">
+        <SidebarGroupHeader
+          glyph={<ClockIcon />}
+          name="Waiting"
+          folded={waitingFold.folded}
+          count={open.length}
+          noun={WAITING_NOUN}
+          onToggle={waitingFold.toggle}
         />
-      ))}
-      {settled.length === 0 ? null : (
-        <Fold className="text-[12.5px]" data-inbox-settled="">
-          <FoldSummary className={cn(TOOL_LINE_CLASS, "hover:text-foreground")}>
-            <FoldChevron />
-            <span>Settled · {settled.length}</span>
-          </FoldSummary>
-          <FoldBody className="flex flex-col gap-2 pt-1">
-            {settled.map((item) => (
-              <SettledCard
+        {waitingFold.folded ? null : open.length === 0 ? (
+          <p className="sidebar-note">{NOTHING_WAITS}</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {open.map((item) => (
+              <OpenCard
                 key={item.id}
                 item={item}
                 agent={agentOf(item)}
+                models={agents.models}
                 now={now}
+                sending={control.sending.has(item.id)}
+                note={control.notes.get(item.id)}
+                draftOf={control.draftOf}
+                onDraft={control.onDraft}
+                onAnswer={control.onAnswer}
                 images={control.images}
                 onImage={control.onImage}
                 onRetryImage={control.onRetryImage}
+                onOpenAgent={onOpenAgent}
                 openLink={openLink}
                 code={code}
               />
             ))}
-          </FoldBody>
-        </Fold>
+          </div>
+        )}
+      </section>
+      {settled.length === 0 ? null : (
+        <section className="inbox-section" aria-label="Settled">
+          <SidebarGroupHeader
+            glyph={<CircleCheckIcon />}
+            name="Settled"
+            folded={settledFolded}
+            count={settled.length}
+            noun={SETTLED_NOUN}
+            onToggle={() => setSettledFolded((was) => !was)}
+          />
+          {settledFolded ? null : (
+            <ul className="plan-summary-rows">
+              {settled.map((item) => (
+                <SettledRow
+                  key={item.id}
+                  item={item}
+                  agent={agentOf(item)}
+                  now={now}
+                  onOpenAgent={onOpenAgent}
+                  images={control.images}
+                  onImage={control.onImage}
+                  onRetryImage={control.onRetryImage}
+                  openLink={openLink}
+                  code={code}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
       )}
       {control.failed ? (
         <div className="agent-note agent-failure" role="alert">

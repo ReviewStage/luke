@@ -152,12 +152,10 @@ interface TranscriptLead {
   startingLine: string;
   /** Whether runs of calls fold under one line; a worker's session is read for its detail, so its do not. */
   grouped: boolean;
-  /** Whether a finished turn's line wears the mark of the harness its model ran in; Luke's own turns run in none. */
-  harnessed: boolean;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting. */
-const AGENT_LEAD: TranscriptLead = {
+/** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
+export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: (
     <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
@@ -166,7 +164,6 @@ const AGENT_LEAD: TranscriptLead = {
   ),
   startingLine: "The agent is starting. Its transcript appears here.",
   grouped: true,
-  harnessed: true,
 };
 
 /** A worker's transcript: the task it was handed, and the worker starting. */
@@ -175,13 +172,6 @@ export const WORKER_LEAD: TranscriptLead = {
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting. Its transcript appears here.",
   grouped: false,
-  harnessed: true,
-};
-
-/** The planning model's turns, which open on no card and run in no harness of a coding agent's. */
-export const PLANNING_LEAD: TranscriptLead = {
-  ...AGENT_LEAD,
-  harnessed: false,
 };
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -502,7 +492,6 @@ export function AgentMessage({
           endedAt={finishedAt}
           record={message}
           models={delegation?.models}
-          harnessed={lead.harnessed}
         />
       )}
       {words === "" ? null : <CopyMessageAction words={words} />}

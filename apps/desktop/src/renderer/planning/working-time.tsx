@@ -44,7 +44,7 @@ const WORKING_LINE = "Working…";
 const WORKED_WORDS = "Worked for ";
 
 /** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour. */
-const STATUS_LINE_CLASS = "text-[12.5px] text-muted-foreground select-text";
+export const STATUS_LINE_CLASS = "text-[12.5px] text-muted-foreground select-text";
 
 /** What separates how long a finished turn worked from when it ended. */
 export const WORKED_SEPARATOR = " · ";
@@ -114,7 +114,6 @@ export function WorkedFor({
   endedAt,
   record = {},
   models = [],
-  harnessed = true,
 }: {
   startedAt: number;
   endedAt: number;
@@ -122,23 +121,13 @@ export function WorkedFor({
   record?: TurnRecord | undefined;
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models?: readonly CatalogModel[] | undefined;
-  /** Whether the turn ran in a harness, as an agent's and a subagent's do; Luke's own turns on the Call tab ran in none. */
-  harnessed?: boolean;
 }): ReactNode {
   const now = useMinute();
   const text = workedForText(startedAt, endedAt, now);
   return (
     <Tooltip
       label={text}
-      card={
-        <TurnCard
-          startedAt={startedAt}
-          endedAt={endedAt}
-          record={record}
-          models={models}
-          harnessed={harnessed}
-        />
-      }
+      card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
     >
       <p className={cn(STATUS_LINE_CLASS, "mt-2 mb-0 w-fit tabular-nums")} data-worked="">
         <span data-worked-length="">
