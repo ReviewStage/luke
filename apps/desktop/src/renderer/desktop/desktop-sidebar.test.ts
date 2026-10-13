@@ -1562,13 +1562,18 @@ function withInboxView(
   return { ...patch, inboxView: { ...plansControl().inboxView, open, onOpen } };
 }
 
-test("the Inbox stands right under Search, counting the waiting items not yet seen at its end in a group count's ink, and nothing at none; its chord shows while hovered", async () => {
+test("the Inbox stands right under Search, counting the items waiting across every plan at its end in a group count's ink, the sum of the Inbox's row counts, and nothing at none; its chord shows while hovered", async () => {
   const styled = await sheetStyle();
-  const unread = (total: number) => ({ ...plansControl().inboxReads, total });
   const counting = mount(DEAN, {
-    plans: { plans: [listedPlan("Billing")], inboxReads: unread(3) },
+    plans: {
+      plans: [listedPlan("Billing")],
+      inbox: [
+        { planId: "plan-billing", items: ["item-a", "item-b"] },
+        { planId: "plan-invites", items: ["item-c"] },
+      ],
+    },
   });
-  const quiet = mount(DEAN, { plans: { inboxReads: unread(0) } });
+  const quiet = mount(DEAN, { plans: { inbox: [] } });
   const folded = mount(DEAN, { plans: { plans: [listedPlan("Invites")] } });
   const group = folded.querySelector<HTMLButtonElement>(".sidebar-repository-toggle");
   assert.ok(group);
@@ -1577,9 +1582,9 @@ test("the Inbox stands right under Search, counting the waiting items not yet se
   const row = inboxButton(counting);
   assert.equal(searchButton(counting).nextElementSibling, row);
   assert.equal(row.getAttribute("aria-keyshortcuts"), "Meta+Shift+I");
-  const count = row.querySelector<HTMLElement>(".sidebar-inbox-unread");
-  assert.equal(count?.textContent, "3 unread items");
-  assert.equal(inboxButton(quiet).querySelector(".sidebar-inbox-unread"), null);
+  const count = row.querySelector<HTMLElement>(".sidebar-inbox-waiting");
+  assert.equal(count?.textContent, "3 items waiting");
+  assert.equal(inboxButton(quiet).querySelector(".sidebar-inbox-waiting"), null);
   assert.equal(inboxButton(quiet).textContent?.replace("⇧⌘I", ""), "Inbox");
   const groupCount = folded.querySelector<HTMLElement>(".sidebar-repository-count");
   assert.ok(count && groupCount);

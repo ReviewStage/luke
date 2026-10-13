@@ -24,7 +24,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
-import { useInboxReads } from "../planning/inbox-reads";
+import { PLAN_MARK, type PlanMark } from "../planning/planning-model";
 import type { InboxViewControl, PlansControl } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -135,40 +135,40 @@ afterEach(() => {
 interface Asked {
   readonly shownPlans: string[];
   readonly shownAgents: [string, string][];
+  readonly marked: [string, PlanMark][];
   closes: number;
 }
 
 /**
- * The Inbox over the plans given, its own view and marks real, as the plans
- * tab holds them, and every press that leaves it recorded.
+ * The Inbox over the plans given, its own view real, as the plans tab holds
+ * it, and every press that leaves it recorded.
  */
 function mount(patch: Partial<PlansControl> = {}) {
-  const asked: Asked = { shownPlans: [], shownAgents: [], closes: 0 };
+  const asked: Asked = { shownPlans: [], shownAgents: [], marked: [], closes: 0 };
   function Page() {
-    const [view, setView] = useState<Pick<InboxViewControl, "planId" | "unreadOnly">>({
+    const [view, setView] = useState<Pick<InboxViewControl, "planId" | "waitingOnly">>({
       planId: undefined,
-      unreadOnly: false,
+      waitingOnly: false,
     });
-    const reads = useInboxReads(WAITING, HOLDING, false);
     const inboxView: InboxViewControl = {
       open: true,
       planId: view.planId,
-      unreadOnly: view.unreadOnly,
+      waitingOnly: view.waitingOnly,
       onOpen: () => undefined,
       onClose: () => {
         asked.closes += 1;
       },
       onChoose: (planId) => setView((held) => ({ ...held, planId })),
-      onUnreadOnly: (unreadOnly) => setView((held) => ({ ...held, unreadOnly })),
+      onWaitingOnly: (waitingOnly) => setView((held) => ({ ...held, waitingOnly })),
     };
     return createElement(DesktopInbox, {
       plans: plansControl({
         plans: [BILLING, INVITES, AUDIT],
         inbox: WAITING,
         inboxPlans: HOLDING,
-        inboxReads: reads,
         inboxView,
         onShowPlan: (planId) => asked.shownPlans.push(planId),
+        onMarkPlan: (planId, mark) => asked.marked.push([planId, mark]),
         onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
         ...patch,
       }),
@@ -188,10 +188,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Each plan of the column as a reader hears it: its name, whether it is unread, and how many items wait. */
+/** Each plan of the column as a reader hears it, `▸ ` where chosen and `*` where drawn bold: its name and how many items wait. */
 function column(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>(".inbox-plans .sidebar-plan")].map(
-    (row) => `${row.getAttribute("aria-current") === "page" ? "▸ " : ""}${row.textContent}`,
+    (row) =>
+      `${row.getAttribute("aria-current") === "page" ? "▸ " : ""}${row.dataset.unread === "true" ? "*" : ""}${row.textContent}`,
   );
 }
 
@@ -216,15 +217,19 @@ function titles(page: HTMLElement): string[] {
   return [...page.querySelectorAll("[data-inbox-title]")].map((title) => title.textContent ?? "");
 }
 
-test("the column lists every plan holding an item, the latest changed first, one line each with its unread mark and how many wait, and the first stands chosen with its items read beside it", async () => {
+test("the column lists every plan holding an item on the sidebar's own plan row, the latest changed first, bold with how many wait in the time's place while any does, and the first stands chosen with its items beside it", async () => {
   const { page } = mount();
   await settle();
 
   assert.deepEqual(column(page), [
-    "▸ Invites1 waiting",
+    "▸ *Invites1 waiting",
     "Audit log",
-    "Billing usage alerts, unread2 waiting",
+    "*Billing usage alerts2 waiting",
   ]);
+  assert.equal(
+    rowNamed(page, "Billing usage alerts").querySelector(".sidebar-plan-time")?.textContent,
+    "2 waiting",
+  );
   assert.equal(
     page.querySelector(".inbox-plans .sidebar-plan-repository"),
     null,
@@ -232,19 +237,60 @@ test("the column lists every plan holding an item, the latest changed first, one
   );
   assert.deepEqual(titles(page), ["Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items h1")?.textContent, "Invites");
-  assert.equal(rowNamed(page, "Invites").dataset.unread, "false", "read once on screen");
+  assert.deepEqual(inboxReads, [INVITES.id]);
 });
 
-test("choosing a plan reads its items beside the column and marks them read, and Unread lists only the plans with an item not yet seen, the chosen one staying as it is read", async () => {
+test("a row hangs the plan's card when rested on, offers Pin and Archive at its end, and its right-click offers Open plan ahead of the plan's own menu", async () => {
+  const { page, asked } = mount();
+  await settle();
+  const billing = rowNamed(page, "Billing usage alerts");
+
+  act(() => {
+    billing.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.body.querySelector<HTMLElement>('[role="tooltip"]');
+  assert.equal(card?.querySelector(".plan-card-name")?.textContent, "Billing usage alerts");
+
+  const archive = billing
+    .closest(".sidebar-plan-item")
+    ?.querySelector<HTMLButtonElement>('.sidebar-plan-marks [aria-label="Archive"]');
+  assert.ok(archive, "the row offers Archive at its end");
+  act(() => archive.click());
+  assert.deepEqual(asked.marked, [[BILLING.id, PLAN_MARK.ARCHIVE]]);
+
+  act(() => {
+    billing.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+  });
+  const items = [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((each) => each.textContent),
+    [
+      "Open plan",
+      "Rename",
+      "Version history",
+      "Pin",
+      "Archive",
+      "Change repository…",
+      "Open on GitHub",
+      "Permanently delete",
+    ],
+  );
+  act(() => items[0]?.click());
+  assert.deepEqual(asked.shownPlans, [BILLING.id]);
+});
+
+test("choosing a plan reads its items beside the column, and Waiting lists only the plans with an item waiting", async () => {
   const { page } = mount();
   await settle();
-  act(() => buttonNamed(page, "Unread").click());
-  assert.deepEqual(column(page), ["▸ Invites1 waiting", "Billing usage alerts, unread2 waiting"]);
+  act(() => buttonNamed(page, "Waiting").click());
+  assert.deepEqual(column(page), ["▸ *Invites1 waiting", "*Billing usage alerts2 waiting"]);
 
   act(() => rowNamed(page, "Billing usage alerts").click());
   await settle();
   assert.deepEqual(titles(page), ["Alert at 80%?", "Email or Slack?"]);
-  assert.deepEqual(column(page), ["▸ Billing usage alerts2 waiting"], "read, and still listed");
+  assert.deepEqual(column(page), ["*Invites1 waiting", "▸ *Billing usage alerts2 waiting"]);
   assert.deepEqual(inboxReads, [INVITES.id, BILLING.id]);
 
   act(() => buttonNamed(page, "All").click());
@@ -269,7 +315,7 @@ test("Open plan and an item's agent leave the Inbox for the plan, and the window
   assert.equal(asked.closes, 1);
 });
 
-test("with no plan holding an item the Inbox says so under its glyph, and under Unread with none unread says that instead", async () => {
+test("with no plan holding an item the Inbox says nothing is waiting under its glyph, and under Waiting the chosen plan stays listed though nothing waits on it", async () => {
   const empty = mount({ inboxPlans: [] });
   assert.match(
     empty.page.querySelector(".empty-state")?.textContent ?? "",
@@ -278,8 +324,11 @@ test("with no plan holding an item the Inbox says so under its glyph, and under 
   assert.ok(empty.page.querySelector(".empty-state-icon svg"));
   act(() => root?.unmount());
 
-  const read = mount({ inboxPlans: [{ planId: AUDIT.id, items: 4, updatedAt: 8_000 }] });
+  const settled = mount({
+    inbox: [],
+    inboxPlans: [{ planId: AUDIT.id, items: 4, updatedAt: 8_000 }],
+  });
   await settle();
-  act(() => buttonNamed(read.page, "Unread").click());
-  assert.deepEqual(column(read.page), ["▸ Audit log"], "the chosen plan stays");
+  act(() => buttonNamed(settled.page, "Waiting").click());
+  assert.deepEqual(column(settled.page), ["▸ Audit log"], "the chosen plan stays");
 });
