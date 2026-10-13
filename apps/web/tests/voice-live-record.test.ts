@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { VOICE_WRITE_REFUSAL } from "@sidecar/database/models/voice-writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -38,7 +39,6 @@ import {
   type VoiceWriteResult,
   voiceWriter,
 } from "../server/hosted/store";
-import { VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
 import {
   LIVE_CLIENT_EVENT,
   type LiveAppendEvent,

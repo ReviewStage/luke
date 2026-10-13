@@ -1404,7 +1404,7 @@ the host's admission of the conversation again on every tool call a turn
 makes.
 
 What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
-voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
+voice writer (`packages/database/src/models/voice-writer.ts`). Every server event is
 handed to `observe` in arrival order and the writer takes what it keeps —
 each transcript delta a segment, and, through the one row door the service
 calls behind each fragment (`upsertSpokenRow`, debounced 300 ms a row and
@@ -1869,7 +1869,7 @@ inserted when the session is created, found again by `(user_id,
 live_session_id)` when a fresh function instance re-attaches to the same
 live session, overwritten with each unconfirmed usage snapshot while open,
 and closed once with the confirmed seconds, the instant, and the reason. The
-voice writer in `server/hosted/store/voice-writer.ts` only reads that row
+voice writer in `packages/database/src/models/voice-writer.ts` only reads that row
 for its id and hangs everything else off it: a segment per transcript delta
 at the next position of the session's own sequence, and the developer's spoken ask as a
 user message on the voice channel, cut from the stored user segments between
