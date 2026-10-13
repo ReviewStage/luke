@@ -252,12 +252,17 @@ const pinnableTabSchema = Schema.Union([
   Schema.Struct({ file: Schema.String }),
 ]);
 
-/** A tab pinned to the sidebar: its plan, the tab, the name the sidebar draws for it, and when it was pinned. */
+/**
+ * A tab pinned to the sidebar: its plan, the tab, the name the sidebar draws
+ * for it, when it was pinned, and, an agent's, the model it ran on then,
+ * whose harness's mark its row wears while its plan is not the open one.
+ */
 const pinnedTabSchema = Schema.Struct({
   plan: Schema.String,
   tab: pinnableTabSchema,
   label: Schema.String,
   at: Schema.Number,
+  model: Schema.optionalKey(Schema.String),
 });
 
 /** A tab of a kind the sidebar holds a pin of, of today's kinds. */
@@ -407,8 +412,8 @@ export interface SidePanelControl {
   onClose: (tab: SidePanelTab) => void;
   /** Moves the tab to the place `to` in the strip, among tabs of every kind, leaving the chosen one chosen. */
   onMove: (tab: SidePanelTab, to: number) => void;
-  /** Pins the open plan's tab, of either strip, to the sidebar under the name given, newest of the pins. */
-  onPin: (tab: PinnableTab, label: string) => void;
+  /** Pins the open plan's tab, of either strip, to the sidebar under the name given, newest of the pins; an agent's with the model it runs on. */
+  onPin: (tab: PinnableTab, label: string, model?: string) => void;
   onUnpin: (planId: string, tab: PinnableTab) => void;
   /** Names each agent pinned on the plan as its tab is named now, by agent id; an agent named nowhere keeps the name it has. */
   onRenamePins: (planId: string, labels: ReadonlyMap<string, string>) => void;
@@ -1306,10 +1311,12 @@ export function useSidePanel(
     [update, drawn],
   );
   const onPin = useCallback(
-    (tab: PinnableTab, label: string) => {
+    (tab: PinnableTab, label: string, model?: string) => {
       if (planId === undefined) return;
       const at = Date.now();
-      update((held) => withPin(held, { plan: planId, tab, label }, at));
+      const pin =
+        model === undefined ? { plan: planId, tab, label } : { plan: planId, tab, label, model };
+      update((held) => withPin(held, pin, at));
     },
     [update, planId],
   );

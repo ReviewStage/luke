@@ -1184,6 +1184,51 @@ test("on the open plan, a pinned agent its plan no longer holds stands dimmed wi
   assert.deepEqual(opened, [held]);
 });
 
+test("a pinned agent wears its harness's mark, never the generic terminal: on the open plan as its tab wears it, where it stands included, and on another plan the mark of the model it was pinned on", () => {
+  const billing = listedPlan("Billing");
+  const invites = listedPlan("Invites");
+  const container = mount(DEAN, {
+    plans: withPins(
+      [
+        { plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 3 },
+        {
+          plan: invites.id,
+          tab: { agent: "agent-9" },
+          label: "Codex run",
+          at: 2,
+          model: "openai/gpt-6-astra",
+        },
+        {
+          plan: invites.id,
+          tab: { agent: "agent-8" },
+          label: "Done run",
+          at: 1,
+          model: "anthropic/claude-opus-5.5",
+        },
+      ],
+      {
+        plans: [billing, invites],
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: billing.id,
+        agents: codingAgentsControl({ agents: [agentOn("agent-1")] }),
+      },
+    ),
+  });
+
+  const glyphs = [
+    ...container.querySelectorAll<HTMLElement>(
+      "nav[aria-label='Pinned'] .sidebar-pinned-tab-glyph",
+    ),
+  ];
+  assert.equal(glyphs.length, 3);
+  assert.ok(glyphs[0]?.querySelector(".working-mark"), "the open plan's running agent works");
+  assert.ok(
+    glyphs[1]?.querySelector('img.provider-mark[src="marks/codex-16.png"]'),
+    "Codex's cloud for the OpenAI model it was pinned on",
+  );
+  assert.ok(glyphs[2]?.querySelector("svg.provider-mark"), "Claude Code's Clawd");
+});
+
 test("the archived plans fold away behind a header that counts them while folded, which unfolds them under the rest", () => {
   const opened: string[] = [];
   const archived = [listedPlan("Old", { archivedAt: 9 }), listedPlan("Older", { archivedAt: 8 })];

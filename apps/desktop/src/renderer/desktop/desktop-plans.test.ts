@@ -3180,9 +3180,15 @@ test("the column's + offers New coding agent and the plan's Inbox and coding age
     ["GPT 5.6 Sol", "", true],
   ]);
   assert.equal(document.activeElement?.getAttribute("placeholder"), "Search tabs");
-  // An agent's row says nothing of where it stands, by word or by dot.
-  for (const label of ["Opus 5.5", "GPT 5.6 Sol"]) {
+  // An agent's row wears its harness's mark and says nothing of where it
+  // stands, by word, by dot, or by the working mark its tab wears.
+  for (const [label, mark] of [
+    ["Opus 5.5", "svg.provider-mark"],
+    ["GPT 5.6 Sol", 'img.provider-mark[src="marks/codex-16.png"]'],
+  ] as const) {
     const row = addRow(label);
+    assert.ok(row.querySelector(mark), `${label} wears its harness's mark`);
+    assert.equal(row.querySelector(".working-mark"), null);
     assert.equal(row.querySelector(".agent-status-dot"), null);
     assert.equal(row.querySelector(".plan-compose-menu-detail"), null);
     assert.equal(row.textContent, label);
@@ -3227,6 +3233,40 @@ test("the side panel's + lists the plan's subagents under a section of their own
   assert.equal(chosenTab(page), job);
   act(() => addButton(page).click());
   assert.equal(addRow(job).textContent, job, "an open tab's row says nothing of it");
+});
+test("a subagent wears its model's mark in its tab and its row of the side panel's +, as its row in the Work tab does, rather than the worker's robot", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session !== undefined);
+  const page = mountOpenPlan({
+    work: {
+      ...live,
+      callLive: false,
+      turns: [
+        {
+          ...turn,
+          state: PLAN_WORK_STATE.DONE,
+          parts: [
+            {
+              ...worker,
+              state: PLAN_WORK_STATE.DONE,
+              session: { ...worker.session, model: "openai/gpt-6.1-sol" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const codex = 'img.provider-mark[src="marks/codex-16.png"]';
+  assert.ok(tabNamed(page, job).querySelector(codex), "the tab wears Codex's cloud");
+  act(() => addButton(page).click());
+  assert.ok(addRow(job).querySelector(codex), "and so does its + row");
+  assert.equal(document.querySelector(".tab-add-menu svg.lucide-bot"), null);
 });
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the column's + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();

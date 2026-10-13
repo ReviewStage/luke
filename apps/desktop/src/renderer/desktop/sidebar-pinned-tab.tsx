@@ -22,8 +22,9 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  *
  * A fixed tab or a file's pinned from its menu in the side panel, or an
  * agent's from its menu in the plan's column, stands under Pinned beside
- * the pinned plans, as a row in the plan rows' own shape: the tab's glyph
- * and name on one line, cut short with a fade as a tab is. Its hover card,
+ * the pinned plans, as a row in the plan rows' own shape: the tab's glyph,
+ * an agent's its harness's mark wearing where it stands as its tab does,
+ * and its name on one line, cut short with a fade as a tab is. Its hover card,
  * in the plan card's look (`plan-card.tsx`), says the rest: the tab's whole
  * name, its kind under its glyph, the plan it is of, and an agent's model
  * and where it stands. A press opens the plan, where it is not the open one, and the tab
@@ -156,7 +157,7 @@ function PinnedTabCard({
           <span className="plan-card-name">{pin.label}</span>
         </div>
         <span className="plan-card-repository">
-          {pinnedTabIcon(pin.tab)}
+          {pinnedTabIcon(pin, agent)}
           {pinKind(pin)}
         </span>
       </div>
@@ -217,6 +218,7 @@ export function SidebarPinnedTab({
   const menu = useActionMenu(plans.shown && inSight);
   const row = useRef<HTMLButtonElement | null>(null);
   const gone = pinGone(pin, plans);
+  const agent = pinAgent(pin, plan, plans);
   // The row is what the menu rings and hands focus back to, even when the
   // right-click lands on Unpin over its end.
   const showMenu = (event: React.MouseEvent) => {
@@ -232,7 +234,7 @@ export function SidebarPinnedTab({
           <PinnedTabCard
             pin={pin}
             plan={plan}
-            agent={pinAgent(pin, plan, plans)}
+            agent={agent}
             gone={gone}
             plans={plans}
           />
@@ -252,7 +254,7 @@ export function SidebarPinnedTab({
           onContextMenu={showMenu}
         >
           <span className="sidebar-plan-line">
-            <span className="sidebar-pinned-tab-glyph">{pinnedTabIcon(pin.tab)}</span>
+            <span className="sidebar-pinned-tab-glyph">{pinnedTabIcon(pin, agent)}</span>
             <span ref={words} className="sidebar-pinned-tab-name" data-overflow={String(clipped)}>
               {pin.label}
             </span>

@@ -15,8 +15,10 @@ import {
   PLAN_WORK_TOOL,
   type PlanningTreeAnswer,
 } from "@sidecar/hosted/planning-view";
+import { BoardIcon, CodeIcon, TranscriptIcon, WorkIcon } from "@sidecar/panel";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import {
@@ -465,8 +467,19 @@ test("Show board and the panel's other kinds are listed with the commands, with 
   const input = openPalette();
   pressFilter("Actions");
   search(input, "show");
-  for (const kind of ["Show board", "Show code", "Show transcript", "Show work"]) {
+  for (const [kind, glyph] of [
+    ["Show board", BoardIcon],
+    ["Show code", CodeIcon],
+    ["Show transcript", TranscriptIcon],
+    ["Show work", WorkIcon],
+  ] as const) {
     assert.ok(rows().includes(kind), `${kind} is listed alone, with no chord`);
+    const row = listedRows().find((each) => rowWords(each) === kind);
+    assert.equal(
+      row?.querySelector("svg")?.outerHTML,
+      renderToStaticMarkup(createElement(glyph)),
+      `${kind} wears its tab's glyph`,
+    );
   }
   choose("Show transcript");
   assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "the panel opens on the Plans tab");

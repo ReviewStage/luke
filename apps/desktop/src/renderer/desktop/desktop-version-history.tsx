@@ -1,12 +1,13 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
-import { BackIcon, EllipsisIcon, TerminalIcon, WingFace } from "@sidecar/panel";
+import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PersonAvatar } from "../person-avatar";
+import { AgentMark } from "../planning/agent-tab";
 import { centreWithin } from "../planning/code-pane";
 import {
   authorName,
@@ -29,7 +30,6 @@ import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ, type ViewedVersion } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
-import { HarnessMark } from "../provider-marks";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import type { DialogConfirm } from "../settings/confirm-dialog";
 import { Skeleton, SkeletonRegion } from "../skeleton";
@@ -120,11 +120,7 @@ function RevisionMark({ author }: { author: RevisionAuthor }): React.JSX.Element
     case REVISION_AUTHOR.AGENT:
       return (
         <span className="version-row-mark" aria-hidden="true">
-          {author.provider === undefined ? (
-            <TerminalIcon />
-          ) : (
-            <HarnessMark provider={author.provider} />
-          )}
+          <AgentMark provider={author.provider} />
         </span>
       );
     case REVISION_AUTHOR.EARLIER:

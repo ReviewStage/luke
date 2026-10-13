@@ -1,5 +1,9 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentStatus,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_STATE,
@@ -12,11 +16,10 @@ import {
   CollapseIcon,
   ExpandIcon,
   SidePanelIcon,
-  TerminalIcon,
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { BotIcon, FileCodeIcon } from "lucide-react";
+import { FileCodeIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -24,7 +27,7 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentSubagentTab } from "../planning/agent-tab";
+import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
 import {
   AgentTabCard,
   cardCorner,
@@ -34,7 +37,7 @@ import {
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
-import { agentGlyphState, agentStateWords } from "../planning/coding-agent-model";
+import { agentGlyphState, agentStateWords, providerOf } from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
@@ -67,7 +70,7 @@ import {
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
-  type PinnableTab,
+  type PinnedTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
@@ -173,8 +176,8 @@ function documentReserve(area: HTMLElement): number {
   return Number.isFinite(declared) ? declared : SIDE_PANEL_WIDTH.MIN;
 }
 
-/** Each kind's glyph, leading its tab, its row in the "+" menu, and its pin in the sidebar (`pinnedTabIcon`). */
-const TAB_ICON = {
+/** Each kind's glyph, leading its tab, its row in the "+" menu, its pin in the sidebar (`pinnedTabIcon`), and its row in ⌘K. */
+export const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
@@ -231,7 +234,7 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * "+" and those the plan has used for the summary; then, under Subagents,
  * each subagent the plan's work holds; then, under Files, each file Luke
  * showed on the plan, by name with its folder beside it. A subagent's row
- * wears the worker's glyph, and where the worker stands only where
+ * wears its model's mark (`SubagentMark`), and where the worker stands only where
  * `standing` asks: the "+" leaves that to its tab, beside it, and the
  * summary has no tab beside it to say it. A file's row wears its type's
  * coloured icon there too, as the file tree draws it (`file-type-icon.tsx`),
@@ -258,9 +261,12 @@ export function panelEntries(input: {
       id: worker.call.id,
       label: worker.session?.title ?? workerJob(worker.call),
       icon: standing ? (
-        <StateGlyph glyph={<BotIcon />} state={workerStanding(worker).state} />
+        <StateGlyph
+          glyph={<SubagentMark model={workerChoice(worker)?.model} />}
+          state={workerStanding(worker).state}
+        />
       ) : (
-        <BotIcon />
+        <SubagentMark model={workerChoice(worker)?.model} />
       ),
       section: ADD_SECTION.SUBAGENTS,
     },
@@ -297,9 +303,21 @@ export function planWorkers(
   });
 }
 
-/** The glyph a tab's pin wears in the sidebar: its kind's, the Coding agents glyph the "+" menu gives an agent, or a file's. */
-export function pinnedTabIcon(tab: PinnableTab): React.JSX.Element {
-  if (isAgentTab(tab)) return <TerminalIcon />;
+/**
+ * The glyph a tab's pin wears in the sidebar: its kind's, a file's, or an
+ * agent's as its tab wears it, where it stands included, wherever the
+ * window last read the agent (`agent`), and otherwise the mark of the
+ * harness it ran in when it was pinned.
+ */
+export function pinnedTabIcon(
+  pin: PinnedTab,
+  agent: Pick<CodingAgentSummary, "model" | "status"> | undefined,
+): React.JSX.Element {
+  const { tab } = pin;
+  if (isAgentTab(tab)) {
+    if (agent !== undefined) return <AgentGlyph agent={agent} />;
+    return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
+  }
   return isFileTab(tab) ? <FileCodeIcon /> : TAB_ICON[tab];
 }
 
@@ -350,6 +368,12 @@ function stripTabs(input: {
   const subagentTabs = subagents.map(({ tab, label, untitled, state, stateWords, worker }) => {
     const running = state === GLYPH_STATE.WORKING;
     const { delegation } = tab;
+    // Note that a delegated worker is marked by its agent's model, because it
+    // runs in its agent's harness whatever model the delegation chose.
+    const model =
+      delegation === undefined
+        ? worker && workerChoice(worker)?.model
+        : agents.agents?.find((agent) => agent.id === delegation.agent)?.model;
     // A worker runs one turn, so the run its tab last read is its run for good.
     const readCard = () => {
       if (delegation === undefined) {
@@ -406,7 +430,7 @@ function stripTabs(input: {
     return {
       tab,
       look: look(tab, {
-        icon: <StateGlyph glyph={<BotIcon />} state={state} />,
+        icon: <StateGlyph glyph={<SubagentMark model={model} />} state={state} />,
         endMark: stateEndMark(state, false),
         label,
         card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,

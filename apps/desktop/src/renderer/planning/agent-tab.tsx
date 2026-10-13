@@ -8,10 +8,10 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { TerminalIcon } from "@sidecar/panel";
+import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
+import { DocumentIcon, TerminalIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import { BotIcon, FileTextIcon } from "lucide-react";
+import { BotIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -147,7 +147,11 @@ interface TranscriptLead {
 /** An agent's transcript: the plan it was handed, and the agent starting. */
 const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
-  icon: <FileTextIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
+  icon: (
+    <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
+      <DocumentIcon />
+    </span>
+  ),
   startingLine: "The agent is starting. Its transcript appears here.",
   grouped: true,
 };
@@ -434,17 +438,37 @@ function AgentMessage({
 }
 
 /**
- * An agent's glyph wearing where it stands: the mark of the harness its
- * model runs in at its full size, or the Coding agents glyph where Luke
- * knows no harness for it, giving way to the working mark while the agent
- * may still write (`state-glyph.tsx`). A failed agent keeps its mark, and
- * its row or tab says the failure at its end (`agentEndMark`).
+ * A coding agent's mark at rest, wherever one is drawn: the mark of the
+ * harness its model runs in, or the Coding agents glyph where Luke knows no
+ * harness for it. A row that says where the agent stands wears it inside
+ * `AgentGlyph`; one that leaves that to the agent's tab, as the "+" does,
+ * or knows nothing of where it stands, as a revision's author, wears it bare.
+ */
+export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
+  return provider === undefined ? <TerminalIcon /> : <HarnessMark provider={provider} />;
+}
+
+/**
+ * A subagent's mark: the mark of the harness its model runs in, as its row
+ * in a transcript wears it, or the worker's robot where its model is not
+ * known. Note that the harness is read from the model's id, as an agent's
+ * is, so the mark stands before the catalog is read.
+ */
+export function SubagentMark({ model }: { model: string | undefined }) {
+  const provider = model === undefined ? undefined : providerOf(model);
+  return provider === undefined ? <BotIcon /> : <HarnessMark provider={provider} />;
+}
+
+/**
+ * An agent's glyph wearing where it stands: its mark (`AgentMark`) at its
+ * full size, giving way to the working mark while the agent may still write
+ * (`state-glyph.tsx`). A failed agent keeps its mark, and its row or tab
+ * says the failure at its end (`agentEndMark`).
  */
 export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
-  const provider = providerOf(agent.model);
   return (
     <StateGlyph
-      glyph={provider === undefined ? <TerminalIcon /> : <HarnessMark provider={provider} />}
+      glyph={<AgentMark provider={providerOf(agent.model)} />}
       state={agentGlyphState(agent.status)}
     />
   );

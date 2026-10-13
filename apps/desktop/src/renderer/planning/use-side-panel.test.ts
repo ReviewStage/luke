@@ -663,6 +663,21 @@ test("a pinned agent takes the name its tab has now on its own plan, and keeps t
   assert.equal(panel.control().pins[0]?.label, "Invite flow");
 });
 
+test("a pinned agent keeps the model it ran on across a launch, for its row to wear its harness's mark on another plan", () => {
+  const first = mount([AGENT]);
+  act(() => first.control().onPin({ agent: AGENT }, "GPT-5.5", "openai/gpt-5.5"));
+  act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+
+  const second = mount([AGENT]);
+  assert.deepEqual(
+    second.control().pins.map(({ tab, model }) => ({ tab, model })),
+    [
+      { tab: SIDE_PANEL_TAB.WORK, model: undefined },
+      { tab: { agent: AGENT }, model: "openai/gpt-5.5" },
+    ],
+  );
+});
+
 test("a file shown from its pin before the plan's code is read is chosen once it is, though other tabs arrive first", () => {
   const { TRANSCRIPT, BOARD, CODE } = SIDE_PANEL_TAB;
   const panel = mountStood({
