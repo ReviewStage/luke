@@ -71,8 +71,6 @@ long it ran, and its card says why it ended and the model it ran on.
 [#2410](https://github.com/ReviewStage/luke/pull/2410),
 [#2417](https://github.com/ReviewStage/luke/pull/2417))
 
-![The Call tab mid-call, with Luke's reading and his subagent under the question that asked for them.](apps/web/public/changelog/0.12.0/the-call-tab.png)
-
 ### The plan is one document
 
 A plan is now one Markdown document you edit in place, its title inline, and the
@@ -96,8 +94,6 @@ headings it belongs to, and plans from earlier releases carry over as documents.
 [#2317](https://github.com/ReviewStage/luke/pull/2317),
 [#2320](https://github.com/ReviewStage/luke/pull/2320),
 [#2331](https://github.com/ReviewStage/luke/pull/2331))
-
-![A plan drawn as one document from the default template, partway through, with sections still holding the template's guidance.](apps/web/public/changelog/0.12.0/the-plan-is-one-document.png)
 
 ### Version history
 
@@ -172,8 +168,6 @@ turns it off.
 [#2374](https://github.com/ReviewStage/luke/pull/2374),
 [#2376](https://github.com/ReviewStage/luke/pull/2376),
 [#2388](https://github.com/ReviewStage/luke/pull/2388))
-
-![A command Luke ran on the Mac in the Call tab, its row tagged On your Mac and open on what it printed.](apps/web/public/changelog/0.12.0/commands-on-your-mac.png)
 
 ### Luke and coding agents share one runtime
 
@@ -260,8 +254,6 @@ the open plan's repository, with a filter for each kind.
 [#2192](https://github.com/ReviewStage/luke/pull/2192),
 [#2212](https://github.com/ReviewStage/luke/pull/2212),
 [#2399](https://github.com/ReviewStage/luke/pull/2399))
-
-![The ⌘K command palette over a plan, listing plans, agents, actions, and settings under its filters.](apps/web/public/changelog/0.12.0/a-command-palette.png)
 
 ### Improvements
 
