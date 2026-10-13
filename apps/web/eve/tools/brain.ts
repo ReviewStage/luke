@@ -4,6 +4,7 @@ import { defineDynamic, defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
 import { lookModelOutput } from "../../server/hosted/board-look.js";
 import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
+import { PLANNER_TOOL_NAMES } from "../../server/hosted/brain-host/planning.js";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 
@@ -20,7 +21,7 @@ import { host } from "../host.js";
  * (`lookModelOutput`).
  */
 export function hostedTools(
-  offered?: ReadonlySet<string>,
+  offered: ReadonlySet<string> = PLANNER_TOOL_NAMES,
   admit: (auth: SessionAuth, sessionId: string) => ReturnType<typeof host.admit> = host.admit,
 ) {
   return defineDynamic({
@@ -39,7 +40,7 @@ export function hostedTools(
             const binding: HostedToolBinding = { target, turn };
             const declarations = host
               .toolDeclarations()
-              .filter((declared) => offered === undefined || offered.has(declared.name));
+              .filter((declared) => offered.has(declared.name));
             return Object.fromEntries(
               declarations.map((declared) => {
                 const name = declared.name;

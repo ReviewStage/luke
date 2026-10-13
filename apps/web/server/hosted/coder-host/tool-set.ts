@@ -1,15 +1,11 @@
-import {
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_TODOS_TOOL,
-} from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import { WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { connectionToolEntries } from "../connection-tools.js";
-import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -31,40 +27,37 @@ import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
  * schema already read before the call ran.
  */
 
-/** The tools the coding agent is offered, by the name eve mounts each under. */
+/**
+ * The tools the coding agent is offered, by the name eve mounts each under:
+ * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
+ * the callers that pick one out. Its test holds this to the registry's role
+ * and the files under `coder/tools/` to this.
+ */
 export const CODER_TOOL = {
-  BASH: "bash",
-  READ_FILE: "read_file",
-  WRITE_FILE: "write_file",
-  GLOB: "glob",
-  GREP: "grep",
-  APPLY_PATCH: "apply_patch",
-  SEARCH_WEB: SEARCH_WEB_TOOL.name,
-  READ_WEB_PAGE: READ_WEB_PAGE_TOOL.name,
-  DELEGATE: CODING_AGENT_DELEGATE_TOOL,
-  EDIT_PLAN: "edit_plan",
-  WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
-  POST_TO_INBOX: INBOX_TOOL.POST,
-  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
-  READ_INBOX: INBOX_TOOL.READ,
-  LOAD_SKILL: "load_skill",
+  BASH: AGENT_TOOL.BASH,
+  READ_FILE: AGENT_TOOL.READ_FILE,
+  WRITE_FILE: AGENT_TOOL.WRITE_FILE,
+  GLOB: AGENT_TOOL.GLOB,
+  GREP: AGENT_TOOL.GREP,
+  APPLY_PATCH: AGENT_TOOL.APPLY_PATCH,
+  SEARCH_WEB: AGENT_TOOL.SEARCH_WEB,
+  READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
+  DELEGATE: AGENT_TOOL.DELEGATE,
+  EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
+  WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
+  POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
+  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
+  READ_INBOX: AGENT_TOOL.READ_INBOX,
+  LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
 } as const;
 
 /**
  * The tools a worker is offered, authored one file each under
- * `coder/subagents/worker/tools/`: every read of the agent's, and nothing
- * that writes the checkout or publishes, so workers run in parallel without
- * colliding and the agent alone edits. The shell is among them, told to
- * change nothing; what holds it to that is the worker's instructions.
+ * `coder/subagents/worker/tools/`: the coding worker's in the registry.
+ * The shell is among them, told to change nothing; what holds it to that
+ * is the worker's instructions.
  */
-export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
-  CODER_TOOL.BASH,
-  CODER_TOOL.READ_FILE,
-  CODER_TOOL.GLOB,
-  CODER_TOOL.GREP,
-  CODER_TOOL.SEARCH_WEB,
-  CODER_TOOL.READ_WEB_PAGE,
-]);
+export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.CODER_WORKER);
 
 /**
  * eve's provider-run web reads, which coding agents ran before they had the
@@ -125,9 +118,12 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  * (`../connection-tools.ts`), which the agent and its workers alike make.
  */
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
-  ...[...Object.values(CODER_TOOL), ...Object.values(RETIRED_CODER_TOOL)].map((name) => [
-    name,
-    wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT),
-  ]),
+  ...[
+    ...new Set([
+      ...toolsOf(AGENT_ROLE.CODER),
+      ...toolsOf(AGENT_ROLE.CODER_WORKER),
+      ...Object.values(RETIRED_CODER_TOOL),
+    ]),
+  ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),
 ]);

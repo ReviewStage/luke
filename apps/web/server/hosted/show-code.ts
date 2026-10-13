@@ -18,6 +18,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../core.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   checkedOutSandbox,
   REPOSITORY_REFUSAL,
@@ -185,7 +186,7 @@ const readShownCode = Schema.decodeUnknownResult(SHOW_CODE_ANSWER);
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const SHOW_CODE_TOOL = {
-  name: "show_code",
+  name: AGENT_TOOL.SHOW_CODE,
   description:
     "Put lines of a file in the plan's repository on the developer's screen, lit, as Luke starts " +
     "saying your next words. Call it just before the queue_question or the return that talks " +

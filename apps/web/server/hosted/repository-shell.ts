@@ -6,6 +6,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
 import { GitHubApp } from "../github/github-app.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
@@ -266,7 +267,7 @@ const readInput = readEither(RUN_IN_REPOSITORY_INPUT);
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const RUN_IN_REPOSITORY_TOOL = {
-  name: "run_in_repository",
+  name: AGENT_TOOL.RUN_IN_REPOSITORY,
   description:
     "Run one bash command in a checkout of the plan's GitHub repository, from the checkout root. " +
     "Use it to read the code: ls, find, grep, cat, sed, git log. " +

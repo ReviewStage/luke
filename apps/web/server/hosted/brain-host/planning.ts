@@ -19,6 +19,8 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import {
@@ -531,22 +533,15 @@ export const EVE_DELEGATION_INPUT = {
  * carries, as eve declares it: the skill's name.
  */
 export const EVE_SKILL_TOOL = {
-  NAME: "load_skill",
+  NAME: AGENT_TOOL.LOAD_SKILL,
   INPUT: Schema.Struct({ skill: Schema.String }),
 } as const;
 
-/**
- * The planning tools the `worker` subagent is offered: every read a
- * background session can carry. Note that it is offered nothing that speaks
- * or shows, because a question queued or code shown reaches the developer only
- * through the planning turn the voice follows, and not `draw_on_board`,
- * because a drawing replaces the planning model's own.
- */
-export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
-  SEARCH_WEB_TOOL.name,
-  READ_WEB_PAGE_TOOL.name,
-  RUN_IN_REPOSITORY_TOOL.name,
-]);
+/** The planning tools the root is offered: the planner's in the registry (`../agent-runtime/tools.ts`). */
+export const PLANNER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.PLANNER);
+
+/** The planning tools the `worker` subagent is offered: the planning worker's in the registry, every read a background session can carry. */
+export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.PLANNER_WORKER);
 
 /**
  * The instructions the `worker` subagent runs under. Note that it is told it

@@ -9,6 +9,8 @@ import type { SessionAuthContext } from "eve/context";
 import { test } from "vitest";
 import agent from "../coder/agent";
 import worker from "../coder/subagents/worker/agent";
+import { AGENT_ROLE } from "../server/hosted/agent-runtime/role";
+import { toolsOf } from "../server/hosted/agent-runtime/tools";
 import { DEPLOYMENT_PRESENCE, lukeAccount } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -91,7 +93,9 @@ test("the tools authored for the agent, the retired web reads an old transcript 
     ].sort(),
     Object.keys(CODER_TOOL_SET).sort(),
   );
-  assert.deepEqual(authored, Object.values(CODER_TOOL).sort());
+  // The agent's files are the coder's tools in the registry, and the names the host picks from are those.
+  assert.deepEqual(authored, [...toolsOf(AGENT_ROLE.CODER)].sort());
+  assert.deepEqual(Object.values(CODER_TOOL).sort(), [...toolsOf(AGENT_ROLE.CODER)].sort());
 });
 
 const SECRET = "cron-secret-1";

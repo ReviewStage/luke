@@ -6,6 +6,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../core.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * end-call.ts -- the planning model's `end_call` tool: the developer said they are done, so Luke hangs up.
@@ -31,7 +32,7 @@ const isEndCallInput = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const END_CALL_TOOL = {
-  name: "end_call",
+  name: AGENT_TOOL.END_CALL,
   description:
     "End the voice call once the developer asks you to end it or has clearly said they are " +
     'done with it, such as "can you end the call", "bye", "see ya", "that\'s all", "thanks, ' +

@@ -35,6 +35,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { startCodingAgent } from "./coder-host/start.js";
@@ -204,7 +205,7 @@ const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_INPUT);
 
 /** The tools as a planning model is offered them: each its name, its words, and its input schema. */
 export const LIST_CODING_AGENTS_TOOL = {
-  name: "list_coding_agents",
+  name: AGENT_TOOL.LIST_CODING_AGENTS,
   description:
     "List the coding agents working on this plan: each with its id, its title (how the " +
     "developer sees it named), the model and effort it runs on with the model's name to say it " +
@@ -216,7 +217,7 @@ export const LIST_CODING_AGENTS_TOOL = {
 } as const;
 
 export const READ_CODING_AGENT_TOOL = {
-  name: "read_coding_agent",
+  name: AGENT_TOOL.READ_CODING_AGENT,
   description:
     "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
     "request from it as GitHub holds them, and a short tail " +
@@ -226,7 +227,7 @@ export const READ_CODING_AGENT_TOOL = {
 } as const;
 
 export const MESSAGE_CODING_AGENT_TOOL = {
-  name: "message_coding_agent",
+  name: AGENT_TOOL.MESSAGE_CODING_AGENT,
   description:
     "Send one coding agent a message, exactly as the developer would type it to the agent. It " +
     "steers the turn under way, so the agent sees it at its next step, or starts a turn when " +
@@ -236,7 +237,7 @@ export const MESSAGE_CODING_AGENT_TOOL = {
 } as const;
 
 export const START_CODING_AGENT_TOOL = {
-  name: "start_coding_agent",
+  name: AGENT_TOOL.START_CODING_AGENT,
   description:
     "Start a new coding agent on this plan, exactly as the developer's Start button would: " +
     "on the plan itself with no task, or on the task given in the plan's place. It runs on the " +

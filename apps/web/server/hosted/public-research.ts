@@ -20,6 +20,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { providerModelOf } from "./model-catalog.js";
 import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
 
@@ -96,8 +97,8 @@ export const PUBLIC_RESEARCH_BOUNDS = {
 } as const;
 
 const PUBLIC_RESEARCH_TOOL = {
-  SEARCH_WEB: "search_web",
-  READ_WEB_PAGE: "read_web_page",
+  SEARCH_WEB: AGENT_TOOL.SEARCH_WEB,
+  READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
 } as const;
 
 type PublicResearchTool = (typeof PUBLIC_RESEARCH_TOOL)[keyof typeof PUBLIC_RESEARCH_TOOL];
