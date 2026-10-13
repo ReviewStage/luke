@@ -527,6 +527,26 @@ it.layer(getTestDB())("the plan template route", (it) => {
       }),
   );
 
+  it.effect(
+    "a restore of what already stands is still kept, naming the revision it asked for",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        yield* ask(writeTemplate(owner, { template: FIRST_TEMPLATE }));
+
+        assert.deepEqual(templateOf(yield* ask(restoreRevision(owner, 2))), {
+          template: FIRST_TEMPLATE,
+          custom: true,
+        });
+        assert.deepEqual(linesOf(historyOf(yield* ask(readHistory(owner))))[0], {
+          seq: 3,
+          actor: PLAN_ACTOR.DEVELOPER,
+          changes: 0,
+          restoredFrom: 2,
+        });
+      }),
+  );
+
   it.effect("restoring the default goes back to the default rather than to a copy of it", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;

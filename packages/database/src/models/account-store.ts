@@ -3,7 +3,7 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
@@ -280,21 +280,46 @@ const updatePlanTemplate = SqlSchema.findOne({
 });
 
 /**
- * Keeps the account's template verbatim, or null for the default, and
- * answers what is then kept. A write that changes it is kept as a revision
- * (`plan-template-revisions.ts`), a restore naming the revision it brought
- * back, in one transaction with the row locked, so two writes never take one
- * revision's number and the template and its history never disagree.
+ * Runs `body` on the template the account holds, in one transaction with
+ * its preference row locked, opened first where the account has none, so
+ * two writes never take one revision's number and the template and its
+ * history never disagree.
  */
-export function writePlanTemplate(
+function underTemplateLock<A>(
   userId: string,
-  template: string | null,
-  restoredFrom?: number,
-): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
-  const written = Effect.gen(function* () {
+  body: (
+    before: string | null,
+  ) => Effect.Effect<A, AccountSeamFailure | Cause.NoSuchElementError, SqlClient.SqlClient>,
+): Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient> {
+  const locked = Effect.gen(function* () {
     yield* openPreferenceRow(userId);
     const { planTemplate: before } = yield* lockPlanTemplate(userId);
-    if (before === template) return before;
+    return yield* body(before);
+  }).pipe(
+    // A row the lock or the write found missing is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+  );
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
+}
+
+/**
+ * The template written over `before`, under the lock, and kept as a
+ * revision (`plan-template-revisions.ts`). Note that a write of what stands
+ * keeps nothing, but a restore of it is still kept, because the developer
+ * asked for that revision back and the history says so.
+ */
+function writtenUnderLock(
+  userId: string,
+  before: string | null,
+  template: string | null,
+  restoredFrom?: number,
+): Effect.Effect<
+  string | null,
+  AccountSeamFailure | Cause.NoSuchElementError,
+  SqlClient.SqlClient
+> {
+  return Effect.gen(function* () {
+    if (before === template && restoredFrom === undefined) return before;
     const { planTemplate: after } = yield* updatePlanTemplate({ userId, planTemplate: template });
     yield* recordTemplateRevision({
       userId,
@@ -303,26 +328,35 @@ export function writePlanTemplate(
       ...(restoredFrom === undefined ? undefined : { restoredFrom }),
     });
     return after;
-  }).pipe(
-    // A row the lock or the write found missing is the database breaking its own contract, not an outcome.
-    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
-  );
-  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
+  });
+}
+
+/** Keeps the account's template verbatim, or null for the default, kept as a revision where it changed, and answers what is then kept. */
+export function writePlanTemplate(
+  userId: string,
+  template: string | null,
+): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
+  return underTemplateLock(userId, (before) => writtenUnderLock(userId, before, template));
 }
 
 /**
  * Puts one revision of the account's template back as the template, a
  * revision of its own that names it, and answers what is then kept; nothing
- * where the account has no such revision.
+ * where the account has no such revision. The revision is read under the
+ * lock, so a write that moves it on meanwhile is either all before the read
+ * or all after the restore.
  */
 export function restorePlanTemplate(
   userId: string,
   seq: number,
 ): Effect.Effect<Option.Option<string | null>, AccountSeamFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(readTemplateRevisionContent(userId, seq), (content) =>
-    Option.match(content, {
-      onNone: () => Effect.succeed(Option.none<string | null>()),
-      onSome: (template) => Effect.map(writePlanTemplate(userId, template, seq), Option.some),
-    }),
+  return underTemplateLock(userId, (before) =>
+    Effect.flatMap(readTemplateRevisionContent(userId, seq), (content) =>
+      Option.match(content, {
+        onNone: () => Effect.succeed(Option.none<string | null>()),
+        onSome: (template) =>
+          Effect.map(writtenUnderLock(userId, before, template, seq), Option.some),
+      }),
+    ),
   );
 }
