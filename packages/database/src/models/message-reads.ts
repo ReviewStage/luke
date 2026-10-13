@@ -804,7 +804,9 @@ const earlierDelegation = alias(asks, "earlier_delegation");
  * a follow-up only where the turn already had a delegation before it: the
  * call's explore ask opens a turn that the developer's first ask is steered
  * into (`voice/live-brain.ts`), and that ask is the turn's, not a follow-up
- * to the explore, which names no line and no voice session.
+ * to the explore, which names no line and no voice session. Delegations are
+ * ordered by when they were made, and by the voice's revision of them where
+ * two were made in one instant.
  */
 const noSteeredAsk = () =>
   notExists(
@@ -826,7 +828,14 @@ const noSteeredAsk = () =>
                 and(
                   eq(earlierDelegation.turnId, namingAsk.turnId),
                   isNotNull(earlierDelegation.voiceSessionId),
-                  lt(earlierDelegation.createdAt, namingAsk.createdAt),
+                  // Two delegations made in one instant are told apart by the voice's own revisions.
+                  or(
+                    lt(earlierDelegation.createdAt, namingAsk.createdAt),
+                    and(
+                      eq(earlierDelegation.createdAt, namingAsk.createdAt),
+                      lt(earlierDelegation.taskRevision, namingAsk.taskRevision),
+                    ),
+                  ),
                 ),
               ),
           ),

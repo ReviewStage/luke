@@ -527,7 +527,7 @@ async function delegatedAsk(
   return delegationId;
 }
 
-test("the developer's first ask of a call, steered into the turn the call's explore ask opened, names its lines as the turn's ask, so the turn stands under them though it ends after the call; a follow-up steered in while the turn runs names none", async () => {
+test("the developer's first ask of a call, steered into the turn the call's explore ask opened, names its lines as the turn's ask, so the turn stands under them though it ends after the call; a follow-up steered in while the turn runs names none, made in the same instant included", async () => {
   const target = await planConversation();
   const standing = standingFor(target);
   // The call opens with the explore ask, keyed by the call's session and naming no line, and eve opens a turn for it at once.
@@ -556,32 +556,31 @@ test("the developer's first ask of a call, steered into the turn the call's expl
     ],
     standing,
   );
-  // The developer's ask, said while the explore turn runs, which eve steers into it.
+  // The developer's ask, said while the explore turn runs (the relay starts it at its own NOW), which eve steers into it.
   const asked = await delegatedAsk(
     target,
     standing,
     [["row-ask", "Look into how invites expire.", 7_400]],
-    NOW,
+    NOW + 1_000,
     1,
   );
   await play(
-    [stampedEveEvent({ type: "message.received", data: received }, NOW + 1_000, [asked])],
+    [stampedEveEvent({ type: "message.received", data: received }, NOW + 2_000, [asked])],
     standing,
   );
-  // A minute in, while the turn waits on its subagent, the developer says more, and eve steers that in too.
+  // While the turn waits on its subagent, the developer says more, and eve steers that in too. Note
+  // that it is made in the same instant as the ask, which the store's clock can do, so the voice's
+  // revision is what tells the follow-up from the ask.
   const followUp = await delegatedAsk(
     target,
     standing,
     [["row-follow", "And who can resend one?", 62_000]],
-    NOW + 60_000,
+    NOW + 1_000,
     2,
   );
   await play(
     [
-      stampedEveEvent({ type: "message.received", data: received }, NOW + 61_000, [
-        asked,
-        followUp,
-      ]),
+      stampedEveEvent({ type: "message.received", data: received }, NOW + 3_000, [asked, followUp]),
       ...answeringStep(FIRST_EVE_TURN, 0, "Seven days, and the inviter."),
     ],
     standing,
