@@ -69,10 +69,10 @@ export interface HostedWorkspaceClientOptions extends AccountToken {
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
 /** The refusals a workspace call names, by the service's own word for each. */
-const REFUSALS: Readonly<Partial<Record<HostedApiError, WorkspaceCallFailure>>> = {
+const REFUSALS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
   [HOSTED_API_ERROR.NOT_FOUND]: WORKSPACE_CALL_FAILURE.NOT_FOUND,
-};
+} as const satisfies Readonly<Partial<Record<HostedApiError, WorkspaceCallFailure>>>;
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
@@ -82,7 +82,10 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-  const failure = refusal === undefined ? undefined : REFUSALS[refusal];
+  const failure =
+    refusal === HOSTED_API_ERROR.NOT_PERMITTED || refusal === HOSTED_API_ERROR.NOT_FOUND
+      ? REFUSALS[refusal]
+      : undefined;
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
