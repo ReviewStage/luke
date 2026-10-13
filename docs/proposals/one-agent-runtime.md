@@ -291,6 +291,17 @@ caller's principal (`eve/docs/subagents/index.mdx`).
 
 ### 3.7 One transcript schema and one transcript component
 
+As built: the planner's turns are drawn by the agent tab's own component
+(#2365). The Transcript and Work tabs became one Call tab, whose spoken
+lines are drawn as messages too, so the deviation from the proposal below
+is that a planner's user lines are drawn, as the voice transcript. The Call
+tab draws each turn's work under the line that asked for it. Every tool name
+lives in one shared vocabulary (`@sidecar/hosted/agent-tools`, #2397), and
+the agent tab reads the planning model's raw calls by it. The wire switch
+(9b) and the old wire's deletion (9c) come after the release, as one step:
+9c has to wait for a desktop release anyway, and 9b alone would double the
+live frame for no visible change.
+
 **Wire.**
 - **One route for every conversation:** the coder's held long-poll page
   (`coder-host/transcript.ts` `transcriptPast`) over raw stored parts,
@@ -386,6 +397,25 @@ lifecycle.
   presentation, not a second component.
 
 ## 5. Migration path
+
+As built (2026-10-13):
+
+| PR | | |
+| --- | --- | --- |
+| 1 | One connection set | #2363 |
+| 2 | One tool registry with roles | #2386 |
+| 3 | One transcript part view | #2365 |
+| 4 | One web-research pair | #2372 |
+| 5a | Worker rows read their own session | #2387 |
+| 5b | One delegation, a resumable task (`serve`) in both roots: the coder waits with `task_wait` unless it sets `background`, and the planner always runs in the background | #2402 |
+| 6 | One meter | #2367 |
+| 7a | One edge kit | #2401 |
+| 7b | One host core (admission, session claim, a worker's child). The rest of each host is its role's own, so the hosts stay two over the core | #2405 |
+| 8 | One sandbox lifecycle | #2403 |
+| 9a | One tool-name vocabulary | #2397 |
+| 9b, 9c | One transcript wire, then deleting the old wire | after the release |
+| 10 | Coders rotate and seed | deferred with the one-root goal: a live coder session is only retired by a deletion, and a new session would lose its sandbox's uncommitted work |
+| Decision 4 | Brain skills | #2375 |
 
 Each PR keeps both live paths working, ships its own tests, and passes
 `check.sh`. Desktop PRs also need the developer's `verify.sh` run. Sizes are
