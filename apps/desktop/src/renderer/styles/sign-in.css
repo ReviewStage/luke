@@ -57,7 +57,7 @@
 }
 
 /* The window's control height and corner. The primary one is filled, drawn in
-   the text colour the way the new-plan page's start press is — the provider
+   the text colour the way a composer's send press is — the provider
    last signed in with, or Google with none kept — and the other is the quiet
    one beside it. */
 .sign-in-provider {
