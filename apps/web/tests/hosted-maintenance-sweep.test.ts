@@ -34,12 +34,13 @@ function sweepRequest(
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
   purged: number[];
+  purgedCalls: number[];
   abandoned: number[];
   voiced: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
-  const recorded: Recorded = { purged: [], abandoned: [], voiced: [] };
+  const recorded: Recorded = { purged: [], purgedCalls: [], abandoned: [], voiced: [] };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
@@ -47,6 +48,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.purged.push(now);
         return 2;
+      }),
+    purgeDeletedPlanCalls: (now) =>
+      Effect.sync(() => {
+        recorded.purgedCalls.push(now);
+        return 3;
       }),
     sweepAbandonedTurns: (now) =>
       Effect.sync(() => {
@@ -76,7 +82,7 @@ it.effect("a sweep refuses every method but GET, and runs nothing", () =>
     const answer = yield* sweep(options);
 
     assert.equal(answer.status, 405);
-    assert.deepEqual(recorded, { purged: [], abandoned: [], voiced: [] });
+    assert.deepEqual(recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
   }),
 );
 
@@ -87,7 +93,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
 
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
-    assert.deepEqual(recorded, { purged: [], abandoned: [], voiced: [] });
+    assert.deepEqual(recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
   }),
 );
 
@@ -101,8 +107,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.status, 401);
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
-    assert.deepEqual(wrong.recorded, { purged: [], abandoned: [], voiced: [] });
-    assert.deepEqual(missing.recorded, { purged: [], abandoned: [], voiced: [] });
+    assert.deepEqual(wrong.recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
+    assert.deepEqual(missing.recorded, { purged: [], purgedCalls: [], abandoned: [], voiced: [] });
   }),
 );
 
@@ -117,8 +123,13 @@ it.effect(
 
       const at = SWEEP_TIME + 7_000;
       assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body, { purged: 2, abandoned: 1, voice: VOICED });
-      assert.deepEqual(recorded, { purged: [at], abandoned: [at], voiced: [at] });
+      assert.deepEqual(answer.body, { purged: 2, purgedCalls: 3, abandoned: 1, voice: VOICED });
+      assert.deepEqual(recorded, {
+        purged: [at],
+        purgedCalls: [at],
+        abandoned: [at],
+        voiced: [at],
+      });
     }),
 );
 

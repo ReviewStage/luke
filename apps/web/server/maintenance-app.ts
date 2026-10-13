@@ -13,7 +13,12 @@ import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
-import { NOTHING_ORPHANED, sweepVoiceOrphans, VOICE_ORPHAN_SWEEP } from "./voice/orphan-sweep.js";
+import {
+  NOTHING_ORPHANED,
+  sweepVoiceOrphans,
+  VOICE_ORPHAN_SWEEP,
+  VOICE_SESSION_LIMIT_MS,
+} from "./voice/orphan-sweep.js";
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's
@@ -38,6 +43,9 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     request,
     cronSecret: environment.cronSecret,
     purgeCleared: (now) => hostedStore().retention.purgeCleared(new Date(now)),
+    // A call started longer ago than OpenAI's own limit has ended, whether or not its row was closed.
+    purgeDeletedPlanCalls: (now) =>
+      hostedStore().retention.purgeDeletedPlanCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
     sweepAbandonedTurns: (now) =>
       Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),

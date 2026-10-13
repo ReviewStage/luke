@@ -98,6 +98,7 @@ const EXCHANGES: readonly Exchange[] = [
           request: new Request(`${ORIGIN}/api/maintenance/sweep`),
           cronSecret: undefined,
           purgeCleared: () => Effect.succeed(0),
+          purgeDeletedPlanCalls: () => Effect.succeed(0),
           sweepAbandonedTurns: () => Effect.succeed(0),
           sweepVoice: () => Effect.succeed(NOTHING_ORPHANED),
         }),

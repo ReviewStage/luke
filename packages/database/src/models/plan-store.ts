@@ -8,7 +8,7 @@ import {
   type PlanSectionEdit,
   type PlanSummary,
 } from "@sidecar/hosted/plan-wire";
-import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -16,6 +16,7 @@ import { db } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
+import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -432,6 +433,26 @@ const stampConversations = SqlSchema.findAll({
       .returning({ id: conversations.id }),
 });
 
+/**
+ * The plan's calls that have ended, and with them the words said on each,
+ * which cascade with the session. A call still open is left to the sweep
+ * (`purgeDeletedPlanCalls`), since the voice service still writes it and
+ * the orphan sweep may still have to end it on Luke's key.
+ */
+const removeEndedCalls = SqlSchema.void({
+  Request: PlanKeySchema,
+  execute: ({ userId, planId }) =>
+    db
+      .delete(voiceSessions)
+      .where(
+        and(
+          eq(voiceSessions.userId, userId),
+          eq(voiceSessions.planId, planId),
+          isNotNull(voiceSessions.closedAt),
+        ),
+      ),
+});
+
 /** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: PlanKeySchema,
@@ -632,10 +653,11 @@ export function updatePlan(
 }
 
 /**
- * Deletes the plan and its document, and stamps its conversation and its
- * coding agents' conversations cleared; false where the account owned no
- * such plan. The agents' conversations are read before the delete, because
- * the delete cascades the agent rows that name them.
+ * Deletes the plan, its document, and its ended calls with what was said on
+ * them, and stamps its conversation and its coding agents' conversations
+ * cleared; false where the account owned no such plan. The agents'
+ * conversations are read before the delete, because the delete cascades
+ * the agent rows that name them.
  */
 export function deletePlan(userId: string, planId: string): PlanStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -644,6 +666,7 @@ export function deletePlan(userId: string, planId: string): PlanStoreEffect<bool
         const agents = yield* findAgentConversations({ userId, planId });
         const removed = yield* removePlan({ userId, planId });
         if (Option.isNone(removed)) return false;
+        yield* removeEndedCalls({ userId, planId });
         const { conversationId } = removed.value;
         const conversationIds = [
           ...(conversationId === null ? [] : [conversationId]),
