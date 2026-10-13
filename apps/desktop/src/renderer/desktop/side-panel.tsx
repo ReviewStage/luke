@@ -19,7 +19,6 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { FileCodeIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -237,8 +236,8 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * wears its model's mark (`SubagentMark`), and where the worker stands only where
  * `standing` asks: the "+" leaves that to its tab, beside it, and the
  * summary has no tab beside it to say it. A file's row wears its type's
- * coloured icon there too, as the file tree draws it (`file-type-icon.tsx`),
- * where the "+" keeps every file's one glyph. Picking a row whose tab is open
+ * coloured icon, as the file tree draws it (`file-type-icon.tsx`), in the
+ * "+" and the summary alike. Picking a row whose tab is open
  * chooses that tab rather than opening another, as a browser's tab search
  * does, so no row says it is open; a file not open opens on the newest
  * snippet of it. The plan's coding agents are opened from the plan's
@@ -281,7 +280,7 @@ export function panelEntries(input: {
       row: {
         id: String(at),
         label: name,
-        icon: standing ? <FileTypeIcon name={name} /> : <FileCodeIcon />,
+        icon: <FileTypeIcon name={name} />,
         detail: ref.path.slice(0, -name.length - 1) || undefined,
         terms: [ref.path],
         section: ADD_SECTION.FILES,
@@ -318,7 +317,7 @@ export function pinnedTabIcon(
     if (agent !== undefined) return <AgentGlyph agent={agent} />;
     return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
   }
-  return isFileTab(tab) ? <FileCodeIcon /> : TAB_ICON[tab];
+  return isFileTab(tab) ? <FileTypeIcon name={fileName(tab.file)} /> : TAB_ICON[tab];
 }
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
@@ -445,7 +444,10 @@ function stripTabs(input: {
   });
   const fileTabs = files.map(({ path }) => ({
     tab: { file: path },
-    look: look({ file: path }, { icon: <FileCodeIcon />, label: fileName(path), tooltip: path }),
+    look: look(
+      { file: path },
+      { icon: <FileTypeIcon name={fileName(path)} />, label: fileName(path), tooltip: path },
+    ),
     close: () => panel.onClose({ file: path }),
   }));
   return [...fixed, ...subagentTabs, ...fileTabs];

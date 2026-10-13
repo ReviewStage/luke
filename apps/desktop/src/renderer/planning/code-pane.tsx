@@ -17,9 +17,11 @@ import {
   type CodeFeedCallSource,
   codeFeedCalls,
   copiedLines,
+  fileName,
   isPointed,
   rangeLabel,
 } from "./code-pane-model";
+import { FileTypeIcon } from "./file-type-icon";
 import { callHeading } from "./transcript-model";
 
 /**
@@ -156,7 +158,8 @@ export function codeCardName(ref: CodeRef): string {
 }
 
 /**
- * A card's header: its path, cut from the left so the file's own name stays
+ * A card's header: its file's type icon, as the file tree draws it
+ * (`file-type-icon.tsx`), then its path, cut from the left so the file's own name stays
  * in sight, with the whole path in its hint; the lines pointed at; their
  * copy, where the card holds them; and the whole file opened in a tab of
  * its own, from the path or its button, where the card's file can be. The Code tab's cards and an inbox
@@ -176,6 +179,7 @@ export function CodeCardHeader({
   const label = rangeLabel(codeRef);
   return (
     <header className="code-card-header">
+      <FileTypeIcon name={fileName(codeRef.path)} />
       <Tooltip label={codeRef.path}>
         {onOpen === undefined ? (
           <span className="code-card-path">
