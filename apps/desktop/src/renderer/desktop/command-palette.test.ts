@@ -712,8 +712,20 @@ const ACROSS_WORKSPACES: PlanningView = {
   ...IDLE_PLANNING_VIEW,
   listStatus: PLANNING_READ.READY,
   workspaces: [
-    { id: "workspace-personal", name: "Personal", personal: true, role: WORKSPACE_ROLE.OWNER },
-    { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER },
+    {
+      id: "workspace-personal",
+      name: "Personal",
+      personal: true,
+      role: WORKSPACE_ROLE.OWNER,
+      active: true,
+    },
+    {
+      id: "workspace-acme",
+      name: "acme",
+      personal: false,
+      role: WORKSPACE_ROLE.MEMBER,
+      active: true,
+    },
   ],
   plans: [
     {

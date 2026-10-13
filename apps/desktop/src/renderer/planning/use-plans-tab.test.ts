@@ -1258,8 +1258,15 @@ const PERSONAL = {
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
+  active: true,
 };
-const ACME = { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const ACME = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
 
 /** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
 const TWO_WORKSPACES: PlanningView = {
@@ -1393,6 +1400,7 @@ const GLOBEX_JOINED = {
   name: "globex",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
+  active: true,
 };
 
 test("joining an installation's workspace asks for it by the installation and lists it once main's view holds it", async () => {

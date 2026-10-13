@@ -2061,8 +2061,15 @@ const PERSONAL = {
   name: "Personal",
   personal: true,
   role: WORKSPACE_ROLE.OWNER,
+  active: true,
 };
-const ACME = { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const ACME = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
 const GLOBEX = { installationId: 4242, name: "globex" };
 
 function workspaceSwitcher(container: HTMLElement): HTMLButtonElement | null {
