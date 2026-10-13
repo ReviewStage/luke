@@ -335,6 +335,11 @@ test("⌘K lists the commands the window can run now under Actions, each with it
   );
   const settings = listedRows().find((row) => rowWords(row).startsWith("Settings"));
   assert.equal(settings?.querySelector(".shortcut")?.textContent, "⌘,");
+  assert.equal(
+    settings?.querySelector(".shortcut")?.getAttribute("aria-hidden"),
+    null,
+    "a row is an option with no aria-keyshortcuts of its own, so its chord is read",
+  );
 });
 
 test("All lists each kind's best few under its heading, and a kind's filter lists more of it", () => {

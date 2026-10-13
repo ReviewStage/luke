@@ -434,7 +434,9 @@ function PaletteItem({
       )}
       {row.command === undefined ? null : (
         <span className="command-palette-hint">
-          <Shortcut chord={APP_SHORTCUTS[row.command].chord} />
+          {/* Spoken, since a palette row is an option, which carries no
+              `aria-keyshortcuts` to say the chord for it. */}
+          <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
         </span>
       )}
       {row.endMark === undefined ? null : (
