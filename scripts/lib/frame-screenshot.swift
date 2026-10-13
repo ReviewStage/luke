@@ -302,12 +302,14 @@ func framed(capture: CGImage, layout: Layout, crop: CGRect?, scale: CGFloat, zoo
     }
     guard let crop else {
         // Note that a whole bleed is cut from its centre, because a display is rarely the standard proportions.
+        // Note that the region is whole pixels no wider than the standard proportions, because rounding a fractional edge outward can tip it past them.
         let image = whole.image
         let aspect = CGFloat(OUTPUT_WIDTH) / CGFloat(OUTPUT_HEIGHT)
-        let width = min(CGFloat(image.width), CGFloat(image.height) * aspect)
-        let height = width / aspect
+        let wide = CGFloat(image.width) / CGFloat(image.height) > aspect
+        let width = wide ? Int((CGFloat(image.height) * aspect).rounded(.down)) : image.width
+        let height = wide ? image.height : Int((CGFloat(image.width) / aspect).rounded(.up))
         let region = CGRect(
-            x: (CGFloat(image.width) - width) / 2, y: (CGFloat(image.height) - height) / 2, width: width, height: height)
+            x: (image.width - width) / 2, y: (image.height - height) / 2, width: width, height: height)
         return try scaled(image, region: region, description: "of the whole picture")
     }
     let region = CGRect(
