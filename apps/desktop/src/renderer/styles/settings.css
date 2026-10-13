@@ -719,7 +719,7 @@
 }
 
 .api-key-hint {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .api-key-trouble {

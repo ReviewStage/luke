@@ -42,7 +42,7 @@
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: var(--markdown-tint);
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   /* Mono runs wider than the text around it at equal size. */
   font-size: 0.92em;
   font-weight: 500;

@@ -174,7 +174,7 @@ function ImageThumbnail({
       <img src={feedbackImageUrl(image)} alt={image.name} />
       <button
         type="button"
-        className="feedback-dialog-image-remove"
+        className="corner-dismiss"
         aria-label={`Remove ${image.name}`}
         disabled={busy}
         onClick={onRemove}

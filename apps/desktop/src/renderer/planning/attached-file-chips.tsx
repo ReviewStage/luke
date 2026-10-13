@@ -102,7 +102,7 @@ export function AttachedFileChips({
           {onRemove === undefined ? null : (
             <button
               type="button"
-              className="attached-file-remove"
+              className="corner-dismiss"
               aria-label={`Remove ${file.name}`}
               onClick={() => onRemove(index)}
             >

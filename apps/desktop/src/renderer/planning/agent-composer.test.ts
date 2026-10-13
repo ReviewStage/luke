@@ -299,7 +299,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       ].filter(
         (each) =>
           !each.matches(
-            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .dictate-button, .attached-file-face, .attached-file-remove",
+            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .dictate-button, .attached-file-face, .corner-dismiss",
           ),
       );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");

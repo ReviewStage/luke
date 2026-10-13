@@ -412,7 +412,7 @@ button.plan-unit-byline:focus-visible {
   color: var(--text-primary);
   direction: rtl;
   font: inherit;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -553,7 +553,7 @@ button.code-card-path:hover {
 .file-view-commit {
   flex: 0 0 auto;
   color: var(--text-tertiary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 
@@ -745,7 +745,7 @@ button.code-card-path:hover {
   flex: 1;
   overflow: hidden;
   direction: rtl;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -755,7 +755,7 @@ button.code-card-path:hover {
 .changes-status {
   flex: 0 0 auto;
   color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
 }
 
@@ -772,7 +772,7 @@ button.code-card-path:hover {
 .diff-lines {
   padding: 0 0 var(--space-6);
   color: var(--code-text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
 }
@@ -1071,7 +1071,7 @@ button.code-card-path:hover {
 .code-lines {
   padding: var(--space-6) 0;
   color: var(--code-text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
 }
@@ -1149,7 +1149,7 @@ button.code-card-path:hover {
 .transcript-code-language {
   min-width: 0;
   overflow: hidden;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -1161,7 +1161,7 @@ button.code-card-path:hover {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   color: var(--code-text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
   overflow-wrap: normal;
@@ -1178,7 +1178,7 @@ button.code-card-path:hover {
   padding: 0.1em 0.35em;
   border-radius: 4px;
   background: var(--raised-strong);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -1740,32 +1740,6 @@ button.attached-file-face:hover img {
   color: var(--file-icon-mauve);
 }
 
-/* Its way off sits on the chip's corner, as a feedback screenshot's does. */
-.attached-file-remove {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  display: flex;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 50%;
-  background: var(--surface-popover);
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.attached-file-remove:hover {
-  color: var(--text-primary);
-}
-
-.attached-file-remove svg {
-  width: 8px;
-  height: 8px;
-}
-
 /* A file opened over the window (attachment-viewer.tsx): the dialog's
    dimmed window and card, the file's name and its buttons along the top,
    and the file under them, an image fitted to the window, a text file's
@@ -2192,7 +2166,7 @@ button.attached-file-face:hover img {
 
 .agent-branch-name {
   max-width: 180px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
 }
 
