@@ -797,10 +797,20 @@ const findSpokenAskRows = SqlSchema.findAll({
     conversationId: Schema.String,
     turnIds: Schema.Array(Schema.String),
   }),
-  Result: Schema.Struct({ turnId: Schema.String, clientId: Schema.String }),
+  Result: Schema.Struct({
+    turnId: Schema.String,
+    clientId: Schema.String,
+    voiceSessionId: Schema.NullOr(Schema.String),
+    fromMs: Schema.NullOr(Schema.Number),
+  }),
   execute: ({ userId, conversationId, turnIds }) =>
     db
-      .select({ turnId: messages.turnId, clientId: messages.clientId })
+      .select({
+        turnId: messages.turnId,
+        clientId: messages.clientId,
+        voiceSessionId: sql<string | null>`${messages.metadata}->>'voice_session_id'`,
+        fromMs: SPOKEN_FROM_MS,
+      })
       .from(messages)
       .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
       .where(
@@ -815,23 +825,33 @@ const findSpokenAskRows = SqlSchema.findAll({
       .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
 });
 
+/** One spoken line a turn took as its ask: the client id the voice's ledger minted for it, and, where its row says, the call it was said on and where on the call its words began. */
+export interface SpokenAskRow {
+  readonly clientId: string;
+  readonly voiceSessionId: string | null;
+  readonly fromMs: number | null;
+}
+
 /**
- * The developer's spoken lines each of the turns named took as its ask, by
- * the client id the voice's ledger minted for each line, in the order they
- * were said, which is where on the call each began rather than where the
- * conversation holds it, since a line taken into its turn moves there: the
- * rows a delegation's attach or the turn's receipt took into the turn. A
- * turn no spoken line opened names none.
+ * The developer's spoken lines each of the turns named took as its ask, in
+ * the order they were said, which is where on the call each began rather
+ * than where the conversation holds it, since a line taken into its turn
+ * moves there: the rows a delegation's attach or the turn's receipt took
+ * into the turn. A turn no spoken line opened names none.
  */
 export function spokenAskRowsOf(
   userId: string,
   conversationId: string,
   turnIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, readonly string[]>, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<
+  ReadonlyMap<string, readonly SpokenAskRow[]>,
+  MessageReadFailure,
+  SqlClient.SqlClient
+> {
   if (turnIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
-    const asked = new Map<string, string[]>();
-    for (const row of rows) asked.set(row.turnId, [...(asked.get(row.turnId) ?? []), row.clientId]);
+    const asked = new Map<string, SpokenAskRow[]>();
+    for (const { turnId, ...row } of rows) asked.set(turnId, [...(asked.get(turnId) ?? []), row]);
     return asked;
   });
 }

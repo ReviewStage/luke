@@ -1385,7 +1385,7 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
     callPlanId: PLAN.id,
     callTranscript: {
       voiceSessionId: CALL,
-      lines: [{ rowId: "row-1", speaker: "user", words }],
+      lines: [{ rowId: "row-1", speaker: "user", words, startMs: 0, endMs: 1_000 }],
     },
   });
   const empty = { calls: [], earlierOmitted: false };
@@ -1585,7 +1585,15 @@ test("a call's line heard live adds the Call tab before the record holds it", ()
       callPlanId: PLAN.id,
       callTranscript: {
         voiceSessionId: "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e",
-        lines: [{ rowId: "row-1", speaker: "user", words: "Invites should expire." }],
+        lines: [
+          {
+            rowId: "row-1",
+            speaker: "user",
+            words: "Invites should expire.",
+            startMs: 0,
+            endMs: 1_000,
+          },
+        ],
       },
     },
   });

@@ -48,27 +48,29 @@ test("a view carrying the developer's own caption is a voice view, and a malform
   assert.equal(isVoiceView(overWire(malformed)), false);
 });
 
-test("a view carrying the call's words is a voice view, and a line naming no speaker is not", () => {
+test("a view carrying the call's words is a voice view, and a line naming no speaker or no span is not", () => {
+  const line = {
+    rowId: "row-1",
+    speaker: TRANSCRIPT_SPEAKER.USER,
+    words: "Invites should expire.",
+    startMs: 0,
+    endMs: 1_000,
+  };
   const view: VoiceView = {
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
-    callTranscript: {
-      voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
-      lines: [
-        { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words: "Invites should expire." },
-      ],
-    },
+    callTranscript: { voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81", lines: [line] },
   };
   assert.equal(isVoiceView(overWire(view)), true);
-  // SAFETY: the guard under test exists to refuse a speaker the type forbids building.
-  const malformed = {
-    ...view,
-    callTranscript: {
-      voiceSessionId: undefined,
-      lines: [{ rowId: "row-1", speaker: "system", words: "" }],
-    },
-  } as unknown as VoiceView;
-  assert.equal(isVoiceView(overWire(malformed)), false);
+  const { startMs: _startMs, ...unspanned } = line;
+  for (const malformedLine of [{ ...line, speaker: "system" }, unspanned]) {
+    // SAFETY: the guard under test exists to refuse a line the type forbids building.
+    const malformed = {
+      ...view,
+      callTranscript: { voiceSessionId: undefined, lines: [malformedLine] },
+    } as unknown as VoiceView;
+    assert.equal(isVoiceView(overWire(malformed)), false);
+  }
 });
 
 test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {

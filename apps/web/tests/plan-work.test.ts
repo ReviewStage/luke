@@ -884,6 +884,9 @@ test("a plan's work reads back from its conversation after the call: its turns o
   assert.ok(Option.isNone(await database.run(readPlanWork(stranger, target.planId, undefined))));
 });
 
+/** The store's id for the session of the call a spoken ask was said on. */
+const SPOKEN_CALL = "3f6a1c2e-8b4d-4e7f-9a1b-5c2d3e4f6a7b";
+
 /**
  * A spoken ask on the plan's conversation, as the voice leaves it: the ask
  * under its delegation's id, dispatched into the standing's eve session, and
@@ -918,6 +921,7 @@ async function spokenAsk(
         metadata: {
           author: MESSAGE_AUTHOR.DEVELOPER,
           channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: SPOKEN_CALL,
           from_ms: fromMs,
           to_ms: fromMs + 900,
         },
@@ -930,7 +934,7 @@ async function spokenAsk(
   await play(spokenTurn(FIRST_EVE_TURN, NOW, [delegationId]), standing);
 }
 
-test("a plan's work read back names the developer's spoken lines each turn took as its ask, in the order they were said however late one was written, and a turn no spoken line opened names none", async () => {
+test("a plan's work read back names the developer's spoken lines each turn took as its ask, in the order they were said however late one was written, with the call and the moment each began, and a turn no spoken line opened names none", async () => {
   const target = await planConversation();
   const spoken = standingFor(target);
   const typed = { ...standingFor(target), turn: BRAIN_HOST_TURN.TYPED };
@@ -948,6 +952,16 @@ test("a plan's work read back names the developer's spoken lines each turn took 
   assert.deepEqual(
     read.value.turns.map((turn) => turn.asked),
     [["row-who", "row-check"], undefined],
+  );
+  assert.deepEqual(
+    read.value.turns.map((turn) => turn.askedAt),
+    [
+      [
+        { voiceSessionId: SPOKEN_CALL, fromMs: 1_000 },
+        { voiceSessionId: SPOKEN_CALL, fromMs: 4_000 },
+      ],
+      undefined,
+    ],
   );
   const stranger = await database.createUser();
   const turnId = hostTurnId(spoken.sessionId, FIRST_EVE_TURN);

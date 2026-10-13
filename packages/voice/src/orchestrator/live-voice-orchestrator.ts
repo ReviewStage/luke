@@ -29,11 +29,13 @@ export interface LiveVoiceSurroundings {
   microphoneGranted: boolean;
 }
 
-/** One line said on the standing call, as its captions group it: the row it grows on, who said it, and the words so far. */
+/** One line said on the standing call, as its captions group it: the row it grows on, who said it, the words so far, and its span in milliseconds into the call, which is what a turn that took it as its ask names it by. */
 interface LiveCallLine {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
   readonly words: string;
+  readonly startMs: number;
+  readonly endMs: number;
 }
 
 /**
@@ -859,6 +861,8 @@ function callTranscriptOf(rows: readonly LiveCaptionRow[]): LiveCallTranscript |
       rowId: row.rowId,
       speaker: SPEAKER_OF_KIND[row.entry.kind],
       words: row.entry.words,
+      startMs: row.startMs,
+      endMs: row.endMs,
     })),
   };
 }
@@ -877,7 +881,9 @@ function sameTranscript(
       other !== undefined &&
       line.rowId === other.rowId &&
       line.speaker === other.speaker &&
-      line.words === other.words
+      line.words === other.words &&
+      line.startMs === other.startMs &&
+      line.endMs === other.endMs
     );
   });
 }

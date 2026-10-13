@@ -5,19 +5,26 @@
  * call lands in a chat thread: the developer's lines and Luke's, call after
  * call, and the work Luke did for a line drawn right under it. The tie is
  * the record's own: a turn names the spoken lines it took as its ask by the
- * row id the voice's ledger minted for each (`asked`), and a line names its
- * rows the same way (`lineRowIds`), whether it was read back from the
- * record or heard on the call standing now. A turn whose ask spans several lines
- * stands under the last of them, since that is where the ask was complete.
- * A turn no line on screen asked for, one typed, one whose lines are not
- * read yet, or one whose lines are past what the transcript holds, stands
- * where it started: inside the call it started on, after its lines, while
- * that call stands or before its recorded end; between calls once it had
- * ended, or where its end is not on record; or ahead of every call.
+ * row id the voice's ledger minted for each (`asked`), and a line read back
+ * from the record names its rows the same way (`lineTies`). A line heard
+ * on the call standing now carries the voice window's own row id, which the
+ * service never sees, so it is tied by where on the call it was said: the
+ * turn says where each of its lines began (`askedAt`), and the heard line
+ * says the span its words cover. A turn whose ask spans several lines
+ * stands under the last of them, since that is where the ask was complete,
+ * and stays there however many lines are said after it. A turn no line on
+ * screen asked for, one typed, one whose lines are not read yet, or one
+ * whose lines are past what the transcript holds, stands where it started:
+ * inside the call it started on, after its lines, while that call stands or
+ * before its recorded end; between calls once it had ended, or where its
+ * end is not on record; or ahead of every call. A turn asked aloud is spoken
+ * wherever it stands, since Luke said its answer whether or not its line is
+ * on screen.
  * Nothing here draws or knows what a turn is beyond its key, start, and
  * ask, so the thread takes a turn in whatever shape its wire reads it.
  */
 
+import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { UIMessage } from "ai";
 import { Option, Schema } from "effect";
 import { callStart, type TranscriptCallRow } from "./transcript-model";
@@ -29,15 +36,22 @@ export const THREAD_ITEM = {
   WORK: "work",
 } as const;
 
-/** A planning turn as the thread places it: its key, when it started, the rows of the lines it took as its ask, and the turn itself. */
+/** Where a line a turn took as its ask began: the call it was said on, by the store's id for its session, and the milliseconds into it. */
+interface AskedAt {
+  readonly voiceSessionId: string;
+  readonly fromMs: number;
+}
+
+/** A planning turn as the thread places it: its key, when it started, the rows of the lines it took as its ask and where each began, and the turn itself. */
 export interface CallTurn<T> {
   readonly key: string;
   readonly startedAt: number;
   readonly asked: readonly string[];
+  readonly askedAt: readonly AskedAt[];
   readonly turn: T;
 }
 
-/** A turn's work as the thread draws it, and whether a line on screen asked for it, which is when Luke said its words aloud. */
+/** A turn's work as the thread draws it, and whether it was asked aloud, which is when Luke said its words. */
 interface ThreadWork<T> {
   readonly kind: typeof THREAD_ITEM.WORK;
   readonly turn: CallTurn<T>;
@@ -58,32 +72,66 @@ export type ThreadSection<T> =
     }
   | ThreadWork<T>;
 
-/** What a line's metadata says of its rows, as the transcript's wire and the live call's report both write it. */
-const LineRowsSchema = Schema.Struct({ rowIds: Schema.Array(Schema.String) });
+/** What a line's metadata says of where it stands: its rows, as the transcript's wire writes them, or its span on the call, as a line heard on the call standing now carries it. */
+const LineTiesSchema = Schema.Struct({
+  rowIds: Schema.optionalKey(Schema.Array(Schema.String)),
+  span: Schema.optionalKey(Schema.Struct({ startMs: Schema.Number, endMs: Schema.Number })),
+});
 
-const readLineRows = Schema.decodeUnknownOption(LineRowsSchema);
+type LineTies = typeof LineTiesSchema.Type;
 
-/** The rows a line was written as, which a turn names its ask by; none for a line whose rows the record does not hold. */
-function lineRowIds(line: UIMessage): readonly string[] {
-  return Option.match(readLineRows(line.metadata), {
-    onNone: () => [],
-    onSome: (rows) => rows.rowIds,
-  });
+const readLineTies = Schema.decodeUnknownOption(LineTiesSchema);
+
+/** The rows a line was written as and the span it covers, each where it says; nothing for a line that says neither. */
+function lineTies(line: UIMessage): LineTies {
+  return Option.getOrElse(readLineTies(line.metadata), () => ({}));
 }
 
-/** The line each turn stands under, by the turn's key: the last line on screen it took as its ask. */
+/** A line on screen with its place in the whole thread, which orders the lines a turn took as its ask. */
+interface PlacedLine {
+  readonly line: UIMessage;
+  readonly place: number;
+}
+
+/** A developer's line heard on a call with the span its words cover. */
+interface HeardLine extends PlacedLine {
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+/**
+ * The line each turn stands under, by the turn's key: the last line on
+ * screen it took as its ask, found by its row where the line names its rows
+ * and by where it began where the line was heard on the call standing now.
+ */
 function anchorsOf<T>(
   calls: readonly TranscriptCallRow[],
   turns: readonly CallTurn<T>[],
 ): ReadonlyMap<string, UIMessage> {
-  // Each line on screen by its row, with its place in the whole thread.
-  const lineOfRow = new Map<string, { readonly line: UIMessage; readonly place: number }>();
-  for (const [place, line] of calls.flatMap((call) => call.messages).entries()) {
-    for (const rowId of lineRowIds(line)) lineOfRow.set(rowId, { line, place });
+  const lineOfRow = new Map<string, PlacedLine>();
+  const heardOn = new Map<string, HeardLine[]>();
+  let place = 0;
+  for (const call of calls) {
+    for (const line of call.messages) {
+      const { rowIds = [], span } = lineTies(line);
+      for (const rowId of rowIds) lineOfRow.set(rowId, { line, place });
+      // Note that only the developer's lines are kept, because the speakers' spans may overlap and an ask is the developer's.
+      if (span !== undefined && line.role === TRANSCRIPT_SPEAKER.USER) {
+        heardOn.set(call.key, [...(heardOn.get(call.key) ?? []), { line, place, ...span }]);
+      }
+      place += 1;
+    }
   }
+  const heardAt = ({ voiceSessionId, fromMs }: AskedAt) =>
+    (heardOn.get(voiceSessionId) ?? []).filter(
+      (heard) => fromMs >= heard.startMs && fromMs <= heard.endMs,
+    );
   const anchors = new Map<string, UIMessage>();
   for (const turn of turns) {
-    const lines = turn.asked.flatMap((rowId) => lineOfRow.get(rowId) ?? []);
+    const lines = [
+      ...turn.asked.flatMap((rowId) => lineOfRow.get(rowId) ?? []),
+      ...turn.askedAt.flatMap(heardAt),
+    ];
     const last = lines.toSorted((left, right) => left.place - right.place).at(-1);
     if (last !== undefined) anchors.set(turn.key, last.line);
   }
@@ -117,27 +165,28 @@ export function callThread<T>(
   const anchors = anchorsOf(calls, turns);
   const byStart = turns.toSorted((left, right) => left.startedAt - right.startedAt);
   const placed = byStart.filter((turn) => !anchors.has(turn.key));
-  const work = (turn: CallTurn<T>, spoken: boolean): ThreadWork<T> => ({
+  // Note that a turn is spoken by its ask rather than by where it stands, so its answer is never drawn beside Luke saying it.
+  const work = (turn: CallTurn<T>): ThreadWork<T> => ({
     kind: THREAD_ITEM.WORK,
     turn,
-    spoken,
+    spoken: turn.asked.length > 0 || turn.askedAt.length > 0,
   });
   const between = (call: number, after: boolean) =>
     placed.filter((turn) => {
       const slot = slotOf(calls, turn);
       return slot.call === call && slot.after === after;
     });
-  const sections: ThreadSection<T>[] = between(-1, false).map((turn) => work(turn, false));
+  const sections: ThreadSection<T>[] = between(-1, false).map(work);
   for (const [index, call] of calls.entries()) {
     const entries: CallEntry<T>[] = [];
     for (const line of call.messages) {
       entries.push({ kind: THREAD_ITEM.LINE, line });
       const under = byStart.filter((turn) => anchors.get(turn.key) === line);
-      entries.push(...under.map((turn) => work(turn, true)));
+      entries.push(...under.map(work));
     }
-    entries.push(...between(index, false).map((turn) => work(turn, false)));
+    entries.push(...between(index, false).map(work));
     sections.push({ kind: THREAD_ITEM.CALL, call, entries });
-    sections.push(...between(index, true).map((turn) => work(turn, false)));
+    sections.push(...between(index, true).map(work));
   }
   return sections;
 }

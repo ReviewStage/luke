@@ -31,7 +31,13 @@ import { spanText } from "./plan-time";
 import { SubagentTab } from "./plan-work";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workerOf, workRowsOf } from "./work-model";
-import { WorkingLine, workedForText, workingClock, workingTime } from "./working-time";
+import {
+  STATUS_LINE_CLASS,
+  WorkingLine,
+  workedForText,
+  workingClock,
+  workingTime,
+} from "./working-time";
 
 /** A plan on which nothing was said yet, so the Call tab draws Luke's turns alone. */
 const NO_CALLS: TranscriptRegion = { kind: TRANSCRIPT_REGION.EMPTY };
@@ -360,6 +366,32 @@ it.effect(
         tab.hoverWorked()?.querySelector(".turn-card-when")?.textContent,
         spanText(TURN_END - 78 * SECOND, TURN_END),
       );
+      tab.unmount();
+    }),
+);
+
+it.effect(
+  "a turn's finished line is set as its working line was, in the same type and colour, without the shimmer",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(TURN_END + MINUTE);
+      const view = (finished: boolean) =>
+        createElement(AgentTranscriptView, {
+          messages: [agentTurn(finished)],
+          reading: false,
+          failed: false,
+          working: !finished,
+          startedAt: TURN_END - 78 * SECOND,
+          onRetry: () => undefined,
+        });
+      const tab = yield* mounted(view(false));
+      const set = (line: Element | null | undefined) =>
+        STATUS_LINE_CLASS.split(" ").filter((name) => line?.classList.contains(name) !== true);
+      assert.deepEqual(set(tab.working()), [], "the working line is set in the status type");
+      yield* tab.draw(view(true));
+      const worked = tab.worked();
+      assert.deepEqual(set(worked), [], "the finished line is set as the working line was");
+      assert.equal(worked?.querySelector(".animate-shimmer"), null);
       tab.unmount();
     }),
 );

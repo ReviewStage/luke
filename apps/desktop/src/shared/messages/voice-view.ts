@@ -8,6 +8,7 @@ import {
   isOptionalWireString,
   isRecord,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -26,11 +27,13 @@ export interface VoiceSpeakers {
   lukeSpeaking: boolean;
 }
 
-/** One line said on the standing call, as the voice window's captions group it. */
+/** One line said on the standing call, as the voice window's captions group it, with its span in milliseconds into the call. */
 interface VoiceCallLine {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
   readonly words: string;
+  readonly startMs: number;
+  readonly endMs: number;
 }
 
 /**
@@ -146,7 +149,9 @@ function isVoiceCallLine(value: UnparsedWireValue): boolean {
     isWireString(value.rowId) &&
     isWireString(value.speaker) &&
     TRANSCRIPT_SPEAKERS.has(value.speaker) &&
-    isWireString(value.words)
+    isWireString(value.words) &&
+    isWireNumber(value.startMs) &&
+    isWireNumber(value.endMs)
   );
 }
 

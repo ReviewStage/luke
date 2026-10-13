@@ -288,6 +288,24 @@ export const planWorkTurnSchema = EffectSchema.Struct({
       EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS)),
     ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
   ),
+  /**
+   * Where each of those lines began: the store's id for the call it was said
+   * on, and the milliseconds into that call, as the Live API's transcript
+   * deltas count them. A line heard on the call standing now carries the
+   * voice window's own row id, which no turn names, and is matched by where
+   * it began instead. Absent where `asked` is, for a line written before it
+   * was recorded, and from a service older than it.
+   */
+  askedAt: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        voiceSessionId: EffectSchema.String.check(
+          EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS),
+        ),
+        fromMs: EffectSchema.Finite,
+      }),
+    ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
+  ),
   ...turnRecordFields,
 });
 

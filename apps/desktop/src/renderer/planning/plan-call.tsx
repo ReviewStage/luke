@@ -406,12 +406,16 @@ export function PlanCall({
   // Note that an ask is answered once the transcript has been read, whether or not it holds what was asked for.
   useRevealInLog(root, region.kind !== TRANSCRIPT_REGION.READING && !seeking, reveal?.onRevealed);
   const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
-  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => ({
-    key: row.key,
-    startedAt: row.startedAt,
-    asked: turns?.find((turn) => turn.turnId === row.key)?.asked ?? [],
-    turn: row,
-  }));
+  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => {
+    const stored = turns?.find((turn) => turn.turnId === row.key);
+    return {
+      key: row.key,
+      startedAt: row.startedAt,
+      asked: stored?.asked ?? [],
+      askedAt: stored?.askedAt ?? [],
+      turn: row,
+    };
+  });
   const doors: WorkDoors = {
     delegation: {
       models,
