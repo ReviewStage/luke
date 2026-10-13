@@ -24,6 +24,14 @@ import {
   useConfirmDialog,
 } from "../settings/confirm-dialog";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
+import { useStateWithRef } from "../use-state-with-ref";
+import {
+  CLOSED_TAB_STRIP,
+  type ClosedTab,
+  NO_CLOSED_TABS,
+  withClosedTab,
+  withUndrawnPassed,
+} from "./closed-tabs";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
 import { dictationKeywords } from "./dictation-keywords";
@@ -69,7 +77,16 @@ import {
   unsettledRepositoryPins,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
-import { isAgentTab, type StripTab } from "./tab-strip-model";
+import {
+  isAgentTab,
+  isChangesTab,
+  isDraftTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  type StripTab,
+  sameTab,
+} from "./tab-strip-model";
 import {
   type HeardCall,
   heardCalls,
@@ -87,11 +104,14 @@ import {
   usePlanHistory,
 } from "./use-plan-history";
 import {
+  drawsChanges,
+  drawsSubagent,
   inColumn,
   type PinnedTab,
   type PlanHolds,
   SIDE_PANEL_TAB,
   type SidePanelControl,
+  type SidePanelTab,
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
@@ -245,6 +265,8 @@ export interface PlansControl {
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
+  /** Opens the tab closed latest again as it stood, on its plan, opening the plan first where it is not the open one; none while no closed tab is kept. */
+  onReopenClosedTab: (() => void) | undefined;
   /** The pin the open plan was last opened from, which the sidebar marks in the plan's place for as long as the plan stays open; none once a plan is opened otherwise. */
   chosenPin: PinnedTab | undefined;
   /** What the repository chip offers, in the composer and on the open plan alike. */
@@ -458,6 +480,12 @@ export function usePlansTab(input: {
     { readonly planId: string; readonly ref: CodeRef; readonly commit: string } | undefined
   >(undefined);
   const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
+  /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
+  const [closedTabs, setClosedTabs, latestClosedTabs] =
+    useStateWithRef<readonly ClosedTab[]>(NO_CLOSED_TABS);
+  /** The closed tabs opened again on a plan not yet open, in the order asked, opened once the host has it open. */
+  const [reopenFor, setReopenFor, latestReopenFor] =
+    useStateWithRef<readonly ClosedTab[]>(NO_CLOSED_TABS);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -495,6 +523,10 @@ export function usePlansTab(input: {
       ),
     [viewed, accountSignedIn],
   );
+  // A tab closed names a plan of the account it was closed under, so a sign-out lets them go.
+  useEffect(() => {
+    if (!accountSignedIn) setClosedTabs(NO_CLOSED_TABS);
+  }, [accountSignedIn, setClosedTabs]);
   const planning = markedView(renamedView(renamedView(viewed, renames), drafts), marks);
   const sidebar = sidebarPlans(planning.plans);
   const signedIn = fixture !== undefined || input.signedIn;
@@ -1089,6 +1121,108 @@ export function usePlansTab(input: {
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, planning.activePlanId, onOpenFile]);
 
+  // Every tab closed is kept as it stood for ⇧⌘T to open again: the plan's
+  // tab never closes, and a draft's lets its draft go, so neither is kept.
+  const openTabs = mainTabs.tabs;
+  const closeMainTab = mainTabs.onClose;
+  const closeColumnTab = useCallback(
+    (tab: MainTab) => {
+      const at = openTabs.findIndex((each) => sameTab(each, tab));
+      const plan = viewed.activePlanId;
+      if (plan !== undefined && at > 0 && !isDraftTab(tab)) {
+        const closed = { strip: CLOSED_TAB_STRIP.COLUMN, plan, tab, at: at - 1 };
+        setClosedTabs(withClosedTab(latestClosedTabs(), closed));
+      }
+      closeMainTab(tab);
+    },
+    [openTabs, closeMainTab, viewed.activePlanId, setClosedTabs, latestClosedTabs],
+  );
+  const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
+  const closeSidePanelTab = useCallback(
+    (tab: SidePanelTab) => {
+      const at = panelStrip.findIndex((each) => sameTab(each, tab));
+      const plan = viewed.activePlanId;
+      if (plan !== undefined && at >= 0) {
+        const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
+        const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, plan, tab, at, file };
+        setClosedTabs(withClosedTab(latestClosedTabs(), closed));
+      }
+      closePanelTab(tab);
+    },
+    [panelStrip, panelFiles, closePanelTab, viewed.activePlanId, setClosedTabs, latestClosedTabs],
+  );
+  // Whether the open plan's strips draw a closed tab of it again: an agent's
+  // while the agent is not archived, the Inbox while the plan holds an
+  // agent, and a subagent's, a Changes tab, or a page's on the strip's own
+  // terms. Note that what the plan has not read yet counts as drawn, as the
+  // strips stand a tab until the read says otherwise.
+  const drawsAgain = (closed: ClosedTab): boolean => {
+    const { tab } = closed;
+    const agentIds = agents.agentIds;
+    if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
+      if (isAgentTab(tab)) return agentIds === undefined || agentIds.includes(tab.agent);
+      if (tab !== MAIN_TAB.INBOX) return true;
+      const held = agents.heldIds;
+      const waiting = input.inboxWaiting.some((plan) => plan.planId === closed.plan);
+      return held === undefined || held.length > 0 || waiting;
+    }
+    if (isSubagentTab(tab))
+      return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: workers });
+    if (isChangesTab(tab)) return drawsChanges(tab, { planAgents: agentIds });
+    if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
+    return true;
+  };
+  const reopenable = withUndrawnPassed(closedTabs, planning.activePlanId, drawsAgain);
+  // A closed tab opens again where it stood, in its strip at its place and
+  // showing what it showed, so a version history or the window's Inbox over
+  // the plan gives way, and a side panel filling the window over its column.
+  // One the plan no longer draws, read only once a reopen opened its plan, opens nothing.
+  const reopenHere = (closed: ClosedTab) => {
+    if (!drawsAgain(closed)) return;
+    setInboxView(undefined);
+    setHistoryFor(undefined);
+    if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
+      sidePanel.onReopen(closed.tab, closed.at, closed.file);
+      return;
+    }
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    mainTabs.onChoose(closed.tab);
+    mainTabs.onMove(closed.tab, closed.at);
+  };
+  // A tab closed on another plan opens once the host has that plan open.
+  // Note that a press while one waits on its plan takes the next tab only
+  // where it is that same plan's, because asking for another plan would let
+  // the waiting one go; it waits its turn on the stack instead.
+  const reopenClosedTab = () => {
+    const waiting = latestReopenFor();
+    const open = waiting.length === 0 ? planning.activePlanId : undefined;
+    const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain);
+    const closed = stack.at(-1);
+    if (closed === undefined || (waiting.length > 0 && waiting[0]?.plan !== closed.plan)) return;
+    setClosedTabs(stack.slice(0, -1));
+    if (waiting.length === 0 && closed.plan === planning.activePlanId) {
+      reopenHere(closed);
+      return;
+    }
+    if (waiting.length === 0) select(closed.plan);
+    setReopenFor([...waiting, closed]);
+  };
+  // A reopen is the plan's it was asked on, so a select refused, or another
+  // plan asked for since, puts the tabs waiting on it back, as they stood.
+  useEffect(() => {
+    const waiting = latestReopenFor();
+    if (waiting.length === 0 || waiting[0]?.plan === boundFor) return;
+    setReopenFor(NO_CLOSED_TABS);
+    setClosedTabs([...latestClosedTabs(), ...waiting.toReversed()]);
+  }, [boundFor, latestReopenFor, setReopenFor, latestClosedTabs, setClosedTabs]);
+  const reopenNow = useRef(reopenHere);
+  reopenNow.current = reopenHere;
+  useEffect(() => {
+    if (reopenFor.length === 0 || reopenFor[0]?.plan !== planning.activePlanId) return;
+    setReopenFor(NO_CLOSED_TABS);
+    for (const closed of reopenFor) reopenNow.current(closed);
+  }, [reopenFor, planning.activePlanId, setReopenFor]);
+
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
@@ -1137,8 +1271,8 @@ export function usePlansTab(input: {
     // the fixture's own call rather than a voice window that holds none.
     status: callStatus(reported, planning),
     live,
-    mainTabs,
-    sidePanel,
+    mainTabs: { ...mainTabs, onClose: closeColumnTab },
+    sidePanel: { ...sidePanel, onClose: closeSidePanelTab },
     unreadTabs,
     board: planning.board,
     shownCode: planning.shownCode,
@@ -1230,6 +1364,7 @@ export function usePlansTab(input: {
       mainTabs.onShow(pin.plan, tab);
     },
     chosenPin: chosen !== undefined && chosen.pin.plan === boundFor ? chosen.pin : undefined,
+    onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories: {
       recent: recentRepositories(planning.plans),
       read: readRepositories,

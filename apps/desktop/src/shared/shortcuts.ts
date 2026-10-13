@@ -40,6 +40,7 @@ export const APP_COMMAND = {
   MOVE_TAB_RIGHT: "move-tab-right",
   NEW_TAB: "new-tab",
   CLOSE_TAB: "close-tab",
+  REOPEN_CLOSED_TAB: "reopen-closed-tab",
   CLOSE_WINDOW: "close-window",
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
@@ -197,8 +198,8 @@ export interface AppShortcut {
  * Safari have them, ⇧⌘⏎ to fill the window with a pane as iTerm and Warp
  * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
- * to close the tab chosen, and ⇧⌘W to close the window as Chrome and VS
- * Code have them,
+ * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
+ * close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
@@ -272,6 +273,10 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.NEW_TAB]: { label: "New tab", chord: { key: SHORTCUT_KEY.T } },
   [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
+  [APP_COMMAND.REOPEN_CLOSED_TAB]: {
+    label: "Reopen closed tab",
+    chord: { key: SHORTCUT_KEY.T, shift: true },
+  },
   [APP_COMMAND.CLOSE_WINDOW]: {
     label: "Close window",
     chord: { key: SHORTCUT_KEY.W, shift: true },
@@ -347,6 +352,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_FULL_SCREEN,
       APP_COMMAND.NEW_TAB,
       APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
     ],

@@ -62,9 +62,9 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * plan, Settings, the Inbox, the Keyboard shortcuts page that lists them
- * all, and back and forward, which answer whether or not their buttons are
- * drawn.
+ * plan, Settings, the Inbox, the tab closed latest, opened again on its
+ * plan, the Keyboard shortcuts page that lists them all, and back and
+ * forward, which answer whether or not their buttons are drawn.
  */
 function usePlaceCommands(
   pastGate: boolean,
@@ -95,6 +95,16 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
           plans.inboxView.onOpen();
+        }
+      : undefined,
+  );
+  const { onReopenClosedTab } = plans;
+  useAppCommand(
+    APP_COMMAND.REOPEN_CLOSED_TAB,
+    pastGate && plans.signedIn && onReopenClosedTab !== undefined
+      ? () => {
+          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          onReopenClosedTab();
         }
       : undefined,
   );
