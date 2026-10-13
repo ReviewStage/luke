@@ -23,6 +23,8 @@ const APP_CLIENT_ID = "Iv1.fixture-app-client";
 const APP_CLIENT_SECRET = "fixture-app-client-secret";
 const GITHUB_ACCOUNT_ID = "4242";
 const GITHUB_EMAIL = "octo@github.test";
+const GITHUB_AVATAR = "https://avatars.githubusercontent.com/u/4242?v=4";
+const GOOGLE_PICTURE = "https://lh3.googleusercontent.com/a/fixture-portrait";
 const NOW = new Date("2026-10-09T12:00:00.000Z");
 const HOUR_SECONDS = 60 * 60;
 
@@ -63,7 +65,13 @@ async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Pr
     return json({ token_type: "bearer", ...grant });
   }
   if (url.href === "https://api.github.com/user") {
-    return json({ id: Number(GITHUB_ACCOUNT_ID), login: "octocat", email: null });
+    return json({
+      id: Number(GITHUB_ACCOUNT_ID),
+      login: "octocat",
+      name: "Octo Cat",
+      email: null,
+      avatar_url: GITHUB_AVATAR,
+    });
   }
   if (url.href === "https://api.github.com/user/emails") {
     return json([{ email: GITHUB_EMAIL, primary: true, verified: true }]);
@@ -197,4 +205,22 @@ test("the auth service hands no browser the GitHub token: the token endpoints ar
     assert.equal(response.status, 404, path);
     assert.equal((await response.text()).includes(APP_GRANT.access_token), false);
   }
+});
+
+test("an account first made with Google comes away from a GitHub sign-in wearing GitHub's name and avatar", async () => {
+  const auth = authService();
+  const context = await auth.$context;
+  const created = await context.internalAdapter.createUser({
+    email: GITHUB_EMAIL,
+    emailVerified: true,
+    name: "Octo From Google",
+    image: GOOGLE_PICTURE,
+  });
+
+  await signIn(auth);
+  const found = await context.internalAdapter.findUserByEmail(GITHUB_EMAIL);
+
+  assert.equal(found?.user.id, created.id);
+  assert.equal(found?.user.image, GITHUB_AVATAR);
+  assert.equal(found?.user.name, "Octo Cat");
 });
