@@ -86,6 +86,21 @@ export function settingsRowsInput({
   };
 }
 
+/**
+ * Why the Voice page's row in a list of pages wears its mark, or nothing while
+ * voice is fully set up. Judged from the panel's props rather than on the Voice
+ * page because the mark has to stand while that page is not drawn: it is the
+ * list saying a page one press away still needs a hand. The keyless half moved
+ * to the Account and usage heading with the ways in, so the row marks only a
+ * microphone still ungranted for a voice that can run. The panel's front page
+ * and the desktop's list of pages both read it, so the two never disagree.
+ */
+export function voicePageAttention(microphone: MicrophoneControl): string | undefined {
+  return microphone.voiceAvailable
+    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
+    : undefined;
+}
+
 export function SettingsPanel({
   account,
   onSignOut,
@@ -100,15 +115,7 @@ export function SettingsPanel({
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
-  // Why the front page's Voice row wears its mark, or nothing while voice is
-  // fully set up. Judged here rather than on the Voice page because the mark
-  // has to stand while that page is not drawn: it is the front page saying a
-  // page one press away still needs a hand. The keyless half moved to the
-  // Account and usage heading with the ways in, so the row marks only a
-  // microphone still ungranted for a voice that can run.
-  const voiceNote = microphone.voiceAvailable
-    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
-    : undefined;
+  const voiceNote = voicePageAttention(microphone);
   const panelView = settingsRowsInput({ settings, microphone, account });
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed

@@ -128,9 +128,13 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
     "Quiet Music and Spotify",
   ]);
 
-  // A description is part of the haystack, so a row is found by what it does.
+  // The line drawn under a row is part of the haystack, so a row is found by
+  // what it says there.
   const bluetooth = labels(found(searchSettings(entries, "bluetooth")));
   assert.ok(bluetooth.includes("Prefer the Mac's microphone"));
+
+  // A choice is found by what it offers, though its row says none of it.
+  assert.ok(labels(found(searchSettings(entries, "dark"))).includes("Theme"));
 
   const captions = searchSettings(entries, "captions");
   assert.equal(found(captions)[0]?.page, SETTINGS_VIEW.VOICE);

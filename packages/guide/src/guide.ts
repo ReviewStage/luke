@@ -23,14 +23,17 @@ type AppToggleValue = (typeof APP_TOGGLE_VALUE)[keyof typeof APP_TOGGLE_VALUE];
 
 /**
  * One user-owned setting as its row and the settings search read it: what it
- * is called, what it does, and what it is set to now.
+ * is called, what it cannot say for itself, and what it is set to now.
  */
 export interface DescribedSetting {
   /** The setting's id, which its row wears as the search's landing anchor. */
   id: string;
   label: string;
-  /** What the setting does, in one sentence. */
-  description: string;
+  /**
+   * What the row cannot say for itself: a consequence or an instruction, drawn
+   * under the label. Absent where the label and control already say it all.
+   */
+  detail?: string;
   kind: AppSettingKind;
   /** The current value: `on`/`off`, or the choice's own token. */
   value: string;

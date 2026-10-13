@@ -14,11 +14,14 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { useAppKeymap } from "../app-commands";
+import { MICROPHONE_UNGRANTED_NOTE } from "../microphone-access";
+import type { MicrophoneControl } from "../settings/controls";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { ToastHost } from "../toast";
@@ -34,7 +37,13 @@ const ignore = () => undefined;
 let turnPage: (view: SettingsView) => void = ignore;
 
 /** Settings with the page held the way the app holds it, so a press turns it. */
-function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Element {
+function Harness({
+  settings,
+  microphone,
+}: {
+  settings?: AppSettingsView;
+  microphone?: MicrophoneControl;
+}): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
   return createElement(DesktopSettings, {
@@ -51,6 +60,7 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       view,
       onViewChange: setView,
       ...(settings ? { settings } : undefined),
+      ...(microphone ? { microphone } : undefined),
     }),
     onExit: ignore,
   });
@@ -60,7 +70,11 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
 const mounted: Root[] = [];
 
 /** Settings under the window's toast, its atoms on `registry` where given. */
-function mount(settings?: AppSettingsView, registry?: AtomRegistry): HTMLElement {
+function mount(
+  settings?: AppSettingsView,
+  registry?: AtomRegistry,
+  microphone?: MicrophoneControl,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -68,7 +82,10 @@ function mount(settings?: AppSettingsView, registry?: AtomRegistry): HTMLElement
   const surface = createElement(
     Fragment,
     null,
-    createElement(Harness, settings ? { settings } : {}),
+    createElement(Harness, {
+      ...(settings ? { settings } : undefined),
+      ...(microphone ? { microphone } : undefined),
+    }),
     createElement(ToastHost),
   );
   act(() => {
@@ -155,6 +172,21 @@ afterEach(() => {
     for (const root of mounted.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
+});
+
+test("the list of pages marks Voice while its microphone is ungranted, as the front page does", () => {
+  const ungranted = mount(undefined, undefined, {
+    status: MICROPHONE_STATUS.NOT_DETERMINED,
+    voiceAvailable: true,
+    onRequest: ignore,
+    onOpenSettings: ignore,
+  });
+  const marked = pageList(ungranted).filter((page) => page.includes(MICROPHONE_UNGRANTED_NOTE));
+  assert.equal(marked.length, 1);
+  assert.ok(marked[0]?.startsWith("Voice"), `the mark stands on "${marked[0]}"`);
+
+  // Granted, the row is its name and nothing more.
+  assert.ok(pageList(mount()).includes("Voice"));
 });
 
 test("typing in the sidebar search turns the page list into results grouped under their pages", () => {

@@ -2440,6 +2440,12 @@ body,
   list-style: none;
 }
 
+/* A page that needs a hand wears the front page's own mark at the row's end,
+   where the front page's row wears it before its chevron. */
+.settings-pages .sidebar-item .settings-attention {
+  margin-left: auto;
+}
+
 .settings-page,
 .version-page {
   display: flex;

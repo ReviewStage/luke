@@ -52,7 +52,6 @@ export const APP_SETTING_SCHEMA = {
     field: "theme",
     id: APP_SETTING_ID.THEME,
     label: "Theme",
-    description: "Whether Luke's windows are light or dark, or follow the Mac's own appearance.",
     values: THEME_LIST,
     token: (theme) => theme,
     optionLabel: themeOptionLabel,
@@ -69,8 +68,7 @@ export const APP_SETTING_SCHEMA = {
     field: "zoom",
     id: APP_SETTING_ID.ZOOM,
     label: "Zoom",
-    description:
-      "How large Luke's window draws its words and controls. ⌘+ and ⌘− step through the same sizes, and ⌘0 returns to 100%.",
+    detail: "⌘+ and ⌘− step through these sizes, and ⌘0 returns to 100%.",
     values: ZOOM_PERCENTS,
     token: (percent) => String(percent),
     optionLabel: (percent) => `${percent}%`,
@@ -87,7 +85,6 @@ export const APP_SETTING_SCHEMA = {
     field: "openAtLogin",
     id: APP_SETTING_ID.OPEN_AT_LOGIN,
     label: "Open Luke at login",
-    description: "Whether Luke starts on his own when this Mac signs in.",
     default: true,
     page: SETTINGS_PAGE.APPEARANCE,
     order: 10,
@@ -98,11 +95,9 @@ export const APP_SETTING_SCHEMA = {
     field: "agentNotifications",
     id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
     label: "Notify me when a coding agent finishes or needs me",
-    description:
-      "Whether Luke sends a Mac notification when a coding agent finishes, fails, opens a " +
-      "pull request, or posts to your Inbox while his window is behind. In front, the window " +
-      "says so itself either way. Notifications, and the Dock's count of what waits in your " +
-      "Inbox, are also allowed or refused for Luke in System Settings.",
+    detail:
+      "Sent only while Luke's window is in the background. System Settings can also turn off " +
+      "Luke's notifications and the Dock's Inbox count.",
     default: true,
     page: SETTINGS_PAGE.ROOT,
     order: 1,
@@ -113,8 +108,7 @@ export const APP_SETTING_SCHEMA = {
     field: "voice",
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    description:
-      "Which voice Luke speaks with. A conversation keeps the voice it opened with, so choosing one ends the conversation standing, and the next opens in the new voice.",
+    detail: "Choosing one ends the conversation in progress. The next one opens in the new voice.",
     values: OFFERED_VOICE_LIST,
     token: (voice) => voice,
     optionLabel: voiceOptionLabel,
@@ -131,9 +125,8 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceCaptions",
     id: APP_SETTING_ID.VOICE_CAPTIONS,
     label: "Captions",
-    description:
-      "Luke's words on screen while he speaks, and yours while you speak to him; nothing is kept. " +
-      "His also appear on their own, whatever this says, while the Mac's output is muted or at zero.",
+    detail:
+      "Shows your words as well as Luke's, and keeps neither. Luke's appear anyway while the Mac's sound is muted or at zero.",
     default: false,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,
@@ -158,8 +151,6 @@ export const APP_SETTING_SCHEMA = {
     field: "duckOtherMedia",
     id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
     label: "Quiet Music and Spotify",
-    description:
-      "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     default: true,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,
@@ -172,10 +163,9 @@ export const APP_SETTING_SCHEMA = {
     field: "preferBuiltInMicrophone",
     id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
     label: "Prefer the Mac's microphone",
-    description:
-      "Whether Luke listens through the Mac's own microphone when the system input is a " +
-      "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
-      "headset's microphone either way.",
+    detail:
+      "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
+      "With the lid shut, Luke uses the headset's microphone anyway.",
     default: true,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,
