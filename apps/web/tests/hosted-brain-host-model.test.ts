@@ -4,8 +4,9 @@ import { generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
+import { meteredModel } from "../server/hosted/agent-runtime/meter";
 import { BRAIN_HOST } from "../server/hosted/brain-host/bounds";
-import { brainModelSelection, meteredModel } from "../server/hosted/brain-host/model";
+import { brainModelSelection } from "../server/hosted/brain-host/model";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 
 /**

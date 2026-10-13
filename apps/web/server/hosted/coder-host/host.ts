@@ -531,7 +531,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     title: (admitted) =>
       Effect.gen(function* () {
-        const model = seams.titleModel();
+        const model = seams.titleModel(admitted.target.userId);
         if (model === undefined) return;
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return;
@@ -540,7 +540,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
-        const model = seams.titleModel();
+        const model = seams.titleModel(admitted.target.userId);
         if (model === undefined) return;
         // A call no delegation was recorded for opened no child, so the fill finds no row to write.
         const childId = childConversationId(admitted.target.conversationId, callId);

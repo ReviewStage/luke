@@ -479,8 +479,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     titleChild: (session) =>
       Effect.gen(function* () {
         const parent = session.parent;
-        const model = seams.titleModel();
-        if (parent === undefined || model === undefined) return;
+        if (parent === undefined) return;
         // Admitted on ownership alone, as the relay of the same session is.
         const admitted = yield* admitConversation(session.auth, {
           id: session.id,
@@ -488,6 +487,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         });
         if (Result.isFailure(admitted)) return;
         const { target } = admitted.success;
+        const model = seams.titleModel(target.userId);
+        if (model === undefined) return;
         const childId = childConversationId(target.conversationId, parent.callId);
         // Note that the task named is the child's first, whichever task woke this, because a
         // later task's call racing the first one's must not name the worker for the later.
