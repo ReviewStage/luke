@@ -465,25 +465,29 @@ export function Tooltip({
   }, [up, hide]);
 
   // While a card hung from a row stands, the pointer leaving the row, not
-  // its control, is what lets it linger, and a press anywhere in the row,
-  // on the control or one of its siblings, takes it down. Note that these
-  // are the row's own events, because the row is no element of this one's,
-  // and that the pointer leaving the row onto the card lets nothing linger,
-  // because React has told the card the pointer arrived before the window
-  // tells the row it left.
+  // its control, is what lets it linger, the pointer back anywhere in the
+  // row keeps it, and a press anywhere in the row, on the control or one of
+  // its siblings, takes it down. Note that these are the row's own events,
+  // because the row is no element of this one's, and that the pointer
+  // leaving the row onto the card lets nothing linger, because React has
+  // told the card the pointer arrived before the window tells the row it
+  // left.
   useEffect(() => {
     const row = region();
     if (!up || row === undefined) return;
     const out = () => {
       if (!overCard.current) leave();
     };
+    const back = () => linger(Atom.Interrupt);
     row.addEventListener("pointerleave", out);
+    row.addEventListener("pointerenter", back);
     row.addEventListener("pointerdown", hide);
     return () => {
       row.removeEventListener("pointerleave", out);
+      row.removeEventListener("pointerenter", back);
       row.removeEventListener("pointerdown", hide);
     };
-  }, [up, region, leave, hide]);
+  }, [up, region, leave, linger, hide]);
 
   const own = children.props;
   const anchor = cloneElement(children, {

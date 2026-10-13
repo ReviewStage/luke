@@ -717,6 +717,28 @@ it.effect("the pointer crossing from a row's button onto its card keeps the card
 );
 
 it.effect(
+  "the pointer coming back from the card onto a row's button, not its name, keeps the card",
+  () =>
+    Effect.gen(function* () {
+      const row = mountRegionRow(yield* registryOnTestClock);
+      const card = shownCard();
+
+      leaveRow(row, control("Fix the flaky test"), card);
+      act(() => {
+        card.dispatchEvent(
+          new MouseEvent("pointerout", { bubbles: true, relatedTarget: control("Archive") }),
+        );
+        row.dispatchEvent(new MouseEvent("pointerenter", { relatedTarget: card }));
+        control("Archive").dispatchEvent(
+          new MouseEvent("pointerover", { bubbles: true, relatedTarget: card }),
+        );
+      });
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS);
+    }),
+);
+
+it.effect(
   "a press anywhere in a row takes its card down: its own, a right-click, or a button's",
   () =>
     Effect.gen(function* () {
