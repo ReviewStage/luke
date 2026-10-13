@@ -729,7 +729,7 @@ export function DesktopSidebar({
       chosenPin !== undefined &&
       current(plan.id) &&
       pin.plan === chosenPin.plan &&
-      sameTab(pin.tab, chosenPin.tab),
+      pin.at === chosenPin.at,
   )?.pin;
   const context: RowContext = {
     plans,
@@ -742,15 +742,17 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's in the plan's own column, any other in the side panel.
+  // an agent's in the plan's own column, any other in the side panel. The
+  // pin marked stands too, so a fold never hides the row the sidebar marks.
   const pinnedShown = ({ plan, pin }: PinnedRow) =>
-    current(plan.id) &&
-    (pin === undefined ||
-      (isAgentTab(pin.tab)
-        ? sameTab(plans.mainTabs.tab, pin.tab)
-        : plans.sidePanel.open &&
-          plans.sidePanel.tab !== undefined &&
-          sameTab(plans.sidePanel.tab, pin.tab)));
+    (pin !== undefined && pin === pinMarked) ||
+    (current(plan.id) &&
+      (pin === undefined ||
+        (isAgentTab(pin.tab)
+          ? sameTab(plans.mainTabs.tab, pin.tab)
+          : plans.sidePanel.open &&
+            plans.sidePanel.tab !== undefined &&
+            sameTab(plans.sidePanel.tab, pin.tab))));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
   const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));

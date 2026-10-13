@@ -2036,6 +2036,20 @@ test("a plan opened from its pin keeps the pin chosen through its other tabs, un
   assert.equal(tab.control().chosenPin, pin, "a pin opens its plan chosen from another");
 });
 
+test("a plan the host refuses to open leaves the pin the open plan was opened from chosen", async () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  act(() => tab.control().onOpenPinnedTab(pin));
+
+  act(() => tab.control().onSelect("9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32"));
+  await settle();
+
+  assert.equal(tab.control().boundFor, PLAN.id);
+  assert.equal(tab.control().chosenPin, pin);
+});
+
 test("an agent main says ended unseen dots its tab beside the arrivals", () => {
   const tab = mount({ shown: true, planning: OPEN, unseenAgents: [AGENT_ID] });
   assert.deepEqual(tab.control().unreadTabs, [{ agent: AGENT_ID }]);
