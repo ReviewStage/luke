@@ -1,10 +1,13 @@
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
-import { githubAppFromEnvironment } from "./github/github-app.js";
+import { type GitHubApp, githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";
-import { integrationConnectFromEnvironment } from "./hosted/integration-connect.js";
+import {
+  type IntegrationConnect,
+  integrationConnectFromEnvironment,
+} from "./hosted/integration-connect.js";
 import { modelCatalogLayer } from "./hosted/model-catalog.js";
 
 /**
@@ -106,6 +109,20 @@ export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<
  * fiber's own face: the runner it names is always one built at an edge.
  */
 export type WebStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
+
+/** What the doors an eve root opens onto the agent runtime may require (`hosted/agent-runtime/edge.ts`). */
+export type WebAgentServices =
+  | SqlClient.SqlClient
+  | HttpClient.HttpClient
+  | GitHubApp
+  | IntegrationConnect;
+
+/**
+ * The edge's own runner as an eve root's doors are handed one, on the same
+ * terms as `WebStoreRun`: the root's `host.ts` hands it `runWeb`, and a test
+ * the runner over its own test database and fakes of the rest.
+ */
+export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.
