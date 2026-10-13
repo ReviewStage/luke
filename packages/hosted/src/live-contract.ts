@@ -174,7 +174,8 @@ export const VOICE_SERVICE_FRAME = {
   /**
    * The desktop's ask for Luke's avatar on the call: the service mints a
    * Keyframe session for this voice session on its own key and answers
-   * `avatar.started`, or `avatar.unavailable` where it cannot. The relay
+   * `avatar.started`, or `avatar.unavailable` where it cannot, each echoing
+   * the request id the host minted for it, as `avatar.stop` does. The relay
    * reads it and forwards it nowhere, as it reads a report.
    */
   AVATAR_START: "avatar.start",
@@ -464,10 +465,12 @@ export type AvatarUnavailableReason =
 
 /**
  * The bounds of the avatar frames. A LiveKit participant token is a JWT of a
- * few hundred bytes, an identity a few dozen characters, and a server URL
- * not much more, so each bound only refuses a document standing in for one.
+ * few hundred bytes, an identity a few dozen characters, a server URL not
+ * much more, and a request id the host's own UUID, so each bound only
+ * refuses a document standing in for one.
  */
 export const AVATAR_FRAME_BOUNDS = {
+  REQUEST_ID_CHARS: 64,
   URL_CHARS: 2_048,
   TOKEN_CHARS: 8_192,
   IDENTITY_CHARS: 256,
@@ -508,16 +511,25 @@ function answeredReason<const Reason extends string>(
   }, emitJsonSchema(listed));
 }
 
-/** The desktop's ask for the avatar: the type alone, since the service picks the persona. */
+/**
+ * The id the host mints for one `avatar.start`, echoed on every frame about
+ * the session that ask put up, so an answer or a stop that belongs to an
+ * earlier ask is told apart from the current one.
+ */
+const avatarRequestId = verbatimText(AVATAR_FRAME_BOUNDS.REQUEST_ID_CHARS);
+
+/** The desktop's ask for the avatar: its request id alone, since the service picks the persona. */
 export const avatarStartFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_START),
+  requestId: avatarRequestId,
 });
 
 export type AvatarStartFrame = typeof avatarStartFrameSchema.Type;
 
-/** The desktop's word that the avatar is down, and why. */
+/** The desktop's word that the avatar its request put up is down, and why. */
 export const avatarStopFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STOP),
+  requestId: avatarRequestId,
   reason: Schema.Literals(Object.values(AVATAR_STOP_REASON)),
 });
 
@@ -532,12 +544,13 @@ export const avatarRequestFrameSchema = Schema.Union([
 export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
 
 /**
- * The avatar is coming up: Keyframe's session grant as its create-session
- * call answered it, the LiveKit server, the participant token the call
+ * The avatar the request asked for is coming up: Keyframe's session grant
+ * as its create-session call answered it, the LiveKit server, the participant token the call
  * window joins with, and the identity the avatar publishes its tracks under.
  */
 export const avatarStartedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
+  requestId: avatarRequestId,
   serverUrl: avatarServerUrl,
   participantToken: verbatimText(AVATAR_FRAME_BOUNDS.TOKEN_CHARS),
   agentIdentity: verbatimText(AVATAR_FRAME_BOUNDS.IDENTITY_CHARS),
@@ -545,9 +558,10 @@ export const avatarStartedFrameSchema = Schema.Struct({
 
 export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;
 
-/** The avatar could not come up, and why; the call goes on as voice. */
+/** The avatar the request asked for could not come up, and why; the call goes on as voice. */
 export const avatarUnavailableFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE),
+  requestId: avatarRequestId,
   reason: answeredReason(Object.values(AVATAR_UNAVAILABLE_REASON), AVATAR_UNAVAILABLE_REASON.ERROR),
 });
 

@@ -7,6 +7,10 @@
         "avatar.started"
       ]
     },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64
+    },
     "serverUrl": {
       "type": "string",
       "maxLength": 2048
@@ -22,6 +26,7 @@
   },
   "required": [
     "type",
+    "requestId",
     "serverUrl",
     "participantToken",
     "agentIdentity"

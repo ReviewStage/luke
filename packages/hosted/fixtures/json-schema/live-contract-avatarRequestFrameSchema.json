@@ -8,10 +8,15 @@
           "enum": [
             "avatar.start"
           ]
+        },
+        "requestId": {
+          "type": "string",
+          "maxLength": 64
         }
       },
       "required": [
-        "type"
+        "type",
+        "requestId"
       ],
       "additionalProperties": false
     },
@@ -24,6 +29,10 @@
             "avatar.stop"
           ]
         },
+        "requestId": {
+          "type": "string",
+          "maxLength": 64
+        },
         "reason": {
           "type": "string",
           "enum": [
@@ -35,6 +44,7 @@
       },
       "required": [
         "type",
+        "requestId",
         "reason"
       ],
       "additionalProperties": false

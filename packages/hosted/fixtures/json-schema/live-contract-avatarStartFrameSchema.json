@@ -6,10 +6,15 @@
       "enum": [
         "avatar.start"
       ]
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64
     }
   },
   "required": [
-    "type"
+    "type",
+    "requestId"
   ],
   "additionalProperties": false
 }
