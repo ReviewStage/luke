@@ -836,11 +836,16 @@ that table.
 The rewrite moves a provider's path segment into the `provider` query
 (`function-rewrites.ts`), as a plan's id is moved into `id`.
 
-**The agents** (`server/hosted/integration-connection.ts`). eve hands a
-declared subagent none of its parent's connections, so each of the four
-agent roots registers `connections/<provider>.ts` for every provider, and
-each file is the one definition over its provider and that agent's own
-ownership check: the root's `admit`, or a worker's `admitDelegated`. The
+**The agents** (`server/hosted/integration-connection.ts`,
+`server/hosted/agent-runtime/connections.ts`). eve hands a declared subagent
+none of its parent's connections, so each of the four agents registers one
+`connections/integrations.ts`: a dynamic connection resolved as each turn
+starts, which hands the turn every server its role's policy has on
+(`agent-runtime/servers.ts`), each the one definition over its provider and
+that agent's own ownership check: the root's `admit`, or a worker's
+`admitDelegated`. The planning agents are handed every integration; a coding
+agent and its worker are handed every one the developer has not switched off
+for that agent. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
 principal. That matters because a spoken planning turn runs as the

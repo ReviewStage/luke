@@ -87,7 +87,7 @@ function remoteToolOf(
   const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
   if (separator < 0) return undefined;
   const connection = toolName.slice(0, separator);
-  // Note that a provider's value is its connection's name, which its file in `connections/` is named for.
+  // Note that a provider's value is its connection's name, which eve names it by (`agent-runtime/connections.ts`).
   const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === connection);
   const remoteTool = toolName.slice(separator + QUALIFIED_SEPARATOR.length);
   if (provider === undefined || !REMOTE_TOOL_PATTERN.test(remoteTool)) return undefined;

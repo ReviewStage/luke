@@ -10,8 +10,8 @@ import { scriptedModel } from "./scripted-model.js";
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
  * tool set that reads and writes files and runs a shell; none of it is
  * offered here, because every tool the brain has is one the planning model
- * declares, beside eve's two over the account's Linear connection
- * (`connections/linear.ts`). A session has no lifetime of eve's own:
+ * declares, beside eve's two over the account's integrations
+ * (`connections/integrations.ts`). A session has no lifetime of eve's own:
  * the conversation's rows are the record, and a session rotates when the
  * host decides, never when a clock runs out. Nor has it a token budget of
  * eve's: eve's default caps a root's input tokens and hands each subagent a
