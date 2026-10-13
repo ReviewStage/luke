@@ -67,11 +67,13 @@ Every brief must contain:
    `gh stack submit --auto --open` (without `--open`, `--auto` opens drafts).
    After any change or merge below a PR, the owner restacks the whole stack
    in one pass: `gh stack sync` (fetch, cascading rebase, atomic push, and
-   relink) when nothing conflicts; on a conflict, `gh stack rebase` with
-   `--continue` or `--abort`, then `gh stack push`, which pushes each branch
-   with `--force-with-lease`. Without the extension, the fallback is
-   `git rebase --update-refs` from the top branch and a `--force-with-lease`
-   push of every branch.
+   relink) when nothing conflicts. When `gh stack sync` reports a conflict,
+   it restores every branch; the owner then runs `gh stack rebase`, resolves
+   each conflict and runs `gh stack rebase --continue` (or `--abort` to give
+   up), and after a successful rebase runs `gh stack push`, which pushes each
+   branch with `--force-with-lease`. Without the extension, the fallback is
+   `git fetch` and `git rebase --update-refs origin/<base-branch>` from the
+   top branch, then a `--force-with-lease` push of every branch.
 3. **Babysit and merge**: watch CI and review comments on every PR in the
    stack, fix what fails, and either merge on green or hold for an explicit
    go from the orchestrator, as the user chose at kickoff; say which. A PR
