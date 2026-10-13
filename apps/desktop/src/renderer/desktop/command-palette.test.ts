@@ -338,6 +338,8 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
               additions: 120,
               deletions: 8,
               changedFiles: 4,
+              base: "main",
+              mergedSha: null,
             },
           ],
         ]),

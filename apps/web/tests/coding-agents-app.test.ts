@@ -1460,6 +1460,10 @@ interface PullRequestFixture {
   state: "open" | "closed";
   draft: boolean;
   merged: boolean;
+  /** The branch it merges into. */
+  base: string;
+  /** The commit GitHub names for it: a test merge while open, what it merged as once merged. */
+  mergeCommitSha: string;
   /** Each check run's status and conclusion on its head. */
   runs: readonly { status: string; conclusion: string | null }[];
   /** Each commit status's state on its head. */
@@ -1476,6 +1480,8 @@ function pullRequestFixture(overrides: Partial<PullRequestFixture> = {}): PullRe
     state: "open",
     draft: false,
     merged: false,
+    base: "main",
+    mergeCommitSha: "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
     runs: [{ status: "completed", conclusion: "success" }],
     statuses: [],
     checksReadable: true,
@@ -1499,10 +1505,12 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     state: pull.state,
     draft: pull.draft,
     merged: pull.merged,
+    merge_commit_sha: pull.mergeCommitSha,
     additions: 210,
     deletions: 14,
     changed_files: 6,
     head: { ref: HEAD.ref, sha: HEAD.sha, label: `${RELAY.owner}:${HEAD.ref}` },
+    base: { ref: pull.base, sha: "c0ffee00", label: `${RELAY.owner}:${pull.base}` },
     user: { login: "luke[bot]", type: "Bot" },
   });
   return (sent) => {
