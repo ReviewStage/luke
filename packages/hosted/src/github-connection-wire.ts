@@ -1,39 +1,65 @@
 import { Schema as EffectSchema } from "effect";
 
 /**
- * github-connection-wire.ts -- whether the account has GitHub connected, and the page in the browser that connects or disconnects it.
+ * github-connection-wire.ts -- whether the signed-in account has connected its GitHub, and the browser page that connects or disconnects it.
  *
- * GitHub is connected apart from signing in: the desktop asks the service
- * for a short-lived, single-use page that links the signed-in account's
- * GitHub, and opens it in the browser. Disconnecting happens on the same
- * page, asked for with the disconnect word. The status names the login at
- * most; no token leaves the service.
+ * Workspaces come from GitHub App installations, and reading them needs the
+ * account's GitHub user token, which an account that signed in some other
+ * way does not hold. Better Auth links a provider to an account only for a
+ * browser session (`linkSocial`), and the Mac holds an OAuth access token
+ * rather than one, so connecting happens on the web: the Mac asks for a
+ * connect intent, a ten-minute, single-use ticket bound to its account, and
+ * opens the page the answer names. The page claims the intent on the
+ * browser's own session, which must be the same account's, and only then
+ * asks Better Auth to link GitHub. Disconnecting is the same page with
+ * `disconnect=1`, Better Auth's `unlinkAccount` on that session. No answer
+ * carries a token.
  */
 
-/** Whether the account has a GitHub account linked, and its login where one is. */
-export const githubConnectionSchema = EffectSchema.Struct({
+/** A connect intent (POST): the page the Mac opens to connect the account's GitHub. */
+export const githubConnectAnswerSchema = EffectSchema.Struct({ url: EffectSchema.String });
+
+export type GitHubConnectAnswer = typeof githubConnectAnswerSchema.Type;
+
+/** Whether the account has a GitHub account linked (GET), and its login where the service holds one. */
+export const githubConnectionAnswerSchema = EffectSchema.Struct({
   connected: EffectSchema.Boolean,
   login: EffectSchema.NullOr(EffectSchema.String),
 });
 
-export type GitHubConnection = typeof githubConnectionSchema.Type;
+export type GitHubConnection = typeof githubConnectionAnswerSchema.Type;
 
-/** The page that links the account's GitHub, bound to the account for a few minutes and used once. */
-export const githubConnectAnswerSchema = EffectSchema.Struct({
-  url: EffectSchema.String,
-});
-
-/** The browser page that connects GitHub, and the word that asks it to disconnect instead. */
-const GITHUB_CONNECT_PAGE = {
+/** The page that connects or disconnects GitHub, and the query it reads. */
+export const GITHUB_CONNECT_PAGE = {
   PATH: "/connect-github.html",
+  /** The opaque id of the intent the Mac asked for. */
+  INTENT_PARAM: "intent",
+  /** Better Auth returned the browser here with GitHub linked. */
+  DONE_PARAM: "done",
+  /** Better Auth returned the browser here with the link refused, its own word for why under `error`. */
+  ERROR_PARAM: "error",
+  /** Unlink the account's GitHub rather than link it. */
   DISCONNECT_PARAM: "disconnect",
-  DISCONNECT_VALUE: "1",
+  /** The value a flag parameter carries. */
+  FLAG: "1",
 } as const;
 
-/** The page that disconnects GitHub on the service at `serviceBaseUrl`. */
-export function githubDisconnectUrl(serviceBaseUrl: string): string {
-  const query = new URLSearchParams({
-    [GITHUB_CONNECT_PAGE.DISCONNECT_PARAM]: GITHUB_CONNECT_PAGE.DISCONNECT_VALUE,
-  });
-  return `${serviceBaseUrl}${GITHUB_CONNECT_PAGE.PATH}?${query}`;
-}
+/** Claiming an intent on the browser's session (POST), by its opaque id. */
+export const githubConnectClaimRequestSchema = EffectSchema.Struct({
+  intent: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/** How a claim settled: the session's own intent is spent; another account's, or one spent or past its ten minutes, is not. */
+export const GITHUB_CONNECT_CLAIM = {
+  CLAIMED: "claimed",
+  /** The intent is another account's; it was left standing for that account's own session. */
+  OTHER_ACCOUNT: "other-account",
+  /** No such intent stands: it was never made, was already claimed, or expired. */
+  EXPIRED: "expired",
+} as const;
+
+export type GitHubConnectClaim = (typeof GITHUB_CONNECT_CLAIM)[keyof typeof GITHUB_CONNECT_CLAIM];
+
+export const githubConnectClaimAnswerSchema = EffectSchema.Struct({
+  claim: EffectSchema.Literals(Object.values(GITHUB_CONNECT_CLAIM)),
+});

@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { CODING_AGENT_BOUNDS, turnRecordFields } from "./coding-agent-wire.js";
-import { githubConnectionSchema } from "./github-connection-wire.js";
+import { githubConnectionAnswerSchema } from "./github-connection-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -398,7 +398,7 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The workspaces of GitHub App installations the account reaches and may join, as the last list read answered; none before the first lands. */
   available: EffectSchema.Array(availableWorkspaceSchema),
   /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
-  github: EffectSchema.optionalKey(githubConnectionSchema),
+  github: EffectSchema.optionalKey(githubConnectionAnswerSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */

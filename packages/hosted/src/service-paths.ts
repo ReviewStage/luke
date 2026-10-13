@@ -97,12 +97,19 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_INSTALLED: "/api/github/installed",
   /**
-   * A page that links the account's GitHub, bound to the account for ten
-   * minutes and used once (POST); `github-connection-wire.ts` declares the
-   * answer.
+   * A connect intent for the account's GitHub (POST): a ten-minute,
+   * single-use ticket bound to the account, answered with the web page that
+   * links GitHub on the browser's session. `github-connection-wire.ts`
+   * declares the answer.
    */
   GITHUB_CONNECT: "/api/github/connect",
-  /** Whether the account has GitHub connected, and its login (GET); no token is in the answer. */
+  /**
+   * The connect page claims an intent (POST) on the browser's own session
+   * rather than a bearer: only the intent's own account claims it.
+   * `github-connection-wire.ts` declares both bodies.
+   */
+  GITHUB_CONNECT_CLAIM: "/api/github/connect/claim",
+  /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
    * The workspaces the account is a member of, its personal one first and

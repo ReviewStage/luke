@@ -15,9 +15,9 @@ export {
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
 export {
-  GITHUB_CONNECTION_FAILURE,
-  type GitHubConnectionFailure,
-  type GitHubConnectionResult,
+  GITHUB_CONNECTION_CALL_FAILURE,
+  type GitHubConnectionCallFailure,
+  type GitHubConnectionCallResult,
   HostedGitHubConnectionClient,
   type HostedGitHubConnectionClientOptions,
 } from "./github-connection-client.js";

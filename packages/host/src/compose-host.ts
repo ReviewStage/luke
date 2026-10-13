@@ -16,6 +16,7 @@ import {
   type PlanDraftFrame,
   type PlanWorkFrame,
 } from "@sidecar/hosted";
+import { GITHUB_CONNECT_PAGE } from "@sidecar/hosted/github-connection-wire";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -127,10 +128,16 @@ export const hostAssemblyLayer: Layer.Layer<
         new HostedPlanClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
         {
           workspaces: workspaceClient,
-          github: new HostedGitHubConnectionClient({
-            serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
-          }),
+          github: Object.assign(
+            new HostedGitHubConnectionClient({
+              serviceBaseUrl: kernel.hostedServiceBaseUrl,
+              ...account.token,
+            }),
+            {
+              disconnectUrl: () =>
+                `${kernel.hostedServiceBaseUrl}${GITHUB_CONNECT_PAGE.PATH}?${GITHUB_CONNECT_PAGE.DISCONNECT_PARAM}=${GITHUB_CONNECT_PAGE.FLAG}`,
+            },
+          ),
         },
       ),
     });

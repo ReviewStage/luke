@@ -8,7 +8,7 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import {
-  GITHUB_CONNECTION_FAILURE,
+  GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
@@ -280,7 +280,7 @@ function fakeService(plans: Plan[]): FakeService {
       status: () =>
         Effect.sync(() =>
           service.connection === undefined
-            ? { ok: false as const, failure: GITHUB_CONNECTION_FAILURE.UNANSWERED }
+            ? { ok: false as const, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED }
             : { ok: true as const, answer: service.connection },
         ),
       connect: () =>

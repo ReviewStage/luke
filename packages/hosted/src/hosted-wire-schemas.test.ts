@@ -12,6 +12,7 @@ import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
+import * as githubConnectionWire from "./github-connection-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
@@ -145,6 +146,12 @@ const EFFECT_MODULE_SCHEMAS = {
     dictationRequestSchema: dictationWire.dictationRequestSchema,
     dictationAnswerSchema: dictationWire.dictationAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof dictationWire>,
+  "github-connection-wire": {
+    githubConnectAnswerSchema: githubConnectionWire.githubConnectAnswerSchema,
+    githubConnectionAnswerSchema: githubConnectionWire.githubConnectionAnswerSchema,
+    githubConnectClaimRequestSchema: githubConnectionWire.githubConnectClaimRequestSchema,
+    githubConnectClaimAnswerSchema: githubConnectionWire.githubConnectClaimAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof githubConnectionWire>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
