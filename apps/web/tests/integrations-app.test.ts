@@ -76,6 +76,8 @@ interface ConnectState {
   authorized: { provider: IntegrationProvider; userId: string; callbackUrl: string }[];
   /** Connect cannot be asked at all. */
   unavailable: boolean;
+  /** Runs while Connect answers a token, the way a press elsewhere lands meanwhile. */
+  meanwhile?: () => void;
 }
 
 function backing(overrides: Partial<Backing> = {}): Backing {
@@ -114,6 +116,7 @@ function rowOf(
     userId,
     provider,
     status: stored.status,
+    state: stored.state,
     stateIssuedAt: stored.stateIssuedAt === undefined ? undefined : new Date(stored.stateIssuedAt),
   };
 }
@@ -157,10 +160,10 @@ function groupSeams(state: Backing): IntegrationsAppSeams {
           stateIssuedAt: NOW,
         });
       }),
-    completeSignIn: (userId, provider) =>
+    completeSignIn: (userId, provider, signIn) =>
       overStore(state, () => {
         const held = state.rows.get(userId);
-        if (held?.has(provider) !== true) return false;
+        if (held === undefined || held.get(provider)?.state !== signIn) return false;
         held.set(provider, {
           status: INTEGRATION_ROW_STATUS.CONNECTED,
           state: undefined,
@@ -197,6 +200,7 @@ function connectorDouble(state: ConnectState, provider: IntegrationProvider): Co
       return Effect.succeed("https://vercel.com/connect/authorize/fixture-request");
     },
     token: (userId) => {
+      state.meanwhile?.();
       if (state.unavailable) return Effect.fail(UNAVAILABLE);
       return state.grants.has(userId)
         ? Effect.succeed({
@@ -266,6 +270,8 @@ interface Exchange {
   finalGrants?: readonly string[];
   /** The authorizations Connect was asked to begin. */
   finalAuthorized?: ConnectState["authorized"];
+  /** What lands in the store while Connect answers a token. */
+  meanwhile?: (state: Backing) => void;
 }
 
 const NO_ROWS = (): Rows => new Map();
@@ -276,6 +282,12 @@ const CONNECTED = row(INTEGRATION_ROW_STATUS.CONNECTED);
 const PENDING = row(INTEGRATION_ROW_STATUS.PENDING, INSIDE_WINDOW);
 const STALE = row(INTEGRATION_ROW_STATUS.PENDING, OUTSIDE_WINDOW);
 const EXPIRED = row(INTEGRATION_ROW_STATUS.EXPIRED);
+/** A sign-in begun again since the one the callback carries. */
+const SUPERSEDED = {
+  status: INTEGRATION_ROW_STATUS.PENDING,
+  state: "n".repeat(43),
+  stateIssuedAt: NOW,
+} as const;
 const CALLBACK_URL = `${ORIGIN}/api/account/integrations/connected?state=${STATE}`;
 
 const EXCHANGES: readonly Exchange[] = [
@@ -439,6 +451,18 @@ const EXCHANGES: readonly Exchange[] = [
     finalRows: ROWS(CONNECTED),
     finalGrants: [USER_ID],
   },
+  // Disconnect and Connect again while Connect answered the old callback: the old sign-in completes nothing.
+  {
+    name: "callback-superseded",
+    state: () => backing({ rows: ROWS(PENDING)() }),
+    connect: () => connectState({ grants: new Set([USER_ID]) }),
+    request: callback(STATE),
+    meanwhile: (state) => {
+      state.rows.set(USER_ID, new Map([[LINEAR, SUPERSEDED]]));
+    },
+    finalRows: ROWS(SUPERSEDED),
+    finalGrants: [USER_ID],
+  },
   {
     name: "callback-declined",
     state: () => backing({ rows: ROWS(PENDING)() }),
@@ -491,6 +515,7 @@ const EXCHANGES: readonly Exchange[] = [
 test.for(EXCHANGES)("$name", async (exchange) => {
   const state = exchange.state();
   const connect = exchange.connect();
+  if (exchange.meanwhile !== undefined) connect.meanwhile = () => exchange.meanwhile?.(state);
   const carried = await answered(await groupAnswer(state, connect, exchange.request()));
 
   assert.ok(!carried.body.includes(ISSUED_TOKEN));

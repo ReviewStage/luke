@@ -233,7 +233,7 @@ const codingSession = (host: CoderHost) =>
 const connected = (userId: string) =>
   Effect.gen(function* () {
     yield* beginIntegrationSignIn(userId, LINEAR, `state-${userId}`);
-    assert.equal(yield* completeIntegrationSignIn(userId, LINEAR), true);
+    assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   });
 
 /** The token the session reads under the admission given, with Connect holding the grants given. */
@@ -343,7 +343,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an integration connection's to
         assert.deepEqual(yield* read(), Result.fail(LINEAR_UNAVAILABLE.NOT_CONNECTED));
         yield* beginIntegrationSignIn(session.userId, LINEAR, "state-first");
         assert.deepEqual(yield* read(), Result.fail(LINEAR_UNAVAILABLE.NOT_CONNECTED));
-        yield* completeIntegrationSignIn(session.userId, LINEAR);
+        yield* completeIntegrationSignIn(session.userId, LINEAR, "state-first");
         assert.ok(Result.isSuccess(yield* read()));
         // Signing in again keeps the account connected while the new sign-in is under way.
         yield* beginIntegrationSignIn(session.userId, LINEAR, "state-again");

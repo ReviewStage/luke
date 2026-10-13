@@ -46,6 +46,8 @@ export interface IntegrationConnectionRow {
   readonly userId: string;
   readonly provider: IntegrationProvider;
   readonly status: IntegrationRowStatus;
+  /** The sign-in under way's own state, which only it may complete under; nothing when none is. */
+  readonly state: string | undefined;
   /** When the sign-in under way began; nothing when none is. */
   readonly stateIssuedAt: Date | undefined;
 }
@@ -54,6 +56,7 @@ const IntegrationRowSchema = Schema.Struct({
   userId: Schema.String,
   provider: integrationProviderSchema,
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
+  state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -61,6 +64,7 @@ const ROW_COLUMNS = {
   userId: integrationConnection.userId,
   provider: integrationConnection.provider,
   status: integrationConnection.status,
+  state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
 };
 
@@ -69,6 +73,7 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     userId: row.userId,
     provider: row.provider,
     status: row.status,
+    state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
   };
 }
@@ -181,10 +186,17 @@ const StampedSchema = Schema.Struct({
   at: Schema.Date,
 });
 
+const CompleteSchema = Schema.Struct({
+  userId: Schema.String,
+  provider: integrationProviderSchema,
+  state: Schema.String,
+  at: Schema.Date,
+});
+
 const updateConnected = SqlSchema.findAll({
-  Request: StampedSchema,
+  Request: CompleteSchema,
   Result: Schema.Struct({ userId: Schema.String }),
-  execute: ({ at, ...account }) =>
+  execute: ({ at, state, ...account }) =>
     db
       .update(integrationConnection)
       .set({
@@ -194,17 +206,23 @@ const updateConnected = SqlSchema.findAll({
         connectedAt: at,
         updatedAt: at,
       })
-      .where(ofAccount(account))
+      .where(and(ofAccount(account), eq(integrationConnection.state, state)))
       .returning({ userId: integrationConnection.userId }),
 });
 
-/** Sets the account connected to one provider and ends its sign-in; answers whether a row stood to set, which a Disconnect meanwhile removes. */
+/**
+ * Sets the account connected to one provider and ends the sign-in begun
+ * under `state`; answers whether that sign-in still stood to complete. A
+ * Disconnect meanwhile removes it, and a sign-in begun again since replaces
+ * its state, so a callback that answered late completes nothing but its own.
+ */
 export function completeIntegrationSignIn(
   userId: string,
   provider: IntegrationProvider,
+  state: string,
 ): IntegrationStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    Effect.map(updateConnected({ userId, provider, at }), (rows) => rows.length > 0),
+    Effect.map(updateConnected({ userId, provider, state, at }), (rows) => rows.length > 0),
   );
 }
 

@@ -111,6 +111,7 @@ export interface IntegrationsAppSeams {
   completeSignIn: (
     userId: string,
     provider: IntegrationProvider,
+    state: string,
   ) => IntegrationStoreEffect<boolean>;
   deleteConnection: (userId: string, provider: IntegrationProvider) => IntegrationStoreEffect<void>;
   /** A fresh sign-in state; random in production, fixed in a test. */
@@ -165,6 +166,7 @@ function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undefined): 
 const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: IntegrationsAppSeams,
   row: IntegrationConnectionRow,
+  state: string,
 ): Effect.fn.Return<boolean, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
   const connector = (yield* IntegrationConnect)[row.provider];
   const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
@@ -177,7 +179,7 @@ const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
     }
     return false;
   }
-  return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider));
+  return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider, state));
 });
 
 /** The status a stored row stands for, settling a sign-in still under way. */
@@ -187,11 +189,14 @@ const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<IntegrationStatus, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
   if (row === undefined) return INTEGRATION_STATUS.DISCONNECTED;
   if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
-  const underWay = signInStands(seams, row.stateIssuedAt);
-  if (underWay && (yield* settledSignIn(seams, row))) return INTEGRATION_STATUS.CONNECTED;
+  // The state of a sign-in still under way, which is the one a settlement may complete.
+  const underWay = signInStands(seams, row.stateIssuedAt) ? row.state : undefined;
+  if (underWay !== undefined && (yield* settledSignIn(seams, row, underWay))) {
+    return INTEGRATION_STATUS.CONNECTED;
+  }
   if (row.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
   // A first sign-in that ran out of time never connected anything.
-  return underWay ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
+  return underWay !== undefined ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
 });
 
 /** GET: where every one of the caller's connections stands; a provider with no connector here is unavailable. */
@@ -326,8 +331,10 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
     return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
   }
-  const completed = yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider));
-  // A Disconnect pressed while the browser was away wins: the account stays disconnected.
+  const completed = yield* hostedStoreOrUnavailable(
+    seams.completeSignIn(row.userId, row.provider, state),
+  );
+  // A Disconnect pressed while the browser was away, or a sign-in begun again, wins: this one completes nothing.
   return landed(
     completed ? INTEGRATION_LANDING_STATUS.CONNECTED : INTEGRATION_LANDING_STATUS.NOT_COMPLETED,
   );
