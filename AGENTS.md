@@ -284,7 +284,7 @@ decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
 `packages/wire/src/effect/json-schema.ts`, and
-`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+`packages/database/src/models/message-reads.ts` all produce or read it.
 
 ### Idioms
 

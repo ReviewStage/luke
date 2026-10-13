@@ -1,3 +1,4 @@
+import { COALESCED_LINE_SEPARATOR } from "@sidecar/database/models/message-reads";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
@@ -12,7 +13,6 @@ import {
 } from "ai";
 import type { MessageReceivedPart } from "eve/client";
 import { UI_PART_STATE, UI_PART_TYPE } from "../core.js";
-import { COALESCED_LINE_SEPARATOR } from "./store/message-reads.js";
 
 /**
  * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, as the journal keeps them, and as eve's receipt of them reads back.

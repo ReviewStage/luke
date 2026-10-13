@@ -1,5 +1,11 @@
 import { childConversationId } from "@sidecar/database/models/ids";
 import {
+  type LatestTurn,
+  readMessageByClientId,
+  turnsBefore,
+  turnsNamed,
+} from "@sidecar/database/models/message-reads";
+import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_DELEGATE_TOOL,
@@ -44,12 +50,6 @@ import {
   type MessageCursor,
   type StoredMessageRecord,
 } from "../store/index.js";
-import {
-  type LatestTurn,
-  readMessageByClientId,
-  turnsBefore,
-  turnsNamed,
-} from "../store/message-reads.js";
 import { turnRecordOf } from "../turn-record.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";

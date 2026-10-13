@@ -10,6 +10,7 @@
  */
 
 import { TurnUsageColumnSchema } from "@sidecar/database/models/columns";
+import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import {
   CODING_AGENT_BOUNDS,
   TURN_ENDING,
@@ -21,7 +22,6 @@ import { CATALOG_ID_SEPARATOR } from "@sidecar/hosted/model-label";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Option, Schema } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
-import type { StoredTurnRecord } from "./store/message-reads.js";
 
 /** The row's fields a record is read from. */
 export type RecordedTurn = Pick<

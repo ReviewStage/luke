@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
+import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "@sidecar/database/models/soft-delete";
 import { messages as messagesTable, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -18,7 +19,6 @@ import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
-import type { MessageListRead } from "../server/hosted/store/message-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,

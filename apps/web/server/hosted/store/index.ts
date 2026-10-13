@@ -1,14 +1,14 @@
-import { purgeClearedConversations } from "@sidecar/database/models/soft-delete";
-import type { ToolSet } from "ai";
-import type { Effect, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type MessageListRead,
   readMessageByClientId,
   type StoredTurnRecord,
   turnsNamed,
-} from "./message-reads.js";
+} from "@sidecar/database/models/message-reads";
+import { purgeClearedConversations } from "@sidecar/database/models/soft-delete";
+import type { ToolSet } from "ai";
+import type { Effect, Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
 type HostedStoreFailure = SqlError | Schema.SchemaError;
@@ -73,7 +73,7 @@ export {
   type MessageCursor,
   type StoredMessageRecord,
   type StoredTurnRecord,
-} from "./message-reads.js";
+} from "@sidecar/database/models/message-reads";
 export {
   type VoiceTarget,
   type VoiceWriteResult,

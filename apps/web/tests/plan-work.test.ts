@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { listJournals } from "@sidecar/database/models/message-reads";
 import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { TURN_ENDING } from "@sidecar/hosted/coding-agent-wire";
@@ -45,7 +46,6 @@ import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hoste
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import { listJournals } from "../server/hosted/store/message-reads";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";

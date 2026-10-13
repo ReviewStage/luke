@@ -1,17 +1,20 @@
-import { db } from "@sidecar/database/core/query";
+import { toolPartType } from "@sidecar/brain";
 import {
-  EpochMillisColumnSchema,
-  InstantColumnSchema,
-  optionalField,
-  TurnUsageColumnSchema,
-} from "@sidecar/database/models/columns";
+  readStoredUIMessages,
+  type StoredUIMessage,
+  UNREGISTERED_TOOL_PART,
+} from "@sidecar/session/ui-messages";
 import {
-  conversations,
-  messages,
-  type StoredTurnUsage,
-  turns,
-} from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+  MESSAGE_ROLE,
+  type SchemaPath,
+  type SchemaRead,
+  type SchemaRefusal,
+  TURN_ORIGIN,
+  TURN_STATUS,
+  unparsedWire,
+  type WireBoundaryInput,
+  WireValueSchema,
+} from "@sidecar/wire";
 import type { ToolSet } from "ai";
 import {
   and,
@@ -31,21 +34,15 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
-  MESSAGE_ROLE,
-  readStoredUIMessages,
-  type SchemaPath,
-  type SchemaRead,
-  type SchemaRefusal,
-  type StoredUIMessage,
-  TURN_ORIGIN,
-  TURN_STATUS,
-  toolPartType,
-  UNREGISTERED_TOOL_PART,
-  unparsedWire,
-  type WireBoundaryInput,
-  WireValueSchema,
-} from "../../core.js";
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  optionalField,
+  TurnUsageColumnSchema,
+} from "./columns.js";
 
 /**
  * The conversation reads the brain and the voice make: a turn's journal by
