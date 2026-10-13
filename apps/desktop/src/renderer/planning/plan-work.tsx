@@ -222,8 +222,11 @@ export function SubagentTab({
 }): React.JSX.Element {
   const { call, task, session } = worker;
   const job = workerJob(call);
+  // A session whose own task failed says so even where the planning model answered its call and went on.
   const ended =
-    call.running || call.state !== PLAN_WORK_STATE.FAILED ? undefined : endedWord(session?.record);
+    call.running || (call.state !== PLAN_WORK_STATE.FAILED && !workFailed(session?.record))
+      ? undefined
+      : endedWord(session?.record);
   // A session that has drawn no row yet is the subagent starting, as an agent's working line says it.
   const phase =
     session === undefined || session.rows.length === 0

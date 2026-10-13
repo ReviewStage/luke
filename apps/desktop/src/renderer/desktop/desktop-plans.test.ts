@@ -1004,6 +1004,37 @@ test("a planning worker whose own task failed wears an alert at its tab's end an
   assert.deepEqual(cardParts(), [job, "Failed", "Queue A lets an admin revoke."]);
 });
 
+test("a planning worker whose call the planning model answered and went on from still wears its own task's failure", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session);
+  const answered: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.DONE,
+        parts: [
+          {
+            ...worker,
+            state: PLAN_WORK_STATE.DONE,
+            session: { ...worker.session, ending: TURN_ENDING.FAILED },
+          },
+        ],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: answered });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+
+  assert.equal(tabEndState(tabNamed(page, job)), "Failed");
+});
+
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
   const job =
     "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";

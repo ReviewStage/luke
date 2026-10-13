@@ -163,7 +163,7 @@ test("a subagent still starting says so once, on the working line at its tab's e
   assert.deepEqual(said(drawing).lines, ["Working…"]);
 });
 
-test("a turn or a subagent the service says failed reads Failed, as an agent's failed turn does, and one stopped, left by its call, or from a service that said neither reads Stopped", () => {
+test("a turn or a subagent the service says failed reads Failed, as an agent's failed turn does, a subagent so even where its call was answered, and one stopped, left by its call, or from a service that said neither reads Stopped", () => {
   const [turn] = TURNS;
   assert.ok(turn);
   const ended = (ending: TurnEnding | undefined) => ({
@@ -195,10 +195,13 @@ test("a turn or a subagent the service says failed reads Failed, as an agent's f
     ["Failed", "Failed", "Stopped", "Stopped", "Stopped"],
   );
 
-  const endLine = (ending: TurnEnding | undefined) => {
+  const endLine = (
+    ending: TurnEnding | undefined,
+    state: PlanWorkState = PLAN_WORK_STATE.FAILED,
+  ) => {
     const worker = workerOf(
       workRowsOf(
-        workerTurn(PLAN_WORK_STATE.FAILED, {
+        workerTurn(state, {
           parts: [{ type: PLAN_WORK_PART.TEXT, text: "Reading the plan routes." }],
           ...(ending === undefined ? undefined : { ending }),
         }),
@@ -213,6 +216,9 @@ test("a turn or a subagent the service says failed reads Failed, as an agent's f
   assert.equal(endLine(TURN_ENDING.FAILED), "Failed");
   assert.equal(endLine(TURN_ENDING.STOPPED), "Stopped");
   assert.equal(endLine(undefined), "Stopped");
+  // The planning model answered the call and went on, and the subagent's own task failed.
+  assert.equal(endLine(TURN_ENDING.FAILED, PLAN_WORK_STATE.DONE), "Failed");
+  assert.equal(endLine(undefined, PLAN_WORK_STATE.DONE), undefined);
 });
 
 test("a worker's job cut short by its line is marked to fade at its end, while a job shown whole is not", () => {
