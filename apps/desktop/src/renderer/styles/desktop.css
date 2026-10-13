@@ -1095,7 +1095,8 @@ body,
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own. */
-.desktop-plan-main .desktop-toolbar {
+.desktop-plan-main .desktop-toolbar,
+.desktop-toolbar:has(.tab-skeleton) {
   padding-left: var(--column-inset);
 }
 
@@ -3951,8 +3952,9 @@ body,
 }
 
 /* While the plan is read, one block in its tab's place: a tab's height and
-   corner at a typical tab's width, so the row stands as it will once the
-   plan's tab is drawn there. */
+   corner at a typical tab's width, starting where the tab's pill will
+   (`.desktop-plan-main .desktop-toolbar`), so the row stands as it will once
+   the plan's tab is drawn there. */
 .tab-skeleton {
   width: 120px;
   height: var(--control-height);

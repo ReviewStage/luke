@@ -103,8 +103,8 @@ const NEW_AGENT_STARTING = "Starting…";
 /** What the plan's Inbox tab is called. */
 const INBOX_LABEL = "Inbox";
 
-/** The "+" menu's row that opens the plan's Inbox, which no agent's id spells. */
-const INBOX_ROW = "inbox";
+/** The row that opens the plan's Inbox, which no agent's id spells. */
+export const INBOX_ROW = "inbox";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -311,21 +311,13 @@ export function agentEntries(
 }
 
 /**
- * The plan's Inbox as the "+" menu, the plan's summary, and ⌘K offer it,
- * among the plan's agents, since only they post to it; none on a plan with
- * no agent. Picking it opens the tab where it was closed and chooses it,
- * through `onPick`. The summary, which reads what waits, hands in
- * `waiting`, counted at the row's end in the sidebar's quiet count, and
- * nothing at none.
+ * The plan's Inbox as a row: its tray and its name, then what waits on the
+ * developer counted at its end in the sidebar's quiet count, and nothing at
+ * none. It names no section, so the summary lists it under Tabs, beside the
+ * panel's kinds.
  */
-export function inboxEntries(
-  agents: CodingAgentsControl,
-  onPick: () => void,
-  waiting = 0,
-): AddEntry[] {
-  // An archived agent's items still stand, so the row stands while the plan holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0) return [];
-  const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon />, section: AGENTS_SECTION };
+export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
+  const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon /> };
   const endMark =
     waiting === 0 ? undefined : (
       <span className="inbox-row-count">
@@ -333,7 +325,19 @@ export function inboxEntries(
         <span className="visually-hidden"> waiting</span>
       </span>
     );
-  return [{ row, endMark, onPick }];
+  return { row, endMark, onPick };
+}
+
+/**
+ * The plan's Inbox as the "+" menu and ⌘K offer it, among the plan's
+ * agents, since only they post to it; none on a plan with no agent. Picking
+ * it opens the tab where it was closed and chooses it, through `onPick`.
+ */
+export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
+  // An archived agent's items still stand, so the row stands while the plan holds any agent.
+  if ((agents.heldIds?.length ?? 0) === 0) return [];
+  const entry = inboxEntry(onPick, 0);
+  return [{ ...entry, row: { ...entry.row, section: AGENTS_SECTION } }];
 }
 
 /**

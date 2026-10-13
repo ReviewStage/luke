@@ -382,7 +382,7 @@ function PlanDocument({
             plans={plans}
             layout={summaryLayout}
             cardId={summaryCard}
-            inbox={inbox.board.open.length}
+            inbox={inbox.board}
           />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be
