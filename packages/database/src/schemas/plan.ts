@@ -3,14 +3,14 @@ import type { PlanAgentEdit } from "@sidecar/hosted/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
 import { conversations } from "./storage.js";
 
 /**
  * plan.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it: its name, whether it is pinned or archived, its
+ * account that started it, in the workspace it was started in: its name, whether it is pinned or archived, its
  * one document, a free Markdown text, and the journal of the saves coding
  * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
@@ -22,7 +22,7 @@ import { conversations } from "./storage.js";
  * The conversation a plan resumes in is the one row it names, attached once
  * the planning model opens it, and a purged conversation leaves the plan
  * standing with none. The row cascades with its account, so deleting an
- * account is still one statement.
+ * account is still one statement, and with its workspace.
  */
 export const plan = pgTable(
   "plan",
@@ -31,6 +31,10 @@ export const plan = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** The workspace the plan belongs to: a Better Auth `organization`, the starter's personal one unless another was named. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
@@ -60,6 +64,8 @@ export const plan = pgTable(
   (table) => [
     // The plan list reads one account's plans, newest started first.
     index("plan_user_created").on(table.userId, table.createdAt),
+    // A workspace's plans, newest started first.
+    index("plan_organization_created").on(table.organizationId, table.createdAt),
   ],
 );
 

@@ -13,6 +13,7 @@ import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readTemplateRevisionContent, recordTemplateRevision } from "./plan-template-revisions.js";
 import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
+import { deletePersonalWorkspace } from "./workspace-store.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the
@@ -61,7 +62,9 @@ export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClien
  * the dependent rows go with the row that names them, in one statement and
  * therefore as one unit. Nothing here enumerates the dependents, because a
  * list here could fall behind a table added later and leave a row standing
- * after the account it belongs to is gone.
+ * after the account it belongs to is gone. The one exception is the
+ * account's personal workspace: its organization names the account rather
+ * than being named by it, so it is deleted first, in the same transaction.
  */
 const deleteUserRow = SqlSchema.void({
   Request: Schema.String,
@@ -93,6 +96,8 @@ const findAccountSessions = SqlSchema.findAll({
  * opened meanwhile waits on it and finds no account, and every conversation
  * of the account is locked as its session is read, so a session claimed
  * meanwhile waits and finds no row to claim, rather than landing unqueued.
+ * The account's personal workspace goes in the same transaction, after the
+ * lock and before the user row, since nothing would take it otherwise.
  */
 export function deleteAccount(
   userId: string,
@@ -102,6 +107,7 @@ export function deleteAccount(
       Effect.gen(function* () {
         yield* lockUserRow(userId);
         yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
+        yield* deletePersonalWorkspace(userId);
         yield* deleteUserRow(userId);
       }),
     ),

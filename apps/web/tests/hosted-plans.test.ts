@@ -8,8 +8,8 @@ import {
   createPlan,
   deletePlan,
   listPlans,
-  type NewPlan,
   readPlan,
+  savePlanText,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -33,6 +33,7 @@ import {
 import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
+import { joinWorkspace, openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The named plans and their one document, through the store's public
@@ -47,11 +48,11 @@ import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
  * Synthetic accounts, repositories, and plans throughout.
  */
 
-const RELAY_PLAN: NewPlan = {
+const RELAY_PLAN: TestPlan = {
   name: "Teammate invitations",
 };
 
-const LEDGER_PLAN: NewPlan = {
+const LEDGER_PLAN: TestPlan = {
   name: "Billing export",
 };
 
@@ -131,11 +132,35 @@ function sectionText(text: string, heading: string): string {
 }
 
 it.layer(getTestDB())("named plans and the notes that write them", (it) => {
+  it.effect("a plan starts in the workspace it was handed, and its summary names it", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const personal = yield* openWorkspace(userId);
+      const shared = yield* openWorkspace(userId);
+
+      const relay = yield* createPlan(userId, { ...RELAY_PLAN, organizationId: shared });
+      yield* TestClock.adjust("1 minute");
+      const ledger = yield* createPlan(userId, { ...LEDGER_PLAN, organizationId: personal });
+
+      assert.equal(relay.workspaceId, shared);
+      assert.deepEqual(
+        (yield* listPlans(userId, { includeArchived: false })).map((plan) => [
+          plan.id,
+          plan.workspaceId,
+        ]),
+        [
+          [ledger.id, personal],
+          [relay.id, shared],
+        ],
+      );
+    }),
+  );
+
   it.effect("two named plans keep independent documents", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const relay = yield* createPlan(userId, RELAY_PLAN);
-      const ledger = yield* createPlan(userId, LEDGER_PLAN);
+      const relay = yield* startPlan(userId, RELAY_PLAN);
+      const ledger = yield* startPlan(userId, LEDGER_PLAN);
 
       yield* saveNotes(bound(userId, relay.id), INVITATIONS_NOTES);
       yield* saveNotes(bound(userId, ledger.id), EMPTY_STATE_NOTES);
@@ -154,7 +179,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
 
         const saved = savedDocument(yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES));
 
@@ -230,7 +255,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a note under a heading the text does not hold opens that section at its end", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       yield* makeDocumentPlan(planId, "## Why\n\nInvites are manual.\n");
 
       const { body } = savedDocument(
@@ -249,7 +274,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a proposal, a correction, and a strike each save in the section they name", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       const binding = bound(userId, planId);
       const everyMember = "Any member may invite by email.";
       const adminsOnly = "Only admins may invite, by email.";
@@ -285,7 +310,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
 
         const result = yield* saveNotes(bound(userId, planId), [
@@ -321,7 +346,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         const outcome = "A member invites a teammate by email.";
         const unheld = [
@@ -345,7 +370,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("notes that would carry the text past the plan's bound are refused whole", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
       const before = yield* resumedDocument(userId, planId);
       const long = "x".repeat(40_000);
@@ -373,10 +398,10 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
         const other = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
+        const relay = yield* startPlan(userId, RELAY_PLAN);
         yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
-        yield* createPlan(other, RELAY_PLAN);
+        const ledger = yield* startPlan(userId, LEDGER_PLAN);
+        yield* startPlan(other, RELAY_PLAN);
         yield* TestClock.adjust("1 minute");
 
         yield* readPlan(userId, relay.id);
@@ -390,11 +415,49 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       }),
   );
 
+  it.effect(
+    "a member lists, opens, renames, saves notes and text on, and deletes a teammate's plan",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const started = yield* startPlan(starter, RELAY_PLAN);
+        yield* joinWorkspace(started.workspaceId, teammate);
+
+        assert.deepEqual(
+          (yield* listPlans(teammate)).map((plan) => plan.id),
+          [started.id],
+        );
+        assert.deepEqual(yield* resumedDocument(teammate, started.id), started.document);
+        const renamed = yield* updatePlan(teammate, started.id, { name: "Shared invitations" });
+        assert.deepEqual(
+          Option.map(renamed, (plan) => plan.name),
+          Option.some("Shared invitations"),
+        );
+        const saved = savedDocument(
+          yield* saveNotes(bound(teammate, started.id), INVITATIONS_NOTES),
+        );
+        assert.deepEqual(yield* resumedDocument(starter, started.id), saved);
+        const edited = `${saved.body}\n## Rollout\n\nBehind a flag first.\n`;
+        assert.equal(Option.isNone(yield* savePlanText(stranger, started.id, edited)), true);
+        assert.equal(Option.isSome(yield* savePlanText(teammate, started.id, edited)), true);
+        assert.equal((yield* resumedDocument(starter, started.id)).body, edited);
+
+        assert.deepEqual(yield* listPlans(stranger), []);
+        assert.equal(Option.isNone(yield* readPlan(stranger, started.id)), true);
+        assert.equal(yield* deletePlan(stranger, started.id), false);
+
+        assert.equal(yield* deletePlan(teammate, started.id), true);
+        assert.equal(Option.isNone(yield* readPlan(starter, started.id)), true);
+      }),
+  );
+
   it.effect("a second account cannot read, write, or delete another's plan", () =>
     Effect.gen(function* () {
       const owner = yield* openUser;
       const intruder = yield* openUser;
-      const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(owner, RELAY_PLAN);
       yield* saveNotes(bound(owner, planId), INVITATIONS_NOTES);
       const saved = yield* resumedDocument(owner, planId);
 
@@ -414,8 +477,8 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a renamed plan lists and opens under its new name, its text as it stood", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const relay = yield* createPlan(userId, RELAY_PLAN);
-      const ledger = yield* createPlan(userId, LEDGER_PLAN);
+      const relay = yield* startPlan(userId, RELAY_PLAN);
+      const ledger = yield* startPlan(userId, LEDGER_PLAN);
       yield* saveNotes(bound(userId, relay.id), INVITATIONS_NOTES);
       const saved = yield* resumedDocument(userId, relay.id);
 
@@ -440,7 +503,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     Effect.gen(function* () {
       const owner = yield* openUser;
       const intruder = yield* openUser;
-      const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(owner, RELAY_PLAN);
       const before = yield* readPlan(owner, planId);
 
       assert.equal(Option.isNone(yield* updatePlan(intruder, planId, { name: "Mine now" })), true);
@@ -457,9 +520,9 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
+        const relay = yield* startPlan(userId, RELAY_PLAN);
         yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        const ledger = yield* startPlan(userId, LEDGER_PLAN);
         yield* TestClock.adjust("1 minute");
 
         const pinned = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: true }));
@@ -491,9 +554,9 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
+        const relay = yield* startPlan(userId, RELAY_PLAN);
         yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        const ledger = yield* startPlan(userId, LEDGER_PLAN);
         yield* updatePlan(userId, relay.id, { pinned: true });
         yield* TestClock.adjust("1 minute");
 
@@ -531,7 +594,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     Effect.gen(function* () {
       const owner = yield* openUser;
       const intruder = yield* openUser;
-      const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(owner, RELAY_PLAN);
       const before = yield* readPlan(owner, planId);
 
       assert.equal(Option.isNone(yield* updatePlan(intruder, planId, { pinned: true })), true);
@@ -547,7 +610,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a save the store refuses is reported as not saved and the prior document stands", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
       const before = yield* resumedDocument(userId, planId);
 
@@ -566,7 +629,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a deleted plan stays deleted: its notes answer it gone and recreate nothing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
 
       assert.equal(yield* deletePlan(userId, planId), true);
@@ -584,7 +647,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("the model resumes in the conversation attached to the plan", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
       const conversationId = yield* openConversation(userId);
 
       const unattached = yield* readPlan(userId, planId);
@@ -609,7 +672,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       Effect.gen(function* () {
         const owner = yield* openUser;
         const other = yield* openUser;
-        const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(owner, RELAY_PLAN);
         const othersConversation = yield* openConversation(other);
         const ownConversation = yield* openConversation(owner);
 
@@ -626,7 +689,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("deleting the account deletes its plans", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+      const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
 
       yield* deleteAccount(userId);
 

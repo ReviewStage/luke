@@ -7,7 +7,6 @@ import {
   listPublishedCodingAgents,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
@@ -27,6 +26,7 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function
@@ -181,7 +181,7 @@ function statusDelivery(ref: string) {
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
     });

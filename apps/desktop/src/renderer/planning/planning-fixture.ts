@@ -86,6 +86,7 @@ const FIXTURE_TEXT = [
 
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -96,6 +97,7 @@ const FIXTURE_PLAN: Plan = {
 const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   {
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
+    workspaceId: "workspace-personal",
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
@@ -138,6 +140,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   plans: [
     {
       id: FIXTURE_PLAN.id,
+      workspaceId: "workspace-personal",
       name: FIXTURE_PLAN.name,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,

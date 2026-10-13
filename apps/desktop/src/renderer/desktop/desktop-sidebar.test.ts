@@ -639,6 +639,7 @@ test("New plan from Settings brings the Plans tab forward and asks for the new-p
 test("Option-Command-Up and Down walk the list as it reads, New plan at its head, and stop at its ends", () => {
   const FIRST = {
     id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    workspaceId: "workspace-personal",
     name: "Invitations",
     createdAt: 1,
     updatedAt: 1,
@@ -646,6 +647,7 @@ test("Option-Command-Up and Down walk the list as it reads, New plan at its head
   };
   const SECOND = {
     id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+    workspaceId: "workspace-personal",
     name: "Billing",
     createdAt: 2,
     updatedAt: 2,
@@ -746,7 +748,15 @@ test("Search names the palette's chord, which it shows at its end only while hov
 
 /** A plan's row of the list, with whatever pin or archive it is given. */
 function listedPlan(name: string, marks: { pinnedAt?: number; archivedAt?: number } = {}) {
-  return { id: `plan-${name}`, name, createdAt: 1, updatedAt: 1, repository: null, ...marks };
+  return {
+    id: `plan-${name}`,
+    workspaceId: "workspace-personal",
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: null,
+    ...marks,
+  };
 }
 
 /** Each section the sidebar draws, by its heading, with the names of the plans under it. */
@@ -1691,7 +1701,14 @@ test("a list that could not be read says so in a sentence of its own, with Retry
 
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
 function onRepository(name: string, repository: string | null, updatedAt = 1) {
-  return { id: `plan-${name}`, name, createdAt: 1, updatedAt, repository };
+  return {
+    id: `plan-${name}`,
+    workspaceId: "workspace-personal",
+    name,
+    createdAt: 1,
+    updatedAt,
+    repository,
+  };
 }
 
 /** Each repository group the Plans section draws, by its header, with the plans standing under it. */
@@ -2111,7 +2128,14 @@ function unread(container: HTMLElement): string[] {
 
 /** A plan's row of the list, started at `createdAt` and last saved at `updatedAt`. */
 function savedPlan(name: string, createdAt: number, updatedAt: number): PlanSummary {
-  return { id: `plan-${name}`, name, createdAt, updatedAt, repository: null };
+  return {
+    id: `plan-${name}`,
+    workspaceId: "workspace-personal",
+    name,
+    createdAt,
+    updatedAt,
+    repository: null,
+  };
 }
 
 /** The open plan's region as the window draws it beside the sidebar: only its look matters here. */

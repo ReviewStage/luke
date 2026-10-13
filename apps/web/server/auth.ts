@@ -1,7 +1,7 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { jwt, lastLoginMethod, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
@@ -12,6 +12,7 @@ import {
   denyOAuthClientPrivileges,
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
+  ORGANIZATION_OPTIONS,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
@@ -89,5 +90,7 @@ export const auth = betterAuth({
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
     }),
+    // A workspace is an organization: its members plan together.
+    organization(ORGANIZATION_OPTIONS),
   ],
 });

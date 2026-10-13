@@ -11,6 +11,7 @@ import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { openWorkspace } from "./support/workspaces";
 
 /**
  * plan-agent-edits-migration.test.ts -- migration 0084 carries a coding agent's journaled notes onto the new template.
@@ -112,9 +113,10 @@ const insertPlan = (userId: string, edits: StoredEdits) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const planId = randomUUID();
+    const organizationId = yield* openWorkspace(userId);
     yield* sql`
-      insert into plan (id, user_id, name, document, agent_edits)
-      values (${planId}, ${userId}, ${"Teammate invitations"}, '',
+      insert into plan (id, user_id, organization_id, name, document, agent_edits)
+      values (${planId}, ${userId}, ${organizationId}, ${"Teammate invitations"}, '',
         ${JSON.stringify(edits)}::jsonb)
     `;
     return planId;

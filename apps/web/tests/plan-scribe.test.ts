@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { listRevisions } from "@sidecar/database/models/plan-revisions";
-import { createPlan, type NewPlan, readPlan } from "@sidecar/database/models/plan-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -17,6 +17,7 @@ import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeSavedDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
+import { startPlan, type TestPlan } from "./support/workspaces";
 
 /**
  * The planning call's notetaker over a real plan row: a scripted model stands
@@ -25,7 +26,7 @@ import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
  * the plan's saved document.
  */
 
-const RELAY_PLAN: NewPlan = {
+const RELAY_PLAN: TestPlan = {
   name: "Teammate invitations",
 };
 
@@ -38,7 +39,7 @@ const OUTCOME = "A member invites a teammate by email.";
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, RELAY_PLAN);
+  const plan = yield* startPlan(userId, RELAY_PLAN);
   return { userId, planId: plan.id };
 });
 

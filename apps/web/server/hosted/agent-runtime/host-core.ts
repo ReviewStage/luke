@@ -5,7 +5,7 @@
  * (`../coder-host/host.ts`) differ in what their agents are for, and each
  * keeps the methods its role alone has. What they share is how a session is
  * admitted for a conversation (the standing it runs under: its own, one
- * claiming the conversation as it starts, or a worker's on ownership alone),
+ * claiming the conversation as it starts, or a worker's on reach alone),
  * how a starting session claims the conversation's record, and how a
  * worker's session finds the child conversation its turns are recorded
  * under: built here once, so both hosts are that core and their own role.
@@ -33,7 +33,7 @@ export interface HostAdmission {
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The admission a worker's session takes: the caller owns the conversation, whichever session runs it. */
+  /** The admission a worker's session takes: the caller reaches the conversation, whichever session runs it. */
   admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** Claims the conversation's record for the session starting, forward only; answers whether the record is now the session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
@@ -61,10 +61,10 @@ export interface DelegatedChild {
 
 /**
  * The child conversation a worker's session records into, under the call
- * that started it: admitted on ownership alone, as the worker's resolvers
+ * that started it: admitted on reach alone, as the worker's resolvers
  * are, since claiming the parent's record for the child's session would
  * refuse every later call of the parent's own; nothing for a session with
- * no parent, or one the account does not own.
+ * no parent, or one the account does not reach.
  */
 export function delegatedChildOf(
   session: SessionContext["session"],

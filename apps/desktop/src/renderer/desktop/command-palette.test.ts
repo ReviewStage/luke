@@ -48,6 +48,7 @@ import { DesktopPlans } from "./desktop-plans";
 
 const OPEN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -59,6 +60,7 @@ const OPEN: Plan = {
 const TWINS: readonly PlanSummary[] = [
   {
     id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+    workspaceId: "workspace-personal",
     name: "Billing export",
     createdAt: 4,
     updatedAt: 5,
@@ -66,6 +68,7 @@ const TWINS: readonly PlanSummary[] = [
   },
   {
     id: "5d2e8a41-9c3b-4f6a-b7d0-1e2f3a4b5c6d",
+    workspaceId: "workspace-personal",
     name: "Billing export",
     createdAt: 6,
     updatedAt: 7,
@@ -76,6 +79,7 @@ const TWINS: readonly PlanSummary[] = [
 /** A plan the developer archived, which the palette still finds. */
 const ARCHIVED: PlanSummary = {
   id: "2f6c1b8d-7a4e-4c3b-9d1f-8e7a6b5c4d3e",
+  workspaceId: "workspace-personal",
   name: "Legacy importer",
   createdAt: 8,
   updatedAt: 9,

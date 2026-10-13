@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
-import {
-  createPlan,
-  openPlanConversation,
-  savePlanText,
-} from "@sidecar/database/models/plan-store";
+import { openPlanConversation, savePlanText } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "../server/hosted/brain-host/conversation";
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, insertMessage } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The standing context as the host answers it to the eve project's prompt
@@ -54,9 +54,10 @@ const seams: BrainHostSeams = {
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
-    sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
-    ownsConversation: (userId, conversationId) =>
-      database.run(conversationOwnedBy(userId, conversationId)),
+    reachesSession: (userId, sessionId) =>
+      database.run(runtimeSessionReachableBy(userId, sessionId)),
+    reachesConversation: (userId, conversationId) =>
+      database.run(conversationReachableBy(userId, conversationId)),
   },
   openAi: () => undefined,
   deploymentSecret: () => undefined,
@@ -119,10 +120,10 @@ async function said(target: ConversationTarget, words: string): Promise<void> {
 
 test("a turn of a plan's conversation is handed the plan's name and the document saved as it starts, and none of the conversation's words", async () => {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  const plan = await database.run(startPlan(userId, { name: PLAN_NAME }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
-  );
+  ).conversationId;
   const target = { userId, conversationId };
   await said(target, SAID);
   await database.run(savePlanText(userId, plan.id, FIRST));
@@ -141,7 +142,7 @@ test("a turn of a plan's conversation is handed the plan's name and the document
 
 test("a conversation no plan names is handed no name and no document", async () => {
   const userId = await database.createUser();
-  const elsewhere = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  const elsewhere = await database.run(startPlan(userId, { name: PLAN_NAME }));
   await database.run(savePlanText(userId, elsewhere.id, FIRST));
   const target = { userId, conversationId: await insertConversation(database.run, { userId }) };
 
