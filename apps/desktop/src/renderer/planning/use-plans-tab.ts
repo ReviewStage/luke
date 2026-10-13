@@ -997,7 +997,7 @@ export function usePlansTab(input: {
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
     fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
-      : act(ACT_KIND.PLANNING_REPOSITORIES).catch(() => ({
+      : act(ACT_KIND.PLANNING_REPOSITORIES, {}).catch(() => ({
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
