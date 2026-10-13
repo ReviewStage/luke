@@ -169,6 +169,10 @@ export const PLAN_WORK_BOUNDS = {
   TEXT_CHARS: 4_000,
   SUBJECT_CHARS: 300,
   NAME_CHARS: 64,
+  /** The most spoken lines one turn names as its ask. */
+  ASKED_LINES: 20,
+  /** The most characters of a spoken line's id, which the voice's ledger mints. */
+  LINE_ID_CHARS: 128,
 } as const;
 
 const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.TEXT_CHARS));
@@ -267,6 +271,17 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   /** Whether older parts than these were left out. */
   earlierOmitted: EffectSchema.Boolean,
   parts: EffectSchema.Array(planWorkPartSchema),
+  /**
+   * The developer's spoken lines the turn took as its ask, by the ids the
+   * Transcript names them by, in the order they were said; absent for a turn
+   * no spoken line opened, before its lines are taken into it, and from a
+   * service older than it.
+   */
+  asked: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS)),
+    ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
+  ),
   ...turnRecordFields,
 });
 

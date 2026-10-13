@@ -48,14 +48,19 @@ export const transcriptTextPartSchema = EffectSchema.Struct({
 /**
  * One speaker's utterance on a call, its fragments run together as received,
  * as a `UIMessage`: the speaker is the role, and the words are one text
- * part. The id is the line's place on its call, counted from zero. Note that
- * the parts are a mutable array, as the SDK's type spells them, so a message
- * read here is one of its messages without a copy.
+ * part. The id is the line's place on its call, counted from zero, and the
+ * metadata names the line's row in the plan's conversation, the id the live
+ * call names the line by and a planning turn names its ask by, where the
+ * record holds that row. Note that the parts are a mutable array, as the
+ * SDK's type spells them, so a message read here is one of its messages
+ * without a copy.
  */
 export const transcriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
   parts: EffectSchema.mutable(EffectSchema.Array(transcriptTextPartSchema)),
+  /** Absent for a line whose row the record does not hold, and from a service older than it. */
+  metadata: EffectSchema.optionalKey(EffectSchema.Struct({ rowId: EffectSchema.String })),
 });
 
 export type TranscriptMessage = typeof transcriptMessageSchema.Type;

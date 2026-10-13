@@ -6,6 +6,7 @@ import {
   readMessageByClientId,
   type StoredMessageRecord,
   type StoredTurnRecord,
+  spokenAskRowsOf,
   turnsBefore,
 } from "@sidecar/database/models/message-reads";
 import { type PlanStoreEffect, readPlan } from "@sidecar/database/models/plan-store";
@@ -36,7 +37,8 @@ import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
  * conversation's turns, newest first a page at a time, each projected from
  * its row and its journal exactly as a call tells it live
  * (`voice/plan-work.ts`), a worker's session and its title read from its
- * child conversation beside it. The code is every answered `show_code` call in
+ * child conversation beside it, and the spoken lines each took as its ask
+ * read from the rows the turn holds. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
  * and no secret file, is read back. The plan is read under the account
@@ -133,11 +135,23 @@ export function readPlanWork(
     const page = yield* turnsBefore(userId, conversationId, PLAN_WORK_BOUNDS.TURNS, before);
     const read = yield* Effect.forEach(page.turns, (turn) => journalOf(userId, turn));
     const journaled = read.filter((each) => each !== undefined);
+    const asked = yield* spokenAskRowsOf(
+      userId,
+      conversationId,
+      journaled.map((each) => each.turn.id),
+    );
     const code = newest ? yield* allShownCode(userId, conversationId) : undefined;
     const oldest = page.turns[0];
     return Option.some({
       turns: journaled.map((each) =>
-        planWorkOf(each.turn, each.message, each.subagents, each.titles, each.records),
+        planWorkOf(
+          each.turn,
+          each.message,
+          each.subagents,
+          each.titles,
+          each.records,
+          asked.get(each.turn.id),
+        ),
       ),
       ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
       ...(code === undefined ? undefined : { code }),

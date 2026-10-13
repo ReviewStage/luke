@@ -6,6 +6,7 @@ import {
   type MessageListRead,
   readMessageByClientId,
   type StoredTurnRecord,
+  spokenAskRowsOf,
   turnsNamed,
 } from "./message-reads.js";
 import { purgeClearedConversations, purgeDeletedPlanCalls } from "./soft-delete.js";
@@ -37,6 +38,12 @@ export interface HostedStore {
       tools: ToolSet,
       clientId: string,
     ): HostedStoreEffect<MessageListRead>;
+    /** The developer's spoken lines each turn named took as its ask, by the client id the voice minted for each, in the conversation's order. */
+    spokenAskRows(
+      userId: string,
+      conversationId: string,
+      turnIds: readonly string[],
+    ): HostedStoreEffect<ReadonlyMap<string, readonly string[]>>;
   };
   turns: {
     /** The turn rows the given ids name, over standing conversations, in the order they last changed. */
@@ -58,6 +65,8 @@ export function hostedStore(): HostedStore {
     messages: {
       byClientId: (userId, conversationId, tools, clientId) =>
         readMessageByClientId(userId, conversationId, tools, clientId),
+      spokenAskRows: (userId, conversationId, turnIds) =>
+        spokenAskRowsOf(userId, conversationId, turnIds),
     },
     turns: {
       named: (userId, turnIds) => turnsNamed(userId, turnIds),

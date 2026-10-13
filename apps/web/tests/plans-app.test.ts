@@ -8,8 +8,9 @@ import {
   recordCodingAgentPublished,
 } from "@sidecar/database/models/coding-agent-store";
 import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
-import { createPlan } from "@sidecar/database/models/plan-store";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { purgeDeletedPlanCalls } from "@sidecar/database/models/soft-delete";
+import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { planBoard } from "@sidecar/database/schemas/plan";
 import { turns } from "@sidecar/database/schemas/storage";
@@ -62,11 +63,13 @@ import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "eff
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE } from "../server/core";
 import {
   DRAW_ON_BOARD_REFUSAL,
   DRAW_ON_BOARD_STATUS,
   runDrawOnBoard,
 } from "../server/hosted/board-tool";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
@@ -1517,6 +1520,54 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(
           yield* ask(request(TRANSCRIPT, owner, { method: "PUT", id: planId })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a transcript's line names the row the voice wrote for it, the id a planning turn names its ask by, and a line with no row on record names none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const call = yield* callAbout({ userId: owner, planId, startedAt: 1_000_000 }, [
+          [VOICE_SEGMENT_ROLE.USER, "Invites ", 0],
+          [VOICE_SEGMENT_ROLE.ASSISTANT, "Mm.", 600],
+          [VOICE_SEGMENT_ROLE.USER, "should expire.", 700],
+          [VOICE_SEGMENT_ROLE.ASSISTANT, "After how many days?", 9_000],
+        ]);
+        const conversationId = Option.getOrThrow(yield* openPlanConversation(owner, planId));
+        const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
+        const target = { userId: owner, conversationId };
+        const span = { channel: MESSAGE_CHANNEL.VOICE, voice_session_id: call } as const;
+        // The developer's line and Luke's question are on record; Luke's "Mm." never was.
+        yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: "row-invites",
+          text: "Invites should expire.",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, ...span, from_ms: 0, to_ms: 1_200 },
+        });
+        yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.ASSISTANT,
+          clientId: "row-how-many",
+          text: "After how many days?",
+          metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL, ...span, from_ms: 9_000, to_ms: 9_500 },
+        });
+
+        const { calls } = readAnswer(
+          planTranscriptAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TRANSCRIPT, owner, { id: planId })),
+        ).transcript;
+        assert.deepEqual(
+          calls[0]?.messages.map((line) => [line.parts[0]?.text, line.metadata?.rowId]),
+          [
+            ["Invites should expire.", "row-invites"],
+            ["Mm.", undefined],
+            ["After how many days?", "row-how-many"],
+          ],
         );
       }),
   );

@@ -5,6 +5,7 @@ import {
   UNREGISTERED_TOOL_PART,
 } from "@sidecar/session/ui-messages";
 import {
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type SchemaPath,
   type SchemaRead,
@@ -785,6 +786,49 @@ export function turnsNamed(
       .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
     (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
+}
+
+const findSpokenAskRows = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    turnIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({ turnId: Schema.String, clientId: Schema.String }),
+  execute: ({ userId, conversationId, turnIds }) =>
+    db
+      .select({ turnId: messages.turnId, clientId: messages.clientId })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.userId, userId),
+          eq(messages.conversationId, conversationId),
+          inArray(messages.turnId, [...turnIds]),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
+        ),
+      )
+      .orderBy(asc(messages.seq)),
+});
+
+/**
+ * The developer's spoken lines each of the turns named took as its ask, by
+ * the client id the voice's ledger minted for each line, in the order the
+ * conversation holds them: the rows a delegation's attach or the turn's
+ * receipt took into the turn. A turn no spoken line opened names none.
+ */
+export function spokenAskRowsOf(
+  userId: string,
+  conversationId: string,
+  turnIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, readonly string[]>, MessageReadFailure, SqlClient.SqlClient> {
+  if (turnIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
+    const asked = new Map<string, string[]>();
+    for (const row of rows) asked.set(row.turnId, [...(asked.get(row.turnId) ?? []), row.clientId]);
+    return asked;
+  });
 }
 
 const findTurnQueuedAt = SqlSchema.findOneOption({
