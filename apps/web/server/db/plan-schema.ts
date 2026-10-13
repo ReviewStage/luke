@@ -38,13 +38,8 @@ export const plan = pgTable(
       .$type<readonly PlanAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /**
-     * The plan as one free Markdown document, its whole text: no title line,
-     * and its assumptions a section like any other
-     * (`@sidecar/hosted/plan-document`). Every row holds one; the column is
-     * made not null with the drop of the fixed template's columns.
-     */
-    document: text("document"),
+    /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@sidecar/hosted/plan-document`). */
+    document: text("document").notNull(),
     /** Who last changed each section and when, by heading; empty until a save changes one. */
     sectionWriters: jsonb("section_writers")
       .$type<readonly PlanSectionWriter[]>()
