@@ -76,6 +76,8 @@ it.effect(
         `luke-page://page/${PLAN_ID}/${CHART.id}`,
         `luke-page://page/${PLAN_ID}/${CHART.id}/2?plan=other`,
         `luke-page://page/${PLAN_ID}/${CHART.id}/0`,
+        `luke-page://page/${PLAN_ID}/${CHART.id}/02`,
+        `luke-page://page/${PLAN_ID}/${CHART.id}/2e0`,
         `luke-page://elsewhere/${PLAN_ID}/${CHART.id}/2`,
         `https://page/${PLAN_ID}/${CHART.id}/2`,
       ];

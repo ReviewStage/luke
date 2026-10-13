@@ -35,7 +35,8 @@ export function framedPageOf(url: string): FramedPage | undefined {
   const [planId, pageId, version, ...rest] = parsed.pathname.slice(1).split("/");
   const number = Number(version);
   if (planId === undefined || pageId === undefined || rest.length > 0) return undefined;
-  if (planId === "" || pageId === "" || !Number.isSafeInteger(number) || number < 1) {
+  // Note that the version is read only as `pageFrameUrl` spells it, so `02` or `2e0` names nothing.
+  if (planId === "" || pageId === "" || String(number) !== version || number < 1) {
     return undefined;
   }
   return { planId, pageId, version: number };
