@@ -57,6 +57,7 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
 .tooltip[data-leaving="seen"] {
   pointer-events: none;
   animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+  transition: none;
 }
 
 .tooltip[data-leaving="unseen"] {

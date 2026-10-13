@@ -2208,6 +2208,10 @@ body,
 :is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
   pointer-events: none;
   animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+  /* Note that the hold waits on every motion the element runs, and losing
+     focus would start the scrollbar's own fade (above), so the exit is the
+     one motion it has. */
+  transition: none;
 }
 
 /* A capture run zeroes the motion tokens on its stage, which a menu or the
