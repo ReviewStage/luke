@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { GitHubMark, GoogleMark } from "./account-marks";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
+import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import {
   SOCIAL_PROVIDER,
@@ -34,39 +35,6 @@ function ProviderMark({
     <GitHubMark className={className} />
   ) : (
     <GoogleMark className={className} />
-  );
-}
-
-function ArrowMark(): React.JSX.Element {
-  return (
-    <svg
-      className="size-6 shrink-0 text-muted-foreground"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M5 12h14M13 6l6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ConnectionGraphic({ provider }: { provider: SocialProvider }): React.JSX.Element {
-  return (
-    <div
-      className="mx-auto mb-5 flex items-center justify-center gap-4 text-foreground"
-      aria-hidden="true"
-    >
-      <ProviderMark provider={provider} className="size-10 shrink-0" />
-      <ArrowMark />
-      <LukeMark className="h-auto w-12 shrink-0" />
-    </div>
   );
 }
 
@@ -107,7 +75,9 @@ function SignIn(): React.JSX.Element {
             page, so it carries the same face the product and the landing page
             wear. */}
         {provider ? (
-          <ConnectionGraphic provider={provider} />
+          <ConnectionGraphic
+            mark={<ProviderMark provider={provider} className="size-10 shrink-0" />}
+          />
         ) : (
           <div className="inline-flex w-13" aria-hidden="true">
             <LukeMark className="h-auto w-full" />

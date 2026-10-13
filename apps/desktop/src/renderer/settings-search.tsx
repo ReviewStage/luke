@@ -1,4 +1,10 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
   APP_SETTING_SCHEMA,
@@ -89,6 +95,14 @@ const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUB
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
+/** The words every integration's row can be found by, beside its own name. */
+const INTEGRATION_WORDS = "connect disconnect integration mcp";
+
+/** What each integration is for, in the words someone looking for it would type. */
+const INTEGRATION_KEYWORDS = {
+  [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
+} as const satisfies Record<IntegrationProvider, string>;
+
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
@@ -125,14 +139,21 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.LINEAR,
-          label: "Linear",
-          page: SETTINGS_VIEW.ROOT,
-          haystack: ["Linear", "connect disconnect issues tracker integration mcp"],
-        }
-      : undefined,
+    // Each integration's row, drawn once an account is signed in and anchored by its provider.
+    ...INTEGRATION_PROVIDER_LIST.map((provider) =>
+      input.accountDrawn
+        ? {
+            id: provider,
+            label: INTEGRATION_NAME[provider],
+            page: SETTINGS_VIEW.ROOT,
+            haystack: [
+              INTEGRATION_NAME[provider],
+              INTEGRATION_WORDS,
+              INTEGRATION_KEYWORDS[provider],
+            ],
+          }
+        : undefined,
+    ),
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,

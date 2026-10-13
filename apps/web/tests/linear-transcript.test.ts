@@ -14,6 +14,7 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CONNECTION_TOOL } from "../server/hosted/connection-tools";
+import { INTEGRATION } from "../server/hosted/integrations";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
@@ -253,7 +254,7 @@ for (const { agent, tools } of TOOL_SETS) {
               state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
             },
             {
-              type: `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`,
+              type: `tool-${INTEGRATION.linear.REMOTE_TOOL}`,
               toolCallId: NESTED_CALL,
               state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
             },
@@ -282,7 +283,7 @@ for (const { agent, tools } of TOOL_SETS) {
         assert.deepEqual(recording.refusals, []);
         const calls = await answeredCalls(recording, target);
         const nested = calls.find((call) => call.toolCallId === NESTED_CALL);
-        assert.equal(nested?.type, `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`);
+        assert.equal(nested?.type, `tool-${INTEGRATION.linear.REMOTE_TOOL}`);
         assert.equal(nested?.state, TOOL_PART_STATE.OUTPUT_ERROR);
         assert.equal(
           calls.find((call) => call.toolCallId === EXECUTE_CALL)?.state,
@@ -338,7 +339,7 @@ it.effect(
       const nested = journal?.parts
         .filter(isToolUIPart)
         .find((part) => part.toolCallId === NESTED_CALL);
-      assert.equal(nested?.type, `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`);
+      assert.equal(nested?.type, `tool-${INTEGRATION.linear.REMOTE_TOOL}`);
       assert.equal(nested?.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.match(
         JSON.stringify(nested && "output" in nested ? nested.output : null),

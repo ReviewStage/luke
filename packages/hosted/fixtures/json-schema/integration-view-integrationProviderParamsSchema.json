@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "linear"
+      ]
+    }
+  },
+  "required": [
+    "provider"
+  ],
+  "additionalProperties": false
+}

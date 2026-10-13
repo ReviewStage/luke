@@ -32,6 +32,16 @@ interface SegmentRewrite {
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
+  {
+    src: "/api/account/integrations/([^/]+)/connect",
+    route: "account/integrations/connect",
+    query: "provider=$1",
+  },
+  {
+    src: "/api/account/integrations/([^/]+)/disconnect",
+    route: "account/integrations/disconnect",
+    query: "provider=$1",
+  },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
   { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },

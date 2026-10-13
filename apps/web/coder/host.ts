@@ -1,3 +1,4 @@
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
@@ -14,10 +15,10 @@ import {
 import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
-  type LinearAdmission,
-  linearAccessToken,
-  linearConnection,
-} from "../server/hosted/linear-connection.js";
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationConnection,
+} from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -147,12 +148,16 @@ export function sessionSkills(
 }
 
 /**
- * The Linear connection under one of this project's ownership checks, the
- * agent's or the worker's, for each one's own `connections/linear.ts`, on the
- * same terms as the planning project's (`../eve/host.ts`).
+ * One integration's connection under one of this project's ownership
+ * checks, the agent's or the worker's, for each one's own
+ * `connections/<provider>.ts`, on the same terms as the planning project's
+ * (`../eve/host.ts`).
  */
-export function linearConnectionFor(
-  admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
+export function integrationConnectionFor(
+  provider: IntegrationProvider,
+  admit: (auth: SessionAuth, sessionId: string) => IntegrationAdmission,
 ) {
-  return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
+  return integrationConnection(provider, (auth, sessionId) =>
+    runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  );
 }

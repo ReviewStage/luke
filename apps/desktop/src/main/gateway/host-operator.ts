@@ -68,12 +68,15 @@ import {
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  LINEAR_CALL_FAILURE,
-  type LinearConnectView,
-  type LinearStatusView,
-  linearConnectViewSchema,
-  linearStatusViewSchema,
-} from "@sidecar/hosted/linear-view";
+  INTEGRATION_CALL_FAILURE,
+  type IntegrationConnectView,
+  type IntegrationProviderParams,
+  type IntegrationStatusesView,
+  type IntegrationStatusView,
+  integrationConnectViewSchema,
+  integrationStatusesViewSchema,
+  integrationStatusViewSchema,
+} from "@sidecar/hosted/integration-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -229,12 +232,12 @@ export interface HostOperator {
   planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
-  /** Where the account's Linear connection stands; or why there is no answer. */
-  linearStatus(): Effect.Effect<LinearStatusView>;
-  /** A Linear sign-in begun and opened in the browser by the host; whether it was, never the address. */
-  linearConnect(): Effect.Effect<LinearConnectView>;
-  /** The account's Linear connection ended; where it then stands, or why there is no answer. */
-  linearDisconnect(): Effect.Effect<LinearStatusView>;
+  /** Where every one of the account's integrations stands; or why there is no answer. */
+  integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
+  /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
+  integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
+  /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
+  integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -345,8 +348,8 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** What a Linear call the host could not answer is drawn as. */
-const LINEAR_UNANSWERED = { failure: LINEAR_CALL_FAILURE.UNANSWERED } as const;
+/** What an integration call the host could not answer is drawn as. */
+const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
@@ -397,23 +400,29 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? CODING_AGENT_UNANSWERED;
 
-  /** A Linear answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const linearAnswer =
+  /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const integrationAnswer =
     <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof LINEAR_UNANSWERED =>
+    (answer: GatewayCallResult): Answer | typeof INTEGRATION_UNANSWERED =>
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? LINEAR_UNANSWERED;
+        : undefined) ?? INTEGRATION_UNANSWERED;
 
   return {
-    linearStatus: () =>
-      Effect.map(client.call(GATEWAY_METHOD.LINEAR_STATUS), linearAnswer(linearStatusViewSchema)),
-    linearConnect: () =>
-      Effect.map(client.call(GATEWAY_METHOD.LINEAR_CONNECT), linearAnswer(linearConnectViewSchema)),
-    linearDisconnect: () =>
+    integrationsStatus: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.LINEAR_DISCONNECT),
-        linearAnswer(linearStatusViewSchema),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
+        integrationAnswer(integrationStatusesViewSchema),
+      ),
+    integrationsConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, { provider: params.provider }),
+        integrationAnswer(integrationConnectViewSchema),
+      ),
+    integrationsDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, { provider: params.provider }),
+        integrationAnswer(integrationStatusViewSchema),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>

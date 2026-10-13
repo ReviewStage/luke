@@ -7,6 +7,7 @@ export * from "./devices.js";
 export * from "./favorite.js";
 export * from "./inbox.js";
 export * from "./inbox-attachment.js";
+export * from "./integration.js";
 export * from "./linear.js";
 export * from "./plan.js";
 export * from "./plan-revision.js";

@@ -1,0 +1,49 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "integrations": {
+          "type": "object",
+          "properties": {
+            "linear": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "linear"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "integrations"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "unavailable",
+            "not-opened"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}
