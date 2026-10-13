@@ -1,7 +1,7 @@
 import { askRecord } from "@sidecar/database/models/asks";
 import { readBoard } from "@sidecar/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
-import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
 import { readPlanOfConversation } from "@sidecar/database/models/plan-store";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
@@ -24,6 +24,7 @@ import {
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
@@ -44,8 +45,6 @@ import { readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
   admitConversation,
-  type ConversationAdmission,
-  claimRuntimeSession,
   openChildConversation,
   SESSION_STANDING,
 } from "./conversation.js";
@@ -139,13 +138,7 @@ function conversationSessionOf(session: Pick<SessionContext["session"], "id" | "
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
 type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
-export interface BrainHost {
-  /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */
-  admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The same admission for a session claiming the conversation as it starts, before its record stands. */
-  admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The admission a subagent's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
-  admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
+export interface BrainHost extends HostAdmission {
   /** The kind of turn the current request opened, or nothing for a request that named none. */
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
@@ -176,8 +169,6 @@ export interface BrainHost {
    * outside the providers Luke runs.
    */
   model(admitted: AdmittedConversation): Result.Result<CoderModelSelection, string>;
-  /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
-  sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /**
    * Relays one event of a subagent's session into the child conversation of
    * the call that started it, as a child turn; a session with no parent, or
@@ -351,12 +342,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     });
 
   return {
-    admit: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
-    admitStarting: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
-    admitDelegated: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.DELEGATED }),
+    ...hostAdmission(seams.now),
 
     turnKindOf(auth) {
       const kind = turnKindOf(auth.current);
@@ -455,9 +441,6 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    sessionStarted: (admitted, sessionId) =>
-      claimRuntimeSession(admitted.target, sessionId, new Date(seams.now())),
-
     relay: (event, admitted, session, state, prompt) =>
       relayEvent(event, {
         sessionId: session.id,
@@ -469,24 +452,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     relayChild: (event, session, state) =>
       Effect.gen(function* () {
-        const parent = session.parent;
-        if (parent === undefined) return;
-        // Admitted on ownership alone, as the subagent's resolvers are: claiming the parent's
-        // record for the child's session would refuse every later call of the planning session.
-        const admitted = yield* admitConversation(session.auth, {
-          id: session.id,
-          standing: SESSION_STANDING.DELEGATED,
-        });
-        if (Result.isFailure(admitted)) return;
-        const { target } = admitted.success;
-        const child = {
-          userId: target.userId,
-          conversationId: childConversationId(target.conversationId, parent.callId),
-        };
+        const found = yield* delegatedChildOf(session);
+        if (Option.isNone(found)) return;
+        const { parent, child } = found.value;
         // The child conversation is opened as each of its turns starts, so a start the store
         // missed is opened by the next, and every event after finds it standing.
         if (event.type === "turn.started") {
-          yield* openChildConversation(target, child.conversationId, EVE_DELEGATION_TOOL.WORKER);
+          yield* openChildConversation(parent, child.conversationId, EVE_DELEGATION_TOOL.WORKER);
         }
         yield* relayEvent(event, {
           sessionId: session.id,
@@ -506,23 +478,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     titleChild: (session) =>
       Effect.gen(function* () {
-        const parent = session.parent;
-        if (parent === undefined) return;
-        // Admitted on ownership alone, as the relay of the same session is.
-        const admitted = yield* admitConversation(session.auth, {
-          id: session.id,
-          standing: SESSION_STANDING.DELEGATED,
-        });
-        if (Result.isFailure(admitted)) return;
-        const { target } = admitted.success;
-        const model = seams.titleModel(target.userId);
+        const found = yield* delegatedChildOf(session);
+        if (Option.isNone(found)) return;
+        const { parent, child } = found.value;
+        const model = seams.titleModel(parent.userId);
         if (model === undefined) return;
-        const childId = childConversationId(target.conversationId, parent.callId);
         // Note that the task named is the child's first, whichever task woke this, because a
         // later task's call racing the first one's must not name the worker for the later.
-        const task = yield* firstTaskOf({ userId: target.userId, conversationId: childId });
+        const task = yield* firstTaskOf(child);
         if (task === undefined) return;
-        yield* titleSubagent(model, target, childId, task);
+        yield* titleSubagent(model, parent, child.conversationId, task);
       }),
   };
 }
