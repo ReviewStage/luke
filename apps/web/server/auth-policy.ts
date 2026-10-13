@@ -37,8 +37,61 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * nothing of Luke's reads that token anywhere but on the server
  * (`github/github-app.ts`), and root AGENTS.md pins that no credential
  * travels in an answer, so neither door is open.
+ *
+ * Every organization write a browser could reach is shut as well. A
+ * workspace's slug is what a later sync adopts a workspace by, so a session
+ * free to create an organization, or to rename its own, could take a slug
+ * before the team it belongs to arrives and be adopted in its place.
+ * Workspaces and their members are written only by Luke's server, through
+ * the server-only `auth.api` calls, which these paths do not reach. The
+ * invitation endpoints are shut for a second reason: Luke sends no
+ * invitation mail, and the plugin would otherwise write an invitation row
+ * nobody is told about. The team and role endpoints are listed although
+ * this deployment does not mount them, so turning either option on later
+ * opens no door by itself.
  */
-export const DISABLED_AUTH_PATHS = ["/token", "/get-access-token", "/refresh-token"] as const;
+export const DISABLED_AUTH_PATHS = [
+  "/token",
+  "/get-access-token",
+  "/refresh-token",
+  "/organization/create",
+  "/organization/update",
+  "/organization/delete",
+  "/organization/check-slug",
+  "/organization/set-active",
+  "/organization/add-member",
+  "/organization/remove-member",
+  "/organization/update-member-role",
+  "/organization/leave",
+  "/organization/invite-member",
+  "/organization/cancel-invitation",
+  "/organization/accept-invitation",
+  "/organization/reject-invitation",
+  "/organization/get-invitation",
+  "/organization/list-invitations",
+  "/organization/list-user-invitations",
+  "/organization/create-team",
+  "/organization/update-team",
+  "/organization/remove-team",
+  "/organization/set-active-team",
+  "/organization/add-team-member",
+  "/organization/remove-team-member",
+  "/organization/create-role",
+  "/organization/update-role",
+  "/organization/delete-role",
+] as const;
+
+/**
+ * How Better Auth keeps workspaces, each an organization of its members. A
+ * workspace is never deleted, so no plan is lost with one, and no signed-in
+ * user creates one: the plugin still lets a server-only call that names a
+ * `userId` and carries no session through, which is the one way Luke
+ * creates a workspace.
+ */
+export const ORGANIZATION_OPTIONS = {
+  allowUserToCreateOrganization: false,
+  disableOrganizationDeletion: true,
+} as const;
 
 export const JWT_KEY_STORAGE = {
   jwks: {

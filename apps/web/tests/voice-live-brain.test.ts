@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
+import { childConversationId } from "@sidecar/database/models/ids";
+import type { MessageListRead } from "@sidecar/database/models/message-reads";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import {
@@ -51,7 +54,8 @@ import {
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation } from "./support/store-rows";
+import { deleteConversation, insertConversation } from "./support/store-rows";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -247,8 +251,8 @@ async function stand(
   const brain = await database.run(
     Scope.provide(
       hostedLiveBrain({
-        userId: target.userId,
-        conversationId,
+        accountId: target.userId,
+        conversation: { userId: target.userId, conversationId },
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
@@ -398,8 +402,8 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       }),
     ],
     {
-      sessionOwner: async (id) => (id === sessionId ? target.userId : undefined),
-      ownsConversation: async (userId, conversationId) =>
+      reachesSession: async (userId, id) => userId === target.userId && id === sessionId,
+      reachesConversation: async (userId, conversationId) =>
         userId === target.userId && conversationId === target.conversationId,
     },
   );
@@ -568,8 +572,9 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            const plan = yield* startPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );
@@ -607,6 +612,40 @@ it.live(
         LIVE_BRAIN_RUN_END.COMPLETED,
       );
       assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+it.effect(
+  "a member following a turn in the plan conversation a teammate opened is shown the worker's session and the model it ran on, read under the teammate who opened it",
+  () =>
+    Effect.gen(function* () {
+      const opener = yield* Effect.promise(() => database.createUser());
+      const member = yield* Effect.promise(() => database.createUser());
+      const target = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* startPlan(opener, PLAN);
+            yield* joinWorkspace(plan.workspaceId, member);
+            const opened = Option.getOrThrow(yield* openPlanConversation(opener, plan.id));
+            return { userId: opener, conversationId: opened.conversationId };
+          }),
+        ),
+      );
+      const f = yield* standOnTestClock(target, member);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      yield* parkedOnTask(target, f);
+      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+      yield* Effect.promise(() => workerRan(target, worker.id));
+      yield* f.polls(2);
+
+      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+      assert.deepEqual(drawn.session?.parts, [
+        { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+      ]);
+      assert.equal(drawn.session?.model, "openai/scripted-model", "the model its turn ran on");
       yield* Effect.promise(() => f.stop());
     }),
 );

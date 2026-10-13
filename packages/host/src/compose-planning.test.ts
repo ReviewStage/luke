@@ -49,6 +49,7 @@ const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 function plan(id: string, name: string, body: string, updatedAt: number): Plan {
   return {
     id,
+    workspaceId: "workspace-personal",
     name,
     createdAt: 1_000,
     updatedAt,

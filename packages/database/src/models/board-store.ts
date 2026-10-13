@@ -5,12 +5,13 @@ import {
   type DrawingElement,
   drawingElementsSchema,
 } from "@sidecar/hosted/board-wire";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { db } from "../core/query.js";
 import { plan, planBoard } from "../schemas/plan.js";
 import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";
+import { reachablePlan } from "./workspace-store.js";
 
 /**
  * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
@@ -23,8 +24,9 @@ import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./pla
  * written over by a scene the Mac read a moment before. Each write runs under
  * the plan row's own lock, so a plan deleted meanwhile reads as gone rather
  * than written back into being. Every statement names the account beside the
- * plan, so a plan another account owns reads and writes as no plan, exactly
- * as in `plan-store.ts`.
+ * plan, so a plan of a workspace the account is not in reads and writes as no
+ * plan, exactly as in `plan-store.ts`, and a board one member saved is read
+ * by the rest.
  *
  * The Mac's first save to hold a new drawing of Luke's carries the scene
  * drawn as a PNG, which the board keeps until the next such save, so it
@@ -50,11 +52,6 @@ const BOARD_COLUMNS = {
   drawingNumber: planBoard.drawingNumber,
 };
 
-/** The account's plan, when it owns one under this id. */
-function ownedPlan(userId: string, planId: string) {
-  return and(eq(plan.id, planId), eq(plan.userId, userId));
-}
-
 /** A plan's board row joined to the plan, so a plan with no board yet still answers a row of nulls. */
 const findBoard = SqlSchema.findOneOption({
   Request: PlanKeySchema,
@@ -64,11 +61,11 @@ const findBoard = SqlSchema.findOneOption({
       .select(BOARD_COLUMNS)
       .from(plan)
       .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-      .where(ownedPlan(userId, planId))
+      .where(reachablePlan(userId, planId))
       .limit(1),
 });
 
-/** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account owns no such plan. */
+/** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
@@ -76,7 +73,7 @@ const lockPlan = SqlSchema.findOneOption({
     db
       .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
       .from(plan)
-      .where(ownedPlan(userId, planId))
+      .where(reachablePlan(userId, planId))
       .for("update"),
 });
 
@@ -125,7 +122,7 @@ const findBoardImage = SqlSchema.findOneOption({
       })
       .from(plan)
       .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-      .where(ownedPlan(userId, planId))
+      .where(reachablePlan(userId, planId))
       .limit(1),
 });
 
@@ -155,7 +152,7 @@ function boardOf(row: BoardRow): Board {
 
 /**
  * Runs one write under the plan row's lock, handed whether the plan is
- * archived as the lock read it; nothing where the account owns no such plan.
+ * archived as the lock read it; nothing where the account reaches no such plan.
  */
 function underPlanLock<E>(
   userId: string,
@@ -174,7 +171,7 @@ function underPlanLock<E>(
   );
 }
 
-/** The plan's board, the empty board before anything was drawn; nothing where the account owns no such plan. */
+/** The plan's board, the empty board before anything was drawn; nothing where the account reaches no such plan. */
 export function readBoard(userId: string, planId: string): PlanStoreEffect<Option.Option<Board>> {
   return Effect.map(findBoard({ userId, planId }), Option.map(boardOf));
 }
@@ -182,7 +179,7 @@ export function readBoard(userId: string, planId: string): PlanStoreEffect<Optio
 /**
  * The image of Luke's latest drawing as the Mac drew it on the board, once a
  * save holding that drawing has carried one; none before, and none where the
- * account owns no such plan.
+ * account reaches no such plan.
  */
 export function readBoardImage(
   userId: string,

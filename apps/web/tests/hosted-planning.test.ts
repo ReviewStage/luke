@@ -5,6 +5,7 @@ import { db } from "@sidecar/database/core/query";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   createPlan,
+  deletePlan,
   openPlanConversation,
   readPlan,
   savePlanText,
@@ -57,6 +58,7 @@ import {
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { sandboxDouble } from "./support/repository-sandbox";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:
@@ -113,8 +115,8 @@ const planningHost = (
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
-        sessionOwner: unreached("sessionOwner"),
-        ownsConversation: unreached("ownsConversation"),
+        reachesSession: unreached("reachesSession"),
+        reachesConversation: unreached("reachesConversation"),
       },
       openAi,
       deploymentSecret: () => undefined,
@@ -137,9 +139,11 @@ const openUser = Effect.gen(function* () {
 const savedPlanWithConversation = () =>
   Effect.gen(function* () {
     const userId = yield* openUser;
-    const started = yield* createPlan(userId, RELAY_PLAN);
+    const started = yield* startPlan(userId, RELAY_PLAN);
     const host = yield* planningHost();
-    const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+    const conversationId = Option.getOrThrow(
+      yield* openPlanConversation(userId, started.id),
+    ).conversationId;
     return { host, userId, planId: started.id, conversationId };
   });
 
@@ -393,10 +397,14 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const started = yield* createPlan(userId, RELAY_PLAN);
+        const started = yield* startPlan(userId, RELAY_PLAN);
 
-        const first = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
-        const again = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const first = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
+        const again = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
 
         assert.equal(again, first);
         const stored = Option.getOrThrow(yield* readPlan(userId, started.id));
@@ -408,7 +416,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
     Effect.gen(function* () {
       const owner = yield* openUser;
       const stranger = yield* openUser;
-      const started = yield* createPlan(owner, RELAY_PLAN);
+      const started = yield* startPlan(owner, RELAY_PLAN);
 
       assert.ok(Option.isNone(yield* openPlanConversation(stranger, started.id)));
       const stored = Option.getOrThrow(yield* readPlan(owner, started.id));
@@ -441,11 +449,10 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
         const host = yield* planningHost();
-        const started = yield* createPlan(userId, {
-          ...RELAY_PLAN,
-          repository: RELAY_FULL_NAME,
-        });
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const started = yield* startPlan(userId, { ...RELAY_PLAN, repository: RELAY_FULL_NAME });
+        const conversationId = Option.getOrThrow(
+          yield* openPlanConversation(userId, started.id),
+        ).conversationId;
         const sandbox = sandboxDouble((command) =>
           command === "ls" ? { exitCode: 0, stdout: RELAY_LISTING, stderr: "" } : undefined,
         );

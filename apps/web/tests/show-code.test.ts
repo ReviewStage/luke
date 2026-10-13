@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -14,7 +13,8 @@ import {
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
-import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
+import { CHECKOUT_COMMIT, type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning model's `show_code`, reading the lines it names from the
@@ -57,7 +57,7 @@ const FILES: CheckoutFiles = {
 const openPlan = (repository: string | null, commit?: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const started = yield* createPlan(userId, { name: "Teammate invitations", repository });
+    const started = yield* startPlan(userId, { name: "Teammate invitations", repository });
     const sandbox = sandboxDouble(() => undefined, {
       files: FILES,
       ...(commit === undefined ? undefined : { commit }),

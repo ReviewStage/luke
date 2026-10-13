@@ -42,6 +42,7 @@ import { type PlansControl, usePlansTab } from "./use-plans-tab";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -238,7 +239,15 @@ function _row(
   createdAt: number,
   marks: { pinnedAt?: number; archivedAt?: number } = {},
 ) {
-  return { id, name: id, createdAt, updatedAt: createdAt, repository: null, ...marks };
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt,
+    updatedAt: createdAt,
+    repository: null,
+    ...marks,
+  };
 }
 
 test("a repository pin still waiting on the service is let go with a sign-out, so the next account never wears it", () => {

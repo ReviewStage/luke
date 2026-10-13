@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { writePlanTemplate } from "@sidecar/database/models/account-store";
-import { createPlan, readPlan } from "@sidecar/database/models/plan-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { Effect, Option } from "effect";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A plan as one document: a new plan is a copy of its account's template,
@@ -29,6 +30,18 @@ const opened = (userId: string, planId: string) =>
 
 it.layer(getTestDB())("a new plan as one document", (it) => {
   it.effect(
+    "a new plan is one document, a copy of the default template while the account keeps none",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+
+        const started = yield* startPlan(userId, RELAY);
+        assert.deepEqual(started.document, { body: DEFAULT_PLAN_TEMPLATE, assumptions: [] });
+        assert.equal(started.lastEdit, undefined);
+        assert.deepEqual(yield* opened(userId, started.id), started);
+      }),
+  );
+  it.effect(
     "a new plan copies the account's own template, and an edit of the template leaves every plan started from it as it stands",
     () =>
       Effect.gen(function* () {
@@ -37,9 +50,9 @@ it.layer(getTestDB())("a new plan as one document", (it) => {
         const template = "## Why\n\n## What\n\n## Risks\n";
         yield* writePlanTemplate(userId, template);
 
-        const started = yield* createPlan(userId, RELAY);
+        const started = yield* startPlan(userId, RELAY);
         yield* writePlanTemplate(userId, "## Something else\n");
-        const othersPlan = yield* createPlan(other, RELAY);
+        const othersPlan = yield* startPlan(other, RELAY);
 
         assert.equal((yield* opened(userId, started.id)).document.body, template);
         assert.equal(othersPlan.document.body, DEFAULT_PLAN_TEMPLATE);

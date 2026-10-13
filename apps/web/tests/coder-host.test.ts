@@ -6,9 +6,14 @@ import {
   createCodingAgent,
   latestTurnsOf,
 } from "@sidecar/database/models/coding-agent-store";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
-import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
+import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
@@ -42,6 +47,10 @@ import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalo
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
+import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
+import { titleModelAnswering } from "./support/title-model";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -90,8 +99,8 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
-        sessionOwner: () => Promise.resolve(undefined),
-        ownsConversation: () => Promise.resolve(false),
+        reachesSession: () => Promise.resolve(false),
+        reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
       keys: () => Effect.succeed(KEYS),
@@ -133,7 +142,7 @@ const unclaimedAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, {
+    const plan = yield* startPlan(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
@@ -306,8 +315,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
-        const plan = yield* createPlan(userId, { name: "Billing export" });
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, plan.id));
+        const plan = yield* startPlan(userId, { name: "Billing export" });
+        const conversationId = Option.getOrThrow(
+          yield* openPlanConversation(userId, plan.id),
+        ).conversationId;
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);
         const starting = yield* host.admitStarting(auth, sessionId);

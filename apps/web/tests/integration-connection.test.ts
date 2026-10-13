@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
 import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
@@ -32,6 +33,7 @@ import {
 import { openGithubUser } from "./support/github-app-fake";
 import { integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The one connection per integration all four agents register, through the
@@ -93,8 +95,8 @@ const planningHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
@@ -138,10 +140,10 @@ const plannedSession = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+    const plan = yield* startPlan(userId, { name: "Teammate invitations" });
     const opened = yield* openPlanConversation(userId, plan.id);
     assert.ok(Option.isSome(opened));
-    const conversationId = opened.value;
+    const conversationId = opened.value.conversationId;
     const auth = seat(userId, conversationId);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
