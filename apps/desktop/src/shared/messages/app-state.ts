@@ -3,6 +3,7 @@ import type { PlanningView } from "@sidecar/hosted/planning-view";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
+import type { AvatarState } from "./avatar";
 import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
 import type { BuildCommit, UpdateSnapshot } from "./update";
 import type { VoiceView } from "./voice-view";
@@ -86,6 +87,13 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
+  /**
+   * Luke's face on the call, as the host's live session reports it: what
+   * keeps the call window's video tile up and what the tile draws. Main's
+   * rather than the voice window's, so a replaced voice window leaves it
+   * standing.
+   */
+  avatar: AvatarState;
 }
 
 /**

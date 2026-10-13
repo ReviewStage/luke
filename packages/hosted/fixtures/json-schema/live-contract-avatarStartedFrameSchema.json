@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "avatar.started"
+      ]
+    },
+    "avatarSessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "livekitUrl": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "viewerToken": {
+      "type": "string",
+      "maxLength": 8192
+    },
+    "mediaUrl": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "maxSeconds": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "type",
+    "avatarSessionId",
+    "livekitUrl",
+    "viewerToken",
+    "mediaUrl",
+    "maxSeconds"
+  ],
+  "additionalProperties": false
+}
