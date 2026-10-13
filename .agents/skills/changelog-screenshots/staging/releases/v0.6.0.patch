@@ -1,0 +1,448 @@
+diff --git a/apps/desktop/src/main/bootstrap.ts b/apps/desktop/src/main/bootstrap.ts
+index dc62bdaeb..19e913423 100644
+--- a/apps/desktop/src/main/bootstrap.ts
++++ b/apps/desktop/src/main/bootstrap.ts
+@@ -60,7 +60,10 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
+     developerIdSigned: buildCarriesDeveloperIdSigning(),
+   });
+   app.setName(appName);
+-  const stateRoot = path.join(app.getPath("appData"), appName);
++  // Throwaway: a changelog shot keeps its state under its own --user-data-dir.
++  const stateRoot =
++    argv.find((argument) => argument.startsWith("--user-data-dir="))?.slice(16) ??
++    path.join(app.getPath("appData"), appName);
+   app.setPath("userData", stateRoot);
+   app.setPath("sessionData", stateRoot);
+ 
+diff --git a/apps/desktop/src/main/ipc/register-desktop-ipc.ts b/apps/desktop/src/main/ipc/register-desktop-ipc.ts
+index 08be300ea..44575c58e 100644
+--- a/apps/desktop/src/main/ipc/register-desktop-ipc.ts
++++ b/apps/desktop/src/main/ipc/register-desktop-ipc.ts
+@@ -173,7 +173,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
+       if (!launch.captureOutput) return;
+       const window = BrowserWindow.fromWebContents(context.sender);
+       if (!window || window.isDestroyed()) return;
+-      await new Promise((resolve) => setTimeout(resolve, 350));
++      // Throwaway: a changelog shot waits for its staged content to draw.
++      await new Promise((resolve) => setTimeout(resolve, launch.profile.startsWith("shot-") ? 3000 : 350));
+       const image = await window.webContents.capturePage(undefined, {
+         stayHidden: true,
+         stayAwake: true,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 81f09b99d..5b33b2e4e 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -42,6 +42,7 @@ import {
+   type PanelPresentation,
+ } from "./panel-state";
+ import { PANEL_TAB, type PanelTab } from "./panel-tabs";
++import { isConversationShot, SHOT_NOW, stageConversationShot } from "./shots/conversation";
+ import { applySessionReplay } from "./session-replay";
+ import { focusSearchField } from "./session-search";
+ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
+@@ -133,7 +134,12 @@ export function App(): React.JSX.Element {
+   // Everything main holds, on the one channel it holds it on, and this
+   // window's own facts beside it. There is no second reading to reconcile
+   // against: what arrives is the whole document at a version that only rises.
+-  const state = useAppState();
++  const appState = useAppState();
++  // Throwaway: the changelog shot of the Conversation tab stages acme's thread and roster.
++  const state = useMemo(
++    () => (appState && isConversationShot(appState) ? stageConversationShot(appState) : appState),
++    [appState],
++  );
+   const account = state?.account;
+   const sessionsSettled = state?.sessions.settled === true;
+   const calendars = state?.calendars ?? EMPTY_CALENDARS;
+@@ -142,7 +148,10 @@ export function App(): React.JSX.Element {
+   const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
+   const outputAudio = state?.audio.outputAudio;
+   const display = state?.window.display;
+-  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
++  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(
++    // Throwaway: the changelog shot opens on the Conversation tab.
++    isConversationShot(state) ? PANEL_TAB.CONVERSATION : PANEL_TAB.SESSIONS,
++  );
+   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+   // The settings search's field, on the sessions search's own terms: the
+   // magnifier beside the tab bar answers for it, and its query lives with the
+@@ -546,6 +555,8 @@ export function App(): React.JSX.Element {
+     opened.current = true;
+     const { run, window: pane } = state;
+     applyAuthoritativeMode(pane.mode);
++    // Throwaway: the changelog shot opens on the Conversation tab.
++    if (isConversationShot(state)) changeTab(PANEL_TAB.CONVERSATION);
+     if (run.startPeeked && pane.mode === "compact") {
+       applyPresentation(PANEL_PRESENTATION.PEEK);
+     }
+@@ -753,7 +764,12 @@ export function App(): React.JSX.Element {
+   // Which clock the rows' ages are honest against. Fixture observations are
+   // measured back from the fixture's own epoch precisely so that no capture
+   // run reads them against the time it happened to run at.
+-  const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
++  // Throwaway: the changelog shot reads its thread against the launch.
++  const now = isConversationShot(state)
++    ? SHOT_NOW
++    : state.run.fixtureMode
++      ? FIXTURE_EPOCH_MS
++      : Date.now();
+   const shownStopHotkey = state.hotkeys.stop;
+   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
+   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
+diff --git a/apps/desktop/src/renderer/shots/conversation.ts b/apps/desktop/src/renderer/shots/conversation.ts
+new file mode 100644
+index 000000000..cd6899356
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/conversation.ts
+@@ -0,0 +1,338 @@
++// conversation.ts -- Throwaway: the changelog shot of 0.6.0's Conversation tab, never committed.
++
++import { ACTION_OUTPUT_STATUS } from "@sidecar/actions";
++import {
++  CONVERSATION_VIEW_TOOL_KIND,
++  type ConversationViewSnapshot,
++  type ConversationViewToolKinds,
++  MESSAGE_AUTHOR,
++  MESSAGE_CHANNEL,
++  MESSAGE_ROLE,
++  PROVIDER_ID,
++  SESSION_APPLICATION_ID,
++  SESSION_APPLICATION_SCOPE,
++  SESSION_LOCATION,
++  SESSION_URGENCY,
++  type StoredToolPart,
++  selectConversationView,
++  TOOL_PART_STATE,
++} from "@sidecar/session";
++import type { FixtureSnapshot } from "@sidecar/session/fixtures";
++import type { StoredUIMessage } from "@sidecar/session/ui-messages";
++import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
++import { type AppStateSnapshot, RUN_PROFILE } from "#shared/messages/app-state";
++
++/**
++ * acme's thread on the Conversation tab, from WORLD.md's story: Dean asks
++ * what needs him, Luke answers in Markdown over a fold of what he looked at,
++ * checks the notebook for what was said about invite expiry, and messages
++ * "Add teammate invitations" to finish #214. Every time is counted back from
++ * the moment this module loads, which is the launch, so the date over the
++ * thread reads Today. Gated on fixture mode and the profile; any other run
++ * draws exactly what the release draws.
++ */
++
++/** The instant the shot is read against: the launch, give or take the bundle's load. */
++export const SHOT_NOW = Date.now();
++
++const MINUTE = 60_000;
++
++const ago = (minutes: number) => SHOT_NOW - minutes * MINUTE;
++
++type FixtureSession = FixtureSnapshot["sessions"][number];
++
++/** acme's Conductor workspaces, by the chat each holds. */
++const SESSION = {
++  INVITATIONS: "acme-relay-teammate-invitations",
++  EMAILS: "acme-relay-invite-emails",
++} as const;
++
++const TITLE = {
++  INVITATIONS: "Add teammate invitations",
++  EMAILS: "Invite emails",
++} as const;
++
++const CONDUCTOR_APP = [
++  {
++    id: SESSION_APPLICATION_ID.CONDUCTOR,
++    name: "Conductor",
++    scope: SESSION_APPLICATION_SCOPE.SESSION,
++  },
++] as const;
++
++function conductorChat(
++  id: string,
++  title: string,
++  agent: { id: FixtureSession["providerId"]; name: string },
++  rest: Omit<
++    FixtureSession,
++    "id" | "title" | "providerId" | "provider" | "agentId" | "agent" | "location"
++  >,
++): FixtureSession {
++  return {
++    id,
++    title,
++    providerId: PROVIDER_ID.CONDUCTOR,
++    provider: "Conductor",
++    agentId: agent.id,
++    agent: agent.name,
++    applications: CONDUCTOR_APP,
++    location: SESSION_LOCATION.CLOUD,
++    ...rest,
++  };
++}
++
++/**
++ * The roster as it stands once the thread has settled: Add teammate
++ * invitations back at work on its answer, Invite emails still writing, and
++ * two finished chats from earlier in the week. The wings draw these marks,
++ * and the chips resolve against these titles.
++ */
++const ACME_SESSIONS: readonly FixtureSession[] = [
++  conductorChat(
++    SESSION.INVITATIONS,
++    TITLE.INVITATIONS,
++    { id: PROVIDER_ID.CLAUDE_CODE, name: "Claude Code" },
++    {
++      detail: "Setting invite links to expire after 7 days.",
++      repository: "relay",
++      branch: "dean/teammate-invitations",
++      model: "claude-opus-5",
++      urgency: SESSION_URGENCY.WORKING,
++      lastActivityAt: ago(1),
++      hasChange: true,
++      changeNumber: 214,
++      workspace: { id: "acme-invitations", name: "teammate-invitations" },
++    },
++  ),
++  conductorChat(
++    SESSION.EMAILS,
++    TITLE.EMAILS,
++    { id: PROVIDER_ID.CODEX, name: "Codex" },
++    {
++      detail: "Writing the Postmark invite template.",
++      repository: "relay",
++      branch: "dean/invite-emails",
++      model: "gpt-5.6-luna",
++      urgency: SESSION_URGENCY.WORKING,
++      lastActivityAt: ago(2),
++      hasChange: true,
++      changeNumber: 216,
++      workspace: { id: "acme-invite-emails", name: "invite-emails" },
++    },
++  ),
++  {
++    id: "acme-relay-webhook-retries",
++    title: "Webhook retries",
++    providerId: PROVIDER_ID.CLAUDE_CODE,
++    provider: "Claude Code",
++    detail: "Retries back off up to an hour; tests pass.",
++    repository: "relay",
++    branch: "dean/webhook-retries",
++    model: "claude-opus-5",
++    urgency: SESSION_URGENCY.COMPLETE,
++    location: SESSION_LOCATION.LOCAL,
++    lastActivityAt: ago(26),
++  },
++  {
++    id: "acme-ledger-usage-billing",
++    title: "Usage-based billing",
++    providerId: PROVIDER_ID.CODEX,
++    provider: "Codex",
++    detail: "Metered usage rolls up into the invoice draft.",
++    repository: "ledger",
++    branch: "dean/usage-billing",
++    model: "gpt-5.6-luna",
++    urgency: SESSION_URGENCY.COMPLETE,
++    location: SESSION_LOCATION.LOCAL,
++    lastActivityAt: ago(52),
++  },
++];
++
++const TOOL_KINDS: ConversationViewToolKinds = new Map([
++  ["announce", CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE],
++  ["send_session_message", CONVERSATION_VIEW_TOOL_KIND.ACTION],
++]);
++
++const identity = (providerSessionId: string) => ({
++  provider_id: PROVIDER_ID.CONDUCTOR,
++  provider_session_id: providerSessionId,
++});
++
++type ToolCallOutput = Extract<
++  StoredToolPart,
++  { state: typeof TOOL_PART_STATE.OUTPUT_AVAILABLE }
++>["output"];
++
++let calls = 0;
++
++function call(toolName: string, input: StoredToolPart["input"], output: ToolCallOutput) {
++  calls += 1;
++  const part: StoredToolPart = {
++    type: `tool-${toolName}`,
++    toolCallId: `call_acme_${String(calls).padStart(2, "0")}`,
++    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
++    input,
++    output,
++  };
++  return part;
++}
++
++const ask = (id: string, text: string): StoredUIMessage => ({
++  id,
++  role: MESSAGE_ROLE.USER,
++  metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
++  parts: [{ type: "text", text }],
++});
++
++const reply = (id: string, parts: StoredUIMessage["parts"]): StoredUIMessage => ({
++  id,
++  role: MESSAGE_ROLE.ASSISTANT,
++  metadata: { author: MESSAGE_AUTHOR.BRAIN },
++  parts,
++});
++
++const TURN = {
++  NEEDS: "3c000000-0000-4000-8000-000000000101",
++  NOTEBOOK: "3c000000-0000-4000-8000-000000000102",
++  MESSAGE: "3c000000-0000-4000-8000-000000000103",
++} as const;
++
++/** When each exchange was asked; each answer lands a few seconds after it. */
++const AT = {
++  NEEDS: ago(14),
++  NOTEBOOK: ago(12),
++  MESSAGE: ago(11),
++} as const;
++
++const NEEDS_ANSWER = [
++  "Two agents are on Teammate invitations:",
++  "",
++  "- **Add teammate invitations** opened #214 and needs a decision: should an invite link last 7 days or 14?",
++  "- **Invite emails** is still writing the Postmark template.",
++].join("\n");
++
++const FINISH_MESSAGE = "Make it 7 days, then finish #214.";
++
++function shotConversation(): ConversationViewSnapshot {
++  const groups = selectConversationView({
++    main: [
++      {
++        message: ask("4d000000-0000-4000-8000-000000000201", "What needs me?"),
++        seq: 1,
++        turnId: TURN.NEEDS,
++        createdAt: AT.NEEDS,
++      },
++      {
++        message: reply("4d000000-0000-4000-8000-000000000202", [
++          { type: "step-start" },
++          call("list_sessions", {}, { roster: "(the roster as text)" }),
++          call("read_transcript", identity(SESSION.INVITATIONS), {
++            lines: ["assistant: Should an invite link last 7 days or 14?"],
++          }),
++          { type: "step-start" },
++          { type: "text", text: NEEDS_ANSWER, state: "done" },
++        ]),
++        seq: 2,
++        turnId: TURN.NEEDS,
++        createdAt: AT.NEEDS + 4000,
++      },
++      {
++        message: ask(
++          "4d000000-0000-4000-8000-000000000203",
++          "What did we say about expiry last time?",
++        ),
++        seq: 3,
++        turnId: TURN.NOTEBOOK,
++        createdAt: AT.NOTEBOOK,
++      },
++      {
++        message: reply("4d000000-0000-4000-8000-000000000204", [
++          { type: "step-start" },
++          call("memory_search", { query: "invite link expiry" }, { results: [] }),
++          { type: "step-start" },
++          {
++            type: "text",
++            text: "You leaned toward **7 days**, so an unused invite can't linger.",
++            state: "done",
++          },
++        ]),
++        seq: 4,
++        turnId: TURN.NOTEBOOK,
++        createdAt: AT.NOTEBOOK + 3000,
++      },
++      {
++        message: ask("4d000000-0000-4000-8000-000000000205", "Go with 7. Tell it to finish up."),
++        seq: 5,
++        turnId: TURN.MESSAGE,
++        createdAt: AT.MESSAGE,
++      },
++      {
++        message: reply("4d000000-0000-4000-8000-000000000206", [
++          { type: "step-start" },
++          call(
++            "send_session_message",
++            { ...identity(SESSION.INVITATIONS), text: FINISH_MESSAGE },
++            {
++              status: ACTION_OUTPUT_STATUS.ACCEPTED,
++              target: {
++                providerId: PROVIDER_ID.CONDUCTOR,
++                providerSessionId: SESSION.INVITATIONS,
++                title: TITLE.INVITATIONS,
++                agentId: PROVIDER_ID.CLAUDE_CODE,
++              },
++            },
++          ),
++          { type: "step-start" },
++          { type: "text", text: "Sent. It's back at work on #214.", state: "done" },
++        ]),
++        seq: 6,
++        turnId: TURN.MESSAGE,
++        createdAt: AT.MESSAGE + 3000,
++      },
++    ],
++    observed: [],
++    turns: [
++      { id: TURN.NEEDS, origin: TURN_ORIGIN.TYPED, status: TURN_STATUS.SETTLED, queuedAt: AT.NEEDS },
++      {
++        id: TURN.NOTEBOOK,
++        origin: TURN_ORIGIN.TYPED,
++        status: TURN_STATUS.SETTLED,
++        queuedAt: AT.NOTEBOOK,
++      },
++      {
++        id: TURN.MESSAGE,
++        origin: TURN_ORIGIN.TYPED,
++        status: TURN_STATUS.SETTLED,
++        queuedAt: AT.MESSAGE,
++      },
++    ],
++    events: [],
++    toolKinds: TOOL_KINDS,
++  });
++  return { groups, settled: true };
++}
++
++/** Whether this run is the shot: a fixture run launched with its profile. */
++export function isConversationShot(state: AppStateSnapshot | undefined): boolean {
++  return state?.run.fixtureMode === true && state.run.profile === RUN_PROFILE.SHOT_CONVERSATION;
++}
++
++const CONVERSATION = shotConversation();
++
++/**
++ * The document as the shot draws it: acme's roster in place of the smoke
++ * fixture's, the thread above, and no onboarding gate or introduction
++ * standing in front of the panel. Memoized by the caller on the state it is
++ * handed, so a re-render reads the same objects.
++ */
++export function stageConversationShot(state: AppStateSnapshot): AppStateSnapshot {
++  return {
++    ...state,
++    run: { ...state.run, fixture: { ...state.run.fixture, sessions: ACME_SESSIONS } },
++    sessions: { ...state.sessions, settled: true },
++    conversation: CONVERSATION,
++    onboarding: { calendarOwed: false, conductorKeyOwed: false },
++    introduction: { playing: false },
++  };
++}
+diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
+index 0242c7d1b..61c98c750 100644
+--- a/apps/desktop/src/shared/messages/app-state.ts
++++ b/apps/desktop/src/shared/messages/app-state.ts
+@@ -28,6 +28,8 @@ export const RUN_PROFILE = {
+   SPEAKING: "speaking",
+   MUTED: "muted",
+   DUPLEX: "duplex",
++  /** Throwaway: the changelog shot of the Conversation tab. */
++  SHOT_CONVERSATION: "shot-conversation",
+ } as const;
+ 
+ export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

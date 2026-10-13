@@ -1,0 +1,270 @@
+diff --git a/apps/desktop/src/main/desktop-app.ts b/apps/desktop/src/main/desktop-app.ts
+index e6b823167..f7310ae40 100644
+--- a/apps/desktop/src/main/desktop-app.ts
++++ b/apps/desktop/src/main/desktop-app.ts
+@@ -99,6 +99,13 @@ import {
+ } from "electron";
+ import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+ import { BRIDGE, channels } from "#shared/bridge";
++// Throwaway: changelog screenshot staging.
++import {
++  requestedUserDataDirectory,
++  SHOT_CAPTURE_SETTLE_MS,
++  stagesOnboardingShot,
++  stagesShot,
++} from "#shared/shots";
+ import {
+   ACCOUNT_STATUS,
+   type AccountSnapshot,
+@@ -161,8 +168,12 @@ app.setName(appName);
+ // manifest name, so the state directory is pointed at the chosen name by
+ // hand — and session data alongside it, since its default only follows a
+ // `userData` that has not been resolved yet.
+-app.setPath("userData", path.join(app.getPath("appData"), appName));
+-app.setPath("sessionData", path.join(app.getPath("appData"), appName));
++// Throwaway: a shot run's state lives under its own `--user-data-dir`, never
++// a running Luke's (the flag is otherwise ignored by the line below).
++const stateDirectory =
++  requestedUserDataDirectory(process.argv) ?? path.join(app.getPath("appData"), appName);
++app.setPath("userData", stateDirectory);
++app.setPath("sessionData", stateDirectory);
+ 
+ const captureOutput = argumentValue("--capture-evidence");
+ const profile = argumentValue("--profile") ?? "idle";
+@@ -1396,9 +1407,14 @@ function registerIpc(): void {
+   // deadline measures. Deliberately its own channel rather than notifyReady:
+   // the panel surface sends that one too, and a panel accidentally drawn in
+   // the takeover window must read as a takeover that never mounted.
+-  registerContextHandler(BRIDGE.introductionMounted, (context: BridgeContext) => {
++  registerContextHandler(BRIDGE.introductionMounted, async (context: BridgeContext) => {
+     if (!introductionWindow.owns(context.sender)) return;
+     introductionRendererReady = true;
++    // Throwaway: the onboarding shot captures the takeover itself — the whole
++    // display-sized transparent window — since no panel stands beside it.
++    if (captureOutput && stagesOnboardingShot({ fixtureMode, profile })) {
++      await captureEvidence(context.sender);
++    }
+   });
+ 
+   registerHandler(BRIDGE.quit, app.quit.bind(app));
+@@ -1411,22 +1427,36 @@ function registerIpc(): void {
+       resolveIntroductionPanelReady = undefined;
+     }
+     if (!captureOutput) return;
+-    // A capture run holds a single window, and the ready message is its own.
+-    const window = BrowserWindow.fromWebContents(context.sender);
+-    if (!window || window.isDestroyed()) return;
+-    await new Promise((resolve) => setTimeout(resolve, 350));
+-    const image = await window.webContents.capturePage(undefined, {
+-      stayHidden: true,
+-      stayAwake: true,
+-    });
+-    const destination = path.resolve(captureOutput);
+-    fs.mkdirSync(path.dirname(destination), { recursive: true });
+-    fs.writeFileSync(destination, image.toPNG());
+-    process.stdout.write(`Electron evidence: ${destination}\n`);
+-    app.quit();
++    // Throwaway: the onboarding shot is the takeover's, never a panel's.
++    if (stagesOnboardingShot({ fixtureMode, profile })) return;
++    await captureEvidence(context.sender);
+   });
+ }
+ 
++/**
++ * Writes the capture of the window that asked, then quits. A capture run
++ * holds a single window, and the ready message is its own. Throwaway: lifted
++ * out of the ready handler so the onboarding shot's takeover can use it, with
++ * a shot's longer settle.
++ */
++async function captureEvidence(sender: Electron.WebContents): Promise<void> {
++  if (!captureOutput) return;
++  const window = BrowserWindow.fromWebContents(sender);
++  if (!window || window.isDestroyed()) return;
++  const settleMs = stagesShot({ fixtureMode, profile }) ? SHOT_CAPTURE_SETTLE_MS : 350;
++  await new Promise((resolve) => setTimeout(resolve, settleMs));
++  if (window.isDestroyed()) return;
++  const image = await window.webContents.capturePage(undefined, {
++    stayHidden: true,
++    stayAwake: true,
++  });
++  const destination = path.resolve(captureOutput);
++  fs.mkdirSync(path.dirname(destination), { recursive: true });
++  fs.writeFileSync(destination, image.toPNG());
++  process.stdout.write(`Electron evidence: ${destination}\n`);
++  app.quit();
++}
++
+ /**
+  * Where a workspace can be created right now, as the adapters offer it: each
+  * capable adapter's latest project list, stamped with its provider. This full
+@@ -2230,11 +2260,14 @@ export function startDesktopApp(): void {
+       // spoken introduction plays on. Everything below reads the takeover's
+       // liveness rather than this flag, because the introduction can end —
+       // completed or abandoned — while the launch is still settling.
+-      const giveIntroduction = shouldRunIntroduction({
+-        requiresAccount: runMode.requiresAccount,
+-        signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+-        completed: introductionCompletedOnDisk(),
+-      });
++      // Throwaway: the onboarding shot forces the takeover a fixture run never gives.
++      const giveIntroduction =
++        stagesOnboardingShot({ fixtureMode, profile }) ||
++        shouldRunIntroduction({
++          requiresAccount: runMode.requiresAccount,
++          signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
++          completed: introductionCompletedOnDisk(),
++        });
+       await panels.refreshGeometry();
+       registerIpc();
+       // Resolving settings touches the filesystem, and the OS keychain only for a
+diff --git a/apps/desktop/src/renderer/introduction/introduction-takeover.tsx b/apps/desktop/src/renderer/introduction/introduction-takeover.tsx
+index 3b65a7349..99f09cf86 100644
+--- a/apps/desktop/src/renderer/introduction/introduction-takeover.tsx
++++ b/apps/desktop/src/renderer/introduction/introduction-takeover.tsx
+@@ -16,6 +16,8 @@ import {
+ import { cssCustomProperties } from "@sidecar/surface/react-css";
+ import { ACT_RESULT_STATUS } from "@sidecar/wire";
+ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
++// Throwaway: changelog screenshot staging.
++import { SHOT_ONBOARDING_CAPTIONS, stagesOnboardingShot } from "#shared/shots";
+ import type { AppBootstrap } from "#shared/wire/session";
+ import { Keycaps } from "../keycaps";
+ import { usePrefersReducedMotion } from "../luke-face-mood";
+@@ -137,7 +139,12 @@ export function IntroductionTakeover({
+ }: {
+   bootstrap: AppBootstrap;
+ }): React.JSX.Element {
+-  const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
++  // Throwaway: the onboarding shot pins the takeover at HELLO, Luke awake at
++  // centre stage with the beat's first line captioned, and runs no voice.
++  const shot = stagesOnboardingShot(bootstrap);
++  const [beat, setBeat] = useState<IntroductionBeat>(
++    shot ? INTRODUCTION_BEAT.HELLO : INTRODUCTION_BEAT.DARK,
++  );
+   const beatRef = useRef<IntroductionBeat>(beat);
+   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+   const [localStream, setLocalStream] = useState<MediaStream | undefined>(undefined);
+@@ -152,7 +159,9 @@ export function IntroductionTakeover({
+    * behind it changes — and it is restored the moment the beat ends.
+    */
+   const [tourFlipId, setTourFlipId] = useState<string | undefined>(undefined);
+-  const [captions, setCaptions] = useState<readonly string[] | undefined>(undefined);
++  const [captions, setCaptions] = useState<readonly string[] | undefined>(
++    shot ? SHOT_ONBOARDING_CAPTIONS : undefined,
++  );
+   const [flightStyle, setFlightStyle] = useState<CSSProperties>({});
+   /** Whether the handoff's fade is running — the real panel is drawn beneath. */
+   const [handoffFading, setHandoffFading] = useState(false);
+@@ -324,6 +333,8 @@ export function IntroductionTakeover({
+     // Tells the main process this surface mounted: the deadline that abandons
+     // a takeover whose renderer never drew is measured against this report.
+     window.sidecar.introductionMounted();
++    // Throwaway: the shot holds its beat — no call, no dark clock, no keys.
++    if (shot) return;
+     const session = ensureSession();
+     let gone = false;
+     // The dark is the one moment with room to be patient: a mint that failed
+@@ -390,7 +401,7 @@ export function IntroductionTakeover({
+       void meterContextRef.current?.close().catch(() => undefined);
+       meterContextRef.current = undefined;
+     };
+-  }, [dispatch, ensureSession]);
++  }, [dispatch, ensureSession, shot]);
+ 
+   // The meter reads whoever holds the floor, exactly as the app's own does:
+   // Luke's stream while he replies, the developer's while a practice turn is
+@@ -424,6 +435,8 @@ export function IntroductionTakeover({
+   // What each beat does on arrival. The clocks live here; the order lives in
+   // the transition table.
+   useEffect(() => {
++    // Throwaway: the shot's HELLO speaks nothing, so nothing moves it on.
++    if (shot) return;
+     switch (beat) {
+       case INTRODUCTION_BEAT.WAKE: {
+         const cycleMs = reducedMotion ? 500 : FACE_MOTION_CYCLE_MS.wake;
+@@ -598,7 +611,7 @@ export function IntroductionTakeover({
+       default:
+         return;
+     }
+-  }, [audio, beat, bootstrap, dispatch, reducedMotion, speakLines]);
++  }, [audio, beat, bootstrap, dispatch, reducedMotion, shot, speakLines]);
+ 
+   // Once the flight lands, the desktop is the developer's again: the window
+   // stops intercepting the pointer, and the landed panel and its strip are
+@@ -683,7 +696,9 @@ export function IntroductionTakeover({
+         ? { motion: FACE_MOTION.TALKING, repeat: true, play: "talking" }
+         : { repeat: false, play: "rest" };
+   const gateFace = useSignInFaceCycle(reducedMotion || !standingDown);
+-  const showCaptions = captions !== undefined && outputSilent(bootstrap.outputAudio);
++  // Throwaway: the shot draws the caption strip the takeover draws on a
++  // silent output, where the caption is the speech.
++  const showCaptions = captions !== undefined && (shot || outputSilent(bootstrap.outputAudio));
+ 
+   return (
+     <div
+@@ -695,6 +710,9 @@ export function IntroductionTakeover({
+       data-settled={String(surfaceSettled)}
+       data-lifted={String(rows.length > 0)}
+       data-notch={String(bootstrap.display.notch.hasNotch)}
++      // Throwaway: capture tokens for the shot — transitions zeroed, the halo's
++      // breath and Luke's idle loops held on their first frame.
++      {...(shot ? { "data-capture": "true" } : undefined)}
+       {...(landed
+         ? {
+             "data-presentation": standingDown
+diff --git a/apps/desktop/src/shared/shots.ts b/apps/desktop/src/shared/shots.ts
+new file mode 100644
+index 000000000..278813198
+--- /dev/null
++++ b/apps/desktop/src/shared/shots.ts
+@@ -0,0 +1,50 @@
++/**
++ * shots.ts -- Throwaway: the changelog screenshot staging for 0.3.10, never
++ * committed. One profile, `shot-onboarding`, staged only in fixture mode:
++ * the full-display introduction takeover pinned at its HELLO beat, with the
++ * caption strip saying the beat's first line, captured by `--capture-evidence`.
++ */
++
++export const SHOT_PROFILE = {
++  ONBOARDING: "shot-onboarding",
++} as const;
++
++export type ShotProfile = (typeof SHOT_PROFILE)[keyof typeof SHOT_PROFILE];
++
++/**
++ * How long a shot's capture waits after its window reports ready, so the
++ * scrim's arrival and every async draw have landed (the tag waits 350 ms).
++ */
++export const SHOT_CAPTURE_SETTLE_MS = 3_000;
++
++/**
++ * The caption the HELLO beat's first reply draws: INTRODUCTION_SCRIPT.HELLO's
++ * first line is 'Say exactly: "Hi! I'm Luke."', and the caption is that
++ * reply's transcript, one segment.
++ */
++export const SHOT_ONBOARDING_CAPTIONS: readonly string[] = ["Hi! I'm Luke."];
++
++/** Whether this run stages the onboarding shot: its profile, in fixture mode only. */
++export function stagesOnboardingShot(input: { fixtureMode: boolean; profile: string }): boolean {
++  return input.fixtureMode && input.profile === SHOT_PROFILE.ONBOARDING;
++}
++
++/** Whether this run stages any shot, for the capture's longer settle. */
++export function stagesShot(input: { fixtureMode: boolean; profile: string }): boolean {
++  return input.fixtureMode && input.profile.startsWith("shot-");
++}
++
++/**
++ * The state directory a shot run asked for with Chromium's `--user-data-dir`
++ * (either `--user-data-dir=<dir>` or `--user-data-dir <dir>`): 0.3.10 points
++ * `userData` at appData/<appName> by hand, which would share a running
++ * Luke's state and single-instance lock.
++ */
++export function requestedUserDataDirectory(argv: readonly string[]): string | undefined {
++  const flag = "--user-data-dir";
++  for (const [index, argument] of argv.entries()) {
++    if (argument.startsWith(`${flag}=`)) return argument.slice(flag.length + 1) || undefined;
++    if (argument === flag) return argv[index + 1];
++  }
++  return undefined;
++}

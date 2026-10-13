@@ -1,0 +1,268 @@
+diff --git a/apps/desktop/src/main.ts b/apps/desktop/src/main.ts
+index af51d1a99..2255a7c57 100644
+--- a/apps/desktop/src/main.ts
++++ b/apps/desktop/src/main.ts
+@@ -150,6 +150,12 @@ import {
+   feedbackSubmission,
+   isFeedbackKind,
+ } from "./shared/feedback";
++import {
++  isShotRun,
++  SHOT_ASK_HOTKEY,
++  SHOT_CAPTURE_SETTLE_MS,
++  shotFixture,
++} from "./shared/shots";
+ import { parseVoiceHotkey } from "./shared/voice-hotkey";
+ import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
+ 
+@@ -161,11 +167,13 @@ const fixtureName = argumentValue("--fixture");
+ // asked for directly.
+ const startPeeked = process.argv.includes("--peek");
+ const startInSlot = process.argv.includes("--slot");
+-const fixture = fixtureSnapshot(fixtureName ?? "smoke");
+ const captureMode = captureOutput !== undefined;
+ // `--fixture` is enough on its own to make a run deterministic: the panel renders
+ // the fixture snapshot and no provider is observed. Capture runs always imply it.
+ const fixtureMode = captureMode || fixtureName !== undefined;
++// Throwaway: a changelog shot draws its own roster in place of the smoke one.
++const shotRun = isShotRun(fixtureMode, profile);
++const fixture = shotRun ? shotFixture() : fixtureSnapshot(fixtureName ?? "smoke");
+ const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+ // A development build may be pointed at a local account service; a packaged one
+ // may not. The override redirects the whole sign-in — including the identity
+@@ -806,7 +814,8 @@ function registerIpc(): void {
+       // and only the accelerator can produce the pair.
+       ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : {}),
+       voiceHotkeyHeld: hotkeys.held,
+-      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
++      // Throwaway: a shot shows the ask key a signed-in Mac would hold.
++      ...(shotRun ? { askHotkey: SHOT_ASK_HOTKEY } : hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
+       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
+       ...(outputAudio ? { outputAudio } : {}),
+       display: panels.diagnostic(display),
+@@ -1772,7 +1781,8 @@ function registerIpc(): void {
+     // A capture run holds a single window, and the ready message is its own.
+     const window = BrowserWindow.fromWebContents(event.sender);
+     if (!window || window.isDestroyed()) return;
+-    await new Promise((resolve) => setTimeout(resolve, 350));
++    // Throwaway: a shot waits for its rows and marks to finish arriving.
++    await new Promise((resolve) => setTimeout(resolve, shotRun ? SHOT_CAPTURE_SETTLE_MS : 350));
+     const image = await window.webContents.capturePage(undefined, {
+       stayHidden: true,
+       stayAwake: true,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 94f5a0c67..97a140595 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -37,6 +37,7 @@ import type {
+   SettingsUpdateResult,
+ } from "../shared/contracts";
+ import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
++import { isShotRun, SHOT_INITIAL_SORT } from "../shared/shots";
+ import type { CredentialProviderId } from "../shared/credential-providers";
+ import {
+   CREDENTIAL_PROVIDER_LIST,
+@@ -1547,6 +1548,10 @@ export function App(): React.JSX.Element {
+     void window.sidecar.getBootstrap().then((value) => {
+       setBootstrap(value);
+       setSessions(value.sessions);
++      // Throwaway: a changelog shot opens the list on its own sort.
++      if (isShotRun(value.fixtureMode, value.profile)) {
++        setSessionView({ ...DEFAULT_SESSION_VIEW, sort: SHOT_INITIAL_SORT });
++      }
+       // Only fill in what no push has said yet: the bootstrap snapshot is
+       // older than any change that raced past it, and the main process will
+       // not repeat a list it believes it already announced.
+diff --git a/apps/desktop/src/shared/shots.ts b/apps/desktop/src/shared/shots.ts
+new file mode 100644
+index 000000000..1eb5a6ced
+--- /dev/null
++++ b/apps/desktop/src/shared/shots.ts
+@@ -0,0 +1,187 @@
++// shots.ts -- Throwaway: the changelog screenshot staged for 0.1.0, never committed.
++//
++// One profile, `shot-one-panel`, run as
++// `--fixture smoke --expanded --profile shot-one-panel --capture-evidence <png>`.
++// It swaps the smoke fixture's six sessions for acme's roster (WORLD.md), opens
++// the list on the release's own Recent sort so the needs-you, working, and done
++// rows read as one mix, and gives the capture time to settle. Everything here is
++// gated on the profile and on fixture mode at its call site.
++
++import {
++  FIXTURE_EPOCH_MS,
++  type FixtureSnapshot,
++  PROVIDER_ID,
++  SESSION_CONTROL_KIND,
++  SESSION_LIST_SORT,
++  SESSION_LOCATION,
++  SESSION_URGENCY,
++  type SessionListSort,
++} from "@sidecar/core";
++
++export const SHOT_PROFILE = {
++  ONE_PANEL: "shot-one-panel",
++} as const;
++
++export type ShotProfile = (typeof SHOT_PROFILE)[keyof typeof SHOT_PROFILE];
++
++/** How long a shot's capture waits after the window reports ready. */
++export const SHOT_CAPTURE_SETTLE_MS = 3_000;
++
++/** The ask key a signed-in Mac would hold; a capture run registers none. */
++export const SHOT_ASK_HOTKEY = "Alt+L";
++
++const CLAUDE_MODEL = "claude-opus-5";
++const CODEX_MODEL = "gpt-5.6-luna";
++
++function minutesAgo(minutes: number): number {
++  return FIXTURE_EPOCH_MS - minutes * 60_000;
++}
++
++/**
++ * Nine sessions on acme's work, each worded the way its provider reports it at
++ * 0.1.0: Claude Code and Codex name the tool they run or their parting words,
++ * Cursor its run's result, while Jules and Copilot title a row by its
++ * repository and say nothing (the row states its own state), and Conductor
++ * titles a lone chat by its workspace. Controls are the ones each adapter
++ * advertises in that state. Ages are minutes before the fixture's own epoch,
++ * which is the clock fixture rows are read against.
++ */
++const onePanelFixture: FixtureSnapshot = {
++  scenario: "smoke",
++  sessions: [
++    {
++      id: "shot-claude-usage-billing",
++      title: "Usage-based billing",
++      providerId: PROVIDER_ID.CLAUDE_CODE,
++      provider: "Claude Code",
++      detail: "Bash: pnpm test src/metering",
++      repository: "ledger",
++      branch: "dean/usage-billing",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(0.2),
++    },
++    {
++      id: "shot-codex-webhook-retries",
++      title: "Webhook retries",
++      providerId: PROVIDER_ID.CODEX,
++      provider: "Codex",
++      detail: "Backoff runs 30s to 1h. Give up after 8 attempts, or keep retrying for 24 hours?",
++      repository: "relay",
++      branch: "dean/webhook-retries",
++      model: CODEX_MODEL,
++      urgency: SESSION_URGENCY.ATTENTION,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(1),
++    },
++    {
++      id: "shot-claude-teammate-invitations",
++      title: "Add teammate invitations",
++      providerId: PROVIDER_ID.CLAUDE_CODE,
++      provider: "Claude Code",
++      detail: "Opened #214: an invite is a pending membership, accepted at /invites/:token.",
++      repository: "relay",
++      branch: "dean/teammate-invitations",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(4),
++    },
++    {
++      id: "shot-cursor-invite-emails",
++      title: "Invite emails",
++      providerId: PROVIDER_ID.CURSOR,
++      provider: "Cursor",
++      detail: "Opened draft #216: invite emails now go out through Postmark, +96 −4.",
++      repository: "acme/relay",
++      branch: "cursor/invite-emails-4e1a",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(7),
++      // A finished Cursor run takes a follow-up and offers its archive.
++      canMessage: true,
++      actions: [{ id: "archive-agent", label: "Archive" }],
++    },
++    {
++      id: "shot-jules-onboarding",
++      title: "acme/web",
++      providerId: PROVIDER_ID.JULES,
++      provider: "Jules",
++      detail: "",
++      repository: "acme/web",
++      branch: "main",
++      urgency: SESSION_URGENCY.ATTENTION,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(9),
++      // Holding for a plan approval: Jules takes a message and the approval.
++      canMessage: true,
++      actions: [{ id: "approve-plan", label: "Approve the plan" }],
++    },
++    {
++      id: "shot-conductor-audit-export",
++      title: "Stream audit rows as CSV",
++      providerId: PROVIDER_ID.CONDUCTOR,
++      provider: "Conductor",
++      detail: "",
++      repository: "acme/relay",
++      model: CLAUDE_MODEL,
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(14),
++      workspace: { id: "shot-conductor-audit", name: "audit-log-export" },
++      // Mid-turn: a Conductor chat takes a steer and offers its stop.
++      canMessage: true,
++      actions: [{ id: "cancel-turn", label: "Stop this turn", kind: SESSION_CONTROL_KIND.STOP }],
++    },
++    {
++      id: "shot-copilot-onboarding",
++      title: "acme/web",
++      providerId: PROVIDER_ID.COPILOT,
++      provider: "Copilot",
++      detail: "",
++      repository: "acme/web",
++      branch: "copilot/onboarding-checklist",
++      urgency: SESSION_URGENCY.WORKING,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(22),
++    },
++    {
++      id: "shot-opencode-dark-mode",
++      title: "Dark mode for the dashboard",
++      providerId: PROVIDER_ID.OPENCODE,
++      provider: "OpenCode",
++      detail: "",
++      repository: "web",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.LOCAL,
++      observedAt: minutesAgo(26),
++    },
++    {
++      id: "shot-devin-invoice-pdf",
++      title: "Invoice PDF redesign",
++      providerId: PROVIDER_ID.DEVIN,
++      provider: "Devin",
++      detail: "",
++      repository: "acme/ledger",
++      urgency: SESSION_URGENCY.COMPLETE,
++      location: SESSION_LOCATION.CLOUD,
++      observedAt: minutesAgo(140),
++      // An exited Devin session offers its archive and takes no message.
++      actions: [{ id: "archive-session", label: "Archive" }],
++    },
++  ],
++};
++
++/** Whether this run stages a shot: fixture mode and one of the shot profiles. */
++export function isShotRun(fixtureMode: boolean, profile: string | undefined): boolean {
++  return fixtureMode && profile === SHOT_PROFILE.ONE_PANEL;
++}
++
++/** The roster a shot run draws in place of the smoke fixture's. */
++export function shotFixture(): FixtureSnapshot {
++  return onePanelFixture;
++}
++
++/** The order the shot's list opens on. */
++export const SHOT_INITIAL_SORT: SessionListSort = SESSION_LIST_SORT.RECENCY;
