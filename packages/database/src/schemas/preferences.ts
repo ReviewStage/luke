@@ -1,6 +1,6 @@
 import type { ContextWindow } from "@sidecar/hosted/coding-agent-wire";
-import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { createdAt, timestamps, timestamptz } from "./_helpers.js";
+import { pgTable, text } from "drizzle-orm/pg-core";
+import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
@@ -14,7 +14,6 @@ export const accountPreference = pgTable("account_preference", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   voice: text("voice"),
-  defaultWorkspaceProvider: text("default_workspace_provider"),
   /**
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
@@ -43,23 +42,3 @@ export const accountPreference = pgTable("account_preference", {
    */
   updatedAt: timestamptz("updated_at"),
 });
-
-/**
- * Workspace creation defaults are keyed by provider. Keeping them as rows
- * avoids turning account preferences into an open-ended JSON settings bag.
- */
-export const accountWorkspacePreference = pgTable(
-  "account_workspace_preference",
-  {
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    providerId: text("provider_id").notNull(),
-    defaultProjectId: text("default_project_id"),
-    agent: text("agent"),
-    model: text("model"),
-    effort: text("effort"),
-    ...timestamps,
-  },
-  (table) => [primaryKey({ columns: [table.userId, table.providerId] })],
-);

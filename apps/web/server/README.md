@@ -45,14 +45,11 @@ branch cannot apply the same migration concurrently.
 
 What applies them is `effect/unstable/sql`'s own migrator: `packages/database/src/core/migrator.ts`
 reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each entry names, in
-order, and records what it applied in its own `effect_sql_migrations` table
-rather than `drizzle.__drizzle_migrations`, which a database an older
-Drizzle-based runner had already migrated is bootstrapped from once rather
-than migrated again: that runner stamped every row it wrote with the journal
-instant of the migration it had just applied and refused anything at or below
-the greatest instant it found, so that greatest instant is read, every journal
-entry at or below it is recorded as applied, and the copy runs only into an
-empty table, which is what makes a second deploy a no-op. The Neon integration
+order, and records what it applied in its own `effect_sql_migrations` table,
+which is what makes a second deploy a no-op. The older Drizzle-based runner's
+`drizzle.__drizzle_migrations`, which every database was bootstrapped from
+once, is read by nothing now and waits on the same drop as the dead tables
+below. The Neon integration
 creates a database branch for each Preview deployment, so its committed schema
 changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
@@ -1790,12 +1787,19 @@ answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
 The database still carries tables and columns nothing reads or writes any
-more — `events`, `provider_cursors`, `provider_key`, `roster_snapshot`,
-`transcript_mark`, `observation_pass`, `workspace_file`,
-`workspace_embedding`, `devices`, `account_workspace_preference`, and
-`introduction_usage`, and the conversation row's observed-session and child
-columns — and their schema modules still declare them, so the drift check
-holds; they go with the migration that drops them.
+more — `events`, `provider_cursors`, `provider_key` (not the BYOK keys,
+which are `account_provider_key`), `roster_snapshot`, `transcript_mark`,
+`observation_pass`, `workspace_file`, `workspace_embedding`, `devices`,
+`account_workspace_preference`, and `introduction_usage`,
+`account_preference.default_workspace_provider`, and the conversation row's
+observed-session columns (`provider_id`, `provider_session_id`,
+`workspace`), its `spawned_by_message_id` and `completion_delivered_at`, its
+`next_event_seq`, and its three `memory_flush_*` columns. No schema module
+declares them, so no insert names them, and the drift check's
+`PENDING_DROP` and `PENDING_DROP_TABLES` list them until the migration that
+drops them. A child's `parent_conversation_id`, `label`, `title`, and
+`expects_completion` are live: a subagent's and a coding agent's worker's
+child conversation writes them.
 
 The conversation tables are the shape the LUKE-95 storage plan settled on,
 less the `prompts` table it drew and less the `tool_sets` table

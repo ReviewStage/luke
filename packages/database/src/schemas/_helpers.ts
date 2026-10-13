@@ -21,8 +21,3 @@ export const createdAt = () => timestamptz("created_at").notNull().defaultNow();
  * sets `updatedAt` itself from the instant its own clock read.
  */
 export const updatedAt = () => timestamptz("updated_at").notNull().defaultNow();
-
-export const timestamps = {
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-};

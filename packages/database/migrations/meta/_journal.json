@@ -708,6 +708,13 @@
       "when": 1791871596311,
       "tag": "20261013060636_coding_agent_disabled_servers",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1791893084244,
+      "tag": "20261013120444_dead_tables_pending_drop",
+      "breakpoints": true
     }
   ]
 }
