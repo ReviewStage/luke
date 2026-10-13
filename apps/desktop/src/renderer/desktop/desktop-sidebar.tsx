@@ -36,6 +36,7 @@ import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
+import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
@@ -54,6 +55,9 @@ const WORK_RESERVE = 360;
 
 /** What the header over the plans with no repository says. */
 const NO_REPOSITORY = "No repository";
+
+/** The widths of the plans' names while the list is first read, uneven as names are. */
+const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
 
 /**
  * The edge of the window's left column, the plans' sidebar or Settings' page
@@ -625,6 +629,24 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
 }
 
 /**
+ * The plans while the list is first read: a plan row's room and its name's
+ * type for each block, one line as a row's name is, so the rows land where
+ * the blocks stood. Nothing stands for the repository headers, whose number
+ * nobody knows yet.
+ */
+function ListSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading your plans…" className="sidebar-skeleton">
+      {LIST_SKELETON.map((width) => (
+        <div key={width} className="sidebar-skeleton-row">
+          <Skeleton width={width} />
+        </div>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
+/**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan the account owns, and the account's
  * row, whose menu and gear lead to Settings and the rest. While anything
@@ -709,6 +731,7 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   const waiting = inboxRows(plans);
+  const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
   // A plan's Inbox is on show where main is told it is: open and in sight, nothing over it.
   const inboxShown = (planId: string) => plans.inboxShown === planId;
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
@@ -817,10 +840,12 @@ export function DesktopSidebar({
               <RetryButton onRetry={plans.onRetryList} />
             </div>
           ) : null}
-          {plans.signedIn &&
-          plans.plans.length === 0 &&
-          plans.archived.length === 0 &&
-          !plans.listFailed ? (
+          {/* The list is empty before its first read lands, so that it
+              holds none says nothing until the service has answered. */}
+          {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
+            <ListSkeleton />
+          ) : null}
+          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
             <p className="sidebar-note">No plans yet.</p>
           ) : null}
           {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}

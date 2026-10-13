@@ -413,6 +413,20 @@ body,
   line-height: 1.45;
 }
 
+/* The plans while the list is first read: each row a row's room around
+   one block in the name's type, as far apart as the rows, so the rows land
+   where the blocks stood. */
+.sidebar-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+}
+
+.sidebar-skeleton-row {
+  padding: var(--space-8) var(--row-inset);
+  font-size: 13px;
+}
+
 /* The list's failure: its sentence, then the retry under it, drawn back by
    its own inset so its glyph starts where the words do. */
 .sidebar-failure {
