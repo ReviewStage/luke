@@ -391,6 +391,8 @@ export interface HostedToolDeclaration {
   readonly description: string;
   /** The wire schema's JSON, as eve takes a plain JSON Schema input. */
   readonly inputSchema: ToolDefinition["inputSchema"];
+  /** Whether a successful call ends the turn with no model step after it, as `end_call` does. */
+  readonly endsTurn?: boolean;
 }
 
 /** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
@@ -408,6 +410,8 @@ interface PlanningTool {
   readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   /** A wider schema its stored rows are read back under, where rows journaled before a newer input was asked for still stand. */
   readonly storedInputSchema?: Schema.Codec<unknown, UnparsedWireValue>;
+  /** Whether a successful call ends the turn, so eve asks the model for no step after it. */
+  readonly endsTurn?: boolean;
   readonly run: (
     call: PlanningCall,
     input: UnparsedWireValue,
@@ -604,6 +608,7 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
     name: tool.name,
     description: tool.description,
     inputSchema: emitJsonSchema(tool.inputSchema),
+    ...(tool.endsTurn === undefined ? undefined : { endsTurn: tool.endsTurn }),
   }));
 }
 

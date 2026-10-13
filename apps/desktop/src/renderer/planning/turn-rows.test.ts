@@ -74,3 +74,29 @@ test("a finished turn folds everything ahead of its last words under the same li
     ],
   );
 });
+
+test("a spoken turn's words run with its calls: inside the open group while it moves, inside the fold once it has finished, whose line counts no message, and a spoken turn of words alone draws none of them", () => {
+  const spoken = [
+    call("end_call"),
+    words("Started a worker."),
+    subagent("Compare the queues."),
+    words("Seven days."),
+  ];
+  assert.deepEqual(rowsOf(spoken, true, true), [
+    [
+      "1 tool called, 1 subagent",
+      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
+      { open: true, running: false },
+    ],
+  ]);
+  assert.deepEqual(rowsOf(spoken, false, true), [
+    [
+      "1 tool call, 1 subagent",
+      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
+    ],
+  ]);
+  assert.deepEqual(rowsOf([thought("Just answer."), words("Seven days.")], false, true), [
+    "Just answer.",
+  ]);
+  assert.deepEqual(rowsOf([words("Seven days.")], true, true), []);
+});

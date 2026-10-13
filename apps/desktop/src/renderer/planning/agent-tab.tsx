@@ -459,7 +459,7 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
-  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so the message holds none and folds all of its work once it has finished. */
+  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
   said?: boolean;
 }): ReactNode {
   const words = messageWords(message);
@@ -481,6 +481,16 @@ export function AgentMessage({
   }
   const { startedAt, finishedAt } = message;
   const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
+  const workedFor =
+    moving || startedAt === undefined || finishedAt === undefined ? null : (
+      <WorkedFor
+        startedAt={startedAt}
+        endedAt={finishedAt}
+        record={message}
+        models={delegation?.models}
+      />
+    );
+  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return (
     <Message from={message.role}>
       <MessageContent>
@@ -490,19 +500,13 @@ export function AgentMessage({
             workers,
             said,
           })}
+          trailer={said ? workedFor : undefined}
         >
           {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
         </TranscriptRows>
       </MessageContent>
-      {moving || startedAt === undefined || finishedAt === undefined ? null : (
-        <WorkedFor
-          startedAt={startedAt}
-          endedAt={finishedAt}
-          record={message}
-          models={delegation?.models}
-        />
-      )}
-      {words === "" ? null : <CopyMessageAction words={words} />}
+      {said ? null : workedFor}
+      {words === "" || said ? null : <CopyMessageAction words={words} />}
     </Message>
   );
 }

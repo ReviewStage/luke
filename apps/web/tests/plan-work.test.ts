@@ -21,7 +21,13 @@ import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { TURN_STATUS } from "../server/core";
+import {
+  ASK_ORIGIN,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_STATUS,
+} from "../server/core";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
@@ -464,4 +470,126 @@ test("a turn's journal leaves out what the Mac is not sent: a page's HTML, which
   assert.deepEqual(page.input, { title: "Invite funnel" });
   assert.equal(look.type, `tool-${LOOK_AT_BOARD_TOOL_NAME}`);
   assert.equal(look.output, undefined);
+});
+
+/** The store's id for the session of the call a spoken ask was said on. */
+const SPOKEN_CALL = "3f6a1c2e-8b4d-4e7f-9a1b-5c2d3e4f6a7b";
+
+/**
+ * A spoken ask on the plan's conversation, as the voice leaves it: the ask
+ * under its delegation's id, made at `at` on the call, dispatched into the
+ * standing's eve session, and the developer's lines the delegation was
+ * about, written and attached to it. Answers the delegation's id, which eve
+ * names the ask's delivery by.
+ */
+async function delegatedAsk(
+  target: ConversationTarget,
+  standing: RelayStanding,
+  lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
+  at: number,
+  revision: number,
+): Promise<string> {
+  const delegationId = `dl_${randomUUID()}`;
+  const record = askRecord();
+  const ask = await database.run(
+    record.record({
+      ...target,
+      clientId: delegationId,
+      origin: ASK_ORIGIN.SPOKEN,
+      createdAt: new Date(at),
+      voice: { sessionId: SPOKEN_CALL, revision },
+    }),
+  );
+  await database.run(
+    record.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: standing.sessionId, deliveryId: delegationId }),
+    ),
+  );
+  for (const [clientId, text, fromMs] of lines) {
+    await database.run(
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
+        clientId,
+        text,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: SPOKEN_CALL,
+          from_ms: fromMs,
+          to_ms: fromMs + 900,
+        },
+      }),
+    );
+  }
+  await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: lines.map(([rowId]) => rowId) }),
+  );
+  return delegationId;
+}
+
+test("the developer's first ask of a call, steered into the turn the call's explore ask opened, names its lines as the turn's ask, so the turn stands under them though it ends after the call; a follow-up steered in while the turn runs names none, made in the same instant included", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  // The call opens with the explore ask, keyed by the call's session and naming no line, and eve opens a turn for it at once.
+  const record = askRecord();
+  const explore = await database.run(
+    record.record({
+      ...target,
+      clientId: SPOKEN_CALL,
+      origin: ASK_ORIGIN.SPOKEN,
+      createdAt: new Date(NOW - 5_000),
+    }),
+  );
+  await database.run(
+    record.dispatchOnce(target, explore.id, () =>
+      Effect.succeed({
+        sessionId: standing.sessionId,
+        turnId: hostTurnId(standing.sessionId, FIRST_EVE_TURN),
+      }),
+    ),
+  );
+  const received = { turnId: FIRST_EVE_TURN, sequence: SEQUENCE, message: "q" };
+  await play(
+    [
+      stampedEveEvent({ type: "turn.started", data: received }, NOW - 4_000),
+      stampedEveEvent({ type: "message.received", data: received }, NOW - 4_000),
+    ],
+    standing,
+  );
+  // The developer's ask, said while the explore turn runs (the relay starts it at its own NOW), which eve steers into it.
+  const asked = await delegatedAsk(
+    target,
+    standing,
+    [["row-ask", "Look into how invites expire.", 7_400]],
+    NOW + 1_000,
+    1,
+  );
+  await play(
+    [stampedEveEvent({ type: "message.received", data: received }, NOW + 2_000, [asked])],
+    standing,
+  );
+  // While the turn waits on its subagent, the developer says more, and eve steers that in too. Note
+  // that it is made in the same instant as the ask, which the store's clock can do, so the voice's
+  // revision is what tells the follow-up from the ask.
+  const followUp = await delegatedAsk(
+    target,
+    standing,
+    [["row-follow", "And who can resend one?", 62_000]],
+    NOW + 1_000,
+    2,
+  );
+  await play(
+    [
+      stampedEveEvent({ type: "message.received", data: received }, NOW + 3_000, [asked, followUp]),
+      ...answeringStep(FIRST_EVE_TURN, 0, "Seven days, and the inviter."),
+    ],
+    standing,
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => [turn.asked, turn.askedAt]),
+    [[["row-ask"], [{ voiceSessionId: SPOKEN_CALL, fromMs: 7_400 }]]],
+  );
 });

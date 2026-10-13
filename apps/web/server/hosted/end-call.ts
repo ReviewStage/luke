@@ -19,6 +19,12 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
  * playing, and keeps the call up if the developer speaks first, so the
  * decision here is only that the developer is done; when the line goes
  * quiet is the Mac's.
+ *
+ * The call ends its turn (`endsTurn`): the developer is done and Luke is
+ * already saying goodbye, so there is nothing for the model to add. Asked
+ * for a step after it anyway, the model answers with nothing, as its words
+ * tell it to, and eve reads an empty answer as the model failing, retries it
+ * once, and fails the turn, which the Call tab then said had failed.
  */
 
 /**
@@ -43,6 +49,7 @@ export const END_CALL_TOOL = {
     "finishes\"), or because the plan looks complete. The call hangs up once Luke's goodbye " +
     "has played, and stays up if the developer speaks first. Answers `accepted`.",
   inputSchema: END_CALL_INPUT,
+  endsTurn: true,
 } as const;
 
 /**

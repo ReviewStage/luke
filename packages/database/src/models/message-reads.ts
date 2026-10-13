@@ -22,6 +22,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   gt,
   inArray,
   isNotNull,
@@ -791,24 +792,53 @@ export function turnsNamed(
 /** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
 const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
 
+/** The asks of a turn, read twice in one rule: the ask that named a row, and an earlier delegation of the same turn. */
+const namingAsk = alias(asks, "naming_ask");
+const earlierDelegation = alias(asks, "earlier_delegation");
+
 /**
- * Whether a spoken row of `messages` came into its turn with the ask that
- * opened it rather than one made after the turn started: a follow-up the
- * running turn was steered with (`brain-host/channel.ts`). The ask names
- * the row by its client id or by the delegation it was attached to.
+ * Whether a spoken row of `messages` came into its turn with an ask that
+ * opened it rather than a follow-up the running turn was steered with
+ * (`brain-host/channel.ts`). The ask names the row by its client id or by
+ * the delegation it was attached to. An ask made after the turn started is
+ * a follow-up only where the turn already had a delegation before it: the
+ * call's explore ask opens a turn that the developer's first ask is steered
+ * into (`voice/live-brain.ts`), and that ask is the turn's, not a follow-up
+ * to the explore, which names no line and no voice session. Delegations are
+ * ordered by when they were made, and by the voice's revision of them where
+ * two were made in one instant.
  */
 const noSteeredAsk = () =>
   notExists(
     db
-      .select({ id: asks.id })
-      .from(asks)
-      .innerJoin(turns, eq(turns.id, asks.turnId))
+      .select({ id: namingAsk.id })
+      .from(namingAsk)
+      .innerJoin(turns, eq(turns.id, namingAsk.turnId))
       .where(
         and(
-          eq(asks.conversationId, messages.conversationId),
-          eq(asks.turnId, messages.turnId),
-          sql`${asks.clientId} in (${messages.clientId}, ${messages.metadata} ->> 'delegation_id')`,
-          gt(asks.createdAt, turns.startedAt),
+          eq(namingAsk.conversationId, messages.conversationId),
+          eq(namingAsk.turnId, messages.turnId),
+          sql`${namingAsk.clientId} in (${messages.clientId}, ${messages.metadata} ->> 'delegation_id')`,
+          gt(namingAsk.createdAt, turns.startedAt),
+          exists(
+            db
+              .select({ id: earlierDelegation.id })
+              .from(earlierDelegation)
+              .where(
+                and(
+                  eq(earlierDelegation.turnId, namingAsk.turnId),
+                  isNotNull(earlierDelegation.voiceSessionId),
+                  // Two delegations made in one instant are told apart by the voice's own revisions.
+                  or(
+                    lt(earlierDelegation.createdAt, namingAsk.createdAt),
+                    and(
+                      eq(earlierDelegation.createdAt, namingAsk.createdAt),
+                      lt(earlierDelegation.taskRevision, namingAsk.taskRevision),
+                    ),
+                  ),
+                ),
+              ),
+          ),
         ),
       ),
   );
@@ -864,7 +894,9 @@ export interface SpokenAskRow {
  * of a follow-up the running turn was steered with is not its ask, because
  * the ask is where the turn's work stands on the call, and a turn parked on
  * its subagents for minutes takes every follow-up said meanwhile; its work
- * stays under the lines that opened it, and the follow-ups stand below.
+ * stays under the lines that opened it, and the follow-ups stand below. The
+ * first ask of a call is steered into the explore turn the call opened, and
+ * is that turn's ask all the same (`noSteeredAsk`).
  */
 export function spokenAskRowsOf(
   userId: string,
