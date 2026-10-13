@@ -418,6 +418,8 @@ export interface SidePanelControl {
   changes: readonly ChangesStripTab[];
   /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
   pages: readonly PageStripTab[];
+  /** The open plan's tabs of every kind as the strip draws them, in its order. */
+  strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -437,6 +439,12 @@ export interface SidePanelControl {
   onClose: (tab: SidePanelTab) => void;
   /** Moves the tab to the place `to` in the strip, among tabs of every kind, leaving the chosen one chosen. */
   onMove: (tab: SidePanelTab, to: number) => void;
+  /**
+   * Opens a tab closed on the open plan again as it stood: shown and chosen
+   * at the place `at` in the strip, a file's tab with the file, the lines,
+   * and the history it had (`file`).
+   */
+  onReopen: (tab: SidePanelTab, at: number, file: OpenFile | undefined) => void;
   /** Pins the open plan's tab, of either strip, to the sidebar under the name given, newest of the pins; an agent's with the model it runs on. */
   onPin: (tab: PinnableTab, label: string, model?: string) => void;
   onUnpin: (planId: string, tab: PinnableTab) => void;
@@ -1389,6 +1397,25 @@ export function useSidePanel(
     (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
   );
+  // Note that a file browsed to is drawn on the plan it was browsed on, so
+  // the strip the tab is placed in draws it from the moment it stands again.
+  const onReopen = useCallback(
+    (tab: SidePanelTab, at: number, file: OpenFile | undefined) => {
+      setAsked(undefined);
+      update((held) => {
+        // A file stands in one tab at most, so the record kept with the tab
+        // takes the place of one another plan opened on the path since.
+        const others = held.files.filter((each) => each.path !== file?.path);
+        const restored = file === undefined ? held : { ...held, files: [...others, file] };
+        const browsed =
+          file !== undefined && file.browsedOn === planId && !drawn.files.includes(file.path);
+        const here = browsed ? { ...drawn, files: [...drawn.files, file.path] } : drawn;
+        const opened = withTab(withChosenViewed(restored, tab, here), tab, planId);
+        return { ...withTabAt(opened, tab, at, here), open: true };
+      });
+    },
+    [update, drawn, planId],
+  );
   const onPin = useCallback(
     (tab: PinnableTab, label: string, model?: string) => {
       if (planId === undefined) return;
@@ -1412,9 +1439,11 @@ export function useSidePanel(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
   );
+  const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   return {
     open: state.open,
     tabs,
+    strip,
     order: orderOn(state, planId),
     closedTabs: planTabs(state, planId).closed,
     used,
@@ -1435,6 +1464,7 @@ export function useSidePanel(
     onShow,
     onClose,
     onMove,
+    onReopen,
     onPin,
     onUnpin,
     onRenamePins,

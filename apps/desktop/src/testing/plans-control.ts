@@ -152,6 +152,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       files: [],
       changes: [],
       pages: [],
+      strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
@@ -162,6 +163,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onShow: ignore,
       onClose: ignore,
       onMove: ignore,
+      onReopen: ignore,
       onPin: ignore,
       onUnpin: ignore,
       onRenamePins: ignore,
@@ -216,6 +218,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
+    onReopenClosedTab: undefined,
     chosenPin: undefined,
     repositories: {
       recent: [],
