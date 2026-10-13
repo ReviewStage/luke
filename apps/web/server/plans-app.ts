@@ -331,28 +331,24 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   planId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
-  const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
-  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, planId, { includeArchived: true }),
   );
   yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
     discard: true,
   });
-  // Note that the sessions are retired while their conversations still stand, because eve's door
-  // admits no one to a cleared conversation's session. An agent started meanwhile refuses the
-  // delete below, which leaves the plan standing with its stopped agents retired.
-  const conversationIds = [
-    ...(opened.value.conversationId === undefined ? [] : [opened.value.conversationId]),
-    ...agents.map((agent) => agent.conversationId),
-  ];
-  const sessions = yield* hostedStoreOrUnavailable(standingSessionsOf(userId, conversationIds));
-  yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   const stopped = new Set(agents.map(({ id }) => id));
   const deleted = yield* hostedStoreOrUnavailable(
-    deletePlan(userId, planId, stopped).pipe(
-      Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined)),
-    ),
+    deletePlan(userId, planId, {
+      stoppedAgentIds: stopped,
+      // Note that the sessions are retired under the plan's lock and before its conversations are
+      // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
+      // agent started meanwhile refuses retires nothing.
+      beforeDelete: (conversationIds) =>
+        Effect.flatMap(standingSessionsOf(userId, conversationIds), (sessions) =>
+          retireSessions((mount) => eveFor(seams, request, mount), sessions),
+        ),
+    }).pipe(Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined))),
   );
   // An agent started while the others were stopped is one this delete has not stopped yet.
   if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);

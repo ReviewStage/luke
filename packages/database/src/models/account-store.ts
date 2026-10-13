@@ -2,7 +2,7 @@ import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agen
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -68,6 +68,12 @@ const deleteUserRow = SqlSchema.void({
   execute: (userId) => db.delete(user).where(eq(user.id, userId)),
 });
 
+const lockUserRow = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+});
+
 const findAccountSessions = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
@@ -75,14 +81,18 @@ const findAccountSessions = SqlSchema.findAll({
     db
       .select({ runtimeSessionId: conversations.runtimeSessionId })
       .from(conversations)
-      .where(and(eq(conversations.userId, userId), isNotNull(conversations.runtimeSessionId))),
+      .where(eq(conversations.userId, userId))
+      .for("update"),
 });
 
 /**
  * Erases the user row; every dependent row cascades with it. The eve session
  * each of the account's conversations ran in, a deleted plan's too, is
  * queued for its sandbox's deletion in the same transaction, since nothing
- * after it names them.
+ * after it names them. The user's row is locked first, so a conversation
+ * opened meanwhile waits on it and finds no account, and every conversation
+ * of the account is locked as its session is read, so a session claimed
+ * meanwhile waits and finds no row to claim, rather than landing unqueued.
  */
 export function deleteAccount(
   userId: string,
@@ -90,6 +100,7 @@ export function deleteAccount(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        yield* lockUserRow(userId);
         yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
         yield* deleteUserRow(userId);
       }),

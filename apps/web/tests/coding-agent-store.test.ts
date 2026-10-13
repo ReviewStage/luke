@@ -294,20 +294,38 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   );
 
   it.effect(
-    "a delete told which agents it stopped refuses while another stands, and takes the plan once each is named",
+    "a delete told which agents it stopped refuses while another stands and runs nothing before it, and once each is named runs its step on the agents' conversations and takes the plan",
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const stoppedAgent = started(yield* createCodingAgent(userId, start(planId)));
         // Started while the delete was stopping the others, so the delete never stopped it.
         const raced = started(yield* createCodingAgent(userId, start(planId)));
+        const handed: (readonly string[])[] = [];
+        const guard = (stoppedAgentIds: ReadonlySet<string>) => ({
+          stoppedAgentIds,
+          beforeDelete: (conversationIds: readonly string[]) =>
+            Effect.sync(() => {
+              handed.push(conversationIds);
+            }),
+        });
 
-        const refused = yield* Effect.flip(deletePlan(userId, planId, new Set([stoppedAgent.id])));
+        const refused = yield* Effect.flip(
+          deletePlan(userId, planId, guard(new Set([stoppedAgent.id]))),
+        );
 
         assert.equal(refused._tag, "PlanAgentUnstopped");
         assert.equal(yield* agentRows(userId), 2);
-        assert.equal(yield* deletePlan(userId, planId, new Set([stoppedAgent.id, raced.id])), true);
+        assert.deepEqual(handed, []);
+        assert.equal(
+          yield* deletePlan(userId, planId, guard(new Set([stoppedAgent.id, raced.id]))),
+          true,
+        );
         assert.equal(yield* agentRows(userId), 0);
+        assert.deepEqual(
+          handed.map((ids) => [...ids].sort()),
+          [[stoppedAgent.conversationId, raced.conversationId].sort()],
+        );
       }),
   );
 

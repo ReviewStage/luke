@@ -52,6 +52,16 @@ export class PlanArchived extends Data.TaggedError("PlanArchived") {}
 /** A coding agent stands on the plan that its delete was not told was stopped: one started while the delete stopped the others. */
 export class PlanAgentUnstopped extends Data.TaggedError("PlanAgentUnstopped") {}
 
+/** What a delete that stopped the plan's agents first tells it. */
+export interface PlanDeleteGuard<R> {
+  /** The agents the caller stopped; any other standing refuses the delete. */
+  readonly stoppedAgentIds: ReadonlySet<string>;
+  /** Run under the plan's lock before anything is deleted, given the plan's conversation and each agent's. */
+  readonly beforeDelete: (
+    conversationIds: readonly string[],
+  ) => Effect.Effect<void, SqlError | Schema.SchemaError, R>;
+}
+
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
   readonly label: string;
@@ -666,30 +676,34 @@ export function updatePlan(
  * and the delete fails with `PlanAgentUnstopped` where any other stands. The
  * plan's row is locked before the agents are read, so a Start racing the
  * delete either landed its agent before the read, which then refuses, or
- * waits on the lock and finds no plan to start on.
+ * waits on the lock and finds no plan to start on. What the caller hands
+ * `beforeDelete` runs under that lock once no other agent stands and before
+ * anything goes, given the plan's conversation and each agent's, so what it
+ * does to them happens only to a plan that is deleted.
  */
-export function deletePlan(
+export function deletePlan<R = never>(
   userId: string,
   planId: string,
-  stoppedAgentIds?: ReadonlySet<string>,
-): Effect.Effect<boolean, PlanStoreFailure | PlanAgentUnstopped, SqlClient.SqlClient> {
+  guard?: PlanDeleteGuard<R>,
+): Effect.Effect<boolean, PlanStoreFailure | PlanAgentUnstopped, SqlClient.SqlClient | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return false;
         const agents = yield* findAgentConversations({ userId, planId });
-        if (stoppedAgentIds !== undefined && agents.some(({ id }) => !stoppedAgentIds.has(id))) {
+        if (guard !== undefined && agents.some(({ id }) => !guard.stoppedAgentIds.has(id))) {
           return yield* new PlanAgentUnstopped();
         }
-        const removed = yield* removePlan({ userId, planId });
-        if (Option.isNone(removed)) return false;
-        yield* removeEndedCalls({ userId, planId });
-        const { conversationId } = removed.value;
+        const { conversationId } = locked.value;
         const conversationIds = [
           ...(conversationId === null ? [] : [conversationId]),
           ...agents.map((agent) => agent.conversationId),
         ];
+        if (guard !== undefined) yield* guard.beforeDelete(conversationIds);
+        const removed = yield* removePlan({ userId, planId });
+        if (Option.isNone(removed)) return false;
+        yield* removeEndedCalls({ userId, planId });
         if (conversationIds.length > 0) {
           const now = yield* DateTime.nowAsDate;
           yield* stampConversations({ userId, conversationIds, now });
