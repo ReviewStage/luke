@@ -377,7 +377,7 @@ export function PlanCall({
   callLive,
   onLoadEarlier,
   onOpenSubagent,
-  onOpenAgent,
+  onOpenTarget,
   shown,
   models,
   reveal,
@@ -392,8 +392,8 @@ export function PlanCall({
   onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
-  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row asks for; none where nothing opens one. */
-  onOpenAgent?: ((agentId: string) => void) | undefined;
+  /** Opens what a call is about in the tab that draws it, as a start's row opens its agent's; none where nothing opens one. */
+  onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** Whether the tab is on screen, which is when a running turn counts how long it has worked. */
   shown: boolean;
   /** The catalog as last read, which names each subagent's model; none before the first read lands. */
@@ -424,7 +424,7 @@ export function PlanCall({
       // A running worker's row counts how long it has worked while the tab is on screen, as its turn counts.
       starts: shown ? workerStarts(rows) : undefined,
       onOpen: (callId) => onOpenSubagent(callId),
-      onOpenAgent,
+      onOpenTarget,
       // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
       jobs: workerJobs(conversation),
     },

@@ -32,6 +32,7 @@ import {
   sameTab,
   tabKey,
 } from "../planning/tab-strip-model";
+import type { ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,
   readWholeTranscript,
@@ -577,8 +578,9 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * What an agent's or the draft's tab shows in the column: the agent's
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
- * `onOpenDelegation`, and its Changes chip its pull request's changes,
- * through `onOpenChanges`.
+ * `onOpenDelegation`, its Changes chip its pull request's changes,
+ * through `onOpenChanges`, and a call about something drawn in a tab of its
+ * own that tab, through `onOpenTarget`.
  */
 export function MainTabContent({
   tab,
@@ -587,6 +589,7 @@ export function MainTabContent({
   views,
   onOpenDelegation,
   onOpenChanges,
+  onOpenTarget,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -601,6 +604,8 @@ export function MainTabContent({
   ) => void;
   /** Opens the agent's changes in the side panel, by the agent. */
   onOpenChanges: (agentId: string) => void;
+  /** Opens what a call in the agent's transcript is about in the tab that draws it. */
+  onOpenTarget: (target: ToolTarget) => void;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -624,6 +629,7 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
+      onOpenTarget={onOpenTarget}
       onHeld={views.onAgentHeld}
     />
   );

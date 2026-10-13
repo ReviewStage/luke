@@ -64,7 +64,7 @@ import {
   sameTab,
   tabKey,
 } from "../planning/tab-strip-model";
-import { cardTitle } from "../planning/tool-call-model";
+import { cardTitle, type ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,
   readWholeTranscript,
@@ -833,7 +833,7 @@ function TabContent({
   standings,
   shown,
   onOpenSubagent,
-  onOpenAgent,
+  onOpenTarget,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
@@ -865,8 +865,8 @@ function TabContent({
   shown: boolean;
   /** Opens a planning worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
-  /** Opens a coding agent's tab in the plan's column, by the agent. */
-  onOpenAgent: (agentId: string) => void;
+  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
+  onOpenTarget: (target: ToolTarget) => void;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -1009,7 +1009,7 @@ function TabContent({
           callLive={work.callLive}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
-          onOpenAgent={onOpenAgent}
+          onOpenTarget={onOpenTarget}
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
@@ -1233,7 +1233,7 @@ export function SidePanel({
   views,
   shown,
   focused,
-  onOpenAgent,
+  onOpenTarget,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1257,8 +1257,8 @@ export function SidePanel({
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W, ⌘T, and ⌘F answer to. */
   focused: boolean;
-  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Call tab asks for. */
-  onOpenAgent: (agentId: string) => void;
+  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
+  onOpenTarget: (target: ToolTarget) => void;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1406,7 +1406,7 @@ export function SidePanel({
               standings={standings}
               shown={keys}
               onOpenSubagent={openSubagent}
-              onOpenAgent={onOpenAgent}
+              onOpenTarget={onOpenTarget}
               onWorkerStatus={views.onWorkerStatus}
               onWorkerHeld={views.onWorkerHeld}
               onOpenFile={panel.onOpenFile}

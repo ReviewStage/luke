@@ -1,4 +1,4 @@
-import { AGENT_TOOL, EVE_TOOL, RETIRED_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
@@ -14,6 +14,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
@@ -35,8 +36,10 @@ import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-r
  * the worker runs on, and its answer once it has one. A to-do write's list
  * is read through the wire's own schema, since its input is the list the
  * row draws item by item, and an item posted to the developer's inbox
- * through it too, its row naming the item the Inbox tab draws. Nothing
- * here draws.
+ * through it too, its row naming the item the Inbox tab draws. A call
+ * about something the window opens elsewhere, a page, the board, an agent,
+ * code shown, names it as its target (`toolTarget`), which its row opens.
+ * Nothing here draws.
  */
 
 export interface ToolCallView {
@@ -565,6 +568,135 @@ export function toolCallView(input: {
       output: input.output === undefined ? undefined : jsonBlock(input.output),
     }
   );
+}
+
+/** What a call's row may open: something the window already draws in a tab of its own. */
+export const TOOL_TARGET = {
+  /** A coding agent's tab in the plan's column. */
+  AGENT: "agent",
+  /** A page's tab in the side panel. */
+  PAGE: "page",
+  /** The side panel's Board tab. */
+  BOARD: "board",
+  /** The plan's own tab, its document. */
+  PLAN: "plan",
+  /** The File tab of a file Luke showed, its lines lit as the call showed them. */
+  SHOWN_CODE: "shown-code",
+  /** The plan's Inbox tab. */
+  INBOX: "inbox",
+} as const;
+
+export type ToolTarget =
+  | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
+  | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
+  | { readonly kind: typeof TOOL_TARGET.BOARD }
+  | { readonly kind: typeof TOOL_TARGET.PLAN }
+  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
+  | { readonly kind: typeof TOOL_TARGET.INBOX };
+
+/** What the hover over a row says it opens, by its target's kind. */
+export const TARGET_HINT = {
+  [TOOL_TARGET.AGENT]: "Open the agent",
+  [TOOL_TARGET.PAGE]: "Open the page",
+  [TOOL_TARGET.BOARD]: "Open the Board",
+  [TOOL_TARGET.PLAN]: "Open the plan",
+  [TOOL_TARGET.SHOWN_CODE]: "Open the file",
+  [TOOL_TARGET.INBOX]: "Open the Inbox",
+} as const satisfies Record<ToolTarget["kind"], string>;
+
+/** A call as its target is read from it: the tool, the call's id, and its input and answer. */
+interface TargetedCall {
+  readonly tool: string;
+  readonly callId: string;
+  readonly input: WireValue | undefined;
+  readonly output: WireValue | undefined;
+}
+
+const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
+const PLAN_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
+const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
+
+/** The agent a call names in its input, as a read of or a message to one does. */
+function namedAgent(call: TargetedCall): ToolTarget | undefined {
+  const agent = stringAt(call.input, "agentId");
+  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+}
+
+/** The agent a start began, which its answer names once it has. */
+function startedAgent(call: TargetedCall): ToolTarget | undefined {
+  const answer = isRecord(call.output) ? call.output.agent : undefined;
+  const agent = stringAt(answer, "id");
+  return agent === undefined ? undefined : { kind: TOOL_TARGET.AGENT, agent };
+}
+
+/** The page a write made or moved on, which its answer names once it has. */
+function shownPage(call: TargetedCall): ToolTarget | undefined {
+  const answer = isRecord(call.output) ? call.output.page : undefined;
+  const page = stringAt(answer, "id");
+  return page === undefined ? undefined : { kind: TOOL_TARGET.PAGE, page };
+}
+
+/** The lines `show_code` put on screen, as a reference a File tab lights. */
+function shownCode(call: TargetedCall): ToolTarget | undefined {
+  const path = stringAt(call.input, "path");
+  if (path === undefined || path === "" || !isRecord(call.input)) return undefined;
+  const { startLine, endLine } = call.input;
+  const ref: CodeRef = {
+    path,
+    ...(isWireNumber(startLine) ? { startLine } : undefined),
+    ...(isWireNumber(endLine) ? { endLine } : undefined),
+  };
+  return { kind: TOOL_TARGET.SHOWN_CODE, call: call.callId, ref };
+}
+
+/**
+ * What each tool's call opens, read from the call alone; a tool not listed
+ * opens nothing, and its row folds its input and answer open in place. A
+ * worker's own delegation and a loaded skill open their tabs through their
+ * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
+ * a file's read, write, or patch, or a web read is read in its row's body,
+ * so none is listed. Note that a coding agent's file calls stay in their
+ * bodies, because a File tab and the Changes tab read the repository and
+ * the pull request on GitHub rather than the agent's checkout, so what the
+ * agent read or wrote and has not pushed would open on nothing.
+ */
+const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
+  AgentTool,
+  (call: TargetedCall) => ToolTarget | undefined
+>([
+  [AGENT_TOOL.SHOW_PAGE, shownPage],
+  [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
+  [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
+  [AGENT_TOOL.READ_CODING_AGENT, namedAgent],
+  [AGENT_TOOL.MESSAGE_CODING_AGENT, namedAgent],
+  [AGENT_TOOL.START_CODING_AGENT, startedAgent],
+  [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
+  [AGENT_TOOL.SHOW_CODE, shownCode],
+  [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
+  [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
+  [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
+]);
+
+/**
+ * Whether a call's answer says it did nothing. Note that it is told by the
+ * reason it answers beside its status rather than by the status's word,
+ * because every refusal among these tools answers why (`rejected`, the
+ * board's `not-drawn` and `not-looked`), each tool in words of its own the
+ * renderer cannot reach, and no answer that did what was asked carries one.
+ */
+function refused(output: WireValue | undefined): boolean {
+  return stringAt(output, "reason") !== undefined;
+}
+
+/**
+ * What a call's row opens, or nothing where it opens nothing. Note that a
+ * call opens nothing until it has answered, because until then what it is
+ * about has not changed, and its row's body is where its input is read; nor
+ * does one its tool refused, whose body is where the refusal is read.
+ */
+export function toolTarget(call: TargetedCall): ToolTarget | undefined {
+  if (call.output === undefined || refused(call.output)) return undefined;
+  return TOOL_TARGETS.get(call.tool)?.(call);
 }
 
 /** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */

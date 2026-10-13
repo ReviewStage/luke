@@ -56,7 +56,6 @@ import {
   providerOf,
   settledPlanEdits,
   showsPublishedRow,
-  startedAgentOf,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -68,10 +67,13 @@ import type { SkillSource } from "./skill-picker";
 import {
   cardTitle,
   delegationView,
+  TARGET_HINT,
+  type ToolTarget,
   todoFocus,
   todosSummary,
   todosView,
   toolCallView,
+  toolTarget,
   type WorkerJobs,
 } from "./tool-call-model";
 import {
@@ -108,7 +110,10 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * an error marked in red, each delegation to a worker a subagent's row on
  * a line of its own, as the Call tab draws its worker's, saying the task
  * and the model and effort the worker runs on, the whole line the one
- * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), each write
+ * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
+ * each call about something the window draws in a tab of its own, a page,
+ * the board, an agent, code shown, the plan, or the Inbox, the one
+ * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
@@ -186,8 +191,8 @@ export interface DelegationDoors {
   starts?: ReadonlyMap<string, number> | undefined;
   /** Opens the worker's tab, by the call that started it, with the task and where the worker stands as the row knows it; none where the row stands in a tab that opens no tab. */
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
-  /** Opens a coding agent's tab, by the agent, which the row of a call that started one asks for; none where nothing opens one. */
-  onOpenAgent?: ((agentId: string) => void) | undefined;
+  /** Opens what a call is about in the tab that draws it (`toolTarget`), which the row of such a call asks for; none where nothing opens one, when every such call folds open in place. */
+  onOpenTarget?: ((target: ToolTarget) => void) | undefined;
   /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
@@ -348,15 +353,20 @@ function LoadedSkillView({
   if (onOpen === undefined || part.state === TOOL_STATE.OUTPUT_ERROR) {
     return <ToolCallView part={part} />;
   }
-  return <OpeningCallView part={part} onOpen={onOpen} />;
+  return <OpeningCallView part={part} hint={SKILL_HINT} onOpen={onOpen} />;
 }
 
-/** A call that started a coding agent, once it began: the one button that opens the agent's tab, saying what it did. */
+/** What the hover over a loaded skill's row says it opens. */
+const SKILL_HINT = "Open SKILL.md";
+
+/** A call about something drawn in a tab of its own: the one button that opens that tab, saying what it did, its hover saying what it opens. */
 function OpeningCallView({
   part,
+  hint,
   onOpen,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  hint: string;
   onOpen: () => void;
 }): ReactNode {
   const view = toolCallView(part);
@@ -366,6 +376,7 @@ function OpeningCallView({
       kind={view.kind}
       subject={view.subject}
       state={part.state}
+      hint={hint}
       onOpen={onOpen}
     />
   );
@@ -388,10 +399,17 @@ function AgentPartView({
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL: {
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
-      const agent = startedAgentOf(part);
-      const openAgent = delegation?.onOpenAgent;
-      if (agent !== undefined && openAgent !== undefined) {
-        return <OpeningCallView part={part} onOpen={() => openAgent(agent)} />;
+      // A call that failed keeps its row, because the row is where its error is read.
+      const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      const openTarget = delegation?.onOpenTarget;
+      if (target !== undefined && openTarget !== undefined) {
+        return (
+          <OpeningCallView
+            part={part}
+            hint={TARGET_HINT[target.kind]}
+            onOpen={() => openTarget(target)}
+          />
+        );
       }
       if (part.tool === AGENT_TOOL.WRITE_TODOS) {
         return <TodosRow part={part} open={part.callId === todos.open} />;
@@ -710,6 +728,7 @@ function AgentTabView({
   onStop,
   onUnarchive,
   onOpenSubagent,
+  onOpenTarget,
   openGitHub,
   onOpenApiKeys,
   keywords,
@@ -734,6 +753,8 @@ function AgentTabView({
   onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
+  /** Opens what one of its calls is about; none where nothing opens it. */
+  onOpenTarget?: DelegationDoors["onOpenTarget"];
   openGitHub: (url: string) => void;
   /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
   onOpenApiKeys?: (() => void) | undefined;
@@ -754,6 +775,7 @@ function AgentTabView({
           own: { model: agent.model, effort: agent.effort },
           starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
           onOpen: onOpenSubagent,
+          onOpenTarget,
           standings: transcript.subagents,
         }}
         reading={transcript.reading}
@@ -811,6 +833,7 @@ export function AgentTab({
   shown,
   onOpenSubagent,
   onOpenChanges,
+  onOpenTarget,
   onHeld,
 }: {
   agent: CodingAgentSummary;
@@ -819,6 +842,8 @@ export function AgentTab({
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
+  /** Opens what one of its calls is about in the tab that draws it. */
+  onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
@@ -888,6 +913,7 @@ export function AgentTab({
       onStop={() => control.onStop(agent.id)}
       onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
+      onOpenTarget={onOpenTarget}
       openGitHub={openGitHub}
       onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}
