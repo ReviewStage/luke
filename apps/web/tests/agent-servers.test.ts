@@ -4,7 +4,6 @@ import {
   createCodingAgent,
   updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
@@ -20,6 +19,7 @@ import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under
@@ -71,7 +71,7 @@ function typedSeat(userId: string, conversationId: string): SessionAuth {
 const codingSession = (host: CoderHost) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, {
+    const plan = yield* startPlan(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });

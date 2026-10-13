@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -19,6 +19,8 @@ import type { WorkspaceSeams } from "./workspace-seams.js";
  * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
+ * Whether an account is in a workspace is one condition, its `member` row,
+ * which a statement elsewhere joins into its own where clause.
  * Every function is an effect over the ambient `Database`.
  */
 
@@ -95,6 +97,34 @@ const insertPersonalWorkspace = SqlSchema.void({
         .insert(personalWorkspace)
         .values({ userId: row.userId, organizationId: row.organizationId, createdAt: row.now })
         .onConflictDoNothing(),
+    ),
+});
+
+/**
+ * The condition that the account is a member of the workspace: a literal id,
+ * or the column of a row the statement reads, such as a plan's own
+ * `organization_id`, so a statement gates on membership in its own where clause.
+ */
+function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
+  return exists(
+    queryBuilder
+      .select({ one: member.id })
+      .from(member)
+      .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId))),
+  );
+}
+
+const findMemberWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(
+          and(eq(organization.id, organizationId), memberOfWorkspace(userId, organization.id)),
+        ),
     ),
 });
 
@@ -212,6 +242,14 @@ export function ensurePersonalWorkspace(
     yield* insertPersonalWorkspace({ userId, organizationId, now });
     return yield* personalWorkspaceOf(userId);
   });
+}
+
+/** Whether the account is a member of the workspace; a workspace that names nothing has none. */
+export function isWorkspaceMember(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<boolean> {
+  return Effect.map(findMemberWorkspace({ userId, organizationId }), Option.isSome);
 }
 
 /** Every workspace the account is a member of, its personal one first and the rest by name. */

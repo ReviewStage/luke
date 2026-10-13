@@ -97,7 +97,9 @@ send one a message it writes for you (kept in that agent's transcript as
 yours), and start a new one; what it read and sent is kept with the plan's
 planning conversation. A fixture or evidence run keeps no conversation at all.
 
-**Feature plans.** When you start a named plan, our service stores under your
+**Feature plans.** When you start a named plan, our service stores it in a
+workspace: your personal workspace unless you start it in another workspace
+you are a member of, and the plan records which. It stores under your
 account its name and its one Markdown document, which begins as a copy of
 your plan template and is written by the planning call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an

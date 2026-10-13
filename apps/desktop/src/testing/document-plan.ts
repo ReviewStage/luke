@@ -24,6 +24,7 @@ const DOCUMENT_TEXT = [
 /** A plan, its text as `DOCUMENT_TEXT`, nobody's save on it yet. */
 export const DOCUMENT_PLAN: Plan = {
   id: "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13",
+  workspaceId: "workspace-personal",
   name: DOCUMENT_NAME,
   createdAt: 1,
   updatedAt: 2,
