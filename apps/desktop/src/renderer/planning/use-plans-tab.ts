@@ -672,6 +672,8 @@ export function usePlansTab(input: {
     agents.agentIds,
     agents.draft?.id,
     input.inboxWaiting.some((plan) => plan.planId === viewed.activePlanId),
+    // Read only off the open plan's own document, so another plan's rollout never stands its Stack here.
+    openDocument?.id === viewed.activePlanId ? (openDocument?.rollout.length ?? 0) : 0,
     agents.heldIds,
   );
   mainRef.current = mainTabs;
