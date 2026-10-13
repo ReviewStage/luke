@@ -2025,10 +2025,13 @@ body,
 }
 
 .new-plan-actions .primary-button:disabled:not([aria-busy="true"]) {
-  --shortcut-ink: var(--text-tertiary);
   background: var(--raised-strong);
   color: var(--text-tertiary);
   cursor: default;
+}
+
+.new-plan-actions .primary-button:disabled:not([aria-busy="true"]) .shortcut {
+  --shortcut-ink: var(--text-tertiary);
 }
 
 .new-plan-note {
