@@ -214,6 +214,8 @@ export interface PlansControl {
   inboxShown: string | null;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
+  /** The pin the open plan was last opened from, which the sidebar marks in the plan's place for as long as the plan stays open; none once a plan is opened otherwise. */
+  chosenPin: PinnedTab | undefined;
   /** What the repository chip offers, in the composer and on the open plan alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
@@ -295,6 +297,12 @@ export interface VersionHistoryControl extends PlanHistoryControl {
 interface HistoryOpening {
   readonly planId: string;
   readonly save: number | undefined;
+}
+
+/** A pin pressed in the sidebar, and the plan open when it was, or its own once that opens. */
+interface PinChoice {
+  readonly pin: PinnedTab;
+  readonly over: string | undefined;
 }
 
 /**
@@ -390,6 +398,7 @@ export function usePlansTab(input: {
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
+  const [chosen, setChosen] = useState<PinChoice | undefined>(undefined);
   /**
    * The plan whose version history stands in the window, which it does only
    * while that plan is the one bound for, and the save whose revision it
@@ -574,6 +583,13 @@ export function usePlansTab(input: {
   // coming back asks nothing of the visit after.
   if (reveal !== undefined && reveal.planId !== boundFor) setReveal(undefined);
   const revealing = reveal !== undefined && reveal.planId === boundFor ? reveal.source : undefined;
+  // A pin stays chosen while its plan stays open, whichever of its tabs is
+  // shown: once its plan opens it is held there, and any other plan opening
+  // lets it go. Note that this reads the plan open rather than the one asked
+  // for, because an ask the host refuses leaves the pin chosen.
+  if (chosen !== undefined && openPlanId !== chosen.over) {
+    setChosen(openPlanId === chosen.pin.plan ? { pin: chosen.pin, over: openPlanId } : undefined);
+  }
   // An answer clears the ask it answers, never one made since.
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
   const select = useCallback(
@@ -1062,7 +1078,13 @@ export function usePlansTab(input: {
       onOpen: openHistory,
       onClose: () => setHistoryFor(undefined),
     },
-    onSelect: select,
+    // Note that the pin's own plan opened by its row is the plan the
+    // sidebar marks again rather than the pin; another plan's lets the pin
+    // go only once it opens.
+    onSelect: (planId) => {
+      setChosen((held) => (held?.pin.plan === planId ? undefined : held));
+      select(planId);
+    },
     onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
@@ -1091,6 +1113,7 @@ export function usePlansTab(input: {
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
     onOpenPinnedTab: (pin) => {
       const { tab } = pin;
+      setChosen({ pin, over: openPlanId });
       if (pin.plan !== planning.activePlanId) select(pin.plan);
       setHistoryFor(undefined);
       if (!isAgentTab(tab)) {
@@ -1100,6 +1123,7 @@ export function usePlansTab(input: {
       if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
       mainTabs.onShow(pin.plan, tab);
     },
+    chosenPin: chosen !== undefined && chosen.pin.plan === boundFor ? chosen.pin : undefined,
     repositories: {
       recent: recentRepositories(planning.plans),
       read: readRepositories,

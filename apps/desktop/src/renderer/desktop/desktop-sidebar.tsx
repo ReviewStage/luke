@@ -130,7 +130,10 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
 /** What every row of the plans is drawn with, whichever section it stands in. */
 interface RowContext {
   readonly plans: PlansControl;
+  /** Whether a plan is the one open, which a fold still leaves standing. */
   readonly current: (planId: string) => boolean;
+  /** Whether a row is the one the sidebar marks: the pin the open plan was opened from, else the open plan's own row. */
+  readonly marked: (planId: string, pin: PinnedTab | undefined) => boolean;
   readonly onOpen: (planId: string) => void;
   /** Whether a plan was saved since the developer last looked at it on this Mac. */
   readonly unread: (plan: PlanSummary) => boolean;
@@ -155,7 +158,7 @@ function PlanRows({
           key={plan.id}
           plans={context.plans}
           plan={plan}
-          current={context.current(plan.id)}
+          current={context.marked(plan.id, undefined)}
           unread={context.unread(plan)}
           now={context.now}
           onOpen={() => context.onOpen(plan.id)}
@@ -207,7 +210,7 @@ function PinnedRows({
             key={plan.id}
             plans={context.plans}
             plan={plan}
-            current={context.current(plan.id)}
+            current={context.marked(plan.id, undefined)}
             unread={context.unread(plan)}
             now={context.now}
             onOpen={() => context.onOpen(plan.id)}
@@ -218,6 +221,7 @@ function PinnedRows({
             plans={context.plans}
             pin={pin}
             plan={plan}
+            current={context.marked(plan.id, pin)}
             inSight={context.inSight}
             onOpen={() => onOpenTab(pin)}
           />
@@ -647,6 +651,8 @@ function ListSkeleton(): React.JSX.Element {
  * and the archived ones are folded away under them all.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
+ * The open plan's row is marked, or, where the plan was opened from a pin,
+ * that pin's row, while the plan stays open.
  * A plan's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
@@ -708,30 +714,45 @@ export function DesktopSidebar({
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
-  const context: RowContext = {
-    plans,
-    current,
-    onOpen: openPlan,
-    unread,
-    now,
-    inSight: !sidebar.collapsed,
-  };
   const waiting = inboxRows(plans);
   const unlisted = plans.plans.length === 0 && plans.archived.length === 0;
   // A plan's Inbox is on show where main is told it is: open and in sight, nothing over it.
   const inboxShown = (planId: string) => plans.inboxShown === planId;
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
+  // The pin the open plan was opened from is marked in its plan's place,
+  // whichever of the plan's tabs is shown, while its row still stands.
+  const { chosenPin } = plans;
+  const pinMarked = pinnedSection.find(
+    ({ plan, pin }) =>
+      pin !== undefined &&
+      chosenPin !== undefined &&
+      current(plan.id) &&
+      pin.plan === chosenPin.plan &&
+      pin.at === chosenPin.at,
+  )?.pin;
+  const context: RowContext = {
+    plans,
+    current,
+    marked: (planId, pin) =>
+      pinMarked === undefined ? pin === undefined && current(planId) : pin === pinMarked,
+    onOpen: openPlan,
+    unread,
+    now,
+    inSight: !sidebar.collapsed,
+  };
   // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's in the plan's own column, any other in the side panel.
+  // an agent's in the plan's own column, any other in the side panel. The
+  // pin marked stands too, so a fold never hides the row the sidebar marks.
   const pinnedShown = ({ plan, pin }: PinnedRow) =>
-    current(plan.id) &&
-    (pin === undefined ||
-      (isAgentTab(pin.tab)
-        ? sameTab(plans.mainTabs.tab, pin.tab)
-        : plans.sidePanel.open &&
-          plans.sidePanel.tab !== undefined &&
-          sameTab(plans.sidePanel.tab, pin.tab)));
+    (pin !== undefined && pin === pinMarked) ||
+    (current(plan.id) &&
+      (pin === undefined ||
+        (isAgentTab(pin.tab)
+          ? sameTab(plans.mainTabs.tab, pin.tab)
+          : plans.sidePanel.open &&
+            plans.sidePanel.tab !== undefined &&
+            sameTab(plans.sidePanel.tab, pin.tab))));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
   const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));

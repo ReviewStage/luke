@@ -999,6 +999,38 @@ function withPins(
   return { ...patch, sidePanel: { ...plansControl().sidePanel, pins, onUnpin } };
 }
 
+test("the pin the open plan was opened from is marked in its plan's place, standing under a fold, and with none chosen, or it unpinned or pinned again since, the plan's own row is", () => {
+  const billing = listedPlan("Billing", { pinnedAt: 5 });
+  const board: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 9 };
+  const agent: PinnedTab = {
+    plan: billing.id,
+    tab: { agent: "agent-1" },
+    label: "Invite flow",
+    at: 8,
+  };
+  const open = { plans: [billing], page: PLANS_PAGE.DOCUMENT, activePlanId: billing.id };
+  const marked = (container: HTMLElement) =>
+    [...container.querySelectorAll<HTMLElement>(".sidebar-plan[aria-current='page']")].map(
+      (row) => row.querySelector(".sidebar-plan-name, .sidebar-pinned-tab-name")?.textContent,
+    );
+
+  const fromPin = mount(DEAN, { plans: withPins([board, agent], { ...open, chosenPin: agent }) });
+  const fromRow = mount(DEAN, { plans: withPins([board, agent], open) });
+  const unpinned = mount(DEAN, { plans: withPins([board], { ...open, chosenPin: agent }) });
+  const repinned = mount(DEAN, {
+    plans: withPins([board, { ...agent, at: 12 }], { ...open, chosenPin: agent }),
+  });
+
+  assert.deepEqual(marked(fromPin), ["Invite flow"]);
+  assert.deepEqual(marked(fromRow), ["Billing"]);
+  assert.deepEqual(marked(unpinned), ["Billing"]);
+  assert.deepEqual(marked(repinned), ["Billing"], "a pin made since is not the one pressed");
+  window.localStorage.clear();
+  act(() => pinnedToggle(fromPin).click());
+  assert.deepEqual(marked(fromPin), ["Invite flow"], "a fold leaves the marked pin standing");
+  window.localStorage.clear();
+});
+
 test("a pinned agent's card names its model and where it stands, read from the open plan's agents or else its plan's row", () => {
   const billing = listedPlan("Billing");
   const invites = {
