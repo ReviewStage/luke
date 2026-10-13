@@ -31,6 +31,7 @@ import {
   runtimeSessionOwner,
 } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
+import { planningToolDeclarations } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
@@ -41,6 +42,7 @@ import {
   START_CODING_AGENT_REFUSAL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
+import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -372,4 +374,11 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
   assert.equal(eve.sent.length, 2);
+});
+
+test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {
+  const endings = planningToolDeclarations()
+    .filter((tool) => tool.endsTurn === true)
+    .map((tool) => tool.name);
+  assert.deepEqual(endings, [END_CALL_TOOL.name]);
 });
