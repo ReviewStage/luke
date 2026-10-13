@@ -70,6 +70,7 @@ function roomAround(chip: HTMLElement) {
 export function PickerRow({
   label,
   copy,
+  describedBy,
   value,
   valueLabel,
   valueIcon,
@@ -85,6 +86,8 @@ export function PickerRow({
   label: string;
   /** The row's name and why, drawn before the chip. */
   copy: React.ReactNode;
+  /** The id of the why drawn in `copy`, which describes the chip. */
+  describedBy?: string | undefined;
   /** The id of the value chosen now, checked in the menu. */
   value: string;
   /** What the chip says: the chosen value's own words. */
@@ -154,6 +157,7 @@ export function PickerRow({
           className="plan-compose-chip settings-picker-chip"
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}
+          aria-describedby={describedBy}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}

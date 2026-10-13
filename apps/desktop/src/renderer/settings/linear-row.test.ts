@@ -129,7 +129,8 @@ test("Disconnect asks first, and only the answer to the question disconnects", a
   const question =
     row.querySelector<HTMLFieldSetElement>('fieldset[data-drawn="true"]') ??
     assert.fail("no question asked");
-  assert.match(question.getAttribute("aria-label") ?? "", /^Disconnect Linear\?/);
+  const name = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
+  assert.match(name?.textContent ?? "", /^Disconnect Linear\?/);
 
   act(() => button(question, "Disconnect").click());
   await settle();

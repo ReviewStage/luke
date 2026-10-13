@@ -82,7 +82,8 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
   field: Field;
   id: Id;
   label: string;
-  description: string;
+  /** What the row cannot say for itself, drawn under its label. */
+  detail?: string;
   default: boolean;
   page: SettingsPage;
   section?: SettingSection;
@@ -105,7 +106,7 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
     describe: (settings) => ({
       id: spec.id,
       label: spec.label,
-      description: spec.description,
+      ...(spec.detail === undefined ? undefined : { detail: spec.detail }),
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings(spec.field) === true),
     }),
@@ -130,7 +131,8 @@ export function choiceSetting<
   field: Field;
   id: Id;
   label: string;
-  description: string;
+  /** What the row cannot say for itself, drawn under its label. */
+  detail?: string;
   /** Every value the setting stores, in the order the control offers them. */
   values: readonly Value[];
   /** The control's token for a value, and the value its description reads. */
@@ -194,7 +196,7 @@ export function choiceSetting<
     describe: (settings) => ({
       id: spec.id,
       label: spec.label,
-      description: spec.description,
+      ...(spec.detail === undefined ? undefined : { detail: spec.detail }),
       kind: APP_SETTING_KIND.CHOICE,
       value: tokenOf(storedValue(settings)),
     }),

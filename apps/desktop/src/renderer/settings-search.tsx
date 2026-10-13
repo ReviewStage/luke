@@ -242,12 +242,19 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     const field = settingFieldForId(setting.id);
     if (!field) return [];
     if (!settingIdVisible(setting.id, input)) return [];
+    // A choice is found by what it offers as well as by its name, so "dark"
+    // finds the theme its row no longer has to describe.
+    const offered = APP_SETTING_SCHEMA[field].control?.options(input) ?? [];
     return [
       {
         id: setting.id,
         label: setting.label,
         page: APP_SETTING_SCHEMA[field].page,
-        haystack: [setting.label, setting.description],
+        haystack: [
+          setting.label,
+          ...(setting.detail === undefined ? [] : [setting.detail]),
+          ...offered.map((option) => option.label),
+        ],
       },
     ];
   });

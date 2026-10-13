@@ -1,4 +1,5 @@
 import type { ActionResult } from "@sidecar/wire";
+import { useId } from "react";
 import { ChangedMark } from "./marks";
 import { PickerRow } from "./picker-row";
 import { useSettingWrite } from "./use-setting-write";
@@ -9,7 +10,7 @@ const NO_MATCH = "Nothing matches.";
 /**
  * A settings pop-up: its name, optional why, and one value from a small fixed
  * set, picked from the app's own menu with no search, since a set this short
- * is read whole.
+ * is read whole. The visible name names the chip and the why describes it.
  */
 export function SelectRow<Value extends string | number>({
   label,
@@ -17,7 +18,6 @@ export function SelectRow<Value extends string | number>({
   value,
   options,
   parse,
-  ariaLabel,
   anchor,
   changed,
   busy: restBusy,
@@ -28,8 +28,6 @@ export function SelectRow<Value extends string | number>({
   value: Value;
   options: readonly { value: Value; label: string }[];
   parse: (raw: string) => Value | undefined;
-  /** When the visible name is too short to stand as the control's own name. */
-  ariaLabel?: string;
   /** The id a pressed search result lands on: marked on the chip itself, which then takes the keyboard. */
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
@@ -44,19 +42,21 @@ export function SelectRow<Value extends string | number>({
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value);
+  const detailId = useId();
   return (
     <>
       <PickerRow
-        label={ariaLabel ?? label}
+        label={label}
         copy={
           <>
             <strong>
               {label}
               {changed ? <ChangedMark /> : null}
             </strong>
-            {detail ? <small>{detail}</small> : null}
+            {detail ? <small id={detailId}>{detail}</small> : null}
           </>
         }
+        describedBy={detail ? detailId : undefined}
         value={String(value)}
         valueLabel={chosen?.label ?? String(value)}
         rows={options.map((option) => ({ id: String(option.value), label: option.label }))}

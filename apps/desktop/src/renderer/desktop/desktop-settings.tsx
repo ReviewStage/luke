@@ -6,12 +6,14 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
+import { AttentionMark } from "../settings/marks";
 import { SETTINGS_PAGE } from "../settings/pages";
 import { pageResetControl } from "../settings/reset";
 import {
   SettingsPanel,
   type SettingsPanelProps,
   settingsRowsInput,
+  voicePageAttention,
 } from "../settings/settings-panel";
 import { useSettingsWrites } from "../settings/writes";
 import {
@@ -38,9 +40,10 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * Settings as a desktop app lays them out: the sidebar turns into the list of
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
- * are the panel's own, drawn by `SettingsPanel`; its front-page index and its
- * back buttons are this list's job here, and a page's reset rides the
- * toolbar's right edge beside the page's title.
+ * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
+ * the Voice row's attention mark, and its back buttons are this list's job
+ * here, and a page's reset rides the toolbar's right edge beside the page's
+ * title.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -75,6 +78,7 @@ export function DesktopSettings({
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
+  const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
@@ -151,6 +155,9 @@ export function DesktopSettings({
                     >
                       {page.icon}
                       {page.title}
+                      {view === SETTINGS_VIEW.VOICE && voiceNote ? (
+                        <AttentionMark note={voiceNote} />
+                      ) : null}
                     </button>
                   </li>
                 );

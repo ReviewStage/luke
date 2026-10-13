@@ -1,5 +1,5 @@
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { BusyLabel } from "../spinner";
 import { focusWhenVisible, useStagedFocus } from "../staged-focus";
 import {
@@ -28,7 +28,7 @@ function answerOrder(index: number): React.CSSProperties {
  * not a state a line can be in.
  */
 interface SwapQuestion {
-  /** What is being asked, in the words a hand and a reader both get. */
+  /** What is being asked, drawn beside the answers and naming the group they stand in. */
   question: string;
   stage: ConfirmStage;
   /** The dangerous answer's word, and what a reader is told while it runs, under the spinner. */
@@ -42,20 +42,21 @@ interface SwapQuestion {
 const RETURNABLE = "button:not([disabled]), select:not([disabled])";
 
 /**
- * A question and its answer in the same few pixels the control was drawn in.
+ * A question and its answer on the line the control was drawn on.
  *
- * The two layers share one grid cell and are both mounted: `data-drawn`,
- * `aria-hidden`, and `inert` trade which one answers, so asking never
- * re-shapes the line and neither layer springs from nothing. The question takes
+ * The two layers are both mounted: `data-drawn`, `aria-hidden`, and `inert`
+ * trade which one answers, so neither layer springs from nothing. The controls
+ * hold the line's shape; the confirm stands over the whole line rather than in
+ * the controls' cell, with the question in the words the line's own copy gives
+ * up while it is asked, so asking never re-shapes the line and the question is
+ * read rather than guessed from a red verb. The question takes
  * the focus to the answer that changes nothing, because the control that asked
  * is inert by the time the confirm is drawn and of the two places focus could
  * land only one is safe to arrive on with a key already pressed. Answering
  * hands focus back to the line. Escape withdraws the question rather than
  * closing the panel behind it — but only while it is still a question.
  *
- * A line with nothing to ask about right now draws the controls alone: an
- * unaskable question still mounted would size the cell to a confirm that can
- * never be given.
+ * A line with nothing to ask about right now draws the controls alone.
  */
 export function ConfirmSwap({
   confirm,
@@ -72,6 +73,7 @@ export function ConfirmSwap({
   const keep = useRef<HTMLButtonElement | null>(null);
   const controls = useRef<HTMLSpanElement | null>(null);
   const returnFocus = useRef(false);
+  const questionId = useId();
 
   useStagedFocus(keep, asked && !acting);
 
@@ -104,12 +106,12 @@ export function ConfirmSwap({
         {children}
       </span>
       {confirm ? (
-        /* The group carries the question, so the two answers are read as
-           answers rather than as a Cancel and a Delete that could belong to
-           anything on the line. */
+        /* The group is named by the question it draws, so the two answers are
+           read as answers rather than as a Cancel and a Delete that could
+           belong to anything on the line. */
         <fieldset
           className="settings-actions credential-confirm"
-          aria-label={confirm.question}
+          aria-labelledby={questionId}
           data-drawn={String(asked)}
           aria-hidden={!asked}
           inert={!asked}
@@ -124,6 +126,9 @@ export function ConfirmSwap({
             keepPressed();
           }}
         >
+          <span id={questionId} className="credential-question">
+            {confirm.question}
+          </span>
           <button
             type="button"
             ref={keep}
