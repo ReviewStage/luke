@@ -25,7 +25,8 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
  * `list-accounts`, and `unlink-account`, none of which the deployment's
  * disabled paths shut. The browser signs in by email and password here only
  * because a session is what linking needs and how it was made is beside the
- * point.
+ * point, as in `auth-account-linking.test.ts`. GitHub's address is no
+ * account's here, which the deployment's `allowDifferentEmails` links.
  *
  * Synthetic accounts, bearers, secrets, and tokens throughout.
  */
@@ -96,10 +97,7 @@ const openService = Effect.gen(function* () {
     baseURL: ORIGIN,
     secret: "github-connection-test-secret-with-enough-length",
     database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
-    // Note that a GitHub email differing from the account's is what PR 8's
-    // `allowDifferentEmails` lets link, and is what lets a second account
-    // reach GitHub's own refusal of an account another one holds.
-    account: { ...ACCOUNT_TOKEN_STORAGE, accountLinking: { allowDifferentEmails: true } },
+    account: ACCOUNT_TOKEN_STORAGE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     emailAndPassword: { enabled: true },
     socialProviders: {
@@ -113,7 +111,7 @@ const openService = Effect.gen(function* () {
   const database = sqlClientOverPglite(client);
 
   /** One request to Better Auth's own handler from the browser, its cookies kept. */
-  const toAuth = (browser: Browser, path: string, body?: object) =>
+  const toAuth = (browser: Browser, path: string, body?: WireValue) =>
     Effect.promise(async () =>
       browser.keep(
         await auth.handler(
@@ -168,7 +166,12 @@ const openService = Effect.gen(function* () {
   /** One request to the group: the Mac's bearer where given, else the browser's cookie. */
   const ask = (
     path: string,
-    init: { method: string; bearer?: string; browser?: Browser; body?: object },
+    init: {
+      method: string;
+      bearer?: string;
+      browser?: Browser | undefined;
+      body?: WireValue;
+    },
   ) =>
     Effect.gen(function* () {
       const services = Layer.mergeAll(
@@ -215,6 +218,7 @@ const openService = Effect.gen(function* () {
 /** The intent the page's address carries, failing the test where the answer names no page. */
 function intentOf(answered: Answer): string {
   assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  // SAFETY: the status is OK, and the group answers a connect with the wire's `{ url }`.
   const { url } = answered.body as { url: string };
   const page = new URL(url);
   assert.equal(page.origin + page.pathname, `${ORIGIN}${GITHUB_CONNECT_PAGE.PATH}`);

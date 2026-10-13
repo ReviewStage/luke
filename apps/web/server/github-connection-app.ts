@@ -45,7 +45,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 const MAXIMUM_CLAIM_BODY_BYTES = 1_024;
 
 /** The browser session a claim rides in on: its account, or none; a failure is the auth service's, not a signed-out browser. */
-export type SessionUserIdResolver = (
+type SessionUserIdResolver = (
   request: Request,
 ) => Effect.Effect<Option.Option<string>, Cause.UnknownError>;
 
