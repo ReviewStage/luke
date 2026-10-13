@@ -62,6 +62,7 @@ window.lukeFileTree = {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installAnimations();
   tree.props = undefined;
   tree.reveals = [];
   tree.narrowed = [];
@@ -315,7 +316,6 @@ function treeSlide(container: HTMLElement): readonly (string | undefined)[] | un
 }
 
 test("the tree slides in from the view's right edge on the pane's motion, and hidden it leaves the layout at once, sliding out over the file out of reach until the slide has played", async () => {
-  installAnimations();
   motion(MOTION.ON);
   const view = mounted();
   await view.draw(FILE);
@@ -343,7 +343,6 @@ test("the tree slides in from the view's right edge on the pane's motion, and hi
 });
 
 test("a tree shown again part way through its slide out comes back from where it had got to, and stays", async () => {
-  installAnimations();
   motion(MOTION.ON);
   const view = mounted();
   await view.draw(FILE);
@@ -367,8 +366,24 @@ test("a tree shown again part way through its slide out comes back from where it
   assert.ok(view.container.querySelector(".file-tree-pane"), "the tree stands");
 });
 
+test("a tree shown again once motion was reduced part way through its slide out stands in place, the slide stopped", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  finishAll();
+  await view.press(view.button("Hide files"));
+  assert.notEqual(treeSlide(view.container), undefined, "sliding out");
+
+  motion(MOTION.REDUCED);
+  await view.press(view.button("Show files"));
+  const pane = view.container.querySelector(".file-tree-pane");
+  assert.ok(pane);
+  assert.equal(pane.hasAttribute("data-leaving"), false);
+  assert.equal(treeSlide(view.container), undefined, "no slide left holding it past the edge");
+});
+
 test("under reduced motion the tree shows and hides at once, with nothing played", async () => {
-  installAnimations();
   motion(MOTION.REDUCED);
   const view = mounted();
   await view.draw(FILE);

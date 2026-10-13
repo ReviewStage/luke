@@ -114,14 +114,16 @@ function useTreeSlide(open: boolean): TreeSlide {
     if (last.current === open || element === null) return;
     last.current = open;
     const timing = paneTiming(element);
+    // Note that the slide under way is read before it is stopped, because
+    // the next one starts from where it had brought the tree, and that it is
+    // stopped even with no motion to play, because an exit's fill would
+    // otherwise hold a tree shown again past the edge.
+    const from = getComputedStyle(element).transform;
+    for (const running of element.getAnimations()) running.cancel();
     if (timing === undefined) {
       if (!open) setLeaving(false);
       return;
     }
-    // Note that the slide under way is read before it is stopped, because
-    // the next one starts from where it had brought the tree.
-    const from = getComputedStyle(element).transform;
-    for (const running of element.getAnimations()) running.cancel();
     if (open) {
       const start = from === "none" ? "translateX(100%)" : from;
       element.animate([{ transform: start }, { transform: "none" }], timing);
