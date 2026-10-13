@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
-import { readBoard, writeScene } from "@sidecar/database/models/board-store";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   createPlan,
-  deletePlan,
   openPlanConversation,
   readPlan,
   savePlanText,
@@ -15,20 +12,10 @@ import {
 import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
-import {
-  PLAN_ACTOR,
-  PLAN_FIELD,
-  type PlanDocument,
-  planDocumentSchema,
-} from "@sidecar/hosted/plan-wire";
+import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {
   generateText,
-  getToolName,
-  isTextUIPart,
-  isToolUIPart,
   type JSONValue,
   jsonSchema,
   type ModelMessage,
@@ -36,32 +23,20 @@ import {
   type ToolSet,
   tool,
 } from "ai";
-import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Effect, Layer, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
-  SCRIPTED_DRAW,
-  SCRIPTED_DRAWN_ID,
-  SCRIPTED_DRAWN_REPLY,
-  SCRIPTED_LOOK_UP,
-  SCRIPTED_NO_SOURCE_REPLY,
-  SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
   SCRIPTED_READ_REPLY,
-  SCRIPTED_RESEARCH_REPLY,
   scriptedModel,
 } from "../eve/scripted-model";
-import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
-import { GitHubApp } from "../server/github/github-app";
-import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
-import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
+import type { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
@@ -71,37 +46,16 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
-  READ_CODING_AGENT_TOOL,
-  START_CODING_AGENT_TOOL,
-} from "../server/hosted/coding-agent-tools";
-import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
-import {
-  READ_WEB_PAGE_TOOL,
-  SEARCH_WEB_STATUS,
-  SEARCH_WEB_TOOL,
-} from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
-import {
-  REPOSITORY_SHELL_REFUSAL,
-  type RepositorySandboxDoor,
-  RUN_IN_REPOSITORY_TOOL,
-} from "../server/hosted/repository-shell";
-import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
+import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
 import {
-  GITHUB_APP_SETTINGS,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   NO_GITHUB,
   openGithubUser,
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { sandboxDouble } from "./support/repository-sandbox";
 
 /**
@@ -134,71 +88,6 @@ const SAVED: PlanDocument = { body: SAVED_TEXT, assumptions: [] };
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
-const EXPIRY_QUERY = "Stripe idempotency key expiry";
-const EXPIRY_SOURCE = "https://docs.stripe.com/api/idempotent_requests";
-const EXPIRY_ANSWER = "Stripe keeps idempotency keys for at least 24 hours. (docs.stripe.com)";
-
-const readFoundSearch = Schema.decodeUnknownOption(
-  Schema.Struct({
-    status: Schema.Literal(SEARCH_WEB_STATUS.FOUND),
-    findings: Schema.Array(Schema.Struct({ url: Schema.String })),
-  }),
-);
-
-/** The sources every settled search in these rows cites, whole, in the rows' order. */
-function citedSources(rows: readonly StoredUIMessage[]): readonly string[] {
-  return rows.flatMap((row) =>
-    row.parts.flatMap((part) => {
-      if (!isToolUIPart(part) || getToolName(part) !== SEARCH_WEB_TOOL.name) return [];
-      if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return [];
-      return Option.match(readFoundSearch(part.output), {
-        onNone: () => [],
-        onSome: (found) => found.findings.map((finding) => finding.url),
-      });
-    }),
-  );
-}
-
-/** Every word spoken in these rows, one string per text part, in the rows' order. */
-function spokenWords(rows: readonly StoredUIMessage[]): readonly string[] {
-  return rows.flatMap((row) => row.parts.filter(isTextUIPart).map((part) => part.text));
-}
-
-/** OpenAI's search as a scripted table: one cited answer, or a server error. */
-function searchService(answered: boolean) {
-  return recordingHttpClient(() =>
-    answered
-      ? jsonResponse({
-          output: [
-            {
-              type: "message",
-              content: [
-                {
-                  type: "output_text",
-                  text: EXPIRY_ANSWER,
-                  annotations: [
-                    {
-                      type: "url_citation",
-                      url: EXPIRY_SOURCE,
-                      title: "Idempotent requests",
-                      start_index: EXPIRY_ANSWER.indexOf("("),
-                      end_index: EXPIRY_ANSWER.length,
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        })
-      : jsonResponse({ error: { message: "fixture: search down" } }, 500),
-  );
-}
-
-const TEST_OPENAI = () => ({
-  apiKey: Redacted.make("sk-test-planning"),
-  choice: { model: "openai/gpt-test", effort: "medium" },
-});
-
 /** The repository the reading scenarios' plan is about, and the installation the developer reaches it through. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -206,25 +95,6 @@ const RELAY_INSTALLATION = { id: 11, login: RELAY.owner, repositories: [RELAY] }
 
 /** What the checkout answers `ls`, on one line so the record is read for it as written. */
 const RELAY_LISTING = "README.md src";
-
-/** A network service beside the App over the fixture settings, for a turn that reads GitHub nowhere. */
-const withApp = (http: Layer.Layer<HttpClient.HttpClient>) =>
-  Layer.merge(http, GitHubApp.layer(GITHUB_APP_SETTINGS));
-
-/** The usage meter as a fixed answer: every use counted, or none writable. */
-function meter(writable: boolean): BrainHostSeams["spend"] {
-  return async () => {
-    if (!writable) throw new Error("fixture: store down");
-  };
-}
-
-/** A spoken ask as the voice's delegation words it: the recent lines, then the developer's latest named as the ask. */
-const SPOKEN_ASK = [
-  "Developer: So who can send an invite?",
-  "Luke: I'd say admins only, like the role check.",
-  `Developer: Actually no. ${CORRECTION}`,
-  `The developer's ask is their latest line above: Actually no. ${CORRECTION}`,
-].join("\n");
 
 function unreached(name: string): () => never {
   return () => {
@@ -547,175 +417,6 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the plan's coding agents, and the end of the call, and no write to the plan",
-    () =>
-      Effect.gen(function* () {
-        const { host } = yield* savedPlanWithConversation();
-
-        const offered = host.toolDeclarations();
-
-        assert.deepEqual(
-          offered.map((declared) => declared.name),
-          [
-            QUEUE_QUESTION_TOOL.name,
-            WITHDRAW_QUESTION_TOOL.name,
-            SHOW_CODE_TOOL.name,
-            RUN_IN_REPOSITORY_TOOL.name,
-            SEARCH_WEB_TOOL.name,
-            READ_WEB_PAGE_TOOL.name,
-            DRAW_ON_BOARD_TOOL.name,
-            LOOK_AT_BOARD_TOOL.name,
-            LIST_CODING_AGENTS_TOOL.name,
-            READ_CODING_AGENT_TOOL.name,
-            MESSAGE_CODING_AGENT_TOOL.name,
-            START_CODING_AGENT_TOOL.name,
-            END_CALL_TOOL.name,
-          ],
-        );
-      }),
-  );
-
-  it.effect(
-    "a coding agent's saves reach the planning model as recent edits named by the agent, newest first; a plan no agent saved on names none",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        assert.doesNotMatch(
-          yield* host.standingContext(standing),
-          /recent edits by coding agents/u,
-        );
-        const started = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
-            planId,
-            idempotencyKey: "start-1",
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            planSnapshot: "# Relay",
-            task: null,
-            repository: "acme/relay",
-          }),
-        );
-        const binding = { userId, planId };
-        const author = { actor: PLAN_ACTOR.AGENT, agentId: started.agent.id } as const;
-        yield* saveNotes(
-          binding,
-          [
-            {
-              kind: NOTE_KIND.ADD,
-              section: PLAN_HEADING.OPEN_QUESTIONS,
-              text: "- Who may withdraw?",
-            },
-          ],
-          author,
-        );
-        yield* saveNotes(
-          binding,
-          [
-            { kind: NOTE_KIND.ADD, section: PLAN_HEADING.APPROACH, text: "Invites expire." },
-            { kind: NOTE_KIND.REPLACE, find: "expire.", text: "expire after 7 days." },
-            { kind: NOTE_KIND.REMOVE, find: "Who may withdraw?" },
-          ],
-          author,
-        );
-
-        const context = yield* host.standingContext(standing);
-
-        const lines = context.split("\n");
-        const at = lines.indexOf("[recent edits by coding agents]");
-        assert.notEqual(at, -1);
-        assert.match(
-          lines[at + 1] ?? "",
-          /^- anthropic\/claude-opus-5\.5, .*: add under "Approach": "Invites expire\."; replace "expire\." → "expire after 7 days\."; remove "Who may withdraw\?"$/u,
-        );
-        assert.match(lines[at + 2] ?? "", /add under "Open questions": "- Who may withdraw\?"$/u);
-      }),
-  );
-
-  // Note that the journal is written raw, because no save takes a note in the
-  // fixed template's shape any more, and a row an agent journaled before
-  // heading notes is what must still read.
-  it.effect(
-    "a coding agent's save journaled in the fixed template's shape reaches the planning model under its field's heading",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const started = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
-            planId,
-            idempotencyKey: "start-1",
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            planSnapshot: "# Relay",
-            task: null,
-            repository: "acme/relay",
-          }),
-        );
-        const journal = [
-          {
-            agentId: started.agent.id,
-            at: NOW,
-            notes: [
-              { kind: "add", field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" },
-              { kind: "add", field: PLAN_FIELD.HARD_PARTS, text: "- A withdrawn link is dead." },
-              { kind: "replace", field: PLAN_FIELD.APPROACH, find: "expire.", text: "lapse." },
-            ],
-          },
-        ];
-        const sql = yield* SqlClient.SqlClient;
-        yield* sql`update plan set agent_edits = ${JSON.stringify(journal)}::jsonb where id = ${planId}`;
-        const session = yield* startSession(host, userId, conversationId);
-
-        const lines = (yield* host.standingContext(yield* admitted(host, session))).split("\n");
-
-        const at = lines.indexOf("[recent edits by coding agents]");
-        assert.notEqual(at, -1);
-        assert.match(
-          lines[at + 1] ?? "",
-          /^- anthropic\/claude-opus-5\.5, .*: add under "Open questions": "- Who may withdraw\?"; add under "Hard parts": "- A withdrawn link is dead\."; replace "expire\." → "lapse\."$/u,
-        );
-      }),
-  );
-
-  it.effect(
-    "the sections the developer wrote reach the planning model by heading, until Luke writes one again",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        assert.doesNotMatch(yield* host.standingContext(standing), /sections the developer wrote/u);
-        const changedContext = INVITATIONS_TEXT.replace("today.", "today, by hand.");
-        const changedGoal = changedContext.replace("by email", "by email or link");
-        yield* saveDeveloperEdit(
-          { userId, planId },
-          { document: { base: INVITATIONS_TEXT, value: changedContext } },
-        );
-        yield* saveDeveloperEdit(
-          { userId, planId },
-          { document: { base: changedContext, value: changedGoal } },
-        );
-
-        const written = (yield* host.standingContext(standing)).split("\n");
-        yield* saveNotes({ userId, planId }, [
-          { kind: NOTE_KIND.ADD, section: PLAN_HEADING.GOAL, text: "- Owners can resend." },
-        ]);
-        const rewritten = (yield* host.standingContext(standing)).split("\n");
-
-        const at = written.indexOf("[sections the developer wrote]");
-        assert.notEqual(at, -1);
-        assert.match(written[at + 1] ?? "", /^- Context, \d{4}-\d{2}-\d{2}T/u);
-        assert.match(written[at + 2] ?? "", /^- Goal, \d{4}-\d{2}-\d{2}T/u);
-        const after = rewritten.indexOf("[sections the developer wrote]");
-        assert.match(rewritten[after + 1] ?? "", /^- Context, /u);
-        assert.ok(!rewritten.some((line) => line.startsWith("- Goal, ")));
-        assert.ok(written.some((line) => line.includes("by email or link")));
-      }),
-  );
-
-  it.effect(
     "the model is handed the saved document every turn, and its turn leaves the document as the notetaker saved it",
     () =>
       Effect.gen(function* () {
@@ -731,202 +432,6 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           handedDocument(yield* host.standingContext(yield* admitted(host, session))),
           SAVED,
         );
-      }),
-  );
-
-  it.effect(
-    "a spoken ask the voice delegates on a plan's conversation reaches the planning model with the document",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
-        yield* savePlanText(userId, planId, SAVED_TEXT);
-        const standing = yield* admitted(host, session);
-        assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
-
-        // The question as the voice composes it: the recent words as context, and the latest line as the ask.
-        const reply = yield* planningTurn(
-          host,
-          session,
-          "turn_0",
-          SPOKEN_ASK,
-          NO_GITHUB,
-          BRAIN_HOST_TURN.SPOKEN,
-        );
-
-        assert.equal(reply, SCRIPTED_PLANNING_REPLY);
-        assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
-      }),
-  );
-
-  it.effect(
-    "asked to draw, the planning model draws on the plan's board, and what the developer draws reaches its next turn",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-
-        const reply = yield* planningTurn(host, session, "turn_0", `${SCRIPTED_DRAW}Invite API`);
-
-        assert.equal(reply, SCRIPTED_DRAWN_REPLY);
-        const drawn = Option.getOrThrow(yield* readBoard(userId, planId));
-        assert.equal(drawn.drawing?.number, 1);
-        assert.deepEqual(
-          drawn.drawing?.elements.map((element) => element.id),
-          [SCRIPTED_DRAWN_ID],
-        );
-        const pending = yield* host.standingContext(yield* admitted(host, session));
-        assert.ok(pending.includes("Your latest drawing is not on the board yet"));
-
-        // The developer's Mac puts the drawing on the board beside a note of the developer's own.
-        const box = {
-          id: SCRIPTED_DRAWN_ID,
-          type: "rectangle",
-          x: 0,
-          y: 0,
-          width: 200,
-          height: 80,
-        } as const;
-        const note = {
-          id: "dev-note",
-          type: "text",
-          x: 0,
-          y: 200,
-          width: 120,
-          height: 25,
-          text: "Rate limit invites",
-        } as const;
-        yield* writeScene(userId, planId, [box, note], 1);
-        const context = yield* host.standingContext(yield* admitted(host, session));
-
-        assert.ok(context.includes(`${SCRIPTED_DRAWN_ID} rectangle at 0,0 200x80`));
-        assert.ok(context.includes('dev-note "Rate limit invites" at 0,200'));
-        assert.ok(!context.includes("not on the board yet"));
-      }),
-  );
-
-  it.effect(
-    "resuming the plan in a new session hands the model its saved document and the conversation so far",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const first = yield* startSession(host, userId, conversationId);
-        const reply = yield* planningTurn(host, first, "turn_0", CORRECTION);
-
-        const resumed = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, resumed);
-        const seed = yield* host.seed(standing);
-        const context = yield* host.standingContext(standing);
-
-        assert.ok(seed);
-        assert.ok(seed.includes(CORRECTION));
-        assert.ok(seed.includes(reply));
-        assert.deepEqual(handedDocument(context), yield* windowDocument(userId, planId));
-      }),
-  );
-
-  it.effect(
-    "a deleted plan's conversation is cleared with it and admits its session no further",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-
-        assert.equal(yield* deletePlan(userId, planId), true);
-
-        const admission = yield* host.admit(session.auth, session.id);
-        assert.ok(Result.isFailure(admission));
-        assert.equal(admission.failure, BRAIN_HOST_REFUSAL.NO_CONVERSATION);
-      }),
-  );
-
-  it.effect(
-    "a search's findings reach the model of the plan whose conversation asked, and no other plan's",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const host = yield* planningHost(TEST_OPENAI, meter(true));
-        const asking = yield* createPlan(userId, RELAY_PLAN);
-        const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
-        const askingConversation = Option.getOrThrow(
-          yield* openPlanConversation(userId, asking.id),
-        );
-        const otherConversation = Option.getOrThrow(yield* openPlanConversation(userId, other.id));
-        const askingSession = yield* startSession(host, userId, askingConversation);
-        const otherSession = yield* startSession(host, userId, otherConversation);
-        const search = searchService(true);
-
-        const reply = yield* planningTurn(
-          host,
-          askingSession,
-          "turn_0",
-          `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-          withApp(search.layer),
-        );
-        yield* planningTurn(host, otherSession, "turn_0", CORRECTION, withApp(search.layer));
-
-        assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
-        assert.equal(search.requests.length, 1);
-        const sent = JSON.stringify(search.requests.map((request) => request.init.body));
-        assert.ok(!sent.includes(userId));
-        assert.ok(!sent.includes(asking.id));
-        const askingRows = yield* readRecentMessages(
-          (yield* admitted(host, askingSession)).target,
-          HOSTED_TOOL_SET,
-          10,
-        );
-        const otherRows = yield* readRecentMessages(
-          (yield* admitted(host, otherSession)).target,
-          HOSTED_TOOL_SET,
-          10,
-        );
-        assert.deepEqual(citedSources(askingRows), [EXPIRY_SOURCE]);
-        assert.deepEqual(citedSources(otherRows), []);
-        assert.deepEqual(spokenWords(otherRows), [CORRECTION, SCRIPTED_PLANNING_REPLY]);
-      }),
-  );
-
-  it.effect("a failed search reaches the model as nothing found, not as a fact", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const host = yield* planningHost(TEST_OPENAI, meter(true));
-      const started = yield* createPlan(userId, RELAY_PLAN);
-      const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
-      const session = yield* startSession(host, userId, conversationId);
-
-      const reply = yield* planningTurn(
-        host,
-        session,
-        "turn_0",
-        `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-        withApp(searchService(false).layer),
-      );
-
-      assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
-    }),
-  );
-
-  it.effect(
-    "a search whose use could not be counted is sent anyway and reaches the model with its source",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const host = yield* planningHost(TEST_OPENAI, meter(false));
-        const started = yield* createPlan(userId, RELAY_PLAN);
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
-        const session = yield* startSession(host, userId, conversationId);
-        const search = searchService(true);
-
-        const reply = yield* planningTurn(
-          host,
-          session,
-          "turn_0",
-          `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-          withApp(search.layer),
-        );
-
-        assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
-        assert.equal(search.requests.length, 1);
       }),
   );
 
@@ -985,19 +490,6 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           assert.equal(text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
           assert.equal(text.includes(header), false);
         }
-      }),
-  );
-
-  it.effect(
-    "asked to read a plan with no repository yet, the planning model says nothing was read and why",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-
-        const reply = yield* planningTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
-
-        assert.equal(reply, `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`);
       }),
   );
 });

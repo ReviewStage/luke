@@ -6,7 +6,7 @@ import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /** What the row says while macOS refuses Luke's notifications. */
-export const NOTIFICATIONS_REFUSED_NOTE = "Notifications are off for Luke in System Settings.";
+const NOTIFICATIONS_REFUSED_NOTE = "Notifications are off for Luke in System Settings.";
 
 /**
  * Whether Luke posts a notification as a coding agent ends behind his

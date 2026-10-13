@@ -398,7 +398,7 @@ function familyRank(modelId: string): number {
  * release date, so the version in the id stands for one; models of one
  * version keep the catalog's own order between them.
  */
-export function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
+function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
   return models
     .map((model, index) => ({
       model,
@@ -949,7 +949,7 @@ export function agentRows(
 }
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */
-export const WORKING_PHASE = {
+const WORKING_PHASE = {
   /** Its session has not opened the turn that will answer the newest line. */
   STARTING: "starting",
   /** The turn is open and its model has drawn nothing yet. */

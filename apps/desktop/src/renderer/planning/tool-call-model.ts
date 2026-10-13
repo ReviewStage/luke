@@ -81,7 +81,7 @@ const ANSI_SEQUENCE = new RegExp(
 );
 
 /** The words with every terminal escape taken out. */
-export function stripAnsi(text: string): string {
+function stripAnsi(text: string): string {
   return text.replace(ANSI_SEQUENCE, "");
 }
 
@@ -89,7 +89,7 @@ export function stripAnsi(text: string): string {
 const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
 
 /** The files a patch touches, in the order its headers name them. */
-export function patchPaths(patchText: string): readonly string[] {
+function patchPaths(patchText: string): readonly string[] {
   return patchText.split("\n").flatMap((line) => {
     const match = PATCH_FILE_HEADER.exec(line.trimEnd());
     return match?.[1] === undefined ? [] : [match[1]];

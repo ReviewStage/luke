@@ -96,7 +96,7 @@ const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
  * a mint naming one the installation never granted fails whole, so these are
  * asked only of an installation that grants them all.
  */
-export const CI_READ_PERMISSIONS = { checks: "read", statuses: "read", actions: "read" } as const;
+const CI_READ_PERMISSIONS = { checks: "read", statuses: "read", actions: "read" } as const;
 
 /**
  * What the App asks of an installation token, by what the token is for:

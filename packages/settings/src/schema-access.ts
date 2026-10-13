@@ -110,7 +110,7 @@ export function accountPreferencesFromStored(
   return parseAccountPreferences(value, "stored");
 }
 
-export const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
+const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);
 

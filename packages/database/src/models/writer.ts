@@ -447,7 +447,7 @@ function turnStatusOf(status: BrainRequestStatus): TurnStatus {
 }
 
 /** The longest a failed turn's detail is kept, in characters, cut from the end here whatever its teller sent. */
-export const TURN_FAILURE_DETAIL = { CHARS: 500 } as const;
+const TURN_FAILURE_DETAIL = { CHARS: 500 } as const;
 
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
   TURN_STATUS.SETTLED,

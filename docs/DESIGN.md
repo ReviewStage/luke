@@ -100,7 +100,7 @@ light appearance in its file's `@media (prefers-color-scheme: light)` `:root`
 block, which Luke's theme drives through Electron's `nativeTheme.themeSource`,
 so a change of appearance is the stylesheet's alone: nothing re-renders, and
 the whiteboard takes it as a new theme for the canvas already mounted.
-`check-design-contract.mjs` refuses a colour literal anywhere but a `:root`
+No colour literal belongs anywhere but a `:root`
 block; a mask's black is an alpha rather than a colour, so a mask may spell it.
 Text that communicates a label, status, count, or instruction must meet WCAG
 AA contrast at its rendered size. Decorative marks and disabled controls may
@@ -125,9 +125,8 @@ glyph or words `--row-inset` from its own, so a column's words start at
 plan's tab, the side panel's first tab, the transcript, and Settings' page list
 all read down that one edge. Controls in a row stand `--control-gap` apart, a
 glyph `--glyph-gap` from its words, a column's groups `--section-gap`, and a
-page's content `--page-inset` from its column. `check-design-contract.mjs`
-refuses a pixel of padding, margin, or gap in `desktop.css`, `sign-in.css`,
-and `tooltip.css` that is not one of these; the optical exception above is marked
+page's content `--page-inset` from its column. No pixel of padding, margin, or gap in
+`desktop.css`, `sign-in.css`, and `tooltip.css` is anything but one of these; the optical exception above is marked
 `/* off-scale */` on its declaration, so a reader sees it is deliberate.
 
 The window has two buttons, both in `desktop.css`. A glyph alone is an
@@ -161,8 +160,7 @@ field holding the caret wears the same ring centred on its edge however the
 caret arrived, and a field set borderless in a well, a search's or the
 composer's, rings the well (`.field-well`). A rule that takes the ring away
 marks it `/* no ring: … */` with what shows focus instead; menus mark a row
-with its fill. `check-design-contract.mjs` refuses an unmarked one, and a ring
-drawn off the tokens.
+with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens in `desktop.css`'s
 `:root`: the `--surface-popover` ground in a `--hairline-strong` edge, the
@@ -171,8 +169,8 @@ from its edge, each row `--menu-row-height` tall with a `--menu-row-radius`
 highlight and a `--menu-glyph` glyph. The corner is the row's corner plus the
 inset, so a highlighted row follows the menu's curve. A plan's menu, a picker,
 a submenu, a crumb's tree, the find bar, a tooltip card, and the context
-popover all draw it, and `check-design-contract.mjs` refuses one
-that spends its own corner, shadow, ground, or row. The command palette is a
+popover all draw it, and none of them may
+spend its own corner, shadow, ground, or row. The command palette is a
 dialog rather than a menu, so it keeps a dialog's 14px corner and deeper
 shadow, as the confirm dialog does; its rows are a menu's. The summary card
 is a panel of the summary's own rows rather than a menu, so it keeps the 12px

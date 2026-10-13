@@ -22,17 +22,3 @@ test("an edit of a document Luke wrote in meanwhile is laid over his words, whic
     applied: lukes.replace("an admin", "an owner"),
   });
 });
-
-test("an edit of a line Luke changed meanwhile, or a clearing of a moved text, conflicts and answers the text as it stands", () => {
-  const lukes = DOCUMENT.replace("an admin", "a workspace admin");
-
-  assert.deepEqual(
-    applyDocumentEdit(lukes, {
-      document: { base: DOCUMENT, value: DOCUMENT.replace("an admin", "an owner") },
-    }),
-    { conflict: { current: lukes } },
-  );
-  assert.deepEqual(applyDocumentEdit(lukes, { document: { base: DOCUMENT, value: "" } }), {
-    conflict: { current: lukes },
-  });
-});

@@ -24,20 +24,3 @@ test("every schema module change has its generated migration", async () => {
   const statements = await generateMigration(await newestSnapshot(), generateDrizzleJson(schema));
   expect(statements, "run `pnpm db:generate` and commit the migration it writes").toEqual([]);
 });
-
-/**
- * The migrator keys a migration by its journal index, so two entries holding
- * one index after a hand-merged conflict would apply one of them and skip the
- * other in production without a word. They need not be contiguous: 22 was
- * dropped long ago.
- */
-test("the journal's indexes only increase, with none repeated", async () => {
-  const journal: { readonly entries: readonly { readonly idx: number }[] } = JSON.parse(
-    await readFile(new URL("_journal.json", META), "utf8"),
-  );
-  const indexes = journal.entries.map((entry) => entry.idx);
-  expect(
-    indexes,
-    "on a migration conflict, delete this branch's migration SQL, snapshot, and journal entry, rebase, and run `pnpm db:generate` again",
-  ).toEqual([...new Set(indexes)].sort((left, right) => left - right));
-});

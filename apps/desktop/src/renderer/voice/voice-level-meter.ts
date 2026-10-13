@@ -2,7 +2,7 @@
  * How long after the last loud frame a voice still counts as speaking, so a
  * breath between two words is not read as the turn ending.
  */
-export const VOICE_ACTIVITY_HANGOVER_MS = 220;
+const VOICE_ACTIVITY_HANGOVER_MS = 220;
 
 /** The loudness a frame must reach to count as a voice at all. */
 const VOICE_ACTIVITY_THRESHOLD = 0.12;
@@ -24,7 +24,7 @@ export function frameLevel(samples: Uint8Array): number {
  * Whether a voice is still active at `now`, given the last frame that was
  * loud enough to count. Exposed so the hangover can be tested without a clock.
  */
-export function voiceActiveAt(now: number, lastVoiceAt: number): boolean {
+function voiceActiveAt(now: number, lastVoiceAt: number): boolean {
   return now - lastVoiceAt < VOICE_ACTIVITY_HANGOVER_MS;
 }
 

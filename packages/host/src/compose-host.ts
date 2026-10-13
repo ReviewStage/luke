@@ -40,7 +40,7 @@ import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
 /** The six concerns, by the name each is built under. */
-export const HOST_CONCERN = {
+const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
@@ -49,13 +49,13 @@ export const HOST_CONCERN = {
   INTEGRATIONS: "integrations",
 } as const;
 
-export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
+type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
  * gated on it. The quit is this order reversed.
  */
-export const HOST_START_ORDER: readonly HostConcern[] = [
+const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.LIVE,

@@ -19,7 +19,7 @@ const ROUTE_EXTENSION = ".ts";
 const FUNCTION_EXTENSION = ".js";
 
 /** Every route under `server/routes/`, as its key `<dir>/<name>` with POSIX separators, sorted. */
-export async function routeKeys(routesDirectory: string): Promise<readonly string[]> {
+async function routeKeys(routesDirectory: string): Promise<readonly string[]> {
   const listing = await readdir(routesDirectory, { recursive: true });
   return listing
     .filter((path) => path.endsWith(ROUTE_EXTENSION))

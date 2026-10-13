@@ -69,7 +69,7 @@ const AGO_UNITS = [
 ] as const;
 
 /** How long ago a save was, in the shortest words: "just now", "3m ago", "2h ago", "5d ago". */
-export function agoText(at: number, now: number): string {
+function agoText(at: number, now: number): string {
   const elapsed = Math.max(0, now - at);
   const unit = AGO_UNITS.find(([span]) => elapsed >= span);
   return unit === undefined ? "just now" : `${Math.floor(elapsed / unit[0])}${unit[1]} ago`;
@@ -102,7 +102,7 @@ function editorOf(edit: PlanLastEdit): string | undefined {
 }
 
 /** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
-export function editedLine(edit: PlanLastEdit, now: number): string {
+function editedLine(edit: PlanLastEdit, now: number): string {
   const editor = editorOf(edit);
   const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
   const call = edit.duringCall ? " during your call" : "";

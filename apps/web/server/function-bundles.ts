@@ -15,14 +15,6 @@ import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./func
  * what Vercel's builder traces from `apps/web/node_modules`, and everything
  * else that resolves external is a dependency a bundled package reaches that
  * this app never declared.
- *
- * The externals are also where an import edge shows itself. A package this
- * app declares but no function should load — the eve package, whose door
- * and host run in eve's own service — appears in a bundle's externals the
- * moment a shared module gains a value import that reaches it, and esbuild
- * follows a value import where it would erase a type one. That is how one
- * import took every function down at once, so `bundlesReaching` is what the
- * test asserts over, before any deploy.
  */
 
 const FUNCTION_BUNDLE_TARGET = "node24";
@@ -49,16 +41,6 @@ export const INLINE_EXCEPTION = {
   PG_NATIVE: "pg-native",
   BUFFERUTIL: "bufferutil",
   UTF8_VALIDATE: "utf-8-validate",
-} as const;
-
-/**
- * The declared dependencies no function bundle may load at all: each runs in
- * a service of its own, and a bundle reaching one loads a graph the function
- * never calls. A second entry here is a second package with that property,
- * and the eve-specific guard runs over every entry.
- */
-export const FORBIDDEN_FUNCTION_EXTERNALS = {
-  EVE: "eve",
 } as const;
 
 /** Where the expected external set of every bundle is committed, compared as data. */
@@ -181,31 +163,6 @@ type MetafileImport = Metafile["inputs"][string]["imports"][number];
 /** The specifier a module wrote, whether esbuild inlined what it resolved to or left it external. */
 function importSpecifier(imported: MetafileImport): string {
   return imported.original ?? imported.path;
-}
-
-/**
- * The output bundles whose graph imports the named package, as the metafile's
- * output paths, sorted. Read from the inputs' own import specifiers rather
- * than from the bundle's externals, so an import that esbuild inlined counts
- * exactly as one it left external: under inline-first bundling a reached
- * package appears in a bundle's inputs and never in its externals, and a
- * guard over externals alone would pass while the package rode along.
- */
-export function bundlesReaching(metafile: Metafile, packageName: string): readonly string[] {
-  return Object.entries(metafile.outputs)
-    .filter(
-      ([, output]) =>
-        Object.keys(output.inputs).some((inputPath) =>
-          metafile.inputs[inputPath]?.imports.some(
-            (imported) => packageNameOf(importSpecifier(imported)) === packageName,
-          ),
-        ) ||
-        output.imports.some(
-          (imported) => imported.external && packageNameOf(imported.path) === packageName,
-        ),
-    )
-    .map(([path]) => path)
-    .sort();
 }
 
 /** The bundle's file under `dist-functions/`, POSIX-separated, whatever the metafile's output path was relative to. */

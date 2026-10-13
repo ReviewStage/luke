@@ -14,14 +14,14 @@ import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/m
  * stays on the plain path. Gain and noise handling are Chromium's own
  * in-process passes and touch nothing but this stream.
  */
-export const MICROPHONE_PROCESSING = {
+const MICROPHONE_PROCESSING = {
   autoGainControl: true,
   echoCancellation: false,
   noiseSuppression: true,
 } as const;
 
 /** The parts of an enumerated media device the choice reads. */
-export interface EnumeratedMicrophone {
+interface EnumeratedMicrophone {
   kind: string;
   label: string;
   deviceId: string;
@@ -40,7 +40,7 @@ export interface EnumeratedMicrophone {
  * and answers `unknown`, which counts as open — an iMac's microphone has
  * nothing to be shut under.
  */
-export function preferredBuiltInLabel(route: MicrophoneRoute | undefined): string | undefined {
+function preferredBuiltInLabel(route: MicrophoneRoute | undefined): string | undefined {
   if (!route?.builtInName) return undefined;
   if (route.defaultTransport !== MICROPHONE_TRANSPORT.BLUETOOTH) return undefined;
   if (route.lid === LID_STATE.SHUT) return undefined;
@@ -54,7 +54,7 @@ export function preferredBuiltInLabel(route: MicrophoneRoute | undefined): strin
  * browser's label for it, which is what lets a fact read natively choose
  * among devices the web API names only by string.
  */
-export function microphoneConstraints(
+function microphoneConstraints(
   route: MicrophoneRoute | undefined,
   devices: readonly EnumeratedMicrophone[],
 ): MediaTrackConstraints {

@@ -57,14 +57,14 @@ async function refusalMessageOf(response: Response): Promise<string> {
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 
 /** The session id a route names, or nothing for the routes that name none. */
-export function sessionIdOf(request: Request): string | undefined {
+function sessionIdOf(request: Request): string | undefined {
   const match = SESSION_ROUTE.exec(new URL(request.url).pathname);
   const id = match?.[1];
   return id ? decodeURIComponent(id) : undefined;
 }
 
 /** Whether the route opens a session, the one route that dispatches a run before any record names it. */
-export function opensSession(request: Request): boolean {
+function opensSession(request: Request): boolean {
   return request.method === "POST" && OPEN_ROUTE.test(new URL(request.url).pathname);
 }
 

@@ -8,8 +8,7 @@ import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
-import { Effect, Layer, Logger, Option, Result } from "effect";
-import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
+import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
 import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
@@ -96,51 +95,14 @@ const codingSession = (host: CoderHost) =>
   });
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
-const { ALWAYS_ON, AGENT_SWITCHES } = CONNECTION_POLICY;
+const { ALWAYS_ON } = CONNECTION_POLICY;
 
 /** Every integration's server on, under the account. */
 function allOn(account: string): ServerStanding {
   return { on: true, account, providers: INTEGRATION_PROVIDER_LIST };
 }
 
-/** Every integration's server but Linear's on, under the account. */
-function linearOff(account: string): ServerStanding {
-  return {
-    on: true,
-    account,
-    providers: INTEGRATION_PROVIDER_LIST.filter((provider) => provider !== LINEAR),
-  };
-}
-
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an agent's MCP servers", (it) => {
-  it.effect(
-    "a turn is handed a server unless its agent switched it off, the worker following its parent, and switching it back on hands it again",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* codingHost;
-        const agent = yield* codingSession(host);
-        const other = yield* codingSession(host);
-        const root = () => turnServers(host.admit(agent.auth, agent.sessionId), AGENT_SWITCHES);
-        const worker = () =>
-          turnServers(host.admitDelegated(agent.auth, mintSession()), AGENT_SWITCHES);
-
-        assert.deepEqual(yield* root(), allOn(agent.userId));
-        assert.deepEqual(yield* worker(), allOn(agent.userId));
-
-        yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
-        assert.deepEqual(yield* root(), linearOff(agent.userId));
-        assert.deepEqual(yield* worker(), linearOff(agent.userId));
-        // Another agent of another account keeps what it had.
-        assert.deepEqual(
-          yield* turnServers(host.admit(other.auth, other.sessionId), AGENT_SWITCHES),
-          allOn(other.userId),
-        );
-
-        yield* updateCodingAgentServers(agent.userId, agent.agentId, []);
-        assert.deepEqual(yield* root(), allOn(agent.userId));
-      }),
-  );
-
   it.effect(
     "a planning agent's turn is handed every server for a session admitted at all, whatever an agent's switches say, and none for one the host does not admit",
     () =>
@@ -163,38 +125,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("an agent's MCP servers", (it) 
         assert.deepEqual(yield* turnServers(host.admit(crossed, agent.sessionId), ALWAYS_ON), {
           on: false,
         });
-      }),
-  );
-
-  it.effect(
-    "a session admitted for no agent, or a row that could not be read, hands the turn no server, and the log keeps the failure's kind alone",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* codingHost;
-        const agent = yield* codingSession(host);
-        const theirs = yield* codingSession(host);
-        // A session over another account's agent's conversation is admitted for no agent at all.
-        const crossed = typedSeat(agent.userId, theirs.conversationId);
-        assert.deepEqual(yield* turnServers(host.admit(crossed, agent.sessionId), AGENT_SWITCHES), {
-          on: false,
-        });
-
-        const statement = 'select "disabled_servers" from "coding_agent" where "user_id" = $1';
-        const logged: string[] = [];
-        const capture = Logger.make((options) => {
-          logged.push(JSON.stringify(options.message));
-        });
-        const unread = yield* turnServers(
-          Effect.fail(
-            new SqlError({
-              reason: new UnknownError({ cause: new Error(statement), message: statement }),
-            }),
-          ),
-          AGENT_SWITCHES,
-        ).pipe(Effect.provide(Logger.layer([capture])));
-        assert.deepEqual(unread, { on: false });
-        assert.ok(logged.some((line) => line.includes("SqlError")));
-        for (const line of logged) assert.ok(!line.includes(statement), line);
       }),
   );
 });

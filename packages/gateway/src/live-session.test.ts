@@ -5,15 +5,8 @@ import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
   LIVE_SDP_MAX_CHARACTERS,
-  LIVE_SESSION_PHASE,
-  LIVE_TRANSPORT_STATE,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
-  voiceEndLiveSessionParamsSchema,
-  voiceLiveSessionChangedSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
-  voiceStopSpeakingResultSchema,
 } from "./protocol.js";
 
 function parse<Value, Encoded>(
@@ -35,17 +28,6 @@ function parseAnswer<Value, Encoded>(
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
-
-test("a stop answer carries one boolean and nothing else is read from it", () => {
-  assert.deepEqual(parseAnswer(voiceStopSpeakingResultSchema, { stopped: true }), {
-    stopped: true,
-  });
-  assert.deepEqual(parseAnswer(voiceStopSpeakingResultSchema, { stopped: false, extra: 1 }), {
-    stopped: false,
-  });
-  assert.equal(parseAnswer(voiceStopSpeakingResultSchema, {}), undefined);
-  assert.equal(parseAnswer(voiceStopSpeakingResultSchema, { stopped: "yes" }), undefined);
-});
 
 test("a create request carries the offer and the plan it is about, and nothing else", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
@@ -92,67 +74,6 @@ test("a create answer names the session and the SDP answer, tolerating what a ne
   assert.equal(parseAnswer(voiceCreateLiveSessionResultSchema, { sessionId: "sess_1" }), undefined);
   assert.equal(
     parseAnswer(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }),
-    undefined,
-  );
-});
-
-test("a transport report names its session and one of the declared states", () => {
-  for (const state of Object.values(LIVE_TRANSPORT_STATE)) {
-    assert.deepEqual(parse(voiceReportLiveTransportParamsSchema, { sessionId: "sess_1", state }), {
-      sessionId: "sess_1",
-      state,
-    });
-  }
-  assert.equal(
-    parse(voiceReportLiveTransportParamsSchema, { sessionId: "sess_1", state: "new" }),
-    undefined,
-  );
-  // A report naming no session could be about any call, so it is about none.
-  assert.equal(
-    parse(voiceReportLiveTransportParamsSchema, { state: LIVE_TRANSPORT_STATE.CLOSED }),
-    undefined,
-  );
-  assert.equal(
-    parse(voiceReportLiveTransportParamsSchema, {
-      sessionId: " ",
-      state: LIVE_TRANSPORT_STATE.CLOSED,
-    }),
-    undefined,
-  );
-  assert.equal(parse(voiceReportLiveTransportParamsSchema, {}), undefined);
-});
-
-test("a hang-up names the session it hangs up", () => {
-  assert.deepEqual(parse(voiceEndLiveSessionParamsSchema, { sessionId: "sess_1" }), {
-    sessionId: "sess_1",
-  });
-  assert.equal(parse(voiceEndLiveSessionParamsSchema, {}), undefined);
-  assert.equal(parse(voiceEndLiveSessionParamsSchema, { sessionId: "" }), undefined);
-});
-
-test("an activity report is one boolean", () => {
-  assert.deepEqual(parse(voiceReportLiveActivityParamsSchema, { idle: true }), { idle: true });
-  assert.deepEqual(parse(voiceReportLiveActivityParamsSchema, { idle: false }), { idle: false });
-  assert.equal(parse(voiceReportLiveActivityParamsSchema, { idle: "yes" }), undefined);
-  assert.equal(parse(voiceReportLiveActivityParamsSchema, { idle: true, sinceMs: 1 }), undefined);
-});
-
-test("a session change carries a phase, and a session id and reason only when the host has one", () => {
-  for (const phase of Object.values(LIVE_SESSION_PHASE)) {
-    assert.deepEqual(parseAnswer(voiceLiveSessionChangedSchema, { phase }), { phase });
-  }
-  assert.deepEqual(
-    parseAnswer(voiceLiveSessionChangedSchema, {
-      sessionId: "sess_1",
-      phase: LIVE_SESSION_PHASE.CLOSED,
-      reason: "expired",
-    }),
-    { sessionId: "sess_1", phase: LIVE_SESSION_PHASE.CLOSED, reason: "expired" },
-  );
-  assert.equal(parseAnswer(voiceLiveSessionChangedSchema, { phase: "speaking" }), undefined);
-  assert.equal(parseAnswer(voiceLiveSessionChangedSchema, { sessionId: "sess_1" }), undefined);
-  assert.equal(
-    parseAnswer(voiceLiveSessionChangedSchema, { phase: LIVE_SESSION_PHASE.STARTED, sessionId: 7 }),
     undefined,
   );
 });

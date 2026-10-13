@@ -63,7 +63,7 @@ type JournalParts = StoredUIMessage["parts"];
  * it ran leave the journal with the rest of its words, so its end can no
  * longer be counted from what the journal still holds.
  */
-export const UNANSWERED_TURN_END_SEQ = Number.MAX_SAFE_INTEGER;
+const UNANSWERED_TURN_END_SEQ = Number.MAX_SAFE_INTEGER;
 
 type JournalPart = JournalParts[number];
 

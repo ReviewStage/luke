@@ -78,7 +78,7 @@ import { listMcpTools, type McpTool } from "./hosted/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
-export const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
+const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
 
 /** The paths the group answers, as the rewrites hand them to it. */
 const INTEGRATIONS_PATH = {
@@ -95,7 +95,7 @@ const INTEGRATIONS_PATH = {
 } as const;
 
 /** How long a provider's tools stay read for an account before the next ask reads the server again. */
-export const INTEGRATION_TOOLS_TTL_MS = 5 * 60 * 1000;
+const INTEGRATION_TOOLS_TTL_MS = 5 * 60 * 1000;
 
 /** One provider's tools as read for an account, when, and under which grant: a sign-in completed since names another. */
 interface ToolsRead {

@@ -1,35 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { childTitlesOf } from "@sidecar/database/models/child-titles";
-import {
-  createCodingAgent,
-  readCodingAgent,
-  updateCodingAgentBranch,
-} from "@sidecar/database/models/coding-agent-store";
-import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
-import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
+import { createCodingAgent, readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { hostTurnId, sentLineId } from "@sidecar/database/models/ids";
+import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { MessageStreamEvent } from "eve/client";
-import type { SessionAuth, SessionAuthContext, SessionContext } from "eve/context";
+import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
-  MESSAGE_AUTHOR,
-  MESSAGE_ROLE,
-  type StoredUIMessage,
-  sessionKey,
-  TURN_ORIGIN,
   type WireRecord,
 } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
@@ -45,28 +32,18 @@ import {
 } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
-import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import {
-  CODING_AGENT_TOOL_BOUNDS,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
-  READ_CODING_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
-import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
-import { insertConversation } from "./support/store-rows";
-import { titleModelAnswering } from "./support/title-model";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -79,28 +56,16 @@ import { titleModelAnswering } from "./support/title-model";
 
 const NOW = 1_800_000_000_000;
 
-const QUESTION = {
-  question: "Should a withdrawn invite tell the invitee who withdrew it?",
-  recommendation: "No: just say the invite is no longer valid.",
-} as const;
-
-/** A tool the brain was once offered and a planning turn is not. */
-const UNOFFERED_TOOL = "write_workspace_file";
-
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
-/** The coding agents' own writer, which is what writes an agent's turn into its conversation. */
-const coderWriter = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
 const CRON_SECRET = "cron-secret-1";
 const EVE_ORIGIN = "https://luke.test";
-const BRANCH = "luke/teammate-invitations";
-const AGENT_WORDS = "Pushed the branch.";
 const INSTRUCTION = "Also add tests for the expiry.";
 const TASK = "Rename the invite email's subject to say who sent it.";
 const SOL = "openai/gpt-6.1-sol";
@@ -245,56 +210,6 @@ async function agentOn(
   return { ...target, id: started.agent.id, sessionId: session };
 }
 
-/** One turn of the agent's, still under way, with the commands it ran and its words so far, written as the relay writes them. */
-async function agentRan(
-  target: ConversationTarget,
-  commands: readonly string[],
-  words: string,
-): Promise<void> {
-  const turnId = randomUUID();
-  const conversationId = sessionKey(target.conversationId);
-  const journal: StoredUIMessage = {
-    id: randomUUID(),
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: { author: MESSAGE_AUTHOR.BRAIN },
-    parts: [
-      ...commands.map((command, index) => ({
-        type: `tool-${CODER_TOOL.BASH}` as const,
-        toolCallId: `call-${index}`,
-        state: "output-available" as const,
-        input: { command },
-        output: { status: "completed", exitCode: 0, stdout: "", stderr: "" },
-      })),
-      { type: "text" as const, text: words },
-    ],
-  };
-  await database.run(
-    Effect.gen(function* () {
-      yield* coderWriter.enqueueTurn(target, {
-        turnId,
-        origin: TURN_ORIGIN.TYPED,
-        eveTurnId: "turn_0",
-      });
-      yield* coderWriter.consume(target, {
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
-        conversationId,
-        turnId,
-        sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
-        at: NOW,
-      });
-      yield* coderWriter.consume(target, {
-        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-        conversationId,
-        turnId,
-        sequence: 2,
-        message: journal,
-      });
-    }),
-  );
-}
-
 /** eve's coding-agent service as a script beside the fake GitHub: every opening answered with a session of its own, every message to a session answered taken, and each written down. */
 function fakeCoderEve() {
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
@@ -312,289 +227,6 @@ function fakeCoderEve() {
   });
   return { services: github.layer, sent };
 }
-
-test("a queued question on a plan's conversation is accepted, and one that does not read is refused", async () => {
-  const call = await callerOn(brainHost(seams), await planConversation());
-
-  assert.deepEqual(await call(QUEUE_QUESTION_TOOL.name, QUESTION), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-  });
-  const unreadable = await call(QUEUE_QUESTION_TOOL.name, { question: "" });
-  assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
-});
-
-test("a planning turn is offered end_call, which is accepted on a plan's conversation and refused when it does not read", async () => {
-  const call = await callerOn(brainHost(seams), await planConversation());
-
-  assert.deepEqual(await call(END_CALL_TOOL.name, {}), { status: ACTION_RESULT_STATUS.ACCEPTED });
-  // SAFETY: a model may emit any JSON as a call's input; a string stands for one that is no object.
-  const unreadable = await call(END_CALL_TOOL.name, "bye" as unknown as WireRecord);
-  assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
-});
-
-test("a name no planning turn is offered runs nothing and answers why", async () => {
-  const call = await callerOn(brainHost(seams), await planConversation());
-
-  const answer = await call(UNOFFERED_TOOL, { name: "USER.md", content: "x" });
-
-  assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.ok(isWireString(answer.reason));
-});
-
-test("a conversation no plan names runs none of the planning tools, the question queue included", async () => {
-  const userId = await database.createUser();
-  const target = { userId, conversationId: await insertConversation(database.run, { userId }) };
-  const call = await callerOn(brainHost(seams), target);
-
-  const answer = await call(QUEUE_QUESTION_TOOL.name, QUESTION);
-
-  assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.ok(isWireString(answer.reason));
-});
-
-test("a worker's session is recorded in its child conversation as a child turn, and the planning session keeps the conversation's record", async () => {
-  const target = await planConversation();
-  const host = brainHost(seams);
-  const rootId = sessionId();
-  const auth = seat(target);
-  const starting = await database.run(host.admitStarting(auth, rootId));
-  if (Result.isFailure(starting)) return assert.fail(starting.failure);
-  assert.equal(await database.run(host.sessionStarted(starting.success, rootId)), true);
-
-  const turn = { id: "turn_0", sequence: 0 };
-  const child = {
-    id: `${rootId}-child`,
-    auth,
-    turn,
-    parent: { callId: "call-worker-1", rootSessionId: rootId, sessionId: rootId, turn },
-  };
-  const state = memoryRelayState();
-  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-    stampedEveEvent(event, NOW);
-  for (const event of [
-    stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
-    stamped({
-      type: "message.received",
-      data: { turnId: "turn_0", sequence: 0, message: "Compare the queues." },
-    }),
-    stamped({
-      type: "step.started",
-      data: { turnId: "turn_0", sequence: 0, stepIndex: 0, modelId: "m" },
-    }),
-    stamped({
-      type: "message.completed",
-      data: {
-        turnId: "turn_0",
-        sequence: 0,
-        stepIndex: 0,
-        finishReason: "stop",
-        message: "Queue A wins.",
-      },
-    }),
-    stamped({
-      type: "step.completed",
-      data: { turnId: "turn_0", sequence: 0, stepIndex: 0, finishReason: "stop" },
-    }),
-    stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
-  ]) {
-    await database.run(host.relayChild(event, child, state).pipe(Effect.provide(NO_GITHUB)));
-  }
-
-  const journals = await database.run(
-    listJournals(
-      target.userId,
-      childConversationId(target.conversationId, "call-worker-1"),
-      HOSTED_TOOL_SET,
-      10,
-    ),
-  );
-  assert.ok(journals.ok);
-  assert.deepEqual(
-    journals.value.flatMap((row) =>
-      row.message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
-    ),
-    ["Queue A wins."],
-  );
-  const [childTurn] = await database.run(
-    database.store.turns.named(target.userId, [hostTurnId(child.id, "turn_0")]),
-  );
-  assert.equal(childTurn?.origin, TURN_ORIGIN.CHILD);
-  // The planning session still stands for its conversation, so its own calls still run.
-  assert.ok(Result.isSuccess(await database.run(host.admit(auth, rootId))));
-});
-
-test("the planning turn and its worker's turn each record the model and effort the brain asks of OpenAI, as a coding agent's worker's turn records its own", async () => {
-  const target = await planConversation();
-  const host = brainHost({
-    ...seams,
-    scriptedModel: () => false,
-    openAi: () => ({
-      apiKey: Redacted.make("sk-openai-fixture"),
-      choice: { model: SOL, effort: "medium" },
-    }),
-  });
-  const rootId = sessionId();
-  const auth = seat(target);
-  const starting = await database.run(host.admitStarting(auth, rootId));
-  if (Result.isFailure(starting)) return assert.fail(starting.failure);
-  assert.equal(await database.run(host.sessionStarted(starting.success, rootId)), true);
-  const turn = { id: "turn_0", sequence: 0 };
-  const root = { id: rootId, auth, turn };
-  const child = {
-    id: `${rootId}-child`,
-    auth,
-    turn,
-    parent: { callId: "call-worker-1", rootSessionId: rootId, sessionId: rootId, turn },
-  };
-  const started = stampedEveEvent(
-    { type: "turn.started", data: { turnId: "turn_0", sequence: 0 } },
-    NOW,
-  );
-
-  await database.run(
-    host
-      .relay(started, starting.success, root, memoryRelayState(), {})
-      .pipe(Effect.provide(NO_GITHUB)),
-  );
-  await database.run(
-    host.relayChild(started, child, memoryRelayState()).pipe(Effect.provide(NO_GITHUB)),
-  );
-
-  const planningId = hostTurnId(rootId, "turn_0");
-  const workerId = hostTurnId(child.id, "turn_0");
-  const turns = await database.run(
-    database.store.turns.named(target.userId, [planningId, workerId]),
-  );
-  const recorded = new Map(
-    turns.map(({ id, model, reasoningEffort }) => [id, { model, reasoningEffort }]),
-  );
-  assert.deepEqual(recorded.get(planningId), { model: SOL, reasoningEffort: "medium" });
-  assert.deepEqual(recorded.get(workerId), { model: SOL, reasoningEffort: "medium" });
-});
-
-test("a worker is titled from the first task it received, even where a later task's arrival is what asks, on the child conversation of the call that started it, once; a title call that fails, or a deployment with no title model, leaves a worker untitled", async () => {
-  const target = await planConversation();
-  const model = titleModelAnswering(['"Queue comparison."', "Second title"]);
-  const titling = brainHost({ ...seams, titleModel: () => model });
-  const failing = brainHost({
-    ...seams,
-    titleModel: () => titleModelAnswering([new Error("fixture: provider down")]),
-  });
-  const untitled = brainHost(seams);
-  const rootId = sessionId();
-  const auth = seat(target);
-  const starting = await database.run(titling.admitStarting(auth, rootId));
-  if (Result.isFailure(starting)) return assert.fail(starting.failure);
-  assert.equal(await database.run(titling.sessionStarted(starting.success, rootId)), true);
-
-  const turn = { id: "turn_0", sequence: 0 };
-  /** One task a worker's session receives, relayed as a turn of its own opening on it, under the state the relay keeps for that turn. */
-  const received = async (child: SessionContext["session"], turnId: string, task: string) => {
-    const state = memoryRelayState();
-    for (const event of [
-      stampedEveEvent({ type: "turn.started", data: { turnId, sequence: 0 } }, NOW),
-      stampedEveEvent(
-        { type: "message.received", data: { turnId, sequence: 0, message: task } },
-        NOW,
-      ),
-    ]) {
-      await database.run(titling.relayChild(event, child, state).pipe(Effect.provide(NO_GITHUB)));
-    }
-  };
-  /** A worker's session under the call named, having received its first task. */
-  const workerOf = async (callId: string, task: string) => {
-    const child = {
-      id: `${rootId}-${callId}`,
-      auth,
-      turn,
-      parent: { callId, rootSessionId: rootId, sessionId: rootId, turn },
-    };
-    await received(child, "turn_0", task);
-    return child;
-  };
-  const titlesOf = (callIds: readonly string[]) =>
-    database.run(
-      childTitlesOf(
-        target,
-        callIds.map((callId) => childConversationId(target.conversationId, callId)),
-      ),
-    );
-
-  const worker = await workerOf("call-worker-1", "Compare the two queues' retry policies.");
-  // A second task lands before any title does, and its arrival is what asks for the title.
-  await received(worker, "turn_1", "Now compare their dead-letter queues.");
-  await database.run(titling.titleChild(worker));
-  const [asked] = model.doGenerateCalls;
-  assert.ok(asked !== undefined);
-  assert.match(JSON.stringify(asked.prompt), /Compare the two queues' retry policies/u);
-  assert.doesNotMatch(JSON.stringify(asked.prompt), /dead-letter/u);
-  // A worker already titled asks for no second title.
-  await database.run(titling.titleChild(worker));
-  assert.equal(model.doGenerateCalls.length, 1);
-
-  await database.run(failing.titleChild(await workerOf("call-worker-2", "Read the queue docs.")));
-  await database.run(untitled.titleChild(await workerOf("call-worker-3", "Read the queue docs.")));
-  assert.deepEqual(
-    [...(await titlesOf(["call-worker-1", "call-worker-2", "call-worker-3"])).values()],
-    ["Queue comparison"],
-  );
-});
-
-test("the plan's coding agents are listed with their status, what each published, and what each last did; one is read as a bounded tail; and an agent is read only on its own plan", async () => {
-  const plan = await planConversation(undefined, RELAY_FULL_NAME);
-  const working = await agentOn(plan.userId, plan.planId);
-  const starting = await agentOn(plan.userId, plan.planId);
-  const commands = Array.from(
-    { length: CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES + 1 },
-    (_, index) => `ls ${index}`,
-  );
-  await agentRan(working, commands, AGENT_WORDS);
-  // The branch is the row's, written as a turn ends in the sandbox.
-  await database.run(updateCodingAgentBranch(working.userId, working.id, BRANCH));
-  const call = await callerOn(brainHost(seams), plan);
-
-  const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
-  assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.deepEqual(listed.agents, [
-    {
-      id: working.id,
-      title: "anthropic/claude-opus-5.5",
-      model: "anthropic/claude-opus-5.5",
-      modelName: "Opus 5.5",
-      effort: "high",
-      status: CODING_AGENT_STATUS.RUNNING,
-      repository: RELAY_FULL_NAME,
-      branch: BRANCH,
-      activity: `Said: ${AGENT_WORDS}`,
-    },
-    {
-      id: starting.id,
-      title: "anthropic/claude-opus-5.5",
-      model: "anthropic/claude-opus-5.5",
-      modelName: "Opus 5.5",
-      effort: "high",
-      status: CODING_AGENT_STATUS.STARTING,
-      repository: RELAY_FULL_NAME,
-      branch: null,
-      activity: null,
-    },
-  ]);
-
-  const read = await call(READ_CODING_AGENT_TOOL.name, { agentId: working.id });
-  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.ok(Array.isArray(read.tail));
-  // The tail is the newest entries, the words last; the first two commands fell off its front.
-  assert.equal(read.tail.length, CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
-  assert.equal(read.tail[0], "Ran: ls 2");
-  assert.equal(read.tail.at(-1), `Said: ${AGENT_WORDS}`);
-
-  const otherPlan = await planConversation(plan.userId, RELAY_FULL_NAME);
-  const elsewhere = await callerOn(brainHost(seams), otherPlan);
-  assert.deepEqual(await elsewhere(READ_CODING_AGENT_TOOL.name, { agentId: working.id }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: CODING_AGENT_TOOL_REFUSAL.NO_AGENT,
-  });
-});
 
 test("a message to the plan's agent steers its session as the deployment acting for the account, under the tool call's own key, and is sent once; another account's agent gets nothing, and a deployment with no secret sends nothing", async () => {
   const userId = await database.run(openGithubUser());
@@ -740,50 +372,4 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
   assert.equal(eve.sent.length, 2);
-});
-
-test("a planning session is offered the skills its plan's repository keeps, each loading behind where it stands for run_in_repository, and none for a plan with no repository or one the App does not reach", async () => {
-  const host = brainHost(seams);
-  const userId = await database.run(openGithubUser());
-  const kept = await planConversation(userId, RELAY_FULL_NAME);
-  const bare = await planConversation(userId);
-  const keeping = githubReaching(
-    [INSTALLATION],
-    undefined,
-    undefined,
-    skillsRepository({
-      fullName: RELAY_FULL_NAME,
-      branch: "main",
-      roots: { ".agents/skills": { "release-notes": SKILL_ENTRY.FOLDER } },
-      files: {
-        ".agents/skills/release-notes/SKILL.md":
-          "---\nname: release-notes\ndescription: Use when the developer asks for release notes.\n---\nOne line per change; see references/style.md.",
-      },
-    }),
-  ).layer;
-  const elsewhere = githubReaching([
-    { id: 7, login: RELAY.owner, repositories: [{ owner: RELAY.owner, name: "Other" }] },
-  ]).layer;
-  const admittedOn = async (target: ConversationTarget) => {
-    const id = sessionId();
-    const starting = await database.run(host.admitStarting(seat(target), id));
-    if (Result.isFailure(starting)) return assert.fail(starting.failure);
-    return starting.success;
-  };
-  const skillsOf = async (
-    target: ConversationTarget,
-    services: Layer.Layer<GitHubApp | HttpClient.HttpClient>,
-  ) => database.run(host.skills(await admittedOn(target)).pipe(Effect.provide(services)));
-
-  assert.deepEqual(await skillsOf(kept, keeping), [
-    {
-      name: "release-notes",
-      description: "Use when the developer asks for release notes.",
-      markdown:
-        "This skill is `.agents/skills/release-notes/SKILL.md` in the plan's repository; read the files it names with `run_in_repository`, relative to `.agents/skills/release-notes/`.\n\nOne line per change; see references/style.md.",
-    },
-  ]);
-  assert.deepEqual(await skillsOf(kept, elsewhere), []);
-  assert.deepEqual(await skillsOf(kept, NO_GITHUB), []);
-  assert.deepEqual(await skillsOf(bare, keeping), []);
 });

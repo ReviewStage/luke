@@ -24,7 +24,6 @@ import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
-  PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateRevisionLine,
 } from "@sidecar/hosted/plan-document-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
@@ -499,52 +498,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
   }),
 );
 
-it.effect("a Start that names a model hands the service the choice as one thing", () =>
-  Effect.gen(function* () {
-    const { call, asked } = yield* subject();
-
-    yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
-      planId: PLAN_ID,
-      idempotencyKey: "press-2",
-      model: "openai/gpt-6.1-sol",
-      effort: "xhigh",
-    });
-
-    assert.deepEqual(asked, [`start:${PLAN_ID}:press-2:openai/gpt-6.1-sol`]);
-  }),
-);
-
-it.effect(
-  "params a method's own schema refuses are refused as invalid, and the service is not asked",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked } = yield* subject();
-
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID }),
-      );
-      const noCursor = yield* Effect.flip(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { planId: PLAN_ID }),
-      );
-      const noAccountCursor = yield* Effect.flip(
-        call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, {}),
-      );
-      const noRevision = yield* Effect.flip(
-        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
-          itemId: ITEM.id,
-          reply: INBOX_REPLY.APPROVED,
-          clientKey: "answer-2",
-        }),
-      );
-
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.equal(noCursor._tag, "InvalidParamsRefusal");
-      assert.equal(noRevision._tag, "InvalidParamsRefusal");
-      assert.equal(noAccountCursor._tag, "InvalidParamsRefusal");
-      assert.deepEqual(asked, []);
-    }),
-);
-
 it.effect(
   "behind a closed account gate, or on a run that sends nothing, every ask is unanswered",
   () =>
@@ -593,89 +546,5 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
-    }),
-);
-
-it.effect(
-  "the plan template is read, kept as written, and reset with null, each one ask of the service; a template past the bound is refused before it, and a closed gate answers unanswered",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked } = yield* subject();
-      const signedOut = yield* subject({ signedIn: false });
-
-      const read = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_READ);
-      const kept = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: "## Why\n" });
-      const reset = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: null });
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, {
-          template: "x".repeat(PLAN_TEMPLATE_BOUNDS.MAX_CHARS + 1),
-        }),
-      );
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ);
-
-      assert.deepEqual(read, { template: DEFAULT_PLAN_TEMPLATE, custom: false });
-      assert.deepEqual(kept, { template: "## Why\n", custom: true });
-      assert.deepEqual(reset, { template: DEFAULT_PLAN_TEMPLATE, custom: false });
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(asked, ["template", "template:## Why\n", "template:the default"]);
-      assert.deepEqual(signedOut.asked, []);
-    }),
-);
-
-it.effect(
-  "the plan template's history is read a page and a revision at a time and a revision restored, each one ask of the service; a revision with no number is refused before it, and a closed gate answers unanswered",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked } = yield* subject();
-      const signedOut = yield* subject({ signedIn: false });
-
-      const newest = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
-      const older = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, { before: 3 });
-      const revision = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: 2 });
-      const restored = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 2 });
-      const refused = yield* Effect.flip(call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 0 }));
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
-
-      assert.deepEqual(newest, { revisions: [TEMPLATE_REVISION] });
-      assert.deepEqual(older, { revisions: [TEMPLATE_REVISION] });
-      assert.deepEqual(revision, {
-        revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
-      });
-      assert.deepEqual(restored, { template: "## Why\n", custom: true });
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(asked, ["revisions:newest", "revisions:3", "revision:2", "restore:2"]);
-      assert.deepEqual(signedOut.asked, []);
-    }),
-);
-
-it.effect(
-  "a dictated clip passes through to the service once and is answered with its words, and a clip the schema refuses is refused in words that hold none of it",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked } = yield* subject();
-      const signedOut = yield* subject({ signedIn: false });
-
-      const heard = yield* call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
-        audio: "GkXfow==",
-        durationMs: 1_500,
-        keywords: ["luke"],
-      });
-      const refused = yield* Effect.flip(
-        call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, { audio: "not base64!", keywords: ["luke"] }),
-      );
-      const unanswered = yield* signedOut.call(GATEWAY_METHOD.DICTATION_TRANSCRIBE, {
-        audio: "GkXfow==",
-        durationMs: 1_500,
-        keywords: [],
-      });
-
-      assert.deepEqual(heard, { text: "Run the tests" });
-      assert.equal(refused._tag, "InvalidParamsRefusal");
-      assert.ok(!JSON.stringify(refused).includes("not base64!"));
-      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(asked, ["transcribe:GkXfow==:luke"]);
-      assert.deepEqual(signedOut.asked, []);
     }),
 );

@@ -133,7 +133,6 @@ export function DocumentBlock({
   });
   return (
     // biome-ignore lint/a11y/useSemanticElements: a block holds a section's words, not a form's controls, so it is no `<fieldset>`.
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: a block is selected by the keyboard and edited with Return, as a document editor's blocks are.
     <div
       ref={block}
       className={DOCUMENT_BLOCK_CLASS}
@@ -284,7 +283,6 @@ export function EditableTitle({
   }, []);
   return (
     // biome-ignore lint/a11y/useSemanticElements: the title's block holds its words, not a form's controls, so it is no `<fieldset>`.
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: the title is a block the keyboard selects, as the sections are.
     <div
       ref={block}
       className={`plan-title-block ${DOCUMENT_BLOCK_CLASS}`}

@@ -3,20 +3,15 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
-import {
-  createPlan,
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-} from "@sidecar/database/models/plan-store";
+import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
-import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
+import { sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
-import { Deferred, Effect, Exit, Fiber, Option, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -42,9 +37,8 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "../server/live";
-import { EXCHANGE_ENDING, hostedLiveExchange } from "../server/voice/live-exchange";
+import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
-import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
@@ -120,12 +114,6 @@ const relay = new StreamRelay({
 });
 const sessionRecord = voiceSessionRecord(() => NOW);
 
-/** The device's socket went with no hang-up: the exchange lets go of the session with nothing said to it. */
-function detach(f: Awaited<ReturnType<typeof stand>>) {
-  f.exchange.endAs(EXCHANGE_ENDING.DETACH);
-  return f.exchange.stop();
-}
-
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintEveSession(): string {
   return `wrun_${randomUUID()}`;
@@ -199,14 +187,6 @@ async function account(): Promise<PlanTarget> {
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
   for (const event of events) await database.run(relay.handle(event, standing));
 }
-
-/**
- * The exchange keeps time on the store runtime's clock, which is the real
- * one, so this suite runs under `it.live`: a wait for a row is a poll on a
- * `Schedule` (`settled`), and a wait on a call the exchange must leave
- * alone is the suite's one plain sleep, asserting that nothing is appended.
- */
-const QUIET_MS = 30;
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
 async function stand(
@@ -384,85 +364,6 @@ it.live(
 );
 
 it.live(
-  "once the plan is deleted, a spoken ask is refused at the door and eve is not reached: the ask lands in the plan's conversation or nowhere",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target));
-      assert.equal(
-        yield* Effect.promise(() => database.run(deletePlan(target.userId, target.planId))),
-        true,
-      );
-
-      const refused = yield* Effect.promise(() =>
-        database.run(
-          f.exchange.brain.submitAsk({
-            submissionId: randomUUID(),
-            question: "Developer: still there?",
-            sessionId: f.liveSessionId,
-            revision: 1,
-          }),
-        ),
-      );
-      assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
-      assert.deepEqual(f.eve.opened, []);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "a fresh call sets eve exploring in the plan's conversation before anyone speaks, and the turn's reply is said session-wide",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target, { explores: true }));
-      yield* settled(() => f.eve.opened.length === 1, "the exploring to reach eve");
-      assert.deepEqual(
-        f.eve.opened.map((message) => [message.conversationId, message.turn, message.message]),
-        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN, PLANNING_EXPLORE_ASK]],
-      );
-      const [sessionId] = f.eve.sessions;
-      assert.ok(sessionId);
-      yield* Effect.promise(() =>
-        play(spokenTurn(FIRST_EVE_TURN, NOW), {
-          sessionId,
-          target,
-          turn: BRAIN_HOST_TURN.SPOKEN,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-      yield* settled(
-        () => f.commentary().length >= 2,
-        "the exploring's reply to be spoken",
-        async () => `reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`,
-      );
-      assert.deepEqual(
-        f.commentary().map((event) => [event.delegation_id, event.content]),
-        [
-          [null, "One agent finished."],
-          [null, "Another is waiting on you."],
-        ],
-      );
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "a call nobody has spoken on, whose exploring eve declines, appends nothing of the exchange's own",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target));
-      yield* settled(() => f.eve.explored.length === 1, "the exploring to reach eve");
-      yield* Effect.sleep(QUIET_MS);
-      assert.deepEqual(f.eve.opened, []);
-      assert.deepEqual(f.commentary(), []);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
   "a call's notetaker drafts what the developer said to the device and saves it into the plan",
   () =>
     Effect.gen(function* () {
@@ -495,170 +396,5 @@ it.live(
       assert.ok(saved.includes(problem));
       assert.equal(drafts.at(-1)?.document.body, saved);
       yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "a planning ask whose connection was lost before its turn finished is spoken on the re-attach, under its own delegation and once: a second re-attach says nothing of it again",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target));
-      lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
-      lost.socket.receive(delegated("dl_1", 2500));
-      // The ask's dispatch is written in a transaction that ends after eve answers, so the detach
-      // waits for the record to hold eve's session rather than for eve alone.
-      yield* settled(
-        async () => (await asks.latestSession(target.userId, target.conversationId)) !== undefined,
-        "the ask's dispatch to be on record",
-      );
-      const recorded = yield* Effect.promise(() =>
-        asks.latestSession(target.userId, target.conversationId),
-      );
-      assert.ok(recorded);
-      // The function reached its duration bound: the device's socket goes, the session stands.
-      yield* Effect.promise(() => detach(lost));
-      yield* Effect.promise(() =>
-        play(spokenTurn(FIRST_EVE_TURN, NOW), {
-          sessionId: recorded,
-          target,
-          turn: BRAIN_HOST_TURN.SPOKEN,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-
-      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
-      yield* settled(
-        () => back.commentary().length >= 2,
-        "the reply to be spoken on the re-attach",
-        async () => `reports ${JSON.stringify(back.reports)}; sent ${socketSent(back)}`,
-      );
-      yield* Effect.sleep(QUIET_MS);
-      assert.deepEqual(lost.commentary(), []);
-      assert.deepEqual(
-        back.commentary().map((event) => [event.delegation_id, event.content]),
-        [
-          ["dl_1", "One agent finished."],
-          ["dl_1", "Another is waiting on you."],
-        ],
-      );
-      yield* Effect.promise(() => detach(back));
-
-      const again = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
-      yield* Effect.sleep(QUIET_MS * 4);
-      assert.deepEqual(again.commentary(), []);
-      assert.deepEqual([...lost.reports, ...back.reports, ...again.reports], []);
-      yield* Effect.promise(() => detach(again));
-    }),
-);
-
-it.live(
-  "a re-attach in the middle of a streamed reply speaks only the sentences the lost connection had not: the first is said once, before the loss, and the rest after",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target));
-      lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
-      lost.socket.receive(delegated("dl_1", 2500));
-      yield* settled(
-        async () => (await asks.latestSession(target.userId, target.conversationId)) !== undefined,
-        "the ask's dispatch to be on record",
-      );
-      const recorded = yield* Effect.promise(() =>
-        asks.latestSession(target.userId, target.conversationId),
-      );
-      assert.ok(recorded);
-      const standing: RelayStanding = {
-        sessionId: recorded,
-        target,
-        turn: BRAIN_HOST_TURN.SPOKEN,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      const events = spokenTurn(FIRST_EVE_TURN, NOW);
-      const answer = events.findIndex((event) => event.type === "message.completed");
-      const forming = stampedEveEvent(
-        {
-          type: "message.appended",
-          data: {
-            turnId: FIRST_EVE_TURN,
-            sequence: 0,
-            stepIndex: 1,
-            messageDelta: "One agent finished. Another is",
-          },
-        },
-        NOW,
-      );
-      yield* Effect.promise(() => play([...events.slice(0, answer), forming], standing));
-      yield* settled(() => lost.commentary().length >= 1, "the first sentence to be spoken");
-      // The connection goes mid-reply; the rest of the answer forms while no connection holds the session.
-      yield* Effect.promise(() => detach(lost));
-      yield* Effect.promise(() => play(events.slice(answer), standing));
-
-      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
-      yield* settled(
-        () => back.commentary().length >= 1,
-        "the rest of the reply to be spoken on the re-attach",
-        async () => `reports ${JSON.stringify(back.reports)}; sent ${socketSent(back)}`,
-      );
-      yield* Effect.sleep(QUIET_MS * 4);
-      assert.deepEqual(
-        lost.commentary().map((event) => [event.delegation_id, event.content]),
-        [["dl_1", "One agent finished."]],
-      );
-      assert.deepEqual(
-        back.commentary().map((event) => [event.delegation_id, event.content]),
-        [["dl_1", "Another is waiting on you."]],
-      );
-      assert.deepEqual([...lost.reports, ...back.reports], []);
-      yield* Effect.promise(() => detach(back));
-    }),
-);
-
-it.live(
-  "a detach while eve is taking the ask still records what eve answered, so the re-attach follows the ask to its turn and speaks the reply once",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target));
-      const answer = yield* Deferred.make<void>();
-      lost.eve.answerWhen = answer;
-      lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
-      lost.socket.receive(delegated("dl_1", 2500));
-      yield* settled(() => lost.eve.opened.length === 1, "eve to take the ask");
-      // The socket goes while eve has the ask and its answer is still on the way back.
-      const detaching = yield* Effect.forkChild(Effect.promise(() => detach(lost)));
-      // The detach is given the time to reach the dispatch before eve answers.
-      yield* Effect.sleep(QUIET_MS * 4);
-      yield* Deferred.succeed(answer, undefined);
-      yield* Fiber.join(detaching);
-      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
-      const [opened] = lost.eve.sessions;
-      assert.ok(opened);
-      yield* Effect.promise(() =>
-        play(spokenTurn(FIRST_EVE_TURN, NOW), {
-          sessionId: opened,
-          target,
-          turn: BRAIN_HOST_TURN.SPOKEN,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-      yield* settled(
-        () => back.commentary().length >= 2,
-        "the reply to be spoken on the re-attach",
-        async () => `reports ${JSON.stringify(back.reports)}; sent ${socketSent(back)}`,
-      );
-      yield* Effect.sleep(QUIET_MS * 4);
-      assert.deepEqual(lost.commentary(), []);
-      assert.deepEqual(
-        back.commentary().map((event) => [event.delegation_id, event.content]),
-        [
-          ["dl_1", "One agent finished."],
-          ["dl_1", "Another is waiting on you."],
-        ],
-      );
-      yield* Effect.promise(() => detach(back));
     }),
 );

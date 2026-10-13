@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
-import { HTTP_STATUS, type UnparsedWireValue } from "@sidecar/wire";
+import { HTTP_STATUS } from "@sidecar/wire";
 import { Redacted } from "effect";
-import { HOSTED_API_ERROR, type HostedApiError, type HostedQuota } from "../core.js";
+import type { HostedApiError, HostedQuota } from "../core.js";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
@@ -49,82 +49,6 @@ export function errorResponse(
   if (extra.upstreamStatus !== undefined) body.upstreamStatus = extra.upstreamStatus;
   if (extra.unreadableRow !== undefined) body.unreadableRow = extra.unreadableRow;
   return jsonResponse(status, body);
-}
-
-const BODY_READ = {
-  READ: "read",
-  TOO_LARGE: "too-large",
-  UNREADABLE: "unreadable",
-} as const;
-
-type BodyRead =
-  | { outcome: typeof BODY_READ.READ; text: string }
-  | { outcome: typeof BODY_READ.TOO_LARGE }
-  | { outcome: typeof BODY_READ.UNREADABLE };
-
-/**
- * Reads the body as it streams, counting bytes rather than trusting a
- * Content-Length the sender may omit or misstate, and stops reading the
- * moment the bound is passed so an oversized request is never held whole.
- */
-async function readBoundedBody(request: Request, maximumBytes: number): Promise<BodyRead> {
-  const stream = request.body;
-  if (!stream) return { outcome: BODY_READ.UNREADABLE };
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.byteLength;
-      if (received > maximumBytes) {
-        await reader.cancel().catch(() => undefined);
-        return { outcome: BODY_READ.TOO_LARGE };
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return { outcome: BODY_READ.UNREADABLE };
-  }
-  const joined = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return {
-      outcome: BODY_READ.READ,
-      text: new TextDecoder("utf-8", { fatal: true }).decode(joined),
-    };
-  } catch {
-    return { outcome: BODY_READ.UNREADABLE };
-  }
-}
-
-/**
- * A request's JSON body as the unparsed wire value a schema reads next, or
- * the refusal to answer with: too large past the bound, unreadable, or not
- * JSON. What the value must then be is the endpoint's own schema's to say.
- */
-export async function readJsonBody(
-  request: Request,
-  maximumBytes: number,
-): Promise<UnparsedWireValue | Response> {
-  const body = await readBoundedBody(request, maximumBytes);
-  if (body.outcome === BODY_READ.TOO_LARGE) {
-    return errorResponse(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE);
-  }
-  if (body.outcome !== BODY_READ.READ) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  try {
-    // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
-    return JSON.parse(body.text) as UnparsedWireValue;
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
 }
 
 /** What every bearer begins with; a secret that adds nothing to it is no secret. */

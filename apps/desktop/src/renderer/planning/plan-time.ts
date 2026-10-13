@@ -69,7 +69,7 @@ export function spanText(startedAt: number, endedAt: number): string {
 }
 
 /** The time now, and again on every minute after, on whatever clock the stream runs under. */
-export const minuteTicks: Stream.Stream<number> = Stream.fromEffectSchedule(
+const minuteTicks: Stream.Stream<number> = Stream.fromEffectSchedule(
   Clock.currentTimeMillis,
   Schedule.spaced(Duration.minutes(1)),
 );

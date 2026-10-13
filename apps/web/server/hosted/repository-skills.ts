@@ -44,7 +44,7 @@ const SKILL_ROOT = {
 type SkillRoot = (typeof SKILL_ROOT)[keyof typeof SKILL_ROOT];
 
 /** How much of a repository's skills is read. */
-export const REPOSITORY_SKILLS = {
+const REPOSITORY_SKILLS = {
   /** The most skills read, across every root: as many as the desktop's read of them carries. */
   MAX_SKILLS: PLAN_SKILL_BOUNDS.MAX_SKILLS,
   /** The most `SKILL.md` files read, across every root: a skill's in each root, twice the skills. */

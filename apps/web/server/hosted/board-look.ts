@@ -30,7 +30,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  */
 
 /** Why a call shows nothing, in words the model can act on. */
-export const LOOK_AT_BOARD_REFUSAL = {
+const LOOK_AT_BOARD_REFUSAL = {
   UNREADABLE: "Not looked: the tool takes no arguments.",
   NOT_OPEN:
     "Not looked: the board is not open on the developer's Mac, so your latest drawing is not " +

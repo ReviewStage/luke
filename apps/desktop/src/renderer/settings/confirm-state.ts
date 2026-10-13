@@ -49,7 +49,7 @@ export interface ConfirmSurroundings {
  * An answer already sent is the exception to both. It is no longer a question,
  * so it finishes wherever it is and the line reports what came back.
  */
-export function confirmStage(
+function confirmStage(
   held: ConfirmStage,
   { subject, surfaceOpen }: ConfirmSurroundings,
 ): ConfirmStage {

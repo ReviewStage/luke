@@ -11,7 +11,7 @@ interface RememberedFlag {
  * the key is written to mean the opposite and removed to mean `absentMeans`
  * again, so the remembered state is always the exception to the default.
  */
-export function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
+function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
   return {
     read(): boolean {
       try {

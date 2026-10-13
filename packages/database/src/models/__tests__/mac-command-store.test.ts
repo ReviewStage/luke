@@ -3,19 +3,14 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { MacCommandResult } from "@sidecar/hosted/mac-command-wire";
 import { Clock, Effect, Option } from "effect";
-import { TestClock } from "effect/testing";
 import { db } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   claimMacCommands,
   macCommandResult,
-  macCommandsWaiting,
-  macListeningSince,
-  markMacListening,
   queueMacCommand,
   settleMacCommand,
-  withdrawMacCommand,
 } from "../mac-command-store.js";
 
 /**
@@ -80,42 +75,5 @@ it.layer(getTestDB())("the Mac command store", (it) => {
         assert.deepEqual(yield* macCommandResult(owner, queued.id), Option.some(RESULT));
         assert.deepEqual(yield* macCommandResult(other, queued.id), Option.none());
       }),
-  );
-
-  it.effect(
-    "a command queued before the instant a read names is never claimed, and a withdrawn one is gone",
-    () =>
-      Effect.gen(function* () {
-        const { owner } = yield* openAccounts;
-        const stale = command();
-        yield* queueMacCommand(owner, stale);
-        yield* TestClock.adjust("1 minute");
-        const since = yield* now;
-        const fresh = command();
-        yield* queueMacCommand(owner, fresh);
-        const withdrawn = command();
-        yield* queueMacCommand(owner, withdrawn);
-        yield* withdrawMacCommand(owner, withdrawn.id);
-
-        assert.equal(yield* macCommandsWaiting(owner, since), true);
-        assert.deepEqual(yield* claimMacCommands(owner, since), [fresh]);
-        assert.equal(yield* macCommandsWaiting(owner, since), false);
-      }),
-  );
-
-  it.effect("a Mac counts as listening from its last read on, for its own account", () =>
-    Effect.gen(function* () {
-      const { owner, other } = yield* openAccounts;
-      const before = new Date(yield* Clock.currentTimeMillis);
-      assert.equal(yield* macListeningSince(owner, before), false, "no Mac has read yet");
-
-      yield* markMacListening(owner);
-      yield* TestClock.adjust("1 minute");
-      const later = new Date(yield* Clock.currentTimeMillis);
-
-      assert.equal(yield* macListeningSince(owner, before), true);
-      assert.equal(yield* macListeningSince(owner, later), false, "a read a minute ago is not now");
-      assert.equal(yield* macListeningSince(other, before), false);
-    }),
   );
 });

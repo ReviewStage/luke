@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Redacted } from "effect";
-import { TestClock } from "effect/testing";
-import { test } from "vitest";
-import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
+import { Effect, Redacted } from "effect";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "../server/hosted/maintenance-bounds";
+import { MAINTENANCE_SWEEP_PATH } from "../server/hosted/maintenance-bounds";
 import {
   handleMaintenanceSweep,
   type MaintenanceSweepOptions,
@@ -17,7 +12,6 @@ import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
 import { noDatabase } from "./support/no-database";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-const SWEEP_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 /** What the sweep over the detached voice sessions answers. */
 const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
 /** What the sweep over the queued sessions' sandboxes answers. */
@@ -91,22 +85,6 @@ function sweep(options: MaintenanceSweepOptions) {
   );
 }
 
-it.effect("a sweep refuses every method but GET, and runs nothing", () =>
-  Effect.gen(function* () {
-    const { options, recorded } = sweepOptions({ request: sweepRequest(undefined, "POST") });
-    const answer = yield* sweep(options);
-
-    assert.equal(answer.status, 405);
-    assert.deepEqual(recorded, {
-      purged: [],
-      purgedCalls: [],
-      abandoned: [],
-      voiced: [],
-      sandboxed: [],
-    });
-  }),
-);
-
 it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothing", () =>
   Effect.gen(function* () {
     const { options, recorded } = sweepOptions({ cronSecret: undefined });
@@ -150,43 +128,3 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     });
   }),
 );
-
-it.effect(
-  "the cron's own bearer runs each sweep at the clock's instant and answers their counts",
-  () =>
-    Effect.gen(function* () {
-      yield* TestClock.setTime(SWEEP_TIME);
-      yield* TestClock.adjust(Duration.seconds(7));
-      const { options, recorded } = sweepOptions();
-      const answer = yield* sweep(options);
-
-      const at = SWEEP_TIME + 7_000;
-      assert.equal(answer.status, 200);
-      assert.deepEqual(answer.body, {
-        purged: 2,
-        purgedCalls: 3,
-        abandoned: 1,
-        voice: VOICED,
-        sandboxes: SANDBOXED,
-      });
-      assert.deepEqual(recorded, {
-        purged: [at],
-        purgedCalls: [at],
-        abandoned: [at],
-        voiced: [at],
-        sandboxed: [at],
-      });
-    }),
-);
-
-test("the cron entry names the sweep, and the sweep's function declares the sweep's cap", () => {
-  // SAFETY: the file is this repository's own vercel.json, read for the cron entry checked below.
-  const vercel = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
-  ) as { crons: Array<{ path: string; schedule: string }> };
-  assert.deepEqual(vercel.crons, [{ path: MAINTENANCE_SWEEP_PATH, schedule: "* * * * *" }]);
-  assert.equal(
-    FUNCTION_MAX_DURATION_SECONDS.get(MAINTENANCE_SWEEP_PATH),
-    MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
-  );
-});

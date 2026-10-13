@@ -37,7 +37,7 @@ const storedReads = Schema.fromJsonString(
 );
 
 /** The waiting items each plan last showed, by plan id. */
-export type InboxReads = typeof storedReads.Type;
+type InboxReads = typeof storedReads.Type;
 
 const decodeStored = Schema.decodeUnknownOption(storedReads);
 const encodeStored = Schema.encodeSync(storedReads);
@@ -63,7 +63,7 @@ function writeStored(reads: InboxReads): void {
 }
 
 /** The plan's waiting items it has not shown while they waited. */
-export function unreadItems(
+function unreadItems(
   reads: InboxReads,
   planId: string,
   waiting: readonly string[],
@@ -77,7 +77,7 @@ export function unreadItems(
  * latest and the oldest let go past the bound. The marks as they stood
  * where the plan already showed exactly these.
  */
-export function withSeen(reads: InboxReads, planId: string, shown: readonly string[]): InboxReads {
+function withSeen(reads: InboxReads, planId: string, shown: readonly string[]): InboxReads {
   const was = reads[planId];
   if (was !== undefined && was.length === shown.length && shown.every((id) => was.includes(id))) {
     return reads;
@@ -92,7 +92,7 @@ export function withSeen(reads: InboxReads, planId: string, shown: readonly stri
  * holding only settled items keeps none. A plan named nowhere keeps its own,
  * since nothing is known of it. The marks as they stood where nothing moved.
  */
-export function withWaiting(
+function withWaiting(
   reads: InboxReads,
   waiting: readonly AppInboxPlan[],
   holding: readonly AppInboxPlanHolding[],

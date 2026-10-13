@@ -132,7 +132,7 @@ export function findDiscardedEffects({ root, rootNames, compilerOptions }) {
  * the same program the repository is read through and asserted against before
  * its answer is believed. A program that resolved no `effect` types would
  * report nothing and read as a clean repository; this is what tells the two
- * apart, and it is the same pair `scripts/discarded-effect.test.mjs` pins.
+ * apart.
  */
 export const CANARY = {
   DIRECTORY: "scripts/fixtures/discarded-effect",

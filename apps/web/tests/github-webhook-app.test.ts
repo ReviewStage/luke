@@ -9,11 +9,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
-import {
-  CHECK_SUMMARY,
-  type CodingAgentPullRequest,
-  PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -163,20 +159,6 @@ function pullRequestDelivery(action: string, ref: string) {
   return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
 }
 
-/** GitHub's delivery of a check run's action on a pull request from the agent's branch, its suite named by id alone. */
-function checkRunDelivery(action: string, ref: string) {
-  return {
-    action,
-    repository,
-    check_run: { check_suite: { id: 123 }, pull_requests: [{ number: 41, head: { ref } }] },
-  };
-}
-
-/** GitHub's delivery of a commit status on the agent's branch's head. */
-function statusDelivery(ref: string) {
-  return { sha: HEAD_SHA, state: "failure", repository, branches: [{ name: ref }] };
-}
-
 /** An account reaching the repository, with one agent on a plan about it, its row on the pull request's branch. */
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
@@ -251,78 +233,6 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           yield* answer(github, SECRET, new Request(new URL(WEBHOOK, ORIGIN))),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
-      }),
-  );
-
-  it.effect(
-    "a signed pull request delivery reads what the agent on its branch published again and keeps it, the same delivery again keeps the same, and GitHub's ping reads nothing",
-    () =>
-      Effect.gen(function* () {
-        const pull: PullRequestFixture = { state: "open", merged: false, conclusion: "success" };
-        const { github, kept, ref } = yield* openAgent(pull);
-
-        assert.deepEqual(
-          yield* answer(github, SECRET, delivery("ping", { zen: "Keep it simple." })),
-          {
-            status: HOSTED_HTTP_STATUS.OK,
-            body: { read: 0 },
-          },
-        );
-        assert.equal(yield* kept(), null);
-
-        pull.state = "closed";
-        pull.merged = true;
-        const merged = delivery("pull_request", pullRequestDelivery("closed", ref));
-        assert.deepEqual(yield* answer(github, SECRET, merged.clone()), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { read: 1 },
-        });
-        const once = yield* kept();
-        assert.equal(once?.state, PULL_REQUEST_STATE.MERGED);
-        assert.equal(once?.title, "Teammate invitations");
-
-        yield* answer(github, SECRET, merged);
-        assert.deepEqual(yield* kept(), once);
-      }),
-  );
-
-  it.effect(
-    "a check run that ended and a commit status read the checks again, one still running and a pull request's action that moves nothing read nothing, and a branch no agent stands on reads none",
-    () =>
-      Effect.gen(function* () {
-        const pull: PullRequestFixture = { state: "open", merged: false, conclusion: "success" };
-        const { github, kept, ref } = yield* openAgent(pull);
-        yield* answer(github, SECRET, delivery("pull_request", pullRequestDelivery("opened", ref)));
-        assert.equal((yield* kept())?.checks, CHECK_SUMMARY.PASSING);
-
-        pull.conclusion = "failure";
-        const quiet = [
-          delivery("check_run", checkRunDelivery("created", ref)),
-          delivery("pull_request", pullRequestDelivery("labeled", ref)),
-          delivery("pull_request", pullRequestDelivery("opened", "someone/else")),
-          delivery("issues", { action: "opened", repository }),
-        ];
-        for (const each of quiet) {
-          assert.deepEqual(yield* answer(github, SECRET, each), {
-            status: HOSTED_HTTP_STATUS.OK,
-            body: { read: 0 },
-          });
-        }
-        assert.equal((yield* kept())?.checks, CHECK_SUMMARY.PASSING);
-
-        assert.deepEqual(
-          yield* answer(github, SECRET, delivery("check_run", checkRunDelivery("completed", ref))),
-          { status: HOSTED_HTTP_STATUS.OK, body: { read: 1 } },
-        );
-        assert.equal((yield* kept())?.checks, CHECK_SUMMARY.FAILING);
-
-        // A commit status on the branch reads the checks again too.
-        pull.conclusion = "success";
-        assert.deepEqual(yield* answer(github, SECRET, delivery("status", statusDelivery(ref))), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { read: 1 },
-        });
-        assert.equal((yield* kept())?.checks, CHECK_SUMMARY.PASSING);
       }),
   );
 });

@@ -55,13 +55,13 @@ import {
 } from "./live-peer";
 
 /** How long a created session may take to announce itself started before the peer gives up on it. */
-export const SESSION_START_TIMEOUT_MS = 15_000;
+const SESSION_START_TIMEOUT_MS = 15_000;
 
 /** The conversations guide's bound on a graceful close: `session.closed` awaited this long after `session.close`. */
 export const SESSION_CLOSE_TIMEOUT_MS = 15_000;
 
 /** How long an acknowledgment of the microphone switch is waited for before the ask is given up. */
-export const MICROPHONE_ACK_TIMEOUT_MS = 5_000;
+const MICROPHONE_ACK_TIMEOUT_MS = 5_000;
 
 /**
  * How long after Luke's track goes quiet he still counts as speaking, so a
@@ -69,7 +69,7 @@ export const MICROPHONE_ACK_TIMEOUT_MS = 5_000;
  * duck would let the music up and the exchange would be counted again on the
  * next word.
  */
-export const SPEAKING_HANGOVER_MS = 1_500;
+const SPEAKING_HANGOVER_MS = 1_500;
 
 /** How often the caption rows are re-read for ones that have settled since their last fragment. */
 const CAPTION_SETTLE_TICK_MS = 500;

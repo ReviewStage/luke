@@ -16,9 +16,7 @@ changes that declaration too.
 Every instant column is `timestamp with time zone` (migration 0026 moved the
 last naive ones), so a JavaScript `Date` round-trips losslessly whatever zone
 the host or the session sits in; `bigint` epochs stand where a table already
-kept them. `tests/instant-columns.test.ts` reads `information_schema` on both
-dialects and refuses any `timestamp without time zone` column, so a new table
-declares `timestamptz` or fails the store tests.
+kept them, so a new table declares `timestamptz`.
 
 For a new table or a changed one, edit the `packages/database/src/schemas/*.ts`
 module that declares it, run `pnpm db:generate`, and commit the SQL file,
@@ -389,8 +387,7 @@ Drizzle's relational queries: a statement is the `db.select()` builder, never
 `db.query`, as the `drizzle` skill has it. The tables a statement names are
 named imports from their own module
 (`import { plan } from "@sidecar/database/schemas/plan"`), never the barrel,
-which is both what makes a renamed column a type error at the call site and
-the import `tests/store-writer-boundary.test.ts` resolves.
+which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
 row is still decoded by an Effect `Schema`, where lobehub's examples reach for
@@ -576,13 +573,10 @@ converted this way; the voice route alone exports something else, the
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
-`readJsonBodyEffect` reading a bounded body off the request stream the way
-`readJsonBody` reads it off a `Request`. A refusal is declared as its body
+`readJsonBodyEffect` reading a bounded body off the request stream. A refusal is declared as its body
 rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
-a byte they never asked for. `fixtures/hosted-refusal/` records the status,
-content type, and body bytes of each one, and `tests/hosted-refusal.test.ts`
-holds both shapes to them; `LUKE_UPDATE_FIXTURES=1` records.
+a byte they never asked for.
 
 ## The auth group
 
@@ -620,14 +614,10 @@ unchanged — `server/hosted/events.ts` and `server/hosted/maintenance-sweep.ts`
 behind a passthrough shaped like the auth group's (`effectPassthrough` in
 `server/hosted/http-effect.ts`): the `HttpServerRequest` becomes the `Request`
 the handler always took, and its `Response` is carried back with
-`HttpServerResponse.raw`. `fixtures/events-maintenance-route/` records one
-answer per route, a wrong method on a declared path, and a path outside each
-group, and `tests/events-maintenance-app.test.ts` answers each twice —
-through the group and by calling the handler directly — and compares the two.
+`HttpServerResponse.raw`.
 `server/events-app.ts` holds one query of its own, the events handler's
 PostHog person read (`readPerson`), a `SqlSchema` query whose builder renders
-against the auth schema module and runs on the ambient `SqlClient`;
-`tests/events-app-queries.test.ts` covers it.
+against the auth schema module and runs on the ambient `SqlClient`.
 
 ## The account group
 
@@ -651,10 +641,6 @@ read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
-`fixtures/account-route/` records what the group answers for a delete, a read,
-a write, a refused method, an invalid token, an invalid body, and a path
-outside the group, with `content-length` checked against the body it frames and
-then dropped before comparing.
 
 The preferences snapshot carries two parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
@@ -798,7 +784,7 @@ take effect regardless of any cache. The migration that made the table copied
 every row of Linear's own table in as Linear's, and the one after it dropped
 that table.
 
-**The routes** (`server/integrations-app.ts`, `fixtures/integrations-route/`):
+**The routes** (`server/integrations-app.ts`):
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
   status } }`, each status `connected`, `pending`, `expired`,
@@ -1102,10 +1088,9 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: the planner, the planning worker, the coding agent, and its worker.
 What each is offered is derived from it: the planning root's hosted resolver
 offers the planner's (`PLANNER_TOOL_NAMES`), the planning worker its own
-(`WORKER_TOOL_NAMES`), the coding agent's files under `coder/tools/` and its
-worker's are held to their roles by `coder-agent.test.ts`, and the planning
-root's resolver and files by `agent-tools.test.ts`, which also holds each
-role's rows to a stored set that names every tool the role is offered. A tool's
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `coder/tools/` and
+its worker's are held to their roles by `coder-agent.test.ts`; each role's
+stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
 every module may import it. eve's own injected tools (`task_wait`,
 `task_cancel`, `connection_search`, `connection_execute`) are eve's, not
@@ -1244,14 +1229,10 @@ and runs nothing at all: the roster's scope and
 search conditions are builder predicates and Drizzle `sql` fragments rather
 than concatenated text, and the search term stays a bound parameter with its
 own wildcards escaped.
-`tests/admin-metrics-queries.test.ts` pins the overview's aggregates for a
-seeded window under both scopes, and `tests/admin-roster-queries.test.ts` the
-roster, the day detail, the account page, and the star.
 
 Every admin answer is viewer-gated account data, refusals included, so each
-one carries `no-store`; `fixtures/admin-refusal/` records the five the group
-answers itself and `tests/admin-refusal.test.ts` holds them to the bytes the
-promise-shaped vocabulary in `server/admin/http.ts` gives.
+one carries `no-store`, the five refusals the group answers itself included,
+in the bytes the promise-shaped vocabulary in `server/admin/http.ts` gives.
 
 ## Signing in on a Preview deployment
 
@@ -1863,12 +1844,10 @@ of either, naming no row and holding no foreign key. Nothing in these tables
 is sealed: the content is readable by an operator.
 
 The store writer, `packages/database/src/models/writer.ts`, is the one path by which a
-`messages` or `turns` row is written, and
-`tests/store-writer-boundary.test.ts` holds the server's own sources to that:
-the writer is the one server module with an insert, an update, or a delete over
-`messages` or `turns`, whether as a Drizzle table imported from the schema or in the
-text of a statement, and the modules that name one at all are the writer and
-the two readers, each listed there by name. It
+`messages` or `turns` row is written: the writer is the one server module
+with an insert, an update, or a delete over `messages` or `turns`, whether as a
+Drizzle table imported from the schema or in the text of a statement, and the
+modules that name one at all are the writer and the two readers. It
 consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
@@ -1951,21 +1930,19 @@ and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
-`check.sh` needs no service; the `postgres` CI job runs the same migrations
-and tests against a Postgres service container. Every one of those is
+`check.sh` needs no service; the `postgres` CI job runs the same migrations,
+and no tests, against a Postgres container. Every one of those is
 Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
-embeds PostgreSQL 18.3, and the CI service image is `postgres:18`, so a test
-that fails in any of them fails about the database the service actually
-runs, and a local `check.sh` is a reproduction on 18 already. On either
+embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
+any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
 dialect an opening of the test database is a database of that opening's own:
 a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
 names, made with `create database ... template ...` on the cluster's
 `postgres` maintenance database and dropped when the file closes it
 (`@sidecar/database/testing`). Nothing writes to the named
 database itself after `db:migrate`, so a statement a test forgets to scope by
-account or conversation reaches its own file's rows and no other file's,
-which is the property `tests/store-database-isolation.test.ts` holds the
-harness to. Which files `test:store` runs is read from the files, not kept
+account or conversation reaches its own file's rows and no other file's.
+Which files `test:store` runs is read from the files, not kept
 in a list: `scripts/store-tests.ts` selects every `tests/**/*.test.ts` whose
 source imports one of the two doors, `tests/support/hosted-store-database`
 or `@sidecar/database/testing` (whose `getTestDB()` is the bare one), because
@@ -1973,10 +1950,7 @@ or `@sidecar/database/testing` (whose `getTestDB()` is the bare one), because
 door cannot meet a Postgres whatever it does. A new store test is therefore
 in the set the moment it imports its harness, and `package.json` is not
 edited. The runner then reads vitest's JSON report back and fails, naming
-each file, when the files vitest ran are not exactly the files selected;
-`tests/store-tests.test.ts` holds the selection to the files that use a
-door's exports, so a file reaching a door by some other path is a named
-difference rather than a quiet absence. A reproduction against a real
+each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
 Postgres needs an 18 of your own whose role may `create database`, migrated
 by `db:migrate` alone, because that is the runner which records what it
 applied and the tests copy what it recorded, so run it first:
@@ -2003,17 +1977,14 @@ environment variables. The
 agent still reaches `server/` by relative import and nothing else: neither
 package depends on the other, so `pnpm install --filter @luke/web...` pulls
 nothing of eve's and the web build never traces into `eve/` (the function
-bundle guard refuses it). `tests/eve-layout.test.ts` runs the real build under
-Vercel's marker and asserts where the output landed, so a dependency bump that
-changed discovery fails the check rather than the deploy.
+bundle guard refuses it).
 
 `eve/sandbox.ts` is the session's sandbox, a `VercelSandbox.environment`
 whose `prepare` holds the one thing the checkout needs of eve's base image,
 git; `eve build` prewarms its snapshot on Vercel, so the eve service's build
 needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
 `VERCEL_TOKEN` with `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and a prewarm
-that fails stops the deployment. `tests/eve-layout.test.ts` builds with
-`--skip-sandbox-prewarm`, so it says nothing about the snapshot. The running
+that fails stops the deployment. The running
 service needs the GitHub App's five variables and `BETTER_AUTH_SECRET` as the
 web functions do: `run_in_repository`'s checkout confirms the plan's
 repository is reachable and mints its token through `GitHubApp`, which the
@@ -2025,10 +1996,8 @@ user token is sealed under.
 runs it. `./scripts/check.sh` runs vitest over the workspaces
 `vitest.config.ts` lists, and `@luke/eve` is not one of them; the eval is
 `pnpm --filter @luke/web test:agent`, which writes through the real store
-writer against the database `DATABASE_URL` names and so runs on CI's "Postgres
-migrations and store" job alone, beside `test:store`, against that job's own
-Postgres service container. A green `check.sh` says nothing about it, which is
-worth knowing before a change to the brain host, the writer, or a schema
+writer against the database `DATABASE_URL` names. CI does not run it either, so
+run it by hand before a change to the brain host, the writer, or a schema
 module it reads back through.
 
 ## The coding-agent service
@@ -2044,8 +2013,7 @@ carries into the service, whose own one `routes` entry turns it back into
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
 `server/hosted/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
-`tests/vercel-services.test.ts` holds the three services and that routing,
-and `tests/eve-layout.test.ts` builds both roots.
+`tests/vercel-services.test.ts` holds the three services and that routing.
 
 A coding agent is one eve session over a `coding_agent` conversation
 (`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored

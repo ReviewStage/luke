@@ -11,7 +11,7 @@ import type { LiveSocket, SocketArrival, SocketClose, SocketVerbs } from "./live
  * the close it delivers carries the overflow code, so a consumer arriving late
  * learns why the session ended rather than finding it quietly gone.
  */
-export const HELD_SOCKET = {
+const HELD_SOCKET = {
   FRAME_LIMIT: 256,
   OVERFLOW_CLOSE_CODE: 4001,
 } as const;

@@ -69,7 +69,7 @@ export const AUTH_SECRET_ENVIRONMENT = {
 } as const;
 
 /** Where the site answers when nothing names a deployment: the Vite dev server. */
-export const LOCAL_AUTH_URL = "http://localhost:5173";
+const LOCAL_AUTH_URL = "http://localhost:5173";
 
 export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */

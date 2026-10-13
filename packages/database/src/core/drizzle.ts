@@ -64,7 +64,7 @@ declare module "drizzle-orm/pg-core/query-builders/select" {
  * itself, `execute` for one it hands back whole — and the other two are what
  * a driver reached through `.get()` or `.values()` would ask for.
  */
-export const DRIZZLE_METHOD = {
+const DRIZZLE_METHOD = {
   ALL: "all",
   GET: "get",
   VALUES: "values",
@@ -182,7 +182,7 @@ function asSqlError(cause: unknown): SqlError {
  * and an object where the driver indexes positions is a row it cannot map.
  * No Postgres proxy call reaches `get` either way.
  */
-export function bridgedRows(
+function bridgedRows(
   sql: string,
   params: ReadonlyArray<unknown>,
   method: DrizzleMethod,

@@ -5,7 +5,7 @@
  * compaction, and stay in the vocabulary so the boundaries those builds
  * recorded still read back rather than dropping from a transcript.
  */
-export const COMPACTION_SOURCE = {
+const COMPACTION_SOURCE = {
   PROVIDER_INLINE: "provider_inline",
   PROVIDER_EXPLICIT: "provider_explicit",
   LOCAL_SUMMARY: "local_summary",

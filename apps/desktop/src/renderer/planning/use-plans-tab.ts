@@ -140,7 +140,7 @@ interface SourceReveal {
  * it leaves the plan the host has open, and the call bound to it, as they
  * stand; opening any plan, or a new one, leaves it.
  */
-export interface InboxViewControl {
+interface InboxViewControl {
   readonly open: boolean;
   /** The plan chosen in it, none until one is, where the list's first stands in. */
   readonly planId: string | undefined;

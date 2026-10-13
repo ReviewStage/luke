@@ -76,7 +76,7 @@ interface AccountClientOptions {
  * read. Everything that decides on a failure below — the renewal, the
  * sign-out — reads these two fields and nothing else.
  */
-export class AccountClientError extends Data.TaggedError("AccountClientError")<{
+class AccountClientError extends Data.TaggedError("AccountClientError")<{
   readonly message: string;
   readonly status?: number | undefined;
   readonly oauthError?: string | undefined;

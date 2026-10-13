@@ -31,7 +31,7 @@ export interface UpdateRow {
  * through the whole install: a release downloading, waiting on its restart,
  * or failed mid-fetch is still one this build is not on.
  */
-export function updateAvailable(update: UpdateSnapshot): boolean {
+function updateAvailable(update: UpdateSnapshot): boolean {
   return (
     update.status === UPDATE_STATUS.DOWNLOADING ||
     update.status === UPDATE_STATUS.READY ||

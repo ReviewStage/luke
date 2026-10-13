@@ -1,5 +1,0 @@
-{
-  "status": 400,
-  "contentType": "application/json",
-  "body": "{\"error\":\"unknown-tool\"}"
-}

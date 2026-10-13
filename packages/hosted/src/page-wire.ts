@@ -14,7 +14,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * draws it in a sandboxed frame of its own scheme.
  */
 
-export const PAGE_BOUNDS = {
+const PAGE_BOUNDS = {
   /** The most characters a page's title may spell. */
   MAX_TITLE_CHARS: 80,
   /** The most characters one version's HTML may spell: a document with its scripts and styles inline. */

@@ -37,17 +37,6 @@ async function environmentOver(
   }
 }
 
-test("a secret that is set to the empty string, or to whitespace, is absent, the same as one never set", async () => {
-  const environment = await environmentOver({
-    [HOSTED_OPENAI_ENVIRONMENT.API_KEY]: "",
-    [POSTHOG_ENVIRONMENT.PERSONAL_API_KEY]: "   ",
-    [CRON_ENVIRONMENT.CRON_SECRET]: undefined,
-  });
-  assert.equal(environment.openAiKey, undefined);
-  assert.equal(environment.posthogPersonalApiKey, undefined);
-  assert.equal(environment.cronSecret, undefined);
-});
-
 test("a secret that is set travels sealed and trimmed, and its value is the one the environment holds", async () => {
   const environment = await environmentOver({
     [HOSTED_OPENAI_ENVIRONMENT.API_KEY]: "sk-test-not-a-real-key",

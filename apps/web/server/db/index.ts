@@ -43,7 +43,7 @@ export const POOL_LIMITS = {
  * Builds a pool for an explicit connection string. Opens nothing: `pg.Pool`
  * connects lazily on first query, which makes this testable offline.
  */
-export function createPool(connectionString: string): Pool {
+function createPool(connectionString: string): Pool {
   return new Pool({ connectionString, ...POOL_LIMITS });
 }
 

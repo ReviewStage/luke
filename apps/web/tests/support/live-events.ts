@@ -8,7 +8,7 @@ import { LIVE_DELEGATION_TARGET, LIVE_SERVER_EVENT, type LiveServerEvent } from 
 
 let eventIds = 0;
 
-export function liveEventId(): string {
+function liveEventId(): string {
   eventIds += 1;
   return `evt_${eventIds}`;
 }

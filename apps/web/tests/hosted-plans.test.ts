@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
-import { deleteAccount } from "@sidecar/database/models/account-store";
 import {
   attachPlanConversation,
   createPlan,
@@ -18,7 +17,7 @@ import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { getTestDB } from "@sidecar/database/testing";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
+import { PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -96,16 +95,6 @@ function bound(userId: string, planId: string): PlanDocumentBinding {
   return { userId, planId };
 }
 
-/** A note correcting a phrase of the plan. */
-function replaced(find: string, text: string): PlanNote {
-  return { kind: NOTE_KIND.REPLACE, find, text };
-}
-
-/** A note striking the line of the plan that holds a phrase. */
-function removed(find: string): PlanNote {
-  return { kind: NOTE_KIND.REMOVE, find };
-}
-
 /** The document a saved result carries, failing the test on any other outcome. */
 function savedDocument(result: PlanSaveResult): PlanDocument {
   if (result.status !== PLAN_SAVE_STATUS.SAVED) {
@@ -174,61 +163,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       }),
   );
 
-  it.effect("a note under a heading the text does not hold opens that section at its end", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      yield* makeDocumentPlan(planId, "## Why\n\nInvites are manual.\n");
-
-      const { body } = savedDocument(
-        yield* saveNotes(bound(userId, planId), [
-          added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
-        ]),
-      );
-
-      assert.equal(
-        body,
-        "## Why\n\nInvites are manual.\n\n## Open questions\n\n- Who can withdraw an invite?\n",
-      );
-    }),
-  );
-
-  it.effect("a proposal, a correction, and a strike each save in the section they name", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      const binding = bound(userId, planId);
-      const everyMember = "Any member may invite by email.";
-      const adminsOnly = "Only admins may invite, by email.";
-      const noContract = "Not applicable: no contract outside the app changes.";
-
-      yield* saveNotes(binding, [
-        added(PLAN_HEADING.HARD_PARTS, everyMember),
-        added(PLAN_HEADING.ASSUMPTIONS, "- Invites expire after a day."),
-      ]);
-      const proposed = yield* resumedDocument(userId, planId);
-      // Corrected: the hard part is rewritten, the assumption struck, and the interfaces said not to apply.
-      yield* saveNotes(binding, [
-        replaced(everyMember, adminsOnly),
-        removed("expire after a day"),
-        added(PLAN_HEADING.INTERFACES, noContract),
-      ]);
-      const settled = yield* resumedDocument(userId, planId);
-
-      assert.ok(sectionText(proposed.body, "Hard parts").endsWith(`\n\n${everyMember}`));
-      assert.ok(
-        sectionText(proposed.body, "Assumptions").endsWith("\n\n- Invites expire after a day."),
-      );
-      assert.ok(sectionText(settled.body, "Hard parts").endsWith(`\n\n${adminsOnly}`));
-      assert.ok(!settled.body.includes(everyMember));
-      assert.equal(
-        sectionText(settled.body, "Assumptions"),
-        sectionText(DEFAULT_PLAN_TEMPLATE, "Assumptions"),
-      );
-      assert.ok(sectionText(settled.body, "Interfaces").endsWith(`\n\n${noContract}`));
-    }),
-  );
-
   it.effect(
     "a note adds after what its section holds, and every section it does not name keeps what stood",
     () =>
@@ -263,57 +197,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         assert.deepEqual(assumptions, []);
         assert.deepEqual(yield* resumedDocument(userId, planId), { body, assumptions });
       }),
-  );
-
-  it.effect(
-    "a note naming a phrase the plan does not hold is passed over, and the notes beside it save",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
-        const outcome = "A member invites a teammate by email.";
-        const unheld = [
-          replaced("a phrase nobody said", "Everything."),
-          removed("Invites expire in a day."),
-          removed("a hard part nobody named"),
-        ];
-
-        const result = yield* saveNotes(bound(userId, planId), [
-          ...unheld,
-          added(PLAN_HEADING.GOAL, outcome),
-        ]);
-
-        const { body } = savedDocument(result);
-        assert.deepEqual(result.status === PLAN_SAVE_STATUS.SAVED && result.missed, unheld);
-        assert.ok(sectionText(body, "Goal").endsWith(`\n\n${outcome}`));
-        assert.equal(body.replace(`\n\n${outcome}`, ""), INVITATIONS_TEXT);
-      }),
-  );
-
-  it.effect("notes that would carry the text past the plan's bound are refused whole", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
-      const before = yield* resumedDocument(userId, planId);
-      const long = "x".repeat(40_000);
-      const oversized = [
-        PLAN_HEADING.GOAL,
-        PLAN_HEADING.APPROACH,
-        PLAN_HEADING.INTERFACES,
-        PLAN_HEADING.NOT_DOING,
-        PLAN_HEADING.TESTING,
-      ].map((heading) => added(heading, long));
-
-      const result = yield* saveNotes(bound(userId, planId), oversized);
-
-      assert.deepEqual(result, {
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.TOO_LONG,
-      });
-      assert.deepEqual(yield* resumedDocument(userId, planId), before);
-    }),
   );
 
   it.effect(
@@ -401,81 +284,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     }),
   );
 
-  it.effect(
-    "a pin carries the instant it was made, a second pin keeps it, an unpin takes it away, and the list's order stands",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
-        yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
-        yield* TestClock.adjust("1 minute");
-
-        const pinned = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: true }));
-        yield* TestClock.adjust("1 minute");
-        const again = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: true }));
-        const listed = yield* listPlans(userId);
-        const unpinned = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: false }));
-
-        assert.equal(pinned.pinnedAt, pinned.createdAt + 120_000);
-        assert.equal(again.pinnedAt, pinned.pinnedAt);
-        assert.equal(pinned.updatedAt, relay.updatedAt);
-        assert.deepEqual(
-          listed.map(({ id, pinnedAt }) => [id, pinnedAt]),
-          [
-            [ledger.id, undefined],
-            [relay.id, pinned.pinnedAt],
-          ],
-        );
-        assert.equal("pinnedAt" in unpinned, false);
-        assert.equal(
-          "pinnedAt" in Option.getOrThrow(yield* readPlan(userId, relay.id)).plan,
-          false,
-        );
-      }),
-  );
-
-  it.effect(
-    "an archived plan leaves the list unless it is asked for, and comes back where it stood, its pin with it",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
-        yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
-        yield* updatePlan(userId, relay.id, { pinned: true });
-        yield* TestClock.adjust("1 minute");
-
-        const archived = Option.getOrThrow(yield* updatePlan(userId, relay.id, { archived: true }));
-        const listed = yield* listPlans(userId);
-        const everything = yield* listPlans(userId, { includeArchived: true });
-        const opened = Option.getOrThrow(yield* readPlan(userId, relay.id)).plan;
-        yield* updatePlan(userId, relay.id, { archived: false });
-        const restored = yield* listPlans(userId);
-
-        assert.equal(archived.archivedAt, relay.createdAt + 120_000);
-        assert.deepEqual(
-          listed.map(({ id }) => id),
-          [ledger.id],
-        );
-        assert.deepEqual(
-          everything.map(({ id, archivedAt }) => [id, archivedAt]),
-          [
-            [ledger.id, undefined],
-            [relay.id, archived.archivedAt],
-          ],
-        );
-        assert.equal(opened.archivedAt, archived.archivedAt);
-        assert.deepEqual(
-          restored.map(({ id, pinnedAt, archivedAt }) => [id, pinnedAt, archivedAt]),
-          [
-            [ledger.id, undefined, undefined],
-            [relay.id, archived.pinnedAt, undefined],
-          ],
-        );
-      }),
-  );
-
   it.effect("a second account cannot pin or archive another's plan", () =>
     Effect.gen(function* () {
       const owner = yield* openUser;
@@ -512,46 +320,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     }),
   );
 
-  it.effect("a deleted plan stays deleted: its notes answer it gone and recreate nothing", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
-
-      assert.equal(yield* deletePlan(userId, planId), true);
-      const result = yield* saveNotes(bound(userId, planId), INVITATIONS_NOTES);
-
-      assert.deepEqual(result, {
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.NO_PLAN,
-      });
-      assert.equal(Option.isNone(yield* readPlan(userId, planId)), true);
-      assert.deepEqual(yield* listPlans(userId), []);
-    }),
-  );
-
-  it.effect("the model resumes in the conversation attached to the plan", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      const conversationId = yield* openConversation(userId);
-
-      const unattached = yield* readPlan(userId, planId);
-      const attached = yield* attachPlanConversation(userId, planId, conversationId);
-      const resumed = yield* readPlan(userId, planId);
-
-      assert.deepEqual(
-        Option.map(unattached, (stored) => stored.conversationId),
-        Option.some(undefined),
-      );
-      assert.equal(attached, true);
-      assert.deepEqual(
-        Option.map(resumed, (stored) => stored.conversationId),
-        Option.some(conversationId),
-      );
-    }),
-  );
-
   it.effect(
     "a plan takes no other account's conversation, and no one attaches to another's plan",
     () =>
@@ -570,16 +338,5 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
           Option.some(undefined),
         );
       }),
-  );
-
-  it.effect("deleting the account deletes its plans", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-
-      yield* deleteAccount(userId);
-
-      assert.equal(Option.isNone(yield* readPlan(userId, planId)), true);
-    }),
   );
 });

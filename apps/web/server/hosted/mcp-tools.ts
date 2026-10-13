@@ -50,7 +50,7 @@ const END_TIMEOUT = Duration.seconds(2);
 const DESCRIPTION_MAX_CHARS = 160;
 
 /** Why no list could be read. */
-export const MCP_TOOLS_FAILURE = {
+const MCP_TOOLS_FAILURE = {
   /** The server never answered, or answered an error status. */
   UNREACHABLE: "unreachable",
   /** The server refused the bearer. */

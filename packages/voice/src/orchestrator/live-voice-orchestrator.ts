@@ -108,13 +108,13 @@ const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
  * is one short line; Luke still talking `PLAYBACK_MS` after the word is Luke
  * carrying on, so the call stays up rather than cutting him off.
  */
-export const LUKE_ENDING_BOUNDS = {
+const LUKE_ENDING_BOUNDS = {
   START_MS: 1_500,
   PLAYBACK_MS: 15_000,
 } as const;
 
 /** The quiet line the strip says once Luke has hung up, so his end is not read as a drop. */
-export const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
+const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
 
 /**
  * Luke ending the standing call, from the host's word until his goodbye has

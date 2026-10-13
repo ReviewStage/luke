@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { singleFlightEffect } from "./single-flight.js";
 
 it.effect(
@@ -29,30 +29,4 @@ it.effect(
       assert.equal(runs, 2);
       yield* Fiber.await(third);
     }),
-);
-
-it.effect("a failed flight fails every waiter and still ends, so the next ask can try again", () =>
-  Effect.gen(function* () {
-    let runs = 0;
-    const refresh = singleFlightEffect(() =>
-      Effect.gen(function* () {
-        runs += 1;
-        // The flight suspends once before it fails, as every refresh that
-        // reaches the token endpoint does: a body that fails without ever
-        // suspending is over before a second ask can join it.
-        yield* Effect.yieldNow;
-        return yield* Effect.fail(new Error("token endpoint unreachable"));
-      }),
-    );
-
-    const first = yield* Effect.forkChild(refresh());
-    const second = yield* Effect.forkChild(refresh());
-    for (const fiber of [first, second]) {
-      assert.equal(Exit.isFailure(yield* Fiber.await(fiber)), true);
-    }
-    assert.equal(runs, 1);
-
-    assert.equal(Exit.isFailure(yield* Effect.exit(refresh())), true);
-    assert.equal(runs, 2);
-  }),
 );

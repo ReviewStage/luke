@@ -251,7 +251,7 @@ export function stopDevice(stream: MediaStream | undefined): void {
  * The slice of the browser's audio graph the silence is built from, so a test
  * can stand a fake in for the context without a browser.
  */
-export interface LiveSilenceSource {
+interface LiveSilenceSource {
   readonly offset: { value: number };
   connect(destination: AudioNode): void;
   start(): void;

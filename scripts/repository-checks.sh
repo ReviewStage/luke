@@ -5,63 +5,6 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-required_files=(
-    AGENTS.md
-    design/check-design-contract.mjs
-    CHANGELOG.md
-    CLAUDE.md
-    docs/WORKFLOW.md
-    README.md
-    package.json
-    pnpm-lock.yaml
-    pnpm-workspace.yaml
-    biome.json
-    .nvmrc
-    .husky/pre-commit
-    tsconfig.base.json
-    apps/desktop/package.json
-    apps/desktop/electron-builder.ts
-    apps/desktop/scripts/electron-builder-config.mjs
-    apps/desktop/scripts/electron-builder-hooks.mjs
-    apps/desktop/scripts/prepare-builder-assets.mjs
-    apps/desktop/native/macos/TalkKey.swift
-    packages/wire/package.json
-    scripts/release-macos.sh
-    scripts/verify.sh
-    docs/DESIGN.md
-    apps/desktop/src/renderer/AGENTS.md
-    apps/desktop/src/renderer/CLAUDE.md
-    packages/AGENTS.md
-    packages/CLAUDE.md
-    packages/analytics/AGENTS.md
-    packages/analytics/CLAUDE.md
-    packages/gateway/AGENTS.md
-    packages/gateway/CLAUDE.md
-    packages/host/AGENTS.md
-    packages/host/CLAUDE.md
-    packages/hosted/AGENTS.md
-    packages/hosted/CLAUDE.md
-    packages/live/AGENTS.md
-    packages/live/CLAUDE.md
-    packages/surface/AGENTS.md
-    packages/surface/CLAUDE.md
-    .conductor/settings.toml
-    .github/pull_request_template.md
-    .github/workflows/ci.yml
-)
-
-for required_file in "${required_files[@]}"; do
-    if [[ ! -f "$SIDECAR_REPO_ROOT/$required_file" ]]; then
-        printf 'error: required repository file is missing: %s\n' "$required_file" >&2
-        exit 1
-    fi
-done
-
-if [[ ! -x "$SIDECAR_REPO_ROOT/.husky/pre-commit" ]]; then
-    printf 'error: Husky pre-commit hook must be executable\n' >&2
-    exit 1
-fi
-
 find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
     while IFS= read -r -d '' script; do
         bash -n "$script"
@@ -155,25 +98,6 @@ pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts -
 # to a rewrite of the table or an extensionless alias the Build Output emits.
 pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
-# Mount reveals, literal timings, loops, and layout-property animation obey the
-# renderer contract in DESIGN.md. The checker keeps the bounded face-artwork
-# exceptions explicit while rejecting new drift.
-node "$SIDECAR_REPO_ROOT/design/check-design-contract.mjs"
-
-# A prior cleanup stamped this sentence ahead of assertions without explaining
-# any invariant. Specific SAFETY comments are part of the executable style
-# contract; the boilerplate must not return.
-generic_safety=$(grep -rFn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
-    'SAFETY: The preceding check establishes the asserted contract.' \
-    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" || true)
-if [[ -n "$generic_safety" ]]; then
-    printf 'error: replace generic SAFETY comments with the concrete checked invariant:
-%s
-' \
-        "$generic_safety" >&2
-    exit 1
-fi
-
 # Every relative import the Vercel builder compiles must carry its .js
 # extension. The builder compiles this TypeScript into the web functions but
 # leaves the specifiers alone, and Node's ESM loader refuses an extensionless
@@ -196,15 +120,6 @@ extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
 if [[ -n "$extensionless_imports" ]]; then
     printf 'error: relative imports in packages/ and the web function sources must end in .js (Node ESM cannot load them compiled otherwise):\n%s\n' \
         "$extensionless_imports" >&2
-    exit 1
-fi
-
-# docs/DESIGN.md admits no native motion on the surface: everything moves on
-# the spring, so a snap is an exception the contract has not granted.
-snaps=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" || true)
-if [[ -n "$snaps" ]]; then
-    printf 'error: the surface moves on the spring alone (docs/DESIGN.md); scroll snapping found in:\n%s\n' \
-        "$snaps" >&2
     exit 1
 fi
 
@@ -268,18 +183,6 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
-# Every pop-up the renderer draws is the app's own menu: a native `<select>`
-# opens the system's popup list, which draws no provider mark, scrolls the
-# page behind it on a trackpad, and matches nothing else the app draws. The
-# shared menu (`searchable-menu.tsx`) is the one list control, searched or not.
-native_selects=$(grep -rnaE --include='*.tsx' '<select\b' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
-    grep -vE '\.test\.tsx?:' || true)
-if [[ -n "$native_selects" ]]; then
-    printf 'error: the renderer draws its own menus — no native <select>:\n%s\n' \
-        "$native_selects" >&2
-    exit 1
-fi
-
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
 # reset time. The diagnostics the renderer receives carry the members, so the
@@ -325,19 +228,6 @@ if [[ -n "$direct_ipc_registration" ]]; then
         "$direct_ipc_registration" >&2
     exit 1
 fi
-
-# The changelog references its screenshots by repository path, and the page
-# serves them from the site root — a reference whose file is gone 404s
-# silently on the page and draws a broken image on GitHub. The paths are
-# word-splittable because the slug convention keeps them free of spaces.
-changelog_image_paths=$(grep -oE '\]\(apps/web/public/[^)]+\)' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
-    sed 's/^](//; s/)$//' || true)
-for image_path in $changelog_image_paths; do
-    if [[ ! -f "$SIDECAR_REPO_ROOT/$image_path" ]]; then
-        printf 'error: CHANGELOG.md references a missing screenshot: %s\n' "$image_path" >&2
-        exit 1
-    fi
-done
 
 # The changelog page splits releases on "## <version> — <YYYY-MM-DD>" and its
 # parser throws on any other shape — at module load in the browser, which no

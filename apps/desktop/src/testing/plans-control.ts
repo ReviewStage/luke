@@ -9,7 +9,6 @@ import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
 import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
 import {
-  type OpenPlan,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
@@ -17,18 +16,6 @@ import {
 import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
-
-/** An open plan that has used every fixed tab, so its panel draws them all. */
-export function usedPlan(id: string): OpenPlan {
-  return {
-    id,
-    holds: {
-      [SIDE_PANEL_TAB.BOARD]: true,
-      [SIDE_PANEL_TAB.CODE]: true,
-      [SIDE_PANEL_TAB.CALL]: true,
-    },
-  };
-}
 
 /** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {
@@ -39,7 +26,7 @@ export const UNPINNED_SUMMARY: SummaryPin = {
 };
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
-export function versionHistoryControl(
+function versionHistoryControl(
   overrides: Partial<VersionHistoryControl> = {},
 ): VersionHistoryControl {
   return {
@@ -63,9 +50,7 @@ export function versionHistoryControl(
 }
 
 /** A plan with no agents and no repository, every press ignored. */
-export function codingAgentsControl(
-  overrides: Partial<CodingAgentsControl> = {},
-): CodingAgentsControl {
+function codingAgentsControl(overrides: Partial<CodingAgentsControl> = {}): CodingAgentsControl {
   return {
     agents: [],
     archived: [],

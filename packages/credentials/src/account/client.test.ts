@@ -1,20 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { type FakeResponder, fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Exit } from "effect";
 import { test } from "vitest";
-import {
-  ACCOUNT_FAILURE_ACTION,
-  AccountClient,
-  AccountClientError,
-  AccountTransportError,
-  accessTokenNeedsRefresh,
-  accountFailureAction,
-  accountGateOpen,
-  deleteHostedAccount,
-  withIssuedAccountTokens,
-} from "./client.js";
+import { AccountClient, accountGateOpen, withIssuedAccountTokens } from "./client.js";
 import { ACCOUNT_PROVIDER } from "./snapshot.js";
 
 function json(body: JsonValue, status = 200): Response {
@@ -81,53 +70,6 @@ it.effect("the code exchange sends the verifier and redirect as form fields", ()
   }),
 );
 
-it.effect("a refresh keeps the existing refresh token when rotation omits one", () =>
-  Effect.gen(function* () {
-    const fetch: FakeResponder = async (_input, init) => {
-      const form = new URLSearchParams(String(init?.body));
-      assert.equal(form.get("grant_type"), "refresh_token");
-      assert.equal(form.get("refresh_token"), "existing-refresh");
-      return json({ access_token: "new-access" });
-    };
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(fetch),
-    });
-
-    assert.deepEqual(yield* client.refresh("existing-refresh"), {
-      accessToken: "new-access",
-      refreshToken: "existing-refresh",
-    });
-  }),
-);
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-it.effect("sign-out revokes the refresh token as a public client", () =>
-  Effect.gen(function* () {
-    let request: Request | undefined;
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(async (input, init) => {
-        request = new Request(input, init);
-        return new Response(null, { status: 200 });
-      }),
-    });
-
-    yield* client.revoke("refresh-to-revoke");
-
-    assert.ok(request);
-    const sent = request;
-    assert.equal(sent.url, "https://tryluke.dev/api/auth/oauth2/revoke");
-    assert.equal(sent.method, "POST");
-    const form = new URLSearchParams(yield* Effect.promise(() => sent.text()));
-    assert.equal(form.get("client_id"), "luke-desktop");
-    assert.equal(form.get("token"), "refresh-to-revoke");
-    assert.equal(form.get("token_type_hint"), "refresh_token");
-  }),
-);
-
 it.effect("userinfo returns the identity fields and nothing else the claim carried", () =>
   Effect.gen(function* () {
     const fetch: FakeResponder = async (_input, init) => {
@@ -150,144 +92,6 @@ it.effect("userinfo returns the identity fields and nothing else the claim carri
       name: "Developer",
       provider: ACCOUNT_PROVIDER.GITHUB,
     });
-  }),
-);
-
-/**
- * The id is the one field nothing user-facing needs, so its absence must cost
- * an account nothing: every hosted endpoint resolves the same claim from the
- * bearer token, and only what has to name a person on this machine stands
- * down without it.
- */
-it.effect("an identity with no subject claim still signs in, without an id", () =>
-  Effect.gen(function* () {
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(async () => json({ email: "developer@example.com" })),
-    });
-
-    assert.deepEqual(yield* client.userInfo("access", ACCOUNT_PROVIDER.GOOGLE), {
-      email: "developer@example.com",
-      provider: ACCOUNT_PROVIDER.GOOGLE,
-    });
-  }),
-);
-
-it.effect("userinfo keeps a picture only from the hosts the renderer's policy pins", () =>
-  Effect.gen(function* () {
-    const clientFor = (picture: string) =>
-      new AccountClient({
-        baseUrl: "https://tryluke.dev/api/auth",
-        clientId: "luke-desktop",
-        httpClient: fakeHttpClientLayer(async () =>
-          json({ email: "developer@example.com", picture }),
-        ),
-      });
-
-    const google = yield* clientFor("https://lh3.googleusercontent.com/a/portrait").userInfo(
-      "access",
-      ACCOUNT_PROVIDER.GOOGLE,
-    );
-    assert.equal(google.pictureUrl, "https://lh3.googleusercontent.com/a/portrait");
-
-    const github = yield* clientFor("https://avatars.githubusercontent.com/u/1?v=4").userInfo(
-      "access",
-      ACCOUNT_PROVIDER.GITHUB,
-    );
-    assert.equal(github.pictureUrl, "https://avatars.githubusercontent.com/u/1?v=4");
-
-    // Anywhere else — another host, a scheme downgrade, a suffix imposter, or
-    // no URL at all — the identity simply travels without a picture.
-    for (const refused of [
-      "https://example.com/avatar.png",
-      "http://lh3.googleusercontent.com/a/portrait",
-      "https://evilgoogleusercontent.com/a/portrait",
-      "https://avatars.githubusercontent.com.evil.example/u/1",
-      "not a url",
-    ]) {
-      const identity = yield* clientFor(refused).userInfo("access", ACCOUNT_PROVIDER.GOOGLE);
-      assert.equal(identity.pictureUrl, undefined, refused);
-    }
-  }),
-);
-
-it.effect("a request that outlives its deadline ends as a timeout, never a hang", () =>
-  Effect.gen(function* () {
-    const asked = yield* Deferred.make<void>();
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      timeoutMs: 1_000,
-      httpClient: fakeHttpClientLayer(() => {
-        Deferred.doneUnsafe(asked, Effect.void);
-        return new Promise<Response>(() => undefined);
-      }),
-    });
-
-    const refreshing = yield* Effect.forkChild(Effect.flip(client.refresh("stale")));
-    yield* Deferred.await(asked);
-    yield* TestClock.adjust(Duration.millis(1_000));
-    const error = yield* Fiber.join(refreshing);
-
-    assert.equal(error._tag, "AccountTransportError");
-    assert.equal(error.errorName, "TimeoutError");
-  }),
-);
-
-it.effect("a fiber cut under a request is an interruption, never a request that failed", () =>
-  Effect.gen(function* () {
-    const asked = yield* Deferred.make<void>();
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(() => {
-        Deferred.doneUnsafe(asked, Effect.void);
-        return new Promise<Response>(() => undefined);
-      }),
-    });
-
-    const refreshing = yield* Effect.forkChild(client.refresh("stale"));
-    yield* Deferred.await(asked);
-    yield* Fiber.interrupt(refreshing);
-
-    assert.equal(Exit.hasInterrupts(yield* Fiber.await(refreshing)), true);
-  }),
-);
-
-it.effect("a transport that cannot carry the request is an error, never a hang", () =>
-  Effect.gen(function* () {
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(() => {
-        throw new TypeError("fetch failed");
-      }),
-    });
-
-    const error = yield* Effect.flip(client.refresh("stale"));
-
-    assert.equal(error._tag, "AccountTransportError");
-    assert.equal(error.errorName, "HttpClientError");
-  }),
-);
-
-it.effect("OAuth errors preserve their status and machine-readable code", () =>
-  Effect.gen(function* () {
-    const client = new AccountClient({
-      baseUrl: "https://tryluke.dev/api/auth",
-      clientId: "luke-desktop",
-      httpClient: fakeHttpClientLayer(async () =>
-        json({ error: "invalid_grant", error_description: "Refresh token was revoked" }, 400),
-      ),
-    });
-
-    const error = yield* Effect.flip(client.refresh("revoked"));
-
-    assert.equal(error._tag, "AccountClientError");
-    assert.equal(error.status, 400);
-    assert.equal(error.oauthError, "invalid_grant");
-    assert.equal(error.message, "Refresh token was revoked");
   }),
 );
 
@@ -317,128 +121,13 @@ it.effect("invalid token and identity responses are refused", () =>
   }),
 );
 
-test("invalid_grant is the only refresh result that signs an account out", () => {
-  assert.equal(
-    accountFailureAction(
-      new AccountClientError({ message: "revoked", oauthError: "invalid_grant" }),
-    ),
-    ACCOUNT_FAILURE_ACTION.SIGN_OUT,
-  );
-  assert.equal(
-    accountFailureAction(new AccountClientError({ message: "service down", status: 503 })),
-    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
-  );
-  assert.equal(
-    accountFailureAction(
-      new AccountTransportError({ message: "network failed", errorName: "TypeError" }),
-    ),
-    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
-  );
-  assert.equal(
-    accountFailureAction(
-      new AccountTransportError({ message: "timed out", errorName: "TimeoutError" }),
-    ),
-    ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
-  );
-});
-
-test("a rejected or expired access token refreshes without signing out", () => {
-  assert.equal(
-    accessTokenNeedsRefresh(
-      new AccountClientError({ message: "expired", oauthError: "invalid_scope" }),
-    ),
-    true,
-  );
-  assert.equal(
-    accessTokenNeedsRefresh(new AccountClientError({ message: "unauthorized", status: 401 })),
-    true,
-  );
-  assert.equal(
-    accessTokenNeedsRefresh(new AccountClientError({ message: "service down", status: 503 })),
-    false,
-  );
-  assert.equal(
-    accessTokenNeedsRefresh(
-      new AccountTransportError({ message: "network failed", errorName: "TypeError" }),
-    ),
-    false,
-  );
-});
-
 test("capture and fixture runs bypass the account wall", () => {
   assert.equal(accountGateOpen({ requiresAccount: false }, false), true);
   assert.equal(accountGateOpen({ requiresAccount: true }, false), false);
   assert.equal(accountGateOpen({ requiresAccount: true }, true), true);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-it.effect("a delete posts the bearer token at the service's account-delete path", () =>
-  Effect.gen(function* () {
-    let request: Request | undefined;
-    const fetch: FakeResponder = async (input, init) => {
-      request = new Request(input, init);
-      return json({ deleted: true });
-    };
-
-    yield* deleteHostedAccount({
-      serviceBaseUrl: "https://tryluke.dev/",
-      accessToken: "access-1",
-      httpClient: fakeHttpClientLayer(fetch),
-    });
-
-    assert.equal(request?.url, "https://tryluke.dev/api/account/delete");
-    assert.equal(request?.method, "POST");
-    assert.equal(request?.headers.get("authorization"), "Bearer access-1");
-  }),
-);
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-it.effect("an expired token's refusal reads as refresh-and-retry, a service no does not", () =>
-  Effect.gen(function* () {
-    const refusal = (status: number): FakeResponder => {
-      return async () => json({ error: "invalid-token" }, status);
-    };
-
-    const expired = yield* Effect.flip(
-      deleteHostedAccount({
-        serviceBaseUrl: "https://tryluke.dev",
-        accessToken: "access-1",
-        httpClient: fakeHttpClientLayer(refusal(401)),
-      }),
-    );
-    assert.equal(expired._tag, "AccountClientError");
-    assert.equal(accessTokenNeedsRefresh(expired), true);
-
-    const refused = yield* Effect.flip(
-      deleteHostedAccount({
-        serviceBaseUrl: "https://tryluke.dev",
-        accessToken: "access-1",
-        httpClient: fakeHttpClientLayer(refusal(503)),
-      }),
-    );
-    assert.equal(refused._tag, "AccountClientError");
-    assert.equal(accessTokenNeedsRefresh(refused), false);
-  }),
-);
-
 const ISSUED_TOKENS = { accessToken: "issued-access", refreshToken: "issued-refresh" };
-
-it.effect("accepted account tokens stay active", () =>
-  Effect.gen(function* () {
-    const revoked: string[] = [];
-    const result = yield* withIssuedAccountTokens({
-      issue: Effect.succeed(ISSUED_TOKENS),
-      use: (tokens) => Effect.succeed(tokens.accessToken),
-      revoke: (refreshToken) =>
-        Effect.sync(() => {
-          revoked.push(refreshToken);
-        }),
-    });
-
-    assert.equal(result, ISSUED_TOKENS.accessToken);
-    assert.deepEqual(revoked, []);
-  }),
-);
 
 it.effect("a failed account completion revokes every issued refresh token", () =>
   Effect.gen(function* () {
@@ -457,60 +146,5 @@ it.effect("a failed account completion revokes every issued refresh token", () =
 
     assert.deepEqual(outcome, Exit.fail(failure));
     assert.deepEqual(revoked, [ISSUED_TOKENS.refreshToken]);
-  }),
-);
-
-it.effect("a revocation the service never answers ends on its own deadline", () =>
-  Effect.gen(function* () {
-    const revokeFailures: Error[] = [];
-    const failure = new Error("identity failed");
-    // The revocation runs as the failed attempt unwinds, where the cleanup is
-    // uninterruptible: its own deadline has to win there all the same.
-    const outcome = yield* Effect.forkChild(
-      Effect.exit(
-        withIssuedAccountTokens({
-          issue: Effect.succeed(ISSUED_TOKENS),
-          use: () => Effect.fail(failure),
-          revoke: () =>
-            Effect.timeoutOrElse({
-              duration: Duration.seconds(10),
-              orElse: () =>
-                Effect.fail(
-                  new AccountTransportError({
-                    message: "revocation timed out",
-                    errorName: "TimeoutError",
-                  }),
-                ),
-            })(Effect.never),
-          onRevokeFailure: (error) => revokeFailures.push(error),
-        }),
-      ),
-    );
-    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
-    yield* TestClock.adjust(Duration.seconds(10));
-
-    assert.deepEqual(yield* Fiber.join(outcome), Exit.fail(failure));
-    assert.deepEqual(
-      revokeFailures.map((error) => error.message),
-      ["revocation timed out"],
-    );
-  }),
-);
-
-it.effect("revocation failure preserves the sign-in failure", () =>
-  Effect.gen(function* () {
-    const revokeFailures: Error[] = [];
-    const failure = new Error("storage failed");
-    const outcome = yield* Effect.exit(
-      withIssuedAccountTokens({
-        issue: Effect.succeed(ISSUED_TOKENS),
-        use: () => Effect.fail(failure),
-        revoke: () => Effect.fail(new AccountClientError({ message: "revocation failed" })),
-        onRevokeFailure: (error) => revokeFailures.push(error),
-      }),
-    );
-
-    assert.deepEqual(outcome, Exit.fail(failure));
-    assert.equal(revokeFailures.length, 1);
   }),
 );

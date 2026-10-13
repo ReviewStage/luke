@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
 import { user } from "@sidecar/database/schemas/auth";
@@ -6,9 +5,9 @@ import { conversations, messages, turns } from "@sidecar/database/schemas/storag
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { MessageRoleSchema } from "@sidecar/wire";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
@@ -88,29 +87,6 @@ export function setConversationDeletedAt(
 
 export function readConversationById(run: HostedStoreTestRun, id: string) {
   return run(db.select().from(conversations).where(eq(conversations.id, id)));
-}
-
-export function readStandingConversations(
-  run: HostedStoreTestRun,
-  userId: string,
-  kind: ConversationInsert["kind"],
-) {
-  return run(
-    db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.userId, userId),
-          eq(conversations.kind, kind),
-          isNull(conversations.deletedAt),
-        ),
-      ),
-  );
-}
-
-export function deleteConversation(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(Effect.asVoid(db.delete(conversations).where(eq(conversations.id, id))));
 }
 
 export interface MessageRow {
@@ -348,17 +324,6 @@ const VoiceSessionRowSchema = Schema.Struct({
 export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
-export function readVoiceSessionByIdTyped(
-  run: HostedStoreTestRun,
-  id: string,
-): Promise<VoiceSessionRow | undefined> {
-  return run(
-    Effect.map(db.select().from(voiceSessions).where(eq(voiceSessions.id, id)), (rows) =>
-      rows[0] === undefined ? undefined : decodeVoiceSessionRow(rows[0]),
-    ),
-  );
-}
-
 export function readVoiceSessionsByUserTyped(
   run: HostedStoreTestRun,
   userId: string,
@@ -395,10 +360,6 @@ export function insertVoiceTranscriptSegment(
       }),
     ),
   );
-}
-
-export function deleteVoiceSession(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(Effect.asVoid(db.delete(voiceSessions).where(eq(voiceSessions.id, id))));
 }
 
 export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
@@ -443,40 +404,3 @@ export function countRowsWhere(
 ): Promise<number> {
   return run(countRows(column, value));
 }
-
-/**
- * The driver's own refusal code (Postgres's `SQLSTATE`, e.g. `23505` for a
- * unique violation) off a rejected `database.run(...)` promise: a promise door
- * rejects with the squashed `Cause`, which is the `SqlError` itself, nothing
- * wrapping it. v4's `SqlError` states what went wrong as a structured `reason`
- * of its own and aliases its `cause` to that reason, so the driver's own error
- * — the one carrying the code — is a level further down than it was when the
- * error wrapped it directly.
- */
-const DriverErrorSchema = Schema.Struct({
-  cause: Schema.Struct({ cause: Schema.Struct({ code: Schema.String }) }),
-});
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Schema.
-function sqlErrorCode(error: unknown): string | undefined {
-  return Option.map(
-    Schema.decodeUnknownOption(DriverErrorSchema)(error),
-    (decoded) => decoded.cause.cause.code,
-  ).pipe(Option.getOrUndefined);
-}
-
-/** A statement's promise is refused for exactly the Postgres code named. */
-export async function assertRefusedWithCode(
-  promise: Promise<unknown>,
-  code: string,
-): Promise<void> {
-  await assert.rejects(promise, (error) => {
-    assert.equal(sqlErrorCode(error), code);
-    return true;
-  });
-}
-
-export const POSTGRES_ERROR = {
-  NOT_NULL_VIOLATION: "23502",
-  UNIQUE_VIOLATION: "23505",
-} as const;

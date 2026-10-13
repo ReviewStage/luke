@@ -377,7 +377,7 @@ function searchedSpan(text: string, note: PlanNote): Span | undefined {
 }
 
 /** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
-export const PLAN_AGENT_EDITS_KEPT = 50;
+const PLAN_AGENT_EDITS_KEPT = 50;
 
 /**
  * One save a coding agent made on the plan: which agent, when, and the notes

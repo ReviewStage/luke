@@ -29,7 +29,7 @@ export const POSTHOG_ENVIRONMENT = {
   PROJECT_ID: "POSTHOG_PROJECT_ID",
 } as const;
 
-export const POSTHOG_DEFAULTS = {
+const POSTHOG_DEFAULTS = {
   HOST: "https://us.i.posthog.com",
   /** The private API lives on the app host, not the ingestion host. */
   API_HOST: "https://us.posthog.com",

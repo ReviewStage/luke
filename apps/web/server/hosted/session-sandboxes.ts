@@ -53,14 +53,14 @@ const SANDBOX_API = {
   PAGE: 100,
 } as const;
 
-export const SESSION_SANDBOX_SWEEP = {
+const SESSION_SANDBOX_SWEEP = {
   /** The most sessions one sweep takes, so a backlog is worked through a sweep at a time. */
   MAX_SESSIONS: 20,
   CONCURRENCY: 5,
 } as const;
 
 /** Vercel could not be asked, or did not confirm a delete; the status where it answered one. */
-export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
+class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
   readonly status?: number;
 }> {
   override get message(): string {
@@ -91,7 +91,7 @@ const readClaims = readEither(OidcClaimsSchema, { excess: EXCESS_KEYS.DROP });
 const readListed = readEither(ListedSandboxesSchema, { excess: EXCESS_KEYS.DROP });
 
 /** How the deployment's own OIDC token is read: the function's in production, a fixed one in a test. */
-export type OidcTokenRead = () => Promise<string>;
+type OidcTokenRead = () => Promise<string>;
 
 /** The project and team a token names, read from its payload; Vercel verifies the token itself. */
 function claimsOf(
@@ -139,7 +139,7 @@ function succeeded(status: number): boolean {
  * never use. A session has one sandbox, so the first page of the list is
  * the whole of it.
  */
-export function vercelSessionSandboxes(
+function vercelSessionSandboxes(
   readToken: OidcTokenRead,
 ): Effect.Effect<SessionSandboxesService, never, HttpClient.HttpClient> {
   return Effect.map(HttpClient.HttpClient, (client) => ({

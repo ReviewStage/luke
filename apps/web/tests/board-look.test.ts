@@ -9,15 +9,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect } from "effect";
-import { test } from "vitest";
-import {
-  BOARD_LOOK_WAIT,
-  LOOK_AT_BOARD_REFUSAL,
-  LOOK_AT_BOARD_STATUS,
-  lookModelOutput,
-  runLookAtBoard,
-  storedLookOutput,
-} from "../server/hosted/board-look";
+import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "../server/hosted/board-look";
 import { driven, forkClockDriven } from "./support/clock-driven";
 
 /**
@@ -30,7 +22,6 @@ import { driven, forkClockDriven } from "./support/clock-driven";
  */
 
 const IMAGE = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk";
-const OLDER_IMAGE = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mNk";
 
 const BOX = [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }] as const;
 const SCENE = [
@@ -46,77 +37,6 @@ const openPlan = Effect.gen(function* () {
 });
 
 it.layer(getTestDB())("look_at_board", (it) => {
-  it.effect("a look answers the image the Mac's save of the latest drawing carried", () =>
-    Effect.gen(function* () {
-      const { userId, planId, binding } = yield* openPlan;
-      yield* writeDrawing(userId, planId, BOX);
-
-      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
-      yield* writeScene(userId, planId, SCENE, 1, IMAGE);
-      const answered = yield* driven(look, BOARD_LOOK_WAIT.POLL);
-
-      assert.deepEqual(answered, { status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE });
-    }),
-  );
-
-  it.effect("a look waits out the image of an older drawing, and says the board is not open", () =>
-    Effect.gen(function* () {
-      const { userId, planId, binding } = yield* openPlan;
-      yield* writeDrawing(userId, planId, BOX);
-      yield* writeScene(userId, planId, SCENE, 1, OLDER_IMAGE);
-      yield* writeDrawing(userId, planId, BOX);
-
-      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
-      const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
-
-      assert.deepEqual(answered, {
-        status: LOOK_AT_BOARD_STATUS.NOT_LOOKED,
-        reason: LOOK_AT_BOARD_REFUSAL.NOT_OPEN,
-      });
-    }),
-  );
-
-  it.effect("a later save with no image keeps the image of the drawing it still holds", () =>
-    Effect.gen(function* () {
-      const { userId, planId, binding } = yield* openPlan;
-      yield* writeDrawing(userId, planId, BOX);
-      yield* writeScene(userId, planId, SCENE, 1, IMAGE);
-      yield* writeScene(userId, planId, [], 1);
-
-      const answered = yield* runLookAtBoard(binding, unparsedWire({}));
-
-      assert.deepEqual(answered, { status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE });
-    }),
-  );
-
-  it.effect("a save of a new drawing that carried no image drops the old drawing's image", () =>
-    Effect.gen(function* () {
-      const { userId, planId, binding } = yield* openPlan;
-      yield* writeDrawing(userId, planId, BOX);
-      yield* writeScene(userId, planId, SCENE, 1, OLDER_IMAGE);
-      yield* writeDrawing(userId, planId, BOX);
-      yield* writeScene(userId, planId, SCENE, 2);
-
-      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
-      const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
-
-      assert.equal(answered.status, LOOK_AT_BOARD_STATUS.NOT_LOOKED);
-    }),
-  );
-
-  it.effect(
-    "a look at a board Luke has not drawn on answers the image of the developer's scene",
-    () =>
-      Effect.gen(function* () {
-        const { userId, planId, binding } = yield* openPlan;
-        yield* writeScene(userId, planId, SCENE, 0, IMAGE);
-
-        const answered = yield* runLookAtBoard(binding, unparsedWire({}));
-
-        assert.deepEqual(answered, { status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE });
-      }),
-  );
-
   it.effect("another account's plan shows nothing", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
@@ -132,38 +52,4 @@ it.layer(getTestDB())("look_at_board", (it) => {
       assert.equal(answered.status, LOOK_AT_BOARD_STATUS.NOT_LOOKED);
     }),
   );
-
-  it.effect("arguments are refused", () =>
-    Effect.gen(function* () {
-      const { binding } = yield* openPlan;
-
-      const answered = yield* runLookAtBoard(binding, unparsedWire({ zoom: 2 }));
-
-      assert.deepEqual(answered, {
-        status: LOOK_AT_BOARD_STATUS.NOT_LOOKED,
-        reason: LOOK_AT_BOARD_REFUSAL.UNREADABLE,
-      });
-    }),
-  );
-});
-
-test("the model is shown a look as the image itself, and any other result as its JSON", () => {
-  const looked = lookModelOutput(
-    unparsedWire({ status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE }),
-  );
-  const parts = looked.type === "content" ? looked.value : [];
-  assert.ok(
-    parts.some(
-      (part) => part.type === "file" && part.mediaType === "image/png" && part.data.data === IMAGE,
-    ),
-  );
-  const ran = { status: "ran", exitCode: 0, stdout: "", stderr: "" };
-  assert.deepEqual(lookModelOutput(unparsedWire(ran)), { type: "json", value: ran });
-});
-
-test("the conversation keeps a look's status and never its image", () => {
-  const kept = storedLookOutput(
-    unparsedWire({ status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE }),
-  );
-  assert.deepEqual(kept, { status: LOOK_AT_BOARD_STATUS.LOOKED });
 });

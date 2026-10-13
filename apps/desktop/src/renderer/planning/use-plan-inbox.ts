@@ -109,7 +109,7 @@ interface KeptDraft {
 }
 
 /** What a card says when its answer was not taken, by what had become of the item. */
-export const INBOX_NOT_TAKEN_NOTE = {
+const INBOX_NOT_TAKEN_NOTE = {
   /** The agent changed the item before the answer landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
   /** The item was answered first, from another window or Mac. */

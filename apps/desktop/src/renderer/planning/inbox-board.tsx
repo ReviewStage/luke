@@ -280,7 +280,6 @@ function CodeBlock({
   const { path, sha, startLine, endLine } = block;
   const codeRef = { path, startLine, endLine };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the block's own fields and a retry's press are what ask again; the block and the door are read through the ref.
   useEffect(() => {
     if (unread !== undefined) return;
     let standing = true;
