@@ -94,7 +94,9 @@ function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuA
  * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
  * item runs, and only the open plan's Archive names ⇧⌘A, because the chord
  * archives the open plan rather than the row under the pointer. They are the
- * row's siblings rather than inside it, so a press on one opens nothing.
+ * row's siblings rather than inside it, so a press on one opens nothing, but
+ * part of the row to its card, which stands while the pointer is on them and
+ * goes as one is pressed (`Tooltip`'s `cardRegion`).
  */
 function SidebarPlanMarks({
   plans,
@@ -315,6 +317,7 @@ export function SidebarPlan({
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
   const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
   const row = useRef<HTMLButtonElement | null>(null);
+  const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
     if (rename.editing || !refocus.current) return;
@@ -329,7 +332,7 @@ export function SidebarPlan({
     actions.show(atPointer(event), row.current);
   };
   return (
-    <li className="sidebar-plan-item">
+    <li ref={item} className="sidebar-plan-item">
       {rename.editing ? (
         <div className="sidebar-plan" aria-current={current ? "page" : undefined}>
           <PlanNameField
@@ -355,6 +358,7 @@ export function SidebarPlan({
             />
           }
           cardBeside
+          cardRegion={item}
         >
           <button
             ref={row}

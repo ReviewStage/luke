@@ -24,7 +24,11 @@
  * down; like theirs, it is the pointer's preview, which the keyboard never
  * enters, so what a card's buttons do is offered elsewhere too. One tooltip
  * stands in the window at a time: the next to show takes a lingering card
- * down at once.
+ * down at once. A card hung from a row may name the row (`cardRegion`):
+ * the row's other controls, a list row's Pin and Archive, are then part of
+ * its control, so the pointer crossing onto them leaves the card standing
+ * and their own pills yield to it, while a press anywhere in the row takes
+ * it down.
  *
  * Taken down once it has shown, a pill or a card is held drawn through its
  * exit, inert, and only then taken out; one taken down while it still
@@ -45,6 +49,7 @@ import {
   type PointerEventHandler,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useId,
@@ -97,6 +102,9 @@ let warmUntil = 0;
 
 /** The way to take down the one tooltip standing in the window, while one stands. */
 let standingHide: (() => void) | undefined;
+
+/** The row the standing card was hung from, whose other controls raise nothing of their own while it stands. */
+let standingRegion: HTMLElement | undefined;
 
 /**
  * A card's linger, as an atom whose work is the wait: it takes the card down
@@ -323,23 +331,33 @@ function TooltipPill({
  * than under it, as a list row's card hangs, or before its start where the
  * window ends past the control. A card's buttons and links
  * take it down once chosen, and stay the pointer's alone, so the card is a
- * description the keyboard never enters.
+ * description the keyboard never enters. `cardRegion` is the row the
+ * control stands in, the whole of which counts as the control while its
+ * card stands.
  */
 export function Tooltip({
   label,
   command,
   card,
   cardBeside = false,
+  cardRegion,
   children,
 }: {
   label: string | undefined;
   command?: KeyedCommand;
   card?: ReactNode;
   cardBeside?: boolean;
+  cardRegion?: RefObject<HTMLElement | null>;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
   const [shown, setShown, latest] = useStateWithRef<Shown | undefined>(undefined);
+  const carded = card !== undefined;
+  // The row a card counts as its control, where it names one; a pill has none.
+  const region = useCallback(
+    () => (carded ? (cardRegion?.current ?? undefined) : undefined),
+    [carded, cardRegion],
+  );
   const linger = useAtomSet(cardLingerAtom);
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
@@ -360,7 +378,10 @@ export function Tooltip({
     if (standing === undefined) return;
     setSeen(visible(standing));
     if (visible(standing)) warmUntil = performance.now() + WARM_MS;
-    if (standingHide === hide) standingHide = undefined;
+    if (standingHide === hide) {
+      standingHide = undefined;
+      standingRegion = undefined;
+    }
     overCard.current = false;
     linger(Atom.Interrupt);
     setShown(undefined);
@@ -372,6 +393,8 @@ export function Tooltip({
       linger(Atom.Interrupt);
       return;
     }
+    // A control in the standing card's row is part of that row, and leaves the card standing.
+    if (standingHide !== hide && standingRegion?.contains(anchor) === true) return;
     if (standingHide !== hide) standingHide?.();
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
@@ -382,14 +405,15 @@ export function Tooltip({
       describes: card !== undefined || name !== label,
     });
     standingHide = hide;
+    standingRegion = region();
   };
   // A card on screen lingers for the pointer crossing to it; a pill, or a
   // card still waiting, goes at once.
-  const leave = () => {
+  const leave = useCallback(() => {
     const standing = latest();
-    if (card !== undefined && standing !== undefined && visible(standing)) linger({ leave: hide });
+    if (carded && standing !== undefined && visible(standing)) linger({ leave: hide });
     else hide();
-  };
+  }, [carded, latest, linger, hide]);
   // A selection dragged past the card's edge leaves it standing until the
   // press ends, and the pointer then off the card lets it linger.
   const onCard = (over: boolean) => {
@@ -413,6 +437,7 @@ export function Tooltip({
     () => () => {
       if (standingHide !== hide) return;
       standingHide = undefined;
+      standingRegion = undefined;
       linger(Atom.Interrupt);
     },
     [hide, linger],
@@ -439,6 +464,31 @@ export function Tooltip({
     };
   }, [up, hide]);
 
+  // While a card hung from a row stands, the pointer leaving the row, not
+  // its control, is what lets it linger, the pointer back anywhere in the
+  // row keeps it, and a press anywhere in the row, on the control or one of
+  // its siblings, takes it down. Note that these are the row's own events,
+  // because the row is no element of this one's, and that the pointer
+  // leaving the row onto the card lets nothing linger, because React has
+  // told the card the pointer arrived before the window tells the row it
+  // left.
+  useEffect(() => {
+    const row = region();
+    if (!up || row === undefined) return;
+    const out = () => {
+      if (!overCard.current) leave();
+    };
+    const back = () => linger(Atom.Interrupt);
+    row.addEventListener("pointerleave", out);
+    row.addEventListener("pointerenter", back);
+    row.addEventListener("pointerdown", hide);
+    return () => {
+      row.removeEventListener("pointerleave", out);
+      row.removeEventListener("pointerenter", back);
+      row.removeEventListener("pointerdown", hide);
+    };
+  }, [up, region, leave, linger, hide]);
+
   const own = children.props;
   const anchor = cloneElement(children, {
     ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
@@ -452,7 +502,8 @@ export function Tooltip({
     },
     onPointerLeave: (event) => {
       own.onPointerLeave?.(event);
-      leave();
+      // A card hung from a row lingers once the pointer leaves the row instead.
+      if (region() === undefined) leave();
     },
     onPointerDown: (event) => {
       own.onPointerDown?.(event);
