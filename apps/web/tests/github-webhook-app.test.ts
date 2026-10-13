@@ -7,6 +7,7 @@ import {
   listPublishedCodingAgents,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
+import { listWorkspaces } from "@sidecar/database/models/workspace-store";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
@@ -19,6 +20,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
+import { syncInstallations } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   type FakeGitHub,
@@ -26,7 +28,7 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { startPlan } from "./support/workspaces";
+import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function
@@ -323,6 +325,42 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           body: { read: 1 },
         });
         assert.equal((yield* kept())?.checks, CHECK_SUMMARY.PASSING);
+      }),
+  );
+
+  it.effect(
+    "an installation removed or suspended leaves its workspace listed as inactive, and one brought back active again",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const installationId = 900_000 + Math.floor(Math.random() * 90_000);
+        const login = `acme-${randomUUID()}`;
+        const github = githubReaching([{ id: installationId, login, repositories: [] }]);
+        yield* syncInstallations(owner, yield* fakeWorkspaceSeams).pipe(
+          Effect.provide(github.layer),
+        );
+        const names = () =>
+          Effect.map(listWorkspaces(owner), (workspaces) =>
+            workspaces.map(({ name, active }) => ({ name, active })),
+          );
+        const deliver = (action: string) =>
+          answer(
+            github,
+            SECRET,
+            delivery("installation", { action, installation: { id: installationId } }),
+          );
+        assert.deepEqual(yield* names(), [{ name: login, active: true }]);
+
+        yield* deliver("suspend");
+        const suspended = yield* names();
+        yield* deliver("unsuspend");
+        const unsuspended = yield* names();
+        yield* deliver("deleted");
+        const deleted = yield* names();
+
+        assert.deepEqual(suspended, [{ name: login, active: false }]);
+        assert.deepEqual(unsuspended, [{ name: login, active: true }]);
+        assert.deepEqual(deleted, [{ name: login, active: false }]);
       }),
   );
 });

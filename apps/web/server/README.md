@@ -275,8 +275,13 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on its owner's own token
 through `agentPublished`, as the agent's tab reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
-scripted GitHub and PGlite.
+answered and ignored. An `installation` delivery, which GitHub sends every
+App unsubscribed, moves the status of its workspace's `github_installation`
+row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
+a workspace whose installation is not active is listed by
+`GET /api/workspaces` with `active: false`, so its plans stay reachable, and
+nothing is deleted. `tests/github-webhook-app.test.ts`
+holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
@@ -1045,6 +1050,39 @@ deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
+
+`server/workspaces-app.ts` answers `GET /api/workspaces`
+(`packages/hosted/src/workspace-wire.ts`): `workspaces`, every workspace the
+bearer's account is a member of, its personal one first and the rest by name,
+each `{ id, name, personal, role, active }`, and `available`, each
+`{ installationId, name }`, the workspaces of Luke GitHub App installations
+the account's GitHub reaches that it is not a member of. A workspace beside
+the personal one stands for one installation: a `github_installation` row
+(`packages/database/src/schemas/github-installation.ts`, migration `20261013162123_github_installation`) ties the
+`organization` to GitHub's installation id and account id, never the login,
+with the account's login and kind and the installation's status. Before it
+reads either list the route ensures the personal workspace and runs
+`hosted/github-installations.ts`'s `syncInstallations`, which reads
+`/user/installations` on the account's own GitHub token: an installation no
+row names yet becomes a workspace, created through `workspaceSeams(auth.api)`
+with the account as its owner and the login as its name and slug, and one a
+row names has its login and kind refreshed. GitHub gives a reinstall a new
+installation id, so a new installation on an account a row already names by
+`account_id` moves that row to it and sets it active, and the workspace comes
+back with its members and plans. A sync never adds or removes a
+member, since it would put back a member an admin removed; that is what
+`available` is for. A GitHub the account cannot read (no GitHub sign-in, an
+App not configured, GitHub down) leaves the installations unsynced and
+`available` empty and is logged by its kind; a plugin refusal answers
+`unavailable`. A workspace of a suspended or removed installation is listed
+with `active: false` and is never offered in `available`. A slug the plugin
+refuses as taken is adopted only where the organization under it is already
+linked to the same GitHub account (a racing sync); an organization anyone else
+made under the login is never adopted, and the workspace is slugged
+`<login>-<account id>` instead. The personal ensure follows the same rule
+against its own `personal_workspace` row.
+`tests/workspaces-app.test.ts` holds it over the plugin on PGlite and a
+scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's

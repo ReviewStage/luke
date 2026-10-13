@@ -24,6 +24,7 @@ import * as planWire from "./plan-wire.js";
 import * as providerKeyWire from "./provider-key-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
+import * as workspaceWire from "./workspace-wire.js";
 
 /**
  * Every schema the hosted wire declares, as the JSON Schema it emits. A wire
@@ -261,6 +262,11 @@ const EFFECT_MODULE_SCHEMAS = {
     planTranscriptSchema: transcriptWire.planTranscriptSchema,
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
+  "workspace-wire": {
+    workspaceSchema: workspaceWire.workspaceSchema,
+    availableWorkspaceSchema: workspaceWire.availableWorkspaceSchema,
+    workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 
 const declaredSchemas = (
