@@ -18,8 +18,8 @@ import {
   type PlanningTreeAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import { BoardIcon, CodeIcon, TranscriptIcon, WorkIcon } from "@sidecar/panel";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import { BoardIcon, CodeIcon, TranscriptIcon, WorkIcon } from "@sidecar/panel";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -753,7 +753,10 @@ test("the palette finds a plan of a workspace the sidebar does not list, and ope
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: true,
       unseenAgents: [],
+      inboxWaiting: [],
+      inboxPlans: [],
       voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: () => undefined },
+      onOpenIntegrations: () => undefined,
     });
     control = plans;
     return createElement(CommandPalette, {
@@ -767,6 +770,8 @@ test("the palette finds a plan of a workspace the sidebar does not list, and ope
           plans.onSelect(planId);
         },
       },
+      settings: { rows: undefined, onViewChange: () => undefined },
+      readFiles: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
     });
   }
   const container = document.body.appendChild(document.createElement("div"));

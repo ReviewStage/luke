@@ -3,13 +3,12 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@sidecar/hosted/workspace-wire";
-import { UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { useConfirm } from "./confirm-state";
-import { ConfirmSwap } from "./confirm-swap";
+import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { SettingsGroup } from "./settings-group";
 
 /**
  * members-section.tsx -- Settings' Workspace section: the chosen workspace's members, the removal and the leave, and the way to install Luke on GitHub.
@@ -20,9 +19,9 @@ import { ConfirmSwap } from "./confirm-swap";
  * also reads its members as the service holds them now, each with its name,
  * email, and role. An owner or an admin removes a member who is not an
  * owner, and anyone but an owner leaves, which lists the personal workspace
- * again. Both ask first, in place, since neither is undone from here. A
- * refusal the account's role earns says so in one line; any other says the
- * act's own sentence.
+ * again. Both ask first in the confirm dialog, since neither is undone from
+ * here, and a refusal is said in it: the account's role's own line where
+ * that is why, the act's own sentence otherwise.
  */
 
 /** What the section says, beside the members it lists. */
@@ -39,9 +38,9 @@ const ROLE_WORDS = {
 } as const;
 
 /**
- * What a refused act answers on the row that asked: its refusal's own words,
- * which main makes `WORKSPACE_NOT_PERMITTED_REFUSAL` where the account's role
- * is why, and the act's own sentence otherwise.
+ * What a refused act answers in the dialog that asked: its refusal's own
+ * words, which main makes `WORKSPACE_NOT_PERMITTED_REFUSAL` where the
+ * account's role is why, and the act's own sentence otherwise.
  */
 function refusedWith(refused: Error): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message };
@@ -63,44 +62,35 @@ function MemberRow({
   removable: boolean;
   onRemove: (userId: string) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const removal = useConfirm({ subject: removable, surfaceOpen: true }, () =>
+  const removal = useConfirmDialog({ subject: removable, surfaceOpen: true }, () =>
     onRemove(member.userId),
   );
   return (
-    <div className="settings-row settings-row-wrapping workspace-member">
+    <div className="settings-row workspace-member">
       <span className="settings-copy">
-        <span className="settings-name">
-          <strong>{member.name}</strong>
-        </span>
+        <strong>{member.name}</strong>
         <small>{`${member.email} · ${ROLE_WORDS[member.role]}`}</small>
       </span>
       {removable ? (
-        <ConfirmSwap
-          confirm={{
-            question: `Remove ${member.name} from this workspace?`,
-            stage: removal.stage,
-            verb: "Remove",
-            running: "Removing",
-            onKeep: removal.keep,
-            onAct: removal.run,
-          }}
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          data-danger="true"
+          disabled={removal.busy}
+          onClick={removal.ask}
         >
-          <button
-            type="button"
-            className="toolbar-button account-delete"
-            disabled={removal.busy}
-            title="Remove…"
-            onClick={removal.ask}
-          >
-            Remove
-          </button>
-        </ConfirmSwap>
+          Remove
+        </button>
       ) : null}
-      {removal.rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {removal.rejection}
-        </p>
-      )}
+      <ConfirmDialog
+        confirm={removal}
+        question={{
+          title: `Remove ${member.name} from this workspace?`,
+          body: "They lose its plans until they join again from a repository they can reach.",
+          verb: "Remove",
+          running: "Removing",
+        }}
+      />
     </div>
   );
 }
@@ -147,7 +137,7 @@ function TeamMembers({
 
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   const manages = owner || workspace.role === WORKSPACE_ROLE.ADMIN;
-  const leave = useConfirm({ subject: !owner, surfaceOpen: true }, () =>
+  const leave = useConfirmDialog({ subject: !owner, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then((): ActionResult => {
       onLeft();
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -171,36 +161,29 @@ function TeamMembers({
         ))
       )}
       {owner ? null : (
-        <div className="settings-row settings-row-wrapping">
+        <div className="settings-row">
           <span className="settings-copy">
             <strong>{`Leave ${workspace.name}`}</strong>
             <small>Its plans leave your sidebar until you join again.</small>
           </span>
-          <ConfirmSwap
-            confirm={{
-              question: `Leave ${workspace.name}?`,
-              stage: leave.stage,
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            data-danger="true"
+            disabled={leave.busy}
+            onClick={leave.ask}
+          >
+            Leave
+          </button>
+          <ConfirmDialog
+            confirm={leave}
+            question={{
+              title: `Leave ${workspace.name}?`,
+              body: "Its plans leave your sidebar until you join again.",
               verb: "Leave",
               running: "Leaving",
-              onKeep: leave.keep,
-              onAct: leave.run,
             }}
-          >
-            <button
-              type="button"
-              className="toolbar-button account-delete"
-              disabled={leave.busy}
-              title="Leave…"
-              onClick={leave.ask}
-            >
-              Leave
-            </button>
-          </ConfirmSwap>
-          {leave.rejection === undefined ? null : (
-            <p className="error-message" role="alert">
-              {leave.rejection}
-            </p>
-          )}
+          />
         </div>
       )}
     </>
@@ -225,22 +208,22 @@ export function MembersSection({
   const { workspace } = control;
   const team = workspace !== undefined && !workspace.personal ? workspace : undefined;
   return (
-    <section className="settings-section" aria-label="Workspace">
-      <h2>
-        <UserIcon />
-        {team === undefined ? "Workspace" : `Members of ${team.name}`}
-      </h2>
+    <SettingsGroup title={team === undefined ? "Workspace" : `Members of ${team.name}`}>
       {team === undefined ? null : (
         <TeamMembers key={team.id} workspace={team} onLeft={control.onLeft} />
       )}
-      <div className="settings-row settings-row-wrapping">
+      <div className="settings-row">
         <span className="settings-copy">
           <small>{SECTION_LINE.INSTALL}</small>
         </span>
-        <button type="button" className="toolbar-button" onClick={control.onInstall}>
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={control.onInstall}
+        >
           Install Luke on GitHub…
         </button>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

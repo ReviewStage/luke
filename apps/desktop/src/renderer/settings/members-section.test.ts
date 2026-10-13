@@ -145,9 +145,14 @@ const memberRow = (page: HTMLElement, name: string) =>
     (row) => row.querySelector("strong")?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
 
-/** Answers the question a press raised on `row` with its dangerous answer. */
-async function confirm(row: Element, verb: string): Promise<void> {
-  act(() => button(row.querySelector("fieldset") ?? row, verb).click());
+/** The confirm dialog a press raised. */
+function dialog(): HTMLElement {
+  return document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+}
+
+/** Answers the standing question with its dangerous answer. */
+async function confirm(verb: string): Promise<void> {
+  act(() => button(dialog(), verb).click());
   await settle();
 }
 
@@ -176,7 +181,7 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   const sam = memberRow(page, "Sam");
   act(() => button(sam, "Remove").click());
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
-  await confirm(sam, "Remove");
+  await confirm("Remove");
 
   assert.equal(askedFirst, true);
   assert.deepEqual(
@@ -188,16 +193,16 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   assert.equal(page.querySelectorAll(".workspace-member").length, 1);
 });
 
-test("a removal the account's role does not allow says so on the member's row", async () => {
+test("a removal the account's role does not allow says so in the dialog that asked", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   const sam = memberRow(page, "Sam");
   act(() => button(sam, "Remove").click());
-  await confirm(sam, "Remove");
+  await confirm("Remove");
 
   assert.equal(
-    memberRow(page, "Sam").querySelector('[role="alert"]')?.textContent,
+    dialog().querySelector('[role="alert"]')?.textContent,
     WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 });
@@ -206,7 +211,7 @@ test("a member leaves after confirming, which lists the personal workspace again
   const member = await mount(ACME);
   const leaveRow = button(member.page, "Leave").closest(".settings-row") ?? assert.fail();
   act(() => button(leaveRow, "Leave").click());
-  await confirm(leaveRow, "Leave");
+  await confirm("Leave");
 
   assert.deepEqual(
     sent
