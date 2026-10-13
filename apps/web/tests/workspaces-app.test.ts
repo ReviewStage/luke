@@ -92,11 +92,14 @@ const send = (seams: WorkspaceSeams, github: FakeGitHub, request: Request) =>
 
 /** A bearer's request to the workspaces group: a read, or a POST with the body given. */
 function bearerRequest(path: string, userId: string | undefined, body?: WireBoundaryInput) {
-  return new Request(new URL(path, ORIGIN), {
-    method: body === undefined ? "GET" : "POST",
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const headers = new Headers();
+  if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
+  const init: RequestInit = { method: "GET", headers };
+  if (body !== undefined) {
+    init.method = "POST";
+    init.body = JSON.stringify(body);
+  }
+  return new Request(new URL(path, ORIGIN), init);
 }
 
 /** GitHub's return through the Setup URL, with the query given. */

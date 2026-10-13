@@ -131,7 +131,7 @@ const insertPersonalWorkspace = SqlSchema.void({
  * or the column of a row the statement reads, such as a plan's own
  * `organization_id`, so a statement gates on membership in its own where clause.
  */
-export function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
+function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
   return exists(
     db
       .select({ one: member.id })
@@ -230,7 +230,7 @@ export function roleOf(text: string): WorkspaceRole {
 }
 
 /** Whether an organization already stands for what a workspace is being made for: the row of the caller's own that names it. */
-export type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
+type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
 
 /**
  * The account's personal workspace: the one its row names, and whatever
@@ -271,7 +271,7 @@ function personalSlugOf(userId: string): string {
  * tried. Nothing under the slug means the plugin refused for another
  * reason, and that refusal, or the last slug's, is answered as it was.
  */
-export function createLinkedOrganization(
+function createLinkedOrganization(
   creation: Omit<WorkspaceCreation, "slug">,
   slugs: readonly [string, ...string[]],
   linked: OrganizationLinked,
