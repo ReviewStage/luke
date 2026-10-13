@@ -124,11 +124,22 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  * still names, and the Linear connection's calls beside them
  * (`../connection-tools.ts`), which the agent and its workers alike make.
  */
+/**
+ * The two task controls eve adds beside any task, which a coding agent's
+ * \`delegate\` is (\`coder/tools/delegate.ts\`): eve runs them, so they are no
+ * tool of Luke's, but a turn that waits on its worker or stops one names them.
+ */
+export const CODER_TASK_TOOL = {
+  TASK_WAIT: "task_wait",
+  TASK_CANCEL: "task_cancel",
+} as const;
+
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
   ...[
     ...new Set([
       ...toolsOf(AGENT_ROLE.CODER),
       ...toolsOf(AGENT_ROLE.CODER_WORKER),
+      ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),

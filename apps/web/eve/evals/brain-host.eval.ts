@@ -29,7 +29,7 @@ import {
 } from "../../server/core";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import {
-  EVE_DELEGATION_TOOL,
+  PLANNER_DELEGATE_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
@@ -239,7 +239,7 @@ export default defineEval({
       // The worker ran to its end on its own model and tools, rather than failing for want of them.
       const settled = researchSession.events.find((event) => event.type === "task.settled");
       assert.ok(settled && settled.type === "task.settled");
-      assert.equal(settled.data.name, EVE_DELEGATION_TOOL.WORKER);
+      assert.equal(settled.data.name, PLANNER_DELEGATE_TOOL.name);
       assert.equal(settled.data.status, "completed");
       const researchRows = await readMessagesByTurn(run, researchConversationId, held.id);
       assert.deepEqual(
@@ -250,7 +250,7 @@ export default defineEval({
       assert.ok(researchAnswer);
       const delegation = researchAnswer.parts.find((part) => isToolUIPart(part));
       assert.ok(delegation);
-      assert.equal(delegation.type, `tool-${EVE_DELEGATION_TOOL.WORKER}`);
+      assert.equal(delegation.type, `tool-${PLANNER_DELEGATE_TOOL.name}`);
       assert.equal(delegation.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       // The words before the wait and the words after it, in one answer.
       assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);

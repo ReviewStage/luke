@@ -58,9 +58,14 @@ export const SCRIPTED_SKILLS = [
 /** A skill a developer names in their words, as `/name` at the start of a word. */
 const NAMED_SKILL = /(?:^|\s)\/([a-z0-9-]+)/u;
 
-const readDelegationOutput = Schema.decodeUnknownOption(codingAgentDelegationOutputSchema);
+const readDelegationOutput = Schema.decodeUnknownOption(
+  Schema.fromJsonString(codingAgentDelegationOutputSchema),
+);
 /** What `load_skill` answers: the skill's body. */
 const readSkillBody = Schema.decodeUnknownOption(Schema.String);
+
+/** eve's own tool that parks a turn until a task it started answers. */
+const TASK_WAIT = "task_wait";
 
 /** The line eve puts ahead of the agent's own words when it hands a worker its task. */
 const CALLER_MESSAGE_MARK = "Caller message:\n";
@@ -72,9 +77,24 @@ function readBack(message: string): string {
   return message.split("\n")[0]?.trim() ?? "";
 }
 
+/** A delegation's task result as eve hands it to the model: its body, the output of the call that started it. */
+const DELEGATED_RESULT = new RegExp(
+  `<task_result id="[^"]*" tool="${CODER_TOOL.DELEGATE}" status="completed">([\\s\\S]*?)</task_result>`,
+  "u",
+);
+
+/** The newest delegation's task result the prompt holds, its body as eve wrote it; nothing before one arrived. */
+function delegatedAnswer(request: MockModelRequest): string | undefined {
+  for (const message of [...request.messages].reverse()) {
+    const body = DELEGATED_RESULT.exec(message.text)?.[1];
+    if (body !== undefined) return body;
+  }
+  return undefined;
+}
+
 /** The reply to a worker's answer: its result, or that it answered nothing readable. */
-function delegatedReply(delegated: MockModelToolResult): MockModelResponse {
-  return Option.match(readDelegationOutput(delegated.output), {
+function delegatedReply(body: string): MockModelResponse {
+  return Option.match(readDelegationOutput(body), {
     onNone: () => ({ text: SCRIPTED_DELEGATED_REPLY }),
     onSome: (output) => ({ text: `${SCRIPTED_DELEGATED_REPLY} ${output.result}` }),
   });
@@ -119,8 +139,13 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
     const input = scriptedTodos(request.lastUserMessage.slice(SCRIPTED_TODOS.length));
     return { toolCalls: [{ name: CODER_TOOL.WRITE_TODOS, input }] };
   }
-  const delegated = request.toolResults.find((result) => result.name === CODER_TOOL.DELEGATE);
-  if (delegated) return delegatedReply(delegated);
+  // A delegation is waited for, as a foreground one is: its receipt, then the wait, then its answer.
+  const answered = delegatedAnswer(request);
+  if (answered !== undefined) return delegatedReply(answered);
+  const delegated = request.toolResults.some((result) => result.name === CODER_TOOL.DELEGATE);
+  const waited = request.toolResults.some((result) => result.name === TASK_WAIT);
+  if (delegated && !waited) return { toolCalls: [{ name: TASK_WAIT, input: {} }] };
+  if (delegated) return { text: SCRIPTED_DELEGATED_REPLY };
   const offered = request.tools.some((tool) => tool.name === CODER_TOOL.DELEGATE);
   if (offered && request.lastUserMessage?.startsWith(SCRIPTED_DELEGATE)) {
     const task = request.lastUserMessage.slice(SCRIPTED_DELEGATE.length);

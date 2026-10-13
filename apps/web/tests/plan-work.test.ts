@@ -30,6 +30,7 @@ import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds"
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {
   EVE_DELEGATION_TOOL,
+  PLANNER_DELEGATE_TOOL,
   planningToolDeclarations,
 } from "../server/hosted/brain-host/planning";
 import {
@@ -1338,4 +1339,32 @@ test("a skill the planning model loads is written and reaches the Work tab as a 
     ),
     [[PLAN_WORK_TOOL.OTHER, "load_skill", "release-notes", PLAN_WORK_STATE.DONE]],
   );
+});
+
+test("the planning model's own delegate reaches the Work tab as a worker every desktop reads: its task carried as the message, and its task named off eve's receipt", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const task = "Compare the two queue libraries.";
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+    ],
+    standing,
+  );
+
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+  assert.equal(worker.tool, PLAN_WORK_TOOL.WORKER);
+  assert.equal(worker.name, PLANNER_DELEGATE_TOOL.name);
+  assert.equal(worker.subject, task);
+  assert.equal(worker.task, "delegate-7k2m9q");
+  assert.equal(decodeWorkerInput(worker.input).message, task);
 });

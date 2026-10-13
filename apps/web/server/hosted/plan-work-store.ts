@@ -24,7 +24,7 @@ import {
   type SubagentJournal,
   workerSessionCallsOf,
 } from "../voice/plan-work.js";
-import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
+import { PLANNER_DELEGATION_TOOLS } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
@@ -46,16 +46,26 @@ import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
  * `plan-store.ts`. Nothing is written here.
  */
 
-/** The conversation's journals that call the worker, where a task a later turn sent work to was started; none where they do not read. */
-const workerJournalsOf = Effect.fnUntraced(function* (userId: string, conversationId: string) {
-  const read = yield* listJournalsCalling(
-    userId,
-    conversationId,
-    HOSTED_TOOL_SET,
-    EVE_DELEGATION_TOOL.WORKER,
+/**
+ * The conversation's journals that delegate to the worker, under any name a
+ * delegation was made under (\`PLANNER_DELEGATION_TOOLS\`), in the order they
+ * were written; a name whose journals do not read leaves them out.
+ */
+export const plannerDelegationJournalsOf = Effect.fnUntraced(function* (
+  userId: string,
+  conversationId: string,
+) {
+  const reads = yield* Effect.forEach([...PLANNER_DELEGATION_TOOLS], (name) =>
+    listJournalsCalling(userId, conversationId, HOSTED_TOOL_SET, name),
   );
-  return read.ok ? read.value.map((row) => row.message) : [];
+  return reads
+    .flatMap((read) => (read.ok ? read.value : []))
+    .sort((one, other) => one.seq - other.seq)
+    .map((row) => row.message);
 });
+
+/** The conversation's journals that call the worker, where a task a later turn sent work to was started; none where they do not read. */
+const workerJournalsOf = plannerDelegationJournalsOf;
 
 /** One turn's journal and the sessions of the subagents it started or sent work to, with the title of each that has one and what each ran on and spent, or nothing where the turn wrote none or it does not read. */
 const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {

@@ -29,6 +29,7 @@ import {
 } from "../server/hosted/coder-host/instructions";
 import { SHELL_INPUT } from "../server/hosted/coder-host/shell";
 import {
+  CODER_TASK_TOOL,
   CODER_TOOL,
   CODER_TOOL_SET,
   RETIRED_CODER_TOOL,
@@ -87,6 +88,7 @@ test("the tools authored for the agent, the retired web reads an old transcript 
   assert.deepEqual(
     [
       ...authored,
+      ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
       ...Object.values(CONNECTION_TOOL),
       ...Object.values(INTEGRATION).map((integration) => integration.REMOTE_TOOL),

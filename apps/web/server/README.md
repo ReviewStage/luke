@@ -2117,9 +2117,22 @@ agent's own sandbox and checkout, uncommitted edits included
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`coder/tools/delegate.ts`), a workflow tool whose
-input is `{ task, model?, effort? }` and whose `execute` blocks the agent's
-turn until the worker answers, several calls in one step running at once.
+model sees `delegate` (`coder/tools/delegate.ts`), a resumable task
+(`serve`, the shape eve gives every agent call) whose input is
+`{ task, model?, effort?, background? }`. The call answers with eve's
+receipt at once and the worker's answer reaches the agent as a task result,
+so the turn stays open while it works; unless the agent sets `background`,
+the tool's words have it call `task_wait` right after, which is a foreground
+delegation in eve's terms, and a developer's message during the wait reaches
+the agent at once without stopping the worker. Several calls in one step run
+at once, and a call with the task's id sends the worker more, into the same
+session. The planning model delegates through the same shape
+(`eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
+and on its own model, its worker declared hidden too; the Work tab reads its
+calls as worker calls under either name, eve's `worker` in earlier
+transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
+says where the worker's own session stands (the page's `subagents`), since
+the call settles at the receipt.
 Its step fills the pair in from the agent's own row, holds it to the same
 catalog a Start is held to (`coder-host/delegation.ts`, refusing with the
 models offered or the named model's efforts, which the body throws so the
@@ -2132,8 +2145,8 @@ worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
 in the worker's own state as the session starts, the model resolver reads
 it at every step and is told the recorded pair (`host.delegatedModel`), and
 the hook relays the worker's stream into the child conversation as a child
-turn naming that pair (`host.relayChild`). The tool's output names the pair
-and the worker's answer; the tool part's `toolCallId` is what names the
+turn naming that pair (`host.relayChild`). The task's result names the pair
+and the worker's answer; the starting call's `toolCallId` is what names the
 child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
 delegation opens no sandbox, and counting it would have the turn's end open
 one only to stop it, so a sandbox a worker opened is stopped at the end of

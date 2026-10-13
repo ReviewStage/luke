@@ -1,5 +1,8 @@
 import type { MessageStreamEvent } from "eve/client";
-import { EVE_DELEGATION_TOOL } from "../../server/hosted/brain-host/planning";
+import {
+  EVE_DELEGATION_TOOL,
+  PLANNER_DELEGATE_TOOL,
+} from "../../server/hosted/brain-host/planning";
 import { END_CALL_TOOL } from "../../server/hosted/end-call";
 import {
   REPOSITORY_SHELL_STATUS,
@@ -286,6 +289,84 @@ export function steeredTurn(
   deliveryIds?: readonly string[],
 ): readonly MessageStreamEvent[] {
   return delegatingTurn(STEERING_CALL, turnId, sequence, now, deliveryIds);
+}
+
+/** The task the planning model's own \`delegate\` starts, by eve's id for it. */
+const DELEGATE_TASK = "delegate-7k2m9q";
+
+/**
+ * A turn that hands work to the worker through the planning model's own
+ * \`delegate\`, a resumable task, up to the park: the call eve announces as a
+ * tool call, the receipt as its result, the words before the wait, and the
+ * park on the task.
+ */
+export function parkedDelegateTurn(
+  turnId: string,
+  sequence: number,
+  now: number,
+): readonly MessageStreamEvent[] {
+  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, now);
+  const callId = STARTING_WORKER_CALL;
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({
+      type: "message.received",
+      data: { turnId, sequence, message: "compare the two queue libraries" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          {
+            kind: "tool-call",
+            callId,
+            toolName: PLANNER_DELEGATE_TOOL.name,
+            input: { task: "Compare the two queue libraries." },
+          },
+        ],
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId,
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          output: `Started task ${DELEGATE_TASK}. Its result will arrive in a <task_result> message.`,
+        },
+      },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 1,
+        finishReason: "stop",
+        message: "The worker is on it.",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.waiting", data: { turnId, sequence, on: "tasks" } }),
+  ];
 }
 
 /** The rest of a parked turn: the task's result, the words after it, and the end, stamped with the turn's deliveries. */

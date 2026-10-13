@@ -209,10 +209,12 @@ export default defineEval({
         accepted.sessionId,
       );
 
-      // A delegation blocks the agent's turn until the worker answers: one
-      // turn on record, settled, holding the call as a tool part that names
-      // the pair asked and the worker's answer, and the worker's own session
-      // recorded under the child conversation the call names, on that pair.
+      // A delegation is a task the agent waits for, as a foreground one is:
+      // one turn on record, settled, holding the call as a tool part that
+      // names the pair asked and answers with eve's receipt, then the wait,
+      // then the worker's answer in the agent's words, and the worker's own
+      // session recorded under the child conversation the call names, on
+      // that pair.
       const delegating = await startAgent(run, plan.id);
       const delegation = await openSession(
         delegating.conversationId,
@@ -239,14 +241,15 @@ export default defineEval({
       assert.equal(call.type, `tool-${CODER_TOOL.DELEGATE}`);
       assert.equal(call.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.deepEqual(call.input, { task: DELEGATED_TASK, ...SCRIPTED_WORKER_CHOICE });
-      assert.deepEqual(call.output, {
-        ...SCRIPTED_WORKER_CHOICE,
-        result: `${SCRIPTED_CODER_REPLY} ${DELEGATED_TASK}`,
-      });
+      // The call answers with eve's receipt, which names the task it started.
+      assert.match(JSON.stringify(call.output), /^"Started task delegate-/u);
       assert.ok(
         answer.parts.some(
-          (part) => isTextUIPart(part) && part.text.startsWith(SCRIPTED_DELEGATED_REPLY),
+          (part) =>
+            isTextUIPart(part) &&
+            part.text === `${SCRIPTED_DELEGATED_REPLY} ${SCRIPTED_CODER_REPLY} ${DELEGATED_TASK}`,
         ),
+        "the worker's answer reaches the agent's words",
       );
       const childId = childConversationId(delegating.conversationId, call.toolCallId);
       const [childTurn] = await readTurnsByConversation(run, childId);

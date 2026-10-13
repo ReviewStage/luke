@@ -22,10 +22,10 @@ import { MODEL_CHOICE_REFUSAL, type OfferedModel, validateModelChoice } from "..
  * read it there (`host.ts`).
  */
 
-/** The delegation tool as the model is shown it (`coder/tools/delegate.ts`): what it does, and its input, the task with the pair the agent chose. */
+/** The delegation tool as the model is shown it (`coder/tools/delegate.ts`): what it does, and its input, the task with the pair the agent chose and whether it waits. */
 export const DELEGATE_TOOL = {
   description:
-    "Hand one scoped task to a read-only worker that reads your checkout, your uncommitted edits included, and wait for its complete answer. Name the model and effort it runs on, or leave either to your own. Several calls in one step run at once.",
+    "Hand one scoped task to a read-only worker that reads your checkout, your uncommitted edits included. Name the model and effort it runs on, or leave either to your own. The call returns a receipt at once and the worker's complete answer arrives later as a task result. Unless you set `background`, wait for that answer: call task_wait right after delegating, before anything else. Set `background: true` only to keep working while the worker runs. Several calls in one step run at once.",
   inputSchema: codingAgentDelegationInputSchema,
 } as const;
 
