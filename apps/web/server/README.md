@@ -54,7 +54,8 @@ changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GITHUB_APP_CLIENT_ID`, and `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
+`GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
 under "The Luke GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
@@ -161,14 +162,27 @@ accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
 during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.
 
-Sign-in is GitHub's alone, since a workspace is a GitHub App installation and
-every account needs a GitHub identity; an account that signed in with Google
-alone, from before, can no longer sign in. GitHub's callback is
+Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests no
 OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
-read Luke requires for its account snapshot.
+read Luke requires for its account snapshot, and what Better Auth's GitHub
+provider reads to link the account at all.
+
+Accounts link (`accountLinking` in `ACCOUNT_TOKEN_STORAGE`,
+[Better Auth: account linking](https://www.better-auth.com/docs/concepts/users-accounts#account-linking)).
+A sign-in through a provider that verified the same email address as an
+existing account joins that account, Better Auth's default, and no provider
+is trusted beyond that (`trustedProviders` stays unset; the docs warn it
+risks account takeover). A signed-in account may also link GitHub to itself
+through Better Auth's own `/link-social`, whatever email address GitHub holds
+(`allowDifferentEmails`), which is how an account made with Google comes to
+hold the GitHub its workspaces and repositories need; `/link-social`,
+`/unlink-account`, and `/list-accounts` stay open, since none of them answers
+a token. A user revoking the App's authorization on GitHub deletes that
+GitHub user's account row (`github_app_authorization` under "The Luke GitHub
+App" below).
 
 ## The Luke GitHub App
 
@@ -307,7 +321,15 @@ App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 a workspace whose installation is not active is listed by
 `GET /api/workspaces` with `active: false`, so its plans stay reachable, and
-nothing is deleted. `tests/github-webhook-app.test.ts`
+nothing is deleted. A `github_app_authorization` delivery, which GitHub also
+sends every App unsubscribed
+([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
+with action `revoked` deletes the `account` rows of provider `github` whose
+`accountId` is the delivery's `sender.id`, and the sealed tokens on them,
+which no longer reach anything; every other way the account signs in is
+kept. That is a write to Better Auth's own table, since a webhook carries no
+session and Better Auth offers no server call that unlinks another user's
+provider account. `tests/github-webhook-app.test.ts`
 holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
@@ -1409,13 +1431,16 @@ carries the relay hooks, while only a positively identified Preview accepts the
 returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`BETTER_AUTH_PROXY_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
+`BETTER_AUTH_PROXY_SECRET`, Google's `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
 `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
-`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the
-end that exchanges the code, but Better Auth's oauth-proxy setup sets the
-provider secrets in every environment, and Charles chose on 2026-09-18 to
-follow it rather than hold them back from Preview; the preview then builds its
-own authorization URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the end that
+exchanges the code, but Better Auth's Google provider refuses to build the
+authorization URL without a client secret, so a Preview without
+`GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
+leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
+the provider secrets in every environment, and Charles chose on 2026-09-18 to
+follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into
