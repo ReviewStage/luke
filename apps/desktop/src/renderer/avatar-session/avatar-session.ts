@@ -16,25 +16,29 @@ import type {
  * `Deferred` or a `Queue` the session's readers wait on; nothing here arms a
  * timer. The session is acquired into the caller's `Scope`: closing the
  * scope closes the session, which is the one way a session ends from this
- * side, since Keyframe has no endpoint that stops one.
+ * side, since Keyframe has no endpoint that stops one. The SDK's `close()`
+ * waits for the audio writes already queued and then leaves the room
+ * without waiting, so `closed` answers from the SDK's own close report,
+ * which lands after `close()` has returned, rather than from the call.
  *
  * A failure carries its kind and nothing the SDK or LiveKit said, because
  * what they say about a connection can name the room the grant opens.
  */
 
+/** Why a session closed, named as the call's avatar end reasons name them. */
 export const AVATAR_CLOSE_REASON = {
   /** This side closed the session: its scope closed. */
-  CLIENT: "client",
-  /** Keyframe ended the room or removed the window from it, as the session's length cap does. */
+  USER: "user",
+  /** Keyframe deleted the room, as the plan's length cap does, shut down, or removed the window from it. */
   SERVER_CLOSED: "server_closed",
-  /** The room went with no reason given: the connection was lost. */
-  LOST: "lost",
+  /** The room went with no reason given. */
+  ERROR: "error",
 } as const;
 
 export type AvatarCloseReason = (typeof AVATAR_CLOSE_REASON)[keyof typeof AVATAR_CLOSE_REASON];
 
 export const AVATAR_SESSION_FAILURE = {
-  /** The bundle could not create a session, or the room refused the grant. */
+  /** The bundle could not create a session, or the room refused the grant: the call reports it as an error end. */
   CONNECT: "connect",
   /** The session closed before the track asked for arrived. */
   CLOSED: "closed",
@@ -53,11 +57,11 @@ export interface AvatarSession {
   readonly video: Effect.Effect<MediaStreamTrack, AvatarSessionError>;
   /** The avatar's lip-synced voice, once Keyframe publishes it. */
   readonly audio: Effect.Effect<MediaStreamTrack, AvatarSessionError>;
-  /** One chunk of Luke's voice, PCM16LE 24 kHz mono; dropped by the SDK while the room is not connected. */
+  /** One chunk of Luke's voice, PCM16LE 24 kHz mono. Each of the three below does nothing once the session has closed. */
   readonly sendAudio: (pcm: Uint8Array) => Effect.Effect<void>;
   /** The turn's last chunk has been sent, so the avatar renders the rest of it. */
   readonly endTurn: Effect.Effect<void>;
-  /** Drops the frames the avatar has not yet shown. */
+  /** Drops the frames the avatar has not yet shown. Sent unreliably by the SDK, so it can be lost. */
   readonly interrupt: Effect.Effect<void>;
   /** Whether the avatar is speaking: `false` first, then each change the playback RPCs report, ending when the session closes. One reader. */
   readonly speaking: Stream.Stream<boolean>;
@@ -69,13 +73,13 @@ export interface AvatarSession {
 const closeReasonOf = (reason: PersonaCloseReason): AvatarCloseReason => {
   switch (reason) {
     case "client_initiated":
-      return AVATAR_CLOSE_REASON.CLIENT;
+      return AVATAR_CLOSE_REASON.USER;
     case "room_deleted":
     case "server_shutdown":
     case "participant_removed":
       return AVATAR_CLOSE_REASON.SERVER_CLOSED;
     case "unknown":
-      return AVATAR_CLOSE_REASON.LOST;
+      return AVATAR_CLOSE_REASON.ERROR;
   }
 };
 
@@ -87,6 +91,17 @@ const failure = (kind: AvatarSessionFailure) => () => new AvatarSessionError({ f
  */
 const quietly = (run: () => Promise<void>): Effect.Effect<void> =>
   Effect.ignore(Effect.tryPromise(run));
+
+/**
+ * Note that a closed session is spoken to no further, because the SDK warns
+ * on the console for every chunk sent to a room it has left, and a running
+ * feed sends twenty-five a second.
+ */
+const whileOpen = (
+  closed: Deferred.Deferred<AvatarCloseReason>,
+  speak: Effect.Effect<void>,
+): Effect.Effect<void> =>
+  Effect.suspend(() => (Deferred.isDoneUnsafe(closed) ? Effect.void : speak));
 
 /**
  * Opens the avatar for a grant: creates the session with its callbacks
@@ -134,9 +149,19 @@ export const openAvatarSession = /* @__PURE__ */ Effect.fn("desktop/openAvatarSe
   return {
     video: Deferred.await(video),
     audio: Deferred.await(audio),
-    sendAudio: (pcm) => Effect.sync(() => session.sendAudio(pcm)),
-    endTurn: quietly(() => session.endAudioTurn()),
-    interrupt: quietly(() => session.interrupt()),
+    sendAudio: (pcm) =>
+      whileOpen(
+        closed,
+        Effect.sync(() => session.sendAudio(pcm)),
+      ),
+    endTurn: whileOpen(
+      closed,
+      quietly(() => session.endAudioTurn()),
+    ),
+    interrupt: whileOpen(
+      closed,
+      quietly(() => session.interrupt()),
+    ),
     speaking: Stream.make(false).pipe(Stream.concat(Stream.fromQueue(playback)), Stream.changes),
     closed: Deferred.await(closed),
   } satisfies AvatarSession;

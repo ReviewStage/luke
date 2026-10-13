@@ -58,9 +58,11 @@ class FakePersona implements PersonaSessionSlice {
     return Promise.reject(new Error("the control channel is gone"));
   }
 
+  /** As the SDK's does: the close report lands after `close()` has returned. */
   close(): Promise<void> {
-    if (!this.left) this.serverCloses("client_initiated");
-    return Promise.resolve();
+    if (this.left) return Promise.resolve();
+    this.left = true;
+    return Promise.resolve().then(() => this.options.onClose("client_initiated"));
   }
 
   serverCloses(reason: PersonaCloseReason): void {
@@ -134,7 +136,7 @@ it.effect("closed names Keyframe's reasons as the window tells them apart", () =
       ["room_deleted", AVATAR_CLOSE_REASON.SERVER_CLOSED],
       ["server_shutdown", AVATAR_CLOSE_REASON.SERVER_CLOSED],
       ["participant_removed", AVATAR_CLOSE_REASON.SERVER_CLOSED],
-      ["unknown", AVATAR_CLOSE_REASON.LOST],
+      ["unknown", AVATAR_CLOSE_REASON.ERROR],
     ];
     for (const [reason, expected] of cases) {
       const fake = fakeModule();
@@ -158,7 +160,7 @@ it.effect("closing the scope leaves the room, and closed says this side ended it
     assert.equal(fake.persona().left, false);
     yield* Scope.close(scope, Exit.void);
     assert.equal(fake.persona().left, true);
-    assert.equal(yield* session.closed, AVATAR_CLOSE_REASON.CLIENT);
+    assert.equal(yield* session.closed, AVATAR_CLOSE_REASON.USER);
   }),
 );
 
@@ -203,5 +205,22 @@ it.effect(
       assert.deepEqual(fake.persona().sent, [chunk]);
       assert.equal(fake.persona().turnsEnded, 1);
       assert.equal(fake.persona().interrupts, 1);
+    }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "a closed session is fed no further, so a running feed does not reach a room that has gone",
+  () =>
+    Effect.gen(function* () {
+      const fake = fakeModule();
+      const session = yield* openAvatarSession(GRANT, fake.module);
+      yield* session.sendAudio(new Uint8Array([1, 2]));
+      fake.persona().serverCloses("server_shutdown");
+      yield* session.sendAudio(new Uint8Array([3, 4]));
+      yield* session.endTurn;
+      yield* session.interrupt;
+      assert.deepEqual(fake.persona().sent, [new Uint8Array([1, 2])]);
+      assert.equal(fake.persona().turnsEnded, 0);
+      assert.equal(fake.persona().interrupts, 0);
     }).pipe(Effect.scoped),
 );
