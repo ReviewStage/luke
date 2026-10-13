@@ -29,10 +29,10 @@ import {
   repositoryLabel,
   repositoryPageUrl,
 } from "../planning/planning-model";
-import { isAgentTab, sameTab } from "../planning/tab-strip-model";
+import { sameTab } from "../planning/tab-strip-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
-import type { PinnedTab } from "../planning/use-side-panel";
+import { inColumn, type PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
@@ -742,13 +742,13 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's in the plan's own column, any other in the side panel. The
+  // an agent's or the Inbox in the plan's own column, any other in the side panel. The
   // pin marked stands too, so a fold never hides the row the sidebar marks.
   const pinnedShown = ({ plan, pin }: PinnedRow) =>
     (pin !== undefined && pin === pinMarked) ||
     (current(plan.id) &&
       (pin === undefined ||
-        (isAgentTab(pin.tab)
+        (inColumn(pin.tab)
           ? sameTab(plans.mainTabs.tab, pin.tab)
           : plans.sidePanel.open &&
             plans.sidePanel.tab !== undefined &&

@@ -4567,3 +4567,43 @@ test("the Inbox tab stands nowhere until an item the developer has not seen arri
   assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "Inbox 2"]);
   assert.equal(columnChosen(page), "Inbox 2");
 });
+
+test("the Inbox tab's menu offers Pin tab; pinned, it wears no × and offers no Close, so neither Command-W nor Close others shuts it, it stands again on the next launch, and Unpin tab makes it closable again", async () => {
+  const inbox = () =>
+    codingAgentsControl({
+      agents: [RUNNING_AGENT],
+      agentIds: [RUNNING_AGENT.id],
+      readInbox: ({ after }) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items: [waitingItem(FIRST_ITEM)], cursor: "1" })
+          : new Promise(() => undefined),
+    });
+  const page = mountOpenPlan({ agents: inbox() });
+  await settle();
+  assert.deepEqual(tabMenu(tabNamed(page, "Inbox 1")), [
+    ["Close", true],
+    ["Close others", true],
+    ["Pin tab", true],
+  ]);
+  closeMenu();
+
+  chooseFromTab(tabNamed(page, "Inbox 1"), "Pin tab");
+  assert.equal(page.querySelector('[aria-label="Close Inbox"]'), null, "no ×");
+  assert.deepEqual(tabMenu(tabNamed(page, "Inbox 1")), [
+    ["Close others", true],
+    ["Unpin tab", true],
+  ]);
+  closeMenu();
+  act(() => tabNamed(page, "Inbox 1").focus());
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "the chord leaves it");
+  chooseFromTab(tabNamed(page, "Opus 5.5"), "Close others");
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "Inbox 1"]);
+  unmountAll();
+
+  const again = mountOpenPlan({ agents: inbox() });
+  await settle();
+  assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5", "Inbox 1"], "still pinned");
+  chooseFromTab(tabNamed(again, "Inbox 1"), "Unpin tab");
+  press(again, '[aria-label="Close Inbox"]');
+  assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5"]);
+});

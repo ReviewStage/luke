@@ -3,6 +3,7 @@ import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileName } from "./code-pane-model";
 import {
+  type AgentStripTab,
   type FileStripTab,
   inPlanOrder,
   isAgentTab,
@@ -16,6 +17,7 @@ import {
   sameTab,
   viewedLast,
 } from "./tab-strip-model";
+import { MAIN_TAB } from "./use-main-tabs";
 
 /**
  * use-side-panel.ts -- the open plan's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -85,7 +87,7 @@ import {
  * leaving the rest as they stood.
  *
  * A fixed tab or a file's may be pinned to the sidebar, and so may a coding
- * agent's from the plan's column, where it stands under Pinned beside the
+ * agent's or the Inbox from the plan's column, where it stands under Pinned beside the
  * pinned plans, newest pinned first, and opens its plan on that tab from
  * any plan. The pins are kept here, with the rest of the window's tab
  * preferences. The strip draws a pinned tab as it draws any other: it
@@ -245,10 +247,11 @@ const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Sc
  */
 const PINS_KEPT = 100;
 
-/** The tab a pin opens: a fixed one, an agent's, or a file's. */
+/** The tab a pin opens: a fixed one, an agent's, the plan's Inbox, or a file's. */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
+  Schema.Literal(MAIN_TAB.INBOX),
   Schema.Struct({ file: Schema.String }),
 ]);
 
@@ -534,9 +537,17 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, or a file's. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, the Inbox, or a file's. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isAgentTab(tab) || isFileTab(tab);
+  return FIXED_TABS.has(tab) || isAgentTab(tab) || tab === MAIN_TAB.INBOX || isFileTab(tab);
+}
+
+/** A pin of a tab in the plan's own column rather than the side panel: an agent's, or the Inbox. */
+export type ColumnPinnableTab = Extract<PinnableTab, AgentStripTab | typeof MAIN_TAB.INBOX>;
+
+/** Whether a pin opens in the plan's own column, an agent's tab or the Inbox, rather than in the side panel. */
+export function inColumn(tab: PinnableTab): tab is ColumnPinnableTab {
+  return isAgentTab(tab) || tab === MAIN_TAB.INBOX;
 }
 
 /** Whether the pin is of the plan's tab. */
@@ -951,9 +962,10 @@ function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
   );
 }
 
-/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, or any agent's. */
+/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
+  if (tab === MAIN_TAB.INBOX) return "Inbox";
   return isAgentTab(tab) ? "Coding agent" : SIDE_PANEL_TAB_KIND[tab].label;
 }
 

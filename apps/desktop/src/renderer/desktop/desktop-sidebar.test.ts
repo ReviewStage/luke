@@ -34,6 +34,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -1401,6 +1402,25 @@ test("a press folds Pinned for the next launch too, counting its pins, and the o
   act(() => pinnedToggle(relaunched).click());
   assert.deepEqual(pinnedSection(relaunched), unfolded);
   assert.equal(pinnedToggle(relaunched).querySelector(".sidebar-repository-count"), null);
+});
+
+test("a pinned Inbox stands under Pinned with its glyph and its plan's name, and still stands under the folded header while its plan is open on it", () => {
+  const billing = listedPlan("Billing");
+  const pin: PinnedTab = { plan: billing.id, tab: MAIN_TAB.INBOX, label: "Inbox", at: 1 };
+  const onTab = (tab: PlansControl["mainTabs"]["tab"]) =>
+    withPins([pin], {
+      plans: [billing],
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: billing.id,
+      mainTabs: { ...plansControl().mainTabs, tab },
+    });
+  const container = mount(DEAN, { plans: onTab(MAIN_TAB.INBOX) });
+  assert.deepEqual(pinnedSection(container), ["◆ Inbox"]);
+
+  act(() => pinnedToggle(container).click());
+  assert.deepEqual(pinnedSection(container), ["◆ Inbox"], "on show");
+  const onPlan = mount(DEAN, { plans: onTab(MAIN_TAB.PLAN) });
+  assert.deepEqual(pinnedSection(onPlan), [], "folded away behind the plan's own tab");
 });
 
 /** Each row under the Inbox as it reads: the plan's name, and how many of its items wait as a reader hears it. */
