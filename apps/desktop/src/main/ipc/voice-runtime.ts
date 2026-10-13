@@ -4,6 +4,7 @@ import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
+import { AVATAR_STATUS } from "#shared/messages/avatar";
 import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
@@ -42,6 +43,7 @@ export interface VoiceRuntimeDependencies {
 type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_COMMAND
   | typeof ACT_KIND.CALL_SHOW_PLAN
+  | typeof ACT_KIND.CALL_AVATAR_FIRST_FRAME
   | typeof ACT_KIND.VOICE_CREATE_LIVE_SESSION
   | typeof ACT_KIND.VOICE_END_LIVE_SESSION
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
@@ -70,6 +72,15 @@ export function voiceRuntimeActRows(
       if ((!call && !panel) || planId === undefined) return;
       panels.focusExpanded();
       panels.broadcast(channels.onShowPlan, { planId });
+    },
+    // The face is live once the call window has drawn its first frame, which
+    // only that window can tell. A frame arriving once the face is no longer
+    // starting is the last face's, landing after it went down, so it moves
+    // nothing.
+    [ACT_KIND.CALL_AVATAR_FIRST_FRAME]: (_payload, { call }) => {
+      const voice = state.snapshot().voice;
+      if (!call || voice.avatar.status !== AVATAR_STATUS.STARTING) return;
+      state.update({ voice: { ...voice, avatar: { status: AVATAR_STATUS.LIVE } } });
     },
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.

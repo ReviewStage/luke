@@ -16,14 +16,12 @@ import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
 import { type ActHandle, useAct } from "../act";
-import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
 import { type CallCardModel, callCard } from "./call-card-model";
-import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
 function returnLabel(planName: string): string {
@@ -188,10 +186,8 @@ export function CallCardDock({
   );
 }
 
-/** The floating window's root: the card over the document it is handed. */
+/** The floating window's card, over the document it is handed. */
 export function CallWindowCard(): React.JSX.Element {
-  useKeyboardModality();
-  useStaleHoverAfterMove();
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();

@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import { App } from "./app";
-import { CallWindowCard } from "./call/call-card";
+import { CallWindowRoot } from "./call/call-window-root";
 import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
@@ -14,7 +14,7 @@ Sentry.init();
 
 // One root for the panels, the hidden voice window, and the floating call
 // window alike, mounting by the role main decided for the window that asked.
-// The voice window mounts `VoiceHost` and the call window `CallWindowCard`,
+// The voice window mounts `VoiceHost` and the call window `CallWindowRoot`,
 // and neither ever mounts `App`, the one place recording starts.
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Renderer root element is missing");
@@ -35,7 +35,7 @@ void (async () => {
       {first.window.role === WINDOW_ROLE.VOICE ? (
         <VoiceHost />
       ) : first.window.role === WINDOW_ROLE.CALL ? (
-        <CallWindowCard />
+        <CallWindowRoot />
       ) : (
         <App />
       )}

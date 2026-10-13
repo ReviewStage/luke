@@ -240,7 +240,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (call) send(call.webContents, voiceWindowState(held));
     // The call window follows the document it draws, so it stands and goes
     // on the same version every window is told.
-    callPresence.voiceChanged(held.voice.view);
+    callPresence.voiceChanged(held.voice.view, held.voice.avatar);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {

@@ -20,6 +20,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
+import { type CallAvatarRoom, isCallAvatarRoomDelivery } from "./messages/avatar-room";
 import {
   isVoiceCommand,
   isVoiceView,
@@ -265,6 +266,26 @@ export const BRIDGE = {
     args: noArgs,
     result: result<void>((v) => v === undefined),
   }),
+  /**
+   * The call's avatar room, to the floating call window alone: where the room
+   * is and the viewer token that joins it, or nothing once the face is down.
+   * An event rather than a slice of the document, because the token may reach
+   * that one window and the document reaches them all; main sends it when the
+   * room changes and again when the window asks below.
+   */
+  onAvatarRoom: entry({
+    kind: "subscribe",
+    channel: "app:avatar-room",
+    args: noArgs,
+    result: result<CallAvatarRoom | undefined>(isCallAvatarRoomDelivery),
+  }),
+  /**
+   * The floating call window asking for the avatar room standing now, once it
+   * listens on `onAvatarRoom`: a renderer opened or replaced after the room
+   * was handed out would otherwise never hear of it. Answered on that channel,
+   * and only to the call window.
+   */
+  requestAvatarRoom: entry({ kind: "send", channel: "app:avatar-room-request", args: noArgs }),
   /**
    * The call card's way back pressed, in the floating window or a panel's
    * own card: the panel is to show the call's plan. An event, as a notification's click is, because it is an

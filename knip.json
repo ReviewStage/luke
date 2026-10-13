@@ -31,7 +31,6 @@
         "src/renderer/whiteboard/index.css",
         "src/renderer/plan-editor/index.ts",
         "src/renderer/session-recorder/index.ts",
-        "src/renderer/call/call-video-tile.tsx",
         "src/renderer/avatar-room/index.ts",
         "src/renderer/voice/avatar-tee-worklet.ts",
         "scripts/*.mjs",

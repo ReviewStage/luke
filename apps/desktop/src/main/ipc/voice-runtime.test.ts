@@ -5,6 +5,7 @@ import type { WireRecord } from "@sidecar/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { ACT_KIND } from "#shared/messages/acts";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "#shared/messages/avatar";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -186,5 +187,28 @@ it.effect("the five live session acts reach the host from the voice window alone
       payload: { sessionId: "sess_1" },
     });
     assert.equal(f.liveCalls.length, 5);
+  }),
+);
+
+it.effect("the call window's first frame turns a starting face live, and nothing else does", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const firstFrame = { kind: ACT_KIND.CALL_AVATAR_FIRST_FRAME } as const;
+    const avatar = () => f.state.snapshot().voice.avatar;
+    // A frame with no face asked for is a stale one, and moves nothing.
+    yield* f.perform(f.callSender, firstFrame);
+    assert.deepEqual(avatar(), AVATAR_OFF);
+    f.state.update({ voice: { avatar: { status: AVATAR_STATUS.STARTING } } });
+    // Only the call window draws the face, so only it can say it drew.
+    yield* f.perform(f.panelSender, firstFrame);
+    yield* f.perform(f.voiceSender, firstFrame);
+    assert.deepEqual(avatar(), { status: AVATAR_STATUS.STARTING });
+    yield* f.perform(f.callSender, firstFrame);
+    assert.deepEqual(avatar(), { status: AVATAR_STATUS.LIVE });
+    // A frame landing after the face went down leaves it down.
+    const ended = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.MEDIA_LOST } as const;
+    f.state.update({ voice: { avatar: ended } });
+    yield* f.perform(f.callSender, firstFrame);
+    assert.deepEqual(avatar(), ended);
   }),
 );

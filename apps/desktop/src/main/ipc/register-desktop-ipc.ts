@@ -121,6 +121,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
     recordAgentTrace: (_context, trace) => {
       void run(operator.host.recordAgentTrace(trace));
     },
+    // The floating call window listening for the face's room: the room is
+    // that window's alone, so no other window that asks is answered.
+    requestAvatarRoom: (context) => {
+      callWindow.sendAvatarRoomTo(context.sender);
+    },
     notifyReady: async (context) => {
       if (!launch.captureOutput) return;
       const window = BrowserWindow.fromWebContents(context.sender);

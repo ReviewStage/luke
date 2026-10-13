@@ -1,5 +1,5 @@
 /**
- * call-window.ts -- the floating call card's window: on top, on every Space, and never bringing Luke forward.
+ * call-window.ts -- the floating call card's window: on top, on every Space, never bringing Luke forward, and the one window the avatar's room is handed to.
  */
 
 import fs from "node:fs";
@@ -7,11 +7,15 @@ import type { RunMode } from "@sidecar/host";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
+import type { CallAvatarRoom } from "#shared/messages/avatar-room";
 import {
   CALL_WINDOW_BOUNDS,
+  CALL_WINDOW_SHAPE,
   type CallWindowPoint,
+  type CallWindowShape,
   type CallWindowSurface,
   callWindowPosition,
+  callWindowReshaped,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
@@ -53,6 +57,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
  * that comes and goes with every switch of app would reload its renderer
  * each time. A renderer that dies is let go of, and the next show opens a fresh
  * one. Like the voice window it never counts toward the app's lifetime.
+ *
+ * It grows into the 16:9 video tile while the call has Luke's face, and is
+ * the one window the face's room is handed to: the room's address and its
+ * viewer token are held here and sent on this window's own channel, never in
+ * the document, when the room changes and whenever its renderer asks.
  */
 export class CallWindow implements CallWindowSurface {
   readonly #options: CallWindowOptions;
@@ -61,21 +70,51 @@ export class CallWindow implements CallWindowSurface {
   #ready = false;
   #wanted = false;
   #closedForGood = false;
+  #shape: CallWindowShape = CALL_WINDOW_SHAPE.CARD;
+  /** The face's room while one stands, which a fresh renderer asks for. */
+  #room: CallAvatarRoom | undefined;
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
   }
 
-  show(): void {
+  show(shape: CallWindowShape): void {
     if (this.#closedForGood) return;
     this.#wanted = true;
     const window = this.current() ?? this.#open();
+    this.#reshape(window, shape);
     if (this.#ready) window.showInactive();
   }
 
   hide(): void {
     this.#wanted = false;
     this.current()?.hide();
+  }
+
+  /**
+   * The room the call window joins, or none once the face is down: held for a
+   * renderer that asks later, and sent to the one standing now.
+   */
+  showAvatarRoom(room: CallAvatarRoom | undefined): void {
+    this.#room = room;
+    const window = this.current();
+    if (window) this.sendAvatarRoomTo(window.webContents);
+  }
+
+  /** The room standing now, to the call window's renderer that asked; any other asks for nothing. */
+  sendAvatarRoomTo(webContents: WebContents): void {
+    if (!this.owns(webContents)) return;
+    webContents.send(channels.onAvatarRoom, this.#room);
+  }
+
+  /** Sets the window's size once per change of shape, never animated. */
+  #reshape(window: BrowserWindow, shape: CallWindowShape): void {
+    if (shape === this.#shape) return;
+    this.#shape = shape;
+    const bounds = window.getBounds();
+    window.setBounds(
+      callWindowReshaped({ bounds, shape, workArea: screen.getDisplayMatching(bounds).workArea }),
+    );
   }
 
   #open(): BrowserWindow {
@@ -117,6 +156,7 @@ export class CallWindow implements CallWindowSurface {
     });
     this.#window = window;
     this.#ready = false;
+    this.#shape = CALL_WINDOW_SHAPE.CARD;
     window.setAlwaysOnTop(true, "floating");
     // Kept out of the Window menu's list, where a window nobody chose to open
     // would read as one of Luke's own.
@@ -138,10 +178,13 @@ export class CallWindow implements CallWindowSurface {
     window.on("move", () => {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
+    // The place is kept as the card's, whichever shape was dragged, so the
+    // card opens next where the tile's foot was left.
     window.on("moved", () => {
-      const [left, top] = window.getPosition();
+      const { x, y, height } = window.getBounds();
+      const top = y + height - CALL_WINDOW_BOUNDS.HEIGHT;
       try {
-        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x, y: top }));
       } catch {
         // Note that a place that cannot be kept is let go of, because the
         // card opening at its corner next time costs nothing, and a throw
@@ -155,8 +198,9 @@ export class CallWindow implements CallWindowSurface {
     window.webContents.on("render-process-gone", () => {
       if (window !== this.#window) return;
       const reopen = this.#wanted && this.#ready;
+      const shape = this.#shape;
       this.close();
-      if (reopen) this.show();
+      if (reopen) this.show(shape);
     });
     void window.loadFile(this.#options.rendererHtmlPath);
     return window;
@@ -182,6 +226,7 @@ export class CallWindow implements CallWindowSurface {
   /** The quit's own close: nothing is opened after it, whatever the call does. */
   closeForGood(): void {
     this.#closedForGood = true;
+    this.#room = undefined;
     this.close();
   }
 }
