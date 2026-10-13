@@ -7,8 +7,8 @@ description: Take the CHANGELOG.md screenshots for a Luke release, or redo an ol
 
 The rules every picture follows are in the comment atop `CHANGELOG.md`; this
 is how to meet them. A release's pictures come from its own build: the commit
-that bumped `apps/desktop/package.json` to that version (`git log -S'"version":
-"<v>"' -- apps/desktop/package.json`), or `main` before the bump lands. The
+the release's tag (`v<version>`, what shipped), or for a release not yet
+tagged, the head of its version pull request. The
 work is in four parts: plan the shots, stage them in a throwaway patch, build
 and capture on the Mac, then frame and land them.
 
@@ -64,6 +64,9 @@ release commit. Start from 0.12.0's, beside this file:
 - `staging/shots/` is 0.12.0's `apps/desktop/src/renderer/shots/` module:
   the shared world as data, one file per shot, and the machinery. Copy it into
   the release's checkout and adapt it to that release's types.
+- `staging/releases/` holds every earlier release's staging patch and a table
+  of each picture's profile, zoom, and crop, so any picture can be taken again
+  exactly; redoing an old release starts from its patch there.
 - `staging/hooks-0.12.0.patch` is the small set of hooks that module needs in
   0.12.0's app files; it will not apply to another release as it stands, but
   it says where each hook goes. Together on `6d47d20f` the two reproduce
@@ -142,7 +145,14 @@ own `--user-data-dir` and the window opens at 1600 by 1000 points and focused.
 `window.sh` launches the build in fixture mode, captures the real window with
 its shadow and traffic lights, and quits it. It retries until the window was
 key; tell the developer before a batch, because typing elsewhere during it
-leaves grey traffic lights. A batch of ten takes about two minutes after a
+leaves grey traffic lights. It parks the pointer on the menu bar first, since
+a window as large as the screen otherwise draws a hover wherever the pointer
+rests. macOS refuses every window capture ("could not create image from
+window") while the screen is locked: check
+`ioreg -n Root -d1 -a | grep -A1 CGSSessionScreenIsLocked`, ask the
+developer to unlock, and keep the display awake with `caffeinate -d -i -t 3600`
+for the batch. The first launch after a build may still be downloading
+Electron's binary, so capture again if that one fails. A batch of ten takes about two minutes after a
 three-minute build.
 
 ## 4. Frame, review, and land

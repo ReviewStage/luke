@@ -1,0 +1,494 @@
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index d81d1847..54b6c1cb 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -34,6 +34,8 @@ import type { CalendarGateControl } from "./calendar-gate";
+ import type { ConductorKeyGateControl } from "./conductor-key-gate";
+ import { ConsentConnectSlot } from "./consent-connect-slot";
+ import { CONVERSATION_SEARCH_INPUT_ID } from "./conversation-search";
++// Throwaway: the changelog shot (`renderer/shots/`).
++import { isShot, SHOT_CAPTIONS } from "./shots/plan-a-feature";
+ import { DesktopShell } from "./desktop/desktop-shell";
+ import { FeedbackSlot } from "./feedback-slot";
+ import { MarkdownMessage } from "./markdown-message";
+@@ -512,7 +514,12 @@ export function App(): React.JSX.Element {
+   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
+   // A capture run always draws the fixture's words: the voice window that
+   // otherwise decides the captions does not stand in one.
+-  const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
++  // Throwaway: the changelog shot's call speaks its own question.
++  const lukeCaptions = fixtureSpeaking
++    ? isShot(state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE })
++      ? SHOT_CAPTIONS
++      : FIXTURE_SPEAKING_CAPTIONS
++    : voiceView.lukeCaptions;
+   const developerCaptions = fixtureSpeaking ? undefined : voiceView.developerCaptions;
+ 
+   // The hint rides the caption it explains, and only over a silence the
+diff --git a/apps/desktop/src/renderer/planning/plan-body.tsx b/apps/desktop/src/renderer/planning/plan-body.tsx
+index 4c61e18c..3739de98 100644
+--- a/apps/desktop/src/renderer/planning/plan-body.tsx
++++ b/apps/desktop/src/renderer/planning/plan-body.tsx
+@@ -1,6 +1,8 @@
+ import type { Plan, PlanAssumption } from "@sidecar/hosted/plan-wire";
+ import { useEffect, useRef, useState } from "react";
+ import { MarkdownMessage } from "../markdown-message";
++// Throwaway: the changelog shot freezes the notetaker mid-line.
++import { SHOT_OPEN_PLAN, scrollToWriting, shotWritingViews } from "../shots/plan-a-feature";
+ import { prefersReducedMotion } from "../use-reduced-motion";
+ import {
+   type ChaseState,
+@@ -163,7 +165,11 @@ function AssumptionRow({
+  * the caret waiting where the typing last stopped.
+  */
+ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.JSX.Element {
+-  const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
++  const chase = usePlanChase(plan, live);
++  const { behind, freshAssumptions, jumps } = chase;
++  // Throwaway: the changelog shot's plan (only its profile draws it) is frozen with the Change map half typed.
++  const shot = plan === SHOT_OPEN_PLAN;
++  const views = shot ? shotWritingViews(plan.document.body) : chase.views;
+   const scroller = useRef<HTMLDivElement>(null);
+   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
+   const scrolledAway = useRef(false);
+@@ -182,6 +188,17 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
+     };
+   }, []);
+ 
++  // Throwaway: the shot scrolls the unit being written into view after layout,
++  // and again whenever the window is resized or zoomed for the capture.
++  useEffect(() => {
++    if (!shot) return;
++    const element = scroller.current;
++    if (element === null) return;
++    const observer = new ResizeObserver(() => scrollToWriting(element));
++    observer.observe(element);
++    return () => observer.disconnect();
++  }, [shot]);
++
+   // A pause in the typing hands the view back: the next burst is followed again.
+   useEffect(() => {
+     if (!behind) scrolledAway.current = false;
+diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+index 823725a4..9157bf09 100644
+--- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
++++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+@@ -4,6 +4,12 @@ import { ACT_KIND } from "#shared/messages/acts";
+ import type { MicrophoneStatus } from "#shared/messages/audio";
+ import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+ import type { ActHandle } from "../act";
++import {
++  isShot,
++  SHOT_CALL,
++  SHOT_PLANNING_VIEW,
++  shotVoiceView,
++} from "../shots/plan-a-feature";
+ import { FIXTURE_PLANNING_CALL, fixturePlanningView } from "./planning-fixture";
+ import {
+   type CallStatus,
+@@ -90,13 +96,19 @@ export function usePlansTab(input: {
+     requestMicrophoneAccess: () => void;
+   };
+ }): PlansControl {
+-  const { shown, voice, composing, onComposingChange } = input;
++  const { shown, composing, onComposingChange } = input;
++  // Throwaway: the changelog shot stages its call live, Luke speaking, the
++  // microphone heard, voice ready to run.
++  const shot = isShot(input.run);
++  const voice = shot
++    ? { ...input.voice, view: shotVoiceView(input.voice.view), listening: true }
++    : input.voice;
+   const { act, tell } = input.acts;
+   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
+ 
+   // A fixture run draws its synthetic plans in place of the account's,
+   // signed out as every fixture run is.
+-  const fixture = fixturePlanningView(input.run);
++  const fixture = shot ? SHOT_PLANNING_VIEW : fixturePlanningView(input.run);
+   const planning = fixture ?? input.planning;
+   const signedIn = fixture !== undefined || input.signedIn;
+   const page = plansPage(planning, composing);
+@@ -135,7 +147,7 @@ export function usePlansTab(input: {
+   };
+ 
+   const microphone = microphoneButton({
+-    voiceAvailable: input.voiceAvailable,
++    voiceAvailable: shot || input.voiceAvailable,
+     microphoneStatus: input.microphoneStatus,
+     activePlanId: planning.activePlanId,
+     listening: voice.listening,
+@@ -198,7 +210,10 @@ export function usePlansTab(input: {
+     },
+     // A fixture's open plan is drawn on a call with Luke working, read from
+     // the fixture's own call rather than a voice window that holds none.
+-    status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
++    status: callStatus(
++      fixture === undefined ? voice.view : shot ? SHOT_CALL : FIXTURE_PLANNING_CALL,
++      planning,
++    ),
+     live,
+     onSelect: select,
+     onChooseFolder: chooseFolder,
+diff --git a/apps/desktop/src/renderer/shots/plan-a-feature.ts b/apps/desktop/src/renderer/shots/plan-a-feature.ts
+new file mode 100644
+index 00000000..9c62841b
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/plan-a-feature.ts
+@@ -0,0 +1,298 @@
++import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
++import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/hosted/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
++import { LIVE_STATUS } from "@sidecar/live";
++import { type AppStateSnapshot, RUN_PROFILE } from "#shared/messages/app-state";
++import { MICROPHONE_STATUS } from "#shared/messages/audio";
++import type { VoiceView } from "#shared/messages/voice-view";
++import { planUnits, type UnitView } from "../planning/plan-reveal";
++
++/**
++ * plan-a-feature.ts -- Throwaway: the 0.7.0 changelog's "Plan a feature with Luke" shot, never committed.
++ *
++ * Run as `electron . --fixture smoke --profile shot-plan-a-feature`. The whole
++ * window: the Plans tab's list of acme's plans, each pointing at a folder on
++ * the Mac, "Teammate invitations" open on the fixed template filled in well
++ * past halfway, and its planning call live at the foot: Luke speaking his one
++ * question (the caption), the planning model reading `~/code/relay`, and the
++ * notetaker writing the change map, its caret held partway through a line.
++ * Signed in as Dean Stratakos; 0.7.0's account row draws an initial, not a
++ * photo, so none is staged. Nothing here draws a time, but every timestamp is
++ * still counted back from launch.
++ */
++
++const MINUTE_MS = 60_000;
++const HOUR_MS = 60 * MINUTE_MS;
++const DAY_MS = 24 * HOUR_MS;
++
++/** The launch every time is counted back from. */
++const LAUNCHED_AT = Date.now();
++
++function ago(ms: number): number {
++  return LAUNCHED_AT - ms;
++}
++
++const HOME = "/Users/dean";
++
++const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
++
++/** The Change map's own words, which the notetaker is partway through typing. */
++const CHANGE_MAP =
++  "- `src/db/schema/memberships.ts`: a `pending` state, and `invitedBy`, `tokenHash`, `expiresAt` columns.\n" +
++  "- `src/members/invite.ts`: new, creating, withdrawing, and accepting an invite.\n" +
++  "- `src/routes/invites.ts`: new, `POST /invites`, `DELETE /invites/:id`, `GET /invites/:token`.\n" +
++  "- `src/mail/templates/invite.tsx`: new, the invite email with its one-time link.";
++
++/** Where in the Change map's unit the caret stands: just into the template's line. */
++const CARET_AFTER = "`src/mail/templates/invite.tsx`: new, the inv";
++
++const PLAN_UPDATE: FullPlanUpdate = {
++  ...EMPTY_PLAN_UPDATE,
++  goal: {
++    problem:
++      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
++      "members wait on an admin every time they want to bring a teammate in.",
++    outcome:
++      "A member invites a teammate by email from Members, and the teammate joins the " +
++      "workspace by opening the link.",
++  },
++  scope: {
++    included:
++      "Inviting by email from Members, the invite email, accepting the link, and withdrawing " +
++      "a pending invite.",
++    excluded: "Bulk invites from a CSV, invite links without an email, and SSO provisioning.",
++    constraints:
++      "An invite link is single use and grants only the role it was sent with. Tokens are " +
++      "stored hashed, never in plain text.",
++  },
++  rules: [
++    {
++      statement: "Any member may invite a teammate by email.",
++      examples: [
++        {
++          given: "Jordan, a member of the acme workspace",
++          when: "Jordan invites sam@acme.dev",
++          // biome-ignore lint/suspicious/noThenProperty: the fixed template's own key.
++          then: "Sam gets an email with a one-time link, and Members lists Sam as Pending", // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++    {
++      statement: "A withdrawn or accepted invite link never grants access again.",
++      examples: [
++        {
++          given: "An invite Sam already accepted",
++          when: "anyone opens its link again",
++          // biome-ignore lint/suspicious/noThenProperty: the fixed template's own key.
++          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++        {
++          given: "Dana withdrew Sam's pending invite",
++          when: "Sam opens the link",
++          // biome-ignore lint/suspicious/noThenProperty: the fixed template's own key.
++          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++    {
++      statement: "Only the member who sent an invite, or an admin, may withdraw it.",
++      examples: [
++        {
++          given: "Jordan invited sam@acme.dev",
++          when: "Dana, an admin, withdraws the invite",
++          // biome-ignore lint/suspicious/noThenProperty: the fixed template's own key.
++          then: "the invite leaves Members and its link stops working", // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++    {
++      statement: "An invite link expires a fixed time after it is sent.",
++      examples: [
++        {
++          given: "Sam's invite was sent ten days ago",
++          when: "Sam opens the link",
++          // biome-ignore lint/suspicious/noThenProperty: the fixed template's own key.
++          then: null, // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++  ],
++  implementation: {
++    changeMap: CHANGE_MAP,
++    contracts:
++      "```ts\n" +
++      "// src/members/invite.ts\n" +
++      "export function createInvite(input: {\n" +
++      "  workspaceId: string;\n" +
++      "  email: string;\n" +
++      "  invitedBy: string;\n" +
++      "}): Promise<Membership>;\n" +
++      "export function withdrawInvite(id: string, by: string): Promise<void>;\n" +
++      "export function acceptInvite(token: string, userId: string): Promise<Accepted>;\n" +
++      "```",
++    patterns:
++      "- `src/members/remove.ts`: the role check before a membership changes.\n" +
++      "- `src/mail/templates/reset-password.tsx`: the React Email layout and the Postmark send.",
++    order: null,
++  },
++  decisions:
++    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
++    "invites and members alike. Rejected: a separate `invitations` table.\n\n" +
++    "The link carries a random token, stored hashed. Why: a withdrawn invite has to stop " +
++    "working at once. Rejected: a signed link, which cannot be revoked.",
++  verification:
++    "On a preview, Jordan invites sam@acme.dev, Sam opens the link in a private window and " +
++    'lands in the workspace, and the same link then reads "This invite is no longer valid". ' +
++    "`pnpm test src/members` passes.",
++  leftToAgent: null,
++  openQuestions: ["Does an invite link last 7 days or 14?"],
++  dataAndMigration:
++    "Adds `pending` to `membership_state` and three nullable columns to `memberships`; " +
++    "existing rows stay `active`. Undone by dropping the columns once no row is pending.",
++  assumptions: [
++    { text: "Invites reuse memberships with a pending state." },
++    { text: "Members and admins can both invite." },
++    { text: "The invite email goes out through Postmark like every other." },
++  ],
++};
++
++export const SHOT_OPEN_PLAN: Plan = {
++  id: PLAN_ID,
++  name: "Teammate invitations",
++  createdAt: ago(2 * DAY_MS),
++  updatedAt: ago(4 * MINUTE_MS),
++  openedAt: ago(26 * MINUTE_MS),
++  document: {
++    body: planBody({ name: "Teammate invitations" }, PLAN_UPDATE),
++    assumptions: PLAN_UPDATE.assumptions,
++  },
++};
++
++/** One of acme's other plans: its name, the folder it reads, and how long ago it was opened. */
++function otherPlan(id: string, name: string, folder: string, age: number) {
++  const plan: PlanSummary = {
++    id,
++    name,
++    createdAt: ago(age + 2 * DAY_MS),
++    updatedAt: ago(age),
++    openedAt: ago(age),
++  };
++  return { plan, folder: `${HOME}/code/${folder}` };
++}
++
++/** acme's other plans, most recently opened first. */
++const OTHER_PLANS = [
++  otherPlan("5c1e7a90-2b4d-4c6e-8f10-3a5b7c9d1e21", "Webhook retries", "relay", 26 * MINUTE_MS),
++  otherPlan("6d2f8b01-3c5e-4d7f-9021-4b6c8d0e2f32", "Usage-based billing", "ledger", 3 * HOUR_MS),
++  otherPlan("7e3a9c12-4d6f-4e80-a132-5c7d9e1f3a43", "Onboarding checklist", "web", DAY_MS),
++  otherPlan("8f4bad23-5e7a-4f91-b243-6d8eaf2a4b54", "Audit log export", "relay", 2 * DAY_MS),
++  otherPlan("9a5cbe34-6f8b-4aa2-c354-7e9fb03b5c65", "Invoice PDF redesign", "ledger", 3 * DAY_MS),
++  otherPlan("ab6dcf45-7a9c-4bb3-d465-8fa0c14c6d76", "Dark mode for the dashboard", "web", 4 * DAY_MS),
++];
++
++/** The Plans tab: the list, the open plan, and the call's backend at work on it. */
++export const SHOT_PLANNING_VIEW: PlanningView = {
++  plans: [
++    {
++      id: SHOT_OPEN_PLAN.id,
++      name: SHOT_OPEN_PLAN.name,
++      createdAt: SHOT_OPEN_PLAN.createdAt,
++      updatedAt: SHOT_OPEN_PLAN.updatedAt,
++      openedAt: ago(0),
++    },
++    ...OTHER_PLANS.map((entry) => entry.plan),
++  ],
++  listStatus: PLANNING_READ.READY,
++  activePlanId: SHOT_OPEN_PLAN.id,
++  document: { status: PLANNING_READ.READY, plan: SHOT_OPEN_PLAN },
++  activity: { planner: { action: 'grep -rn "expiresAt" src/auth' }, notes: true },
++  folders: {
++    [SHOT_OPEN_PLAN.id]: `${HOME}/code/relay`,
++    ...Object.fromEntries(OTHER_PLANS.map((entry) => [entry.plan.id, entry.folder])),
++  },
++};
++
++/** The call the voice window would report: Luke speaking, about the open plan. */
++export const SHOT_CALL: Pick<VoiceView, "voiceStatus" | "callPlanId"> = {
++  voiceStatus: LIVE_STATUS.SPEAKING,
++  callPlanId: SHOT_OPEN_PLAN.id,
++};
++
++/** Luke's words on the call: what he read in the folder, then his one question. */
++export const SHOT_CAPTIONS: readonly string[] = [
++  "Password reset links in src/auth/reset.ts expire after an hour, and sessions last 14 days.",
++  "Should an invite link last 7 days, or 14 like a session?",
++];
++
++/** Whether this run stages the shot: a fixture run under its profile alone. */
++export function isShot(run: { readonly fixtureMode: boolean; readonly profile: string }): boolean {
++  return run.fixtureMode && run.profile === RUN_PROFILE.SHOT_PLAN_A_FEATURE;
++}
++
++/** The voice view the Plans tab reads: the staged call over the window's own report. */
++export function shotVoiceView(view: VoiceView): VoiceView {
++  return { ...view, ...SHOT_CALL };
++}
++
++const STAGED = new WeakMap<AppStateSnapshot, AppStateSnapshot>();
++
++/**
++ * The snapshot as the shot draws it: signed in as Dean Stratakos with the
++ * microphone allowed. Cached per snapshot, so every reader of one delivery
++ * holds the same object.
++ */
++export function stagedAppState(state: AppStateSnapshot): AppStateSnapshot {
++  if (!isShot(state.run)) return state;
++  const held = STAGED.get(state);
++  if (held !== undefined) return held;
++  const staged: AppStateSnapshot = {
++    ...state,
++    account: {
++      status: ACCOUNT_STATUS.SIGNED_IN,
++      email: "dean@example.com",
++      name: "Dean Stratakos",
++      provider: ACCOUNT_PROVIDER.GITHUB,
++    },
++    audio: { ...state.audio, microphoneStatus: MICROPHONE_STATUS.GRANTED },
++  };
++  STAGED.set(state, staged);
++  return staged;
++}
++
++/**
++ * The open plan's units as the shot freezes them: every unit whole, but the
++ * Change map's, which the notetaker is typing, its caret solid partway into
++ * its last line and the rest not yet drawn.
++ */
++export function shotWritingViews(body: string): readonly UnitView[] {
++  return planUnits(body).map((words): UnitView => {
++    const still = { words, edit: undefined, writing: false, resting: false, fresh: false };
++    if (!words.startsWith("### Change map")) return still;
++    const caret = words.indexOf(CARET_AFTER) + CARET_AFTER.length;
++    return {
++      words,
++      edit: { hidden: { from: caret, to: words.length }, caret },
++      writing: true,
++      resting: false,
++      fresh: false,
++    };
++  });
++}
++
++/** Where the writing unit stands in the document's view, as a share of its height from the top. */
++const WRITING_AT = 0.42;
++
++/** Scrolls the document so the unit being written stands a little above the middle. */
++export function scrollToWriting(scroller: HTMLElement): void {
++  const writing = scroller.querySelector(".plan-writing");
++  if (writing === null) return;
++  // Note that we work in the document's own offsets, because this runs again on every resize and must land in the same place each time.
++  const view = scroller.getBoundingClientRect();
++  const offsetOf = (element: Element): number => element.getBoundingClientRect().top - view.top + scroller.scrollTop;
++  const wanted = offsetOf(writing) - view.height * WRITING_AT;
++  // Note that we snap to the last heading above that point, because a view cut through a heading reads as a mistake.
++  const headings = Array.from(scroller.querySelectorAll("h1, h2, h3, h4, p > strong:first-child")).map(offsetOf);
++  const snapped = headings.filter((offset) => offset <= wanted).pop() ?? wanted;
++  scroller.scrollTop = Math.max(0, snapped - 24);
++}
+diff --git a/apps/desktop/src/renderer/use-app-state.ts b/apps/desktop/src/renderer/use-app-state.ts
+index 77aa8bc4..6d2d58fd 100644
+--- a/apps/desktop/src/renderer/use-app-state.ts
++++ b/apps/desktop/src/renderer/use-app-state.ts
+@@ -6,6 +6,8 @@ import * as Atom from "effect/unstable/reactivity/Atom";
+ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+ import type { AppStateSnapshot } from "#shared/messages/app-state";
+ import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
++// Throwaway: the changelog shot signs in as Dean Stratakos.
++import { stagedAppState } from "./shots/plan-a-feature";
+ 
+ /** The two bridge calls a window reads its state through, and nothing else. */
+ interface AppStateSource {
+@@ -124,12 +126,14 @@ export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavaila
+  * has to read what the first left. Not a hook, so nothing redraws for it.
+  */
+ export function appStateNow(): AppStateSnapshot | undefined {
+-  return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
++  const state = Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
++  return state === undefined ? undefined : stagedAppState(state);
+ }
+ 
+ /** This window's snapshot, absent only before the first read has answered. */
+ export function useAppState(): AppStateSnapshot | undefined {
+-  return Option.getOrUndefined(AsyncResult.value(useAtomValue(appStateAtom)));
++  const state = Option.getOrUndefined(AsyncResult.value(useAtomValue(appStateAtom)));
++  return state === undefined ? undefined : stagedAppState(state);
+ }
+ 
+ /**
+diff --git a/apps/desktop/src/renderer/use-voice-view.ts b/apps/desktop/src/renderer/use-voice-view.ts
+index 1be38423..c88e558e 100644
+--- a/apps/desktop/src/renderer/use-voice-view.ts
++++ b/apps/desktop/src/renderer/use-voice-view.ts
+@@ -90,6 +90,11 @@ const FIXTURE_VOICES: ReadonlyMap<RunProfile, FixtureVoice> = new Map([
+   [RUN_PROFILE.SPEAKING, { speakers: { listening: false, lukeSpeaking: true }, muted: false }],
+   [RUN_PROFILE.MUTED, { speakers: { listening: false, lukeSpeaking: true }, muted: true }],
+   [RUN_PROFILE.DUPLEX, { speakers: { listening: true, lukeSpeaking: true }, muted: false }],
++  // Throwaway: the changelog shot's planning call, Luke asking his question.
++  [
++    RUN_PROFILE.SHOT_PLAN_A_FEATURE,
++    { speakers: { listening: false, lukeSpeaking: true }, muted: false },
++  ],
+ ]);
+ 
+ const RUN_PROFILES: ReadonlySet<string> = new Set(Object.values(RUN_PROFILE));
+diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
+index 5e8d9488..25f72bea 100644
+--- a/apps/desktop/src/shared/messages/app-state.ts
++++ b/apps/desktop/src/shared/messages/app-state.ts
+@@ -37,6 +37,8 @@ export const RUN_PROFILE = {
+   DUPLEX: "duplex",
+   /** The panel's Plans tab, opened at launch over a synthetic plan. */
+   PLANNING: "planning",
++  /** Throwaway: the 0.7.0 changelog's "Plan a feature with Luke" shot (`renderer/shots/`). */
++  SHOT_PLAN_A_FEATURE: "shot-plan-a-feature",
+ } as const;
+ 
+ export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

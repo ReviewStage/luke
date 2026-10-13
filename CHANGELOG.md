@@ -468,7 +468,7 @@ right-click menu.
 [#1962](https://github.com/ReviewStage/luke/pull/1962),
 [#1964](https://github.com/ReviewStage/luke/pull/1964))
 
-![A coding agent's tab beside the plan, with two subagent rows, its model in the message box, and the plan marked as updated by the agent.](apps/web/public/changelog/0.11.0/coding-agents-work-alongside-you.png)
+![A coding agent's tab, titled for its work, with its right-click menu open on Rename, beside the agent's transcript where it updated the plan and opened #214.](apps/web/public/changelog/0.11.0/coding-agents-work-alongside-you.png)
 
 ### Subagents
 
@@ -478,7 +478,7 @@ transcript, and the row opens the worker's own tab in the side panel.
 ([#1954](https://github.com/ReviewStage/luke/pull/1954),
 [#1961](https://github.com/ReviewStage/luke/pull/1961))
 
-![A subagent's own tab in the side panel, showing the searches and reads behind its answer.](apps/web/public/changelog/0.11.0/subagents.png)
+![A coding agent's transcript with two subagent rows, each naming its model and effort, and one worker open in a tab of its own beside the plan.](apps/web/public/changelog/0.11.0/subagents.png)
 
 ### Improvements
 
@@ -557,7 +557,7 @@ and effort.
 [#1907](https://github.com/ReviewStage/luke/pull/1907),
 [#1919](https://github.com/ReviewStage/luke/pull/1919))
 
-![A coding agent's tab in the side panel, mid-run, with its transcript, its pull request in the head, and the message box with Stop.](apps/web/public/changelog/0.10.0/coding-agents.png)
+![A coding agent's tab full screen, mid-run, with what it read, edited, and tested, a steer from the developer, its pull request in the head, and the message box with Stop.](apps/web/public/changelog/0.10.0/coding-agents.png)
 
 ### Planning on a GitHub repository
 
@@ -576,7 +576,7 @@ goes through the Luke GitHub App too.
 [#1877](https://github.com/ReviewStage/luke/pull/1877),
 [#1885](https://github.com/ReviewStage/luke/pull/1885))
 
-![The new-plan composer with its repository picker open on recent repositories and a link to GitHub.](apps/web/public/changelog/0.10.0/planning-on-a-github-repository.png)
+![The new-plan composer with its repository picker open on acme's repositories, a search field, and a link to GitHub.](apps/web/public/changelog/0.10.0/planning-on-a-github-repository.png)
 
 ### Improvements
 
@@ -638,7 +638,7 @@ it wrote. A background worker's whole session opens from its call in the tab.
 [#1904](https://github.com/ReviewStage/luke/pull/1904),
 [#1905](https://github.com/ReviewStage/luke/pull/1905))
 
-![The Work tab showing a planning turn's thought, its background worker, and the commands it ran.](apps/web/public/changelog/0.9.0/a-work-tab.png)
+![The Work tab with a finished planning turn above the current one: Luke's thought, his background worker, and the commands he is running.](apps/web/public/changelog/0.9.0/a-work-tab.png)
 
 ### Improvements
 
@@ -688,7 +688,7 @@ in the sidebar.
 [#1847](https://github.com/ReviewStage/luke/pull/1847),
 [#1856](https://github.com/ReviewStage/luke/pull/1856))
 
-![The new-plan composer beside the sidebar of plans, with the account button at its foot.](apps/web/public/changelog/0.8.0/a-new-home-for-your-plans.png)
+![The new-plan composer beside the sidebar of plans, one plan's right-click menu open on Rename, Reveal in Finder, Change folder, and Delete plan.](apps/web/public/changelog/0.8.0/a-new-home-for-your-plans.png)
 
 ### A side panel for the board, the code, and the transcript
 
@@ -708,7 +708,7 @@ then looks at what he drew and fixes what he sees.
 [#1864](https://github.com/ReviewStage/luke/pull/1864),
 [#1878](https://github.com/ReviewStage/luke/pull/1878))
 
-![A plan beside the side panel open on the whiteboard Luke drew for it.](apps/web/public/changelog/0.8.0/a-side-panel-for-the-board-the-code-and-the-transcript.png)
+![The side panel full screen on the whiteboard Luke drew for a plan: the flow from a member's invite to the teammate joining or the link being refused.](apps/web/public/changelog/0.8.0/a-side-panel-for-the-board-the-code-and-the-transcript.png)
 
 ### Luke as a planning teammate
 
@@ -724,7 +724,7 @@ tells you its result at a natural pause, and Stop cancels that work too.
 [#1824](https://github.com/ReviewStage/luke/pull/1824),
 [#1825](https://github.com/ReviewStage/luke/pull/1825))
 
-![A plan beside its transcript, where a new call picks up from what was said on the last one.](apps/web/public/changelog/0.8.0/luke-as-a-planning-teammate.png)
+![The Transcript tab, where today's call opens on what was settled yesterday and Luke reports a background worker's finding at a pause.](apps/web/public/changelog/0.8.0/luke-as-a-planning-teammate.png)
 
 ### Improvements
 
@@ -827,7 +827,7 @@ read public pages, and with GitHub connected he reads your repositories.
 [#1777](https://github.com/ReviewStage/luke/pull/1777),
 [#1779](https://github.com/ReviewStage/luke/pull/1779))
 
-![An open plan on its fixed template, with the planning call listening and the notetaker writing.](apps/web/public/changelog/0.7.0/plan-a-feature-with-luke.png)
+![A plan on its fixed template mid-call, the notetaker writing its change map while Luke asks one question about what he read in the code.](apps/web/public/changelog/0.7.0/plan-a-feature-with-luke.png)
 
 ### Luke opens as a Mac app
 
@@ -840,8 +840,6 @@ are hidden.
 [#1755](https://github.com/ReviewStage/luke/pull/1755),
 [#1775](https://github.com/ReviewStage/luke/pull/1775),
 [#1782](https://github.com/ReviewStage/luke/pull/1782))
-
-![Luke's window on the Plans tab, listing plans beside an invitation to start a new one.](apps/web/public/changelog/0.7.0/luke-opens-as-a-mac-app.png)
 
 ### Improvements
 
