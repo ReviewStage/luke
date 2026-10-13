@@ -79,13 +79,13 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
 }
 
 /**
- * What a blank line's text holds. Note that it is a newline rather than
- * nothing, because the gutter's number is left out of a selection, so a
- * line holding no text would leave nothing to copy and the copy would close
- * up the blank lines between the code; drawn in `pre-wrap`, a lone newline
- * takes no more room than the line.
+ * What a blank line's text holds, here and in a diff. Note that it is a
+ * newline rather than nothing, because the gutter's number is left out of a
+ * selection, so a line holding no text would leave nothing to copy and the
+ * copy would close up the blank lines between the code; drawn in `pre-wrap`,
+ * a lone newline takes no more room than the line.
  */
-const BLANK_LINE_TEXT = "\n";
+export const BLANK_LINE_TEXT = "\n";
 
 /** Whether a line holds no text to copy. */
 function isBlank(tokens: PlanCode["lines"][number]): boolean {

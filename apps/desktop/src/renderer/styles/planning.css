@@ -769,12 +769,15 @@ button.code-card-path:hover {
 
 /* The diff's rows: the old side's number, the new side's, then the line,
    added rows on a green ground and removed rows on a red one. */
+/* A diff selects and copies as `.code-lines` does, its numbers left out. */
 .diff-lines {
   padding: 0 0 var(--space-6);
   color: var(--code-text);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;
   line-height: 1.6;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .diff-line,
@@ -807,6 +810,7 @@ button.code-card-path:hover {
   padding: 0 var(--space-6) 0 0;
   color: var(--code-line-number);
   text-align: right;
+  -webkit-user-select: none;
   user-select: none;
 }
 
