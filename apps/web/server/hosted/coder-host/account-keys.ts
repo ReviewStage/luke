@@ -1,7 +1,7 @@
+import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
 import type { WebStoreRun } from "../../runtime.js";
-import type { PlanStoreEffect } from "../plan-store.js";
 import {
   type KeyRing,
   openProviderKey,

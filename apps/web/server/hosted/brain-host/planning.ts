@@ -1,3 +1,4 @@
+import type { LabelledAgentEdit, StoredPlan } from "@sidecar/database/models/plan-store";
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
@@ -36,7 +37,6 @@ import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
-import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,

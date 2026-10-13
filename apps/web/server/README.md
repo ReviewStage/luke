@@ -492,7 +492,7 @@ client out of the fiber it runs on rather than holding one of its own, the
 bridged statements of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
-Outside `packages/database/src/models/`, `server/hosted/plan-store.ts` is on the same
+Outside `packages/database/src/models/`, `packages/database/src/models/plan-store.ts` is on the same
 client, and `server/voice/session-record.ts` is on it whole, each of its five methods
 answering an effect over the live session row rather than running one.
 `VoiceService` yields those five
@@ -932,7 +932,7 @@ plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`server/hosted/plan-store.ts` names the account beside the plan, so another
+`packages/database/src/models/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
 
 `server/repository-pins-app.ts` answers `/api/repository-pins`, the
@@ -1776,7 +1776,7 @@ less the `prompts` table it drew and less the `tool_sets` table
 `0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`plan`, which `server/hosted/plan-store.ts`
+conversation row names its kind (`plan`, which `packages/database/src/models/plan-store.ts`
 opens, and `coding_agent`, which `server/hosted/coding-agent-store.ts` opens,
 are the two any code still opens), the
 runtime's own session id, its soft-delete instant, and the counter that

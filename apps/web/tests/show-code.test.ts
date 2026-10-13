@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -7,7 +8,6 @@ import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
-import { createPlan } from "../server/hosted/plan-store";
 import {
   REPOSITORY_REFUSAL,
   REPOSITORY_SANDBOX_CONTRACT,

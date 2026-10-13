@@ -7,6 +7,7 @@ import {
   type StoredTurnRecord,
   turnsBefore,
 } from "@sidecar/database/models/message-reads";
+import { type PlanStoreEffect, readPlan } from "@sidecar/database/models/plan-store";
 import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
@@ -25,7 +26,6 @@ import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";
 import { childTitlesByCall } from "./child-titles.js";
-import { type PlanStoreEffect, readPlan } from "./plan-store.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 
 /**

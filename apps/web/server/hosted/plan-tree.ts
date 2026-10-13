@@ -1,3 +1,4 @@
+import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
 import {
   CODE_PATH_MAX_CHARS,
   PLAN_FILE_REFUSAL,
@@ -13,7 +14,6 @@ import type { GitHubApp } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 import { reachPlanRepository, refused } from "./plan-file.js";
-import { type PlanStoreFailure, readPlan } from "./plan-store.js";
 import { isSecretFile } from "./shown-file.js";
 
 /**

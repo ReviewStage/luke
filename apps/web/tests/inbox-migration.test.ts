@@ -8,6 +8,7 @@ import {
   webMigrationJournal,
 } from "@sidecar/database/core/migrator";
 import { db } from "@sidecar/database/core/query";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -18,7 +19,6 @@ import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { answerInboxItem, planInboxItems, postInboxItem } from "../server/hosted/inbox-store";
-import { createPlan } from "../server/hosted/plan-store";
 
 /**
  * Migration 0088 moves every inbox item from the fixed kinds, a kind, a

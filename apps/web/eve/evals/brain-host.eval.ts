@@ -3,6 +3,12 @@ import { db } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  createPlan,
+  openPlanConversation,
+  readPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { EXCESS_KEYS } from "@sidecar/wire";
@@ -26,12 +32,6 @@ import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
-import {
-  createPlan,
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-} from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import {

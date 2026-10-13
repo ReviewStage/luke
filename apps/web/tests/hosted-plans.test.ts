@@ -3,6 +3,15 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { deleteAccount } from "@sidecar/database/models/account-store";
+import {
+  attachPlanConversation,
+  createPlan,
+  deletePlan,
+  listPlans,
+  type NewPlan,
+  readPlan,
+  updatePlan,
+} from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { plan } from "@sidecar/database/schemas/plan";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -22,15 +31,6 @@ import {
   type PlanSaveResult,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import {
-  attachPlanConversation,
-  createPlan,
-  deletePlan,
-  listPlans,
-  type NewPlan,
-  readPlan,
-  updatePlan,
-} from "../server/hosted/plan-store";
 import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";

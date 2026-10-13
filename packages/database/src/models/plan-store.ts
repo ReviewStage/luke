@@ -1,11 +1,3 @@
-import { db } from "@sidecar/database/core/query";
-import { readPlanTemplate } from "@sidecar/database/models/account-store";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { readLastEdit, UNKNOWN_AGENT_LABEL } from "@sidecar/database/models/plan-revisions";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { plan } from "@sidecar/database/schemas/plan";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { type PlanSectionWriter, planSectionWriterSchema } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/hosted/plan-template";
@@ -20,6 +12,14 @@ import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
+import { plan } from "../schemas/plan.js";
+import { conversations } from "../schemas/storage.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { readPlanTemplate } from "./account-store.js";
+import { InstantColumnSchema } from "./columns.js";
+import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 
 /**
  * plan-store.ts -- the named plans an account owns, and the one document each holds.

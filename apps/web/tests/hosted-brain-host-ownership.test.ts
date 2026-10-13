@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -27,7 +28,6 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { stampedEveEvent } from "./support/eve-events";
 import { NO_GITHUB } from "./support/github-app-fake";

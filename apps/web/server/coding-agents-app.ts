@@ -1,4 +1,5 @@
 import { childConversationId } from "@sidecar/database/models/ids";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import {
   type ConversationTarget,
@@ -110,7 +111,6 @@ import {
   withdrawInboxAnswer,
 } from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
-import { readPlan } from "./hosted/plan-store.js";
 import { logStoreFailure } from "./hosted/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 

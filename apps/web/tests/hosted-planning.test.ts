@@ -3,6 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  createPlan,
+  deletePlan,
+  openPlanConversation,
+  readPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -73,13 +80,6 @@ import {
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
-import {
-  createPlan,
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-} from "../server/hosted/plan-store";
 import {
   READ_WEB_PAGE_TOOL,
   SEARCH_WEB_STATUS,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
@@ -17,7 +18,6 @@ import {
   storedLookOutput,
 } from "../server/hosted/board-look";
 import { writeDrawing, writeScene } from "../server/hosted/board-store";
-import { createPlan } from "../server/hosted/plan-store";
 import { driven, forkClockDriven } from "./support/clock-driven";
 
 /**

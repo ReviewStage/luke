@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { writePlanTemplate } from "@sidecar/database/models/account-store";
+import { createPlan, readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { Effect, Option } from "effect";
-import { createPlan, readPlan } from "../server/hosted/plan-store";
 
 /**
  * A plan as one document: a new plan is a copy of its account's template,

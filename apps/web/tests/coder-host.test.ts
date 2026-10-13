@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import { createPlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -81,7 +82,6 @@ import {
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -29,7 +30,6 @@ import {
   recordCodingAgentPublished,
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
-import { createPlan, deletePlan } from "../server/hosted/plan-store";
 
 /**
  * The coding agents of an account's plans, through the store's public

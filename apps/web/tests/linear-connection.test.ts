@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
 import { ConnectError, UserAuthorizationRequiredError } from "@vercel/connect";
@@ -38,7 +39,6 @@ import {
   LINEAR_ROW_STATUS,
   readLinearConnection,
 } from "../server/hosted/linear-store";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 
