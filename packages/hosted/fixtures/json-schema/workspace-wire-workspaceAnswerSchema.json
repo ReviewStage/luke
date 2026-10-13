@@ -23,8 +23,28 @@
             "member"
           ]
         },
-        "active": {
-          "type": "boolean"
+        "github": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "login": {
+                  "type": "string"
+                },
+                "active": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "login",
+                "active"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -32,7 +52,7 @@
         "name",
         "personal",
         "role",
-        "active"
+        "github"
       ],
       "additionalProperties": false
     }

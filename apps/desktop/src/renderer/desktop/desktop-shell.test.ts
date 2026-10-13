@@ -752,7 +752,6 @@ const NAMED_VIEW: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   workspaces: [],
-  available: [],
   activePlanId: DOCUMENT_PLAN.id,
   document: { status: PLANNING_READ.READY, plan: DOCUMENT_PLAN },
 };

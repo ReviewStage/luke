@@ -128,9 +128,6 @@ const REPOSITORY_FAILURE_NOTES = {
 /** What a button that opens the page connecting the account's GitHub says, wherever a refusal for GitHub not connected is drawn. */
 export const CONNECT_GITHUB_LABEL = "Connect GitHub";
 
-/** Why Install Luke on GitHub opened nothing where the account has no GitHub connected. */
-export const INSTALL_NEEDS_GITHUB_NOTE = "Connect GitHub in Settings to install Luke on GitHub.";
-
 /** The sentence the page shows for a start or a repository change the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {
   return REPOSITORY_FAILURE_NOTES[failure];

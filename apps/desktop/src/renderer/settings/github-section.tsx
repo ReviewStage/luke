@@ -27,7 +27,7 @@ export interface GitHubSettingsControl {
 /** What the row says the connection is. */
 function connectionLine(connection: GitHubConnection | undefined): string {
   if (connection === undefined || !connection.connected) {
-    return "Connect GitHub to choose repositories, start agents, and join workspaces.";
+    return "Connect GitHub to choose repositories and start agents.";
   }
   return connection.login === null ? "Connected" : `Connected as ${connection.login}`;
 }

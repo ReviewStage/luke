@@ -504,12 +504,12 @@ export function App(): React.JSX.Element {
             workspace: {
               workspace: plans.workspace,
               onLeft: plans.onLeftWorkspace,
-              onInstall: plans.onInstallApp,
+              onConnectGitHub: plans.onConnectGitHub,
             },
             github: {
               connection: plans.github,
-              onConnect: plans.onConnectGitHub,
-              onDisconnect: plans.onDisconnectGitHub,
+              onConnect: plans.onConnectAccountGitHub,
+              onDisconnect: plans.onDisconnectAccountGitHub,
             },
           }}
         />

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { highlightSnippet } from "@sidecar/host";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted";
 import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
   type CodeLines,
   PLAN_CALL_FAILURE,
   type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
-  type PlanningWorkspaceJoinAnswer,
-  WORKSPACE_CALL_FAILURE,
+  type PlanningWorkspaceGitHubConnectAnswer,
 } from "@sidecar/hosted/planning-view";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { Effect } from "effect";
@@ -18,8 +18,6 @@ import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   COLOURED_CODE_MAX_CHARS,
-  GITHUB_CONNECT_REFUSAL,
-  WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -32,13 +30,14 @@ const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: fals
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const RELAY = { installationId: 4_200_017, name: "relay-labs" };
+const SERVICE = "https://luke.test";
+const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const ACME = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
-  active: true,
+  github: { login: "acme", active: true },
 };
 const GRACE = {
   userId: "user-grace",
@@ -69,12 +68,11 @@ function fixture() {
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
   /**
-   * Whether the host refuses a workspace call: a write as the account's role
-   * not allowing it, a join as not found; and whether the account's GitHub
-   * is not connected, which a join is refused for and a connect page is not
-   * named under.
+   * Whether the host refuses a workspace write as the account's role not
+   * allowing it, the install address a connection answers, and whether the
+   * host names no page to connect the account's own GitHub.
    */
-  const host = { notPermitted: false, githubDisconnected: false, githubUnanswered: false };
+  const host = { notPermitted: false, connectUrl: INSTALL_URL, githubUnanswered: false };
   const refusal = () =>
     host.notPermitted
       ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
@@ -184,17 +182,20 @@ function fixture() {
           asked.push("github-disconnect");
           return { url: DISCONNECT_PAGE };
         }),
-      workspaceJoin: (params) =>
-        Effect.sync((): PlanningWorkspaceJoinAnswer => {
-          asked.push(`join:${params.installationId}`);
-          if (host.githubDisconnected) {
-            return { failure: WORKSPACE_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED } as const;
-          }
-          if (params.installationId === RELAY.installationId) return { workspace: ACME };
-          // The service answers a join it would not grant as not found.
-          return host.notPermitted
-            ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
-            : refusal();
+      workspaceCreate: (params) =>
+        Effect.sync(() => {
+          asked.push(`create:${params.name}`);
+          return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
+        }),
+      workspaceGitHubConnect: (params) =>
+        Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
+          asked.push(`connect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { url: host.connectUrl };
+        }),
+      workspaceGitHubDisconnect: (params) =>
+        Effect.sync(() => {
+          asked.push(`disconnect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { workspace: ACME };
         }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
@@ -216,6 +217,7 @@ function fixture() {
       opened.push(url);
       return Promise.resolve();
     },
+    serviceBaseUrl: SERVICE,
     activePlanId: () => view.activePlanId,
     talkAboutPlan: (planId) => {
       talked.push(planId);
@@ -297,70 +299,125 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
+      const workspace = { workspaceId: ACME.id };
 
-      const joined = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: RELAY.installationId } },
+      const made = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
+        PANEL,
+      );
+      const connected = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace },
+        PANEL,
+      );
+      const disconnected = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: workspace },
         PANEL,
       );
       const members = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: { workspaceId: ACME.id } },
+        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: workspace },
         PANEL,
       );
       const removed = yield* f.router.performAct(
-        {
-          kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
-          payload: { workspaceId: ACME.id, userId: GRACE.userId },
-        },
+        { kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE, payload: { ...workspace, userId: GRACE.userId } },
         PANEL,
       );
       const left = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
+        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace },
         PANEL,
       );
       const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
+        { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
         VOICE,
       );
 
-      assert.deepEqual(joined, { status: ACT_OUTCOME_STATUS.DONE, value: ACME });
+      assert.deepEqual(made, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ...ACME, name: "Relay Labs" },
+      });
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
       assert.deepEqual(removed, { status: ACT_OUTCOME_STATUS.DONE, value: [] });
       assert.equal(left.status, ACT_OUTCOME_STATUS.DONE);
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, [
-        `join:${RELAY.installationId}`,
+        "create:Relay Labs",
+        `connect:${ACME.id}`,
+        `disconnect:${ACME.id}`,
         `members:${ACME.id}`,
         `remove:${ACME.id}:${GRACE.userId}`,
         `leave:${ACME.id}`,
       ]);
+      assert.deepEqual(f.opened, [INSTALL_URL]);
     }),
 );
 
 it.effect(
-  "a workspace act the account's role does not allow, and a join GitHub does not show, are each refused in words that say so, and one unanswered in its kind's own",
+  "inviting people opens the service's invite page for the workspace, from a panel alone, and asks the host nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const invited = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_INVITE, payload: { workspaceId: "org a&b" } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_INVITE, payload: { workspaceId: ACME.id } },
+        VOICE,
+      );
+
+      assert.equal(invited.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.opened, [`${SERVICE}/invite.html?workspace=org+a%26b`]);
+      assert.deepEqual(f.asked, []);
+    }),
+);
+
+it.effect("a connection's install address opens only where it is GitHub's", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    f.host.connectUrl = "https://evil.test/apps/luke/installations/new";
+
+    const connected = yield* f.router.performAct(
+      { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: ACME.id } },
+      PANEL,
+    );
+
+    assert.deepEqual(connected, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.WORKSPACE_GITHUB_CONNECT].refusal,
+    });
+    assert.deepEqual(f.opened, []);
+  }),
+);
+
+it.effect(
+  "a workspace write the account's role does not allow is refused in words that say so, and one unanswered in its kind's own",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       f.host.notPermitted = true;
+      const workspace = { workspaceId: ACME.id };
 
-      const removed = yield* f.router.performAct(
-        {
-          kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
-          payload: { workspaceId: ACME.id, userId: GRACE.userId },
-        },
-        PANEL,
-      );
-      const left = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
-        PANEL,
-      );
-      const notShown = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
-        PANEL,
-      );
+      const refusedNow = yield* Effect.all([
+        f.router.performAct({ kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace }, PANEL),
+        f.router.performAct(
+          { kind: ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: workspace },
+          PANEL,
+        ),
+        f.router.performAct(
+          {
+            kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+            payload: { ...workspace, userId: GRACE.userId },
+          },
+          PANEL,
+        ),
+        f.router.performAct({ kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace }, PANEL),
+      ]);
       f.host.notPermitted = false;
-      const unjoined = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
+      const unread = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: { workspaceId: "workspace-gone" } },
         PANEL,
       );
 
@@ -368,16 +425,12 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
       };
-      assert.deepEqual(removed, notPermitted);
-      assert.deepEqual(left, notPermitted);
-      assert.deepEqual(notShown, {
+      assert.deepEqual(refusedNow, [notPermitted, notPermitted, notPermitted, notPermitted]);
+      assert.deepEqual(unread, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
+        reason: ACT[ACT_KIND.WORKSPACE_MEMBERS_READ].refusal,
       });
-      assert.deepEqual(unjoined, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.WORKSPACE_JOIN].refusal,
-      });
+      assert.deepEqual(f.opened, []);
     }),
 );
 
@@ -631,25 +684,6 @@ it.effect(
         reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
       });
       assert.deepEqual(f.opened, [CONNECT_PAGE, DISCONNECT_PAGE]);
-    }),
-);
-
-it.effect(
-  "a join refused for GitHub not connected is refused in words that point to Settings",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      f.host.githubDisconnected = true;
-
-      const joined = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: RELAY.installationId } },
-        PANEL,
-      );
-
-      assert.deepEqual(joined, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: GITHUB_CONNECT_REFUSAL,
-      });
     }),
 );
 
