@@ -4,12 +4,16 @@ import type { McpClientConnectionDefinition } from "eve/connections";
 import { test } from "vitest";
 import coderLinear from "../coder/connections/linear";
 import coderNotion from "../coder/connections/notion";
+import coderSentry from "../coder/connections/sentry";
 import coderWorkerLinear from "../coder/subagents/worker/connections/linear";
 import coderWorkerNotion from "../coder/subagents/worker/connections/notion";
+import coderWorkerSentry from "../coder/subagents/worker/connections/sentry";
 import planningLinear from "../eve/connections/linear";
 import planningNotion from "../eve/connections/notion";
+import planningSentry from "../eve/connections/sentry";
 import planningWorkerLinear from "../eve/subagents/worker/connections/linear";
 import planningWorkerNotion from "../eve/subagents/worker/connections/notion";
+import planningWorkerSentry from "../eve/subagents/worker/connections/sentry";
 import { INTEGRATION } from "../server/hosted/integrations";
 
 /**
@@ -35,6 +39,10 @@ const REGISTERED: readonly (readonly [
   ["planning worker", INTEGRATION_PROVIDER.NOTION, planningWorkerNotion],
   ["coding agent", INTEGRATION_PROVIDER.NOTION, coderNotion],
   ["coding agent's worker", INTEGRATION_PROVIDER.NOTION, coderWorkerNotion],
+  ["planning", INTEGRATION_PROVIDER.SENTRY, planningSentry],
+  ["planning worker", INTEGRATION_PROVIDER.SENTRY, planningWorkerSentry],
+  ["coding agent", INTEGRATION_PROVIDER.SENTRY, coderSentry],
+  ["coding agent's worker", INTEGRATION_PROVIDER.SENTRY, coderWorkerSentry],
 ];
 
 test.for(REGISTERED)(

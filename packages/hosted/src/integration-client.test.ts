@@ -26,6 +26,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
           integrations: {
             linear: INTEGRATION_STATUS.CONNECTED,
             notion: INTEGRATION_STATUS.UNAVAILABLE,
+            sentry: INTEGRATION_STATUS.UNAVAILABLE,
           },
         }),
       },
@@ -35,6 +36,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
       integrations: {
         linear: INTEGRATION_STATUS.CONNECTED,
         notion: INTEGRATION_STATUS.UNAVAILABLE,
+        sentry: INTEGRATION_STATUS.UNAVAILABLE,
       },
     });
     assert.deepEqual(api.credentials(), ["token-1"]);
@@ -42,26 +44,28 @@ it.effect("reads where every provider stands under the account's bearer", () =>
 );
 
 it.effect(
-  "a provider the service left out of the answer, or one it spells unknown, is no answer",
+  "a provider an older service leaves out, or names in a status this build does not know, stands unavailable, and the others still stand",
   () =>
     Effect.gen(function* () {
-      const missing = fakeCloudApi({
-        "GET /api/account/integrations": {
-          answer: () => ({ integrations: { linear: INTEGRATION_STATUS.CONNECTED } }),
-        },
-      });
-      assert.deepEqual(yield* Effect.provide(client().statuses(), missing.layer), {
-        failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
-      });
-
-      const unknown = fakeCloudApi({
+      const older = fakeCloudApi({
         "GET /api/account/integrations": {
           answer: () => ({
-            integrations: { linear: "half-connected", notion: INTEGRATION_STATUS.UNAVAILABLE },
+            integrations: { linear: INTEGRATION_STATUS.CONNECTED, notion: "half-connected" },
           }),
         },
       });
-      assert.deepEqual(yield* Effect.provide(client().statuses(), unknown.layer), {
+      assert.deepEqual(yield* Effect.provide(client().statuses(), older.layer), {
+        integrations: {
+          linear: INTEGRATION_STATUS.CONNECTED,
+          notion: INTEGRATION_STATUS.UNAVAILABLE,
+          sentry: INTEGRATION_STATUS.UNAVAILABLE,
+        },
+      });
+
+      const shapeless = fakeCloudApi({
+        "GET /api/account/integrations": { answer: () => ({ integrations: "all of them" }) },
+      });
+      assert.deepEqual(yield* Effect.provide(client().statuses(), shapeless.layer), {
         failure: INTEGRATION_CALL_FAILURE.UNANSWERED,
       });
     }),

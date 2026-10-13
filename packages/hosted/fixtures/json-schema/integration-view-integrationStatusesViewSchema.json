@@ -25,11 +25,22 @@
                 "disconnected",
                 "unavailable"
               ]
+            },
+            "sentry": {
+              "type": "string",
+              "enum": [
+                "connected",
+                "pending",
+                "expired",
+                "disconnected",
+                "unavailable"
+              ]
             }
           },
           "required": [
             "linear",
-            "notion"
+            "notion",
+            "sentry"
           ],
           "additionalProperties": false
         }

@@ -53,9 +53,15 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.INTEGRATIONS_STATUS:
       if (readFails) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }));
-      // Notion has no connector on this deployment, so only Linear offers anything.
+      // No other provider has a connector on this deployment, so only Linear offers anything.
       return Promise.resolve(
-        done({ integrations: { linear: standing, notion: INTEGRATION_STATUS.UNAVAILABLE } }),
+        done({
+          integrations: {
+            linear: standing,
+            notion: INTEGRATION_STATUS.UNAVAILABLE,
+            sentry: INTEGRATION_STATUS.UNAVAILABLE,
+          },
+        }),
       );
     case ACT_KIND.INTEGRATIONS_CONNECT:
       assert.deepEqual(request.payload, LINEAR);

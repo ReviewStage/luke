@@ -1936,19 +1936,26 @@ body,
 
 /* An integration whose brand publishes its one-colour mark in named inks
    wears them by the ground: Notion's pure white on dark and pure black on
-   light (`integration-marks.tsx`). */
+   light, Sentry's white on dark and its dark blurple on light
+   (`integration-marks.tsx`). */
 :root {
   --integration-ink-notion: #fff;
+  --integration-ink-sentry: #fff;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
     --integration-ink-notion: #000;
+    --integration-ink-sentry: #181225;
   }
 }
 
 .integration-mark-notion {
   color: var(--integration-ink-notion);
+}
+
+.integration-mark-sentry {
+  color: var(--integration-ink-sentry);
 }
 
 /* The searchable menu, in the shape of a command menu: the search as the

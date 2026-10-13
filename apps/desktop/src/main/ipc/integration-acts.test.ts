@@ -28,6 +28,7 @@ function fixture() {
             integrations: {
               linear: INTEGRATION_STATUS.CONNECTED,
               notion: INTEGRATION_STATUS.DISCONNECTED,
+              sentry: INTEGRATION_STATUS.DISCONNECTED,
             },
           };
         }),
@@ -58,6 +59,7 @@ it.effect("the panel's integration acts carry the host's answers to it, whole", 
         integrations: {
           linear: INTEGRATION_STATUS.CONNECTED,
           notion: INTEGRATION_STATUS.DISCONNECTED,
+          sentry: INTEGRATION_STATUS.DISCONNECTED,
         },
       },
     });
