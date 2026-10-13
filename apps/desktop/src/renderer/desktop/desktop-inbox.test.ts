@@ -371,9 +371,13 @@ test("the list is resized from its edge between its bounds, and keeps its width 
       edge().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   };
-  assert.equal(width(), 320);
+  assert.equal(
+    width(),
+    360,
+    "wide enough to centre the Inbox's name past the folded sidebar's buttons",
+  );
   press("ArrowRight");
-  assert.equal(width(), 336);
+  assert.equal(width(), 376);
   press("End");
   assert.equal(width(), 520);
   press("ArrowRight");

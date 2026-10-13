@@ -33,12 +33,13 @@ const STORAGE_KEY = {
  * How wide the Inbox's list may be dragged, in CSS pixels, and where it
  * starts: a mail app's message list, never so narrow that its head, with
  * the folded sidebar's buttons standing over its start, cannot name the
- * Inbox beside its own buttons.
+ * Inbox beside its own buttons, and starting wide enough that the name
+ * stands centred over the list past those buttons.
  */
 export const INBOX_LIST_WIDTH = {
   MIN: 300,
   MAX: 520,
-  DEFAULT: 320,
+  DEFAULT: 360,
 } as const;
 
 /** The folded groups, each by its repository, null for the plans with none. */
