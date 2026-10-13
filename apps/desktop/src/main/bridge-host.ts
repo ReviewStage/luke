@@ -11,6 +11,7 @@ import {
 import { type Act, parsedAct } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import type { ActRouter, ActSender } from "./act-router";
+import { windowAppState } from "./app-state";
 
 /** Which window a report came from, which is all a report's handler is told. */
 interface BridgeContext {
@@ -46,7 +47,7 @@ export interface BridgeHostDependencies {
   /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   reports: ReportHandlers;
-  /** The document as one window stands, which is the answer to its own bootstrap read. */
+  /** The document as one window stands, which is the answer to its own bootstrap read, the voice and call windows' without the plan's work (`voiceWindowState`). */
   snapshotFor: (sender: WebContents) => Promise<AppStateSnapshot>;
 }
 
@@ -76,7 +77,8 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
 
   ipcMain.handle(BRIDGE.requestAppState.channel, async (event) => {
     if (!trustedSender(event)) throw new Error("Invalid bridge request");
-    return snapshotFor(event.sender);
+    // The voice and call windows read the document as `app:state` sends it them, without the plan's work, from their first read on.
+    return windowAppState(await snapshotFor(event.sender), senderOf(event.sender));
   });
 
   // SAFETY: `reports` is keyed by ReportMethod; Object.keys erases those literal keys.

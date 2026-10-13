@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { runModeFor } from "@sidecar/host";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
-import { AppStateStore, bootstrapPatch, initialAppState, voiceWindowState } from "./app-state";
+import {
+  AppStateStore,
+  bootstrapPatch,
+  initialAppState,
+  voiceWindowState,
+  windowAppState,
+} from "./app-state";
 import type { HostBootstrap } from "./gateway/host-operator";
 
 /**
@@ -169,7 +177,7 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
-it("the voice window is sent the document without the planning turns' work, and the rest of the plan as held", () => {
+it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
   const held = initialAppState(RUN, true);
   const planning = {
     ...held.planning,
@@ -184,9 +192,44 @@ it("the voice window is sent the document without the planning turns' work, and 
         workers: [],
       },
     ],
+    conversation: {
+      messages: [
+        {
+          id: "turn-1",
+          role: MESSAGE_ROLE.ASSISTANT,
+          turnId: "turn-1",
+          parts: [
+            {
+              type: "tool-run_on_mac",
+              toolCallId: "call-1",
+              state: "output-available",
+              input: { command: "git status" },
+              output: { status: "ran", stdout: "On branch invite-expiry", stderr: "" },
+            },
+          ],
+        },
+      ],
+      cursor: "1:1",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    },
   } as const;
   const sent = voiceWindowState({ ...held, planning });
   assert.equal(sent.planning.activePlanId, "plan-1");
   assert.equal("work" in sent.planning, false);
+  assert.equal("conversation" in sent.planning, false);
+  assert.doesNotMatch(JSON.stringify(sent), /invite-expiry/u);
+  // A window's first read of the document answers the same: the voice and call windows' without either, a panel's whole.
+  for (const window of [
+    { voice: true, call: false },
+    { voice: false, call: true },
+  ]) {
+    assert.doesNotMatch(
+      JSON.stringify(windowAppState({ ...held, planning }, window)),
+      /invite-expiry/u,
+    );
+  }
+  const panel = windowAppState({ ...held, planning }, { voice: false, call: false });
+  assert.equal(panel.planning.conversation?.cursor, "1:1");
   assert.deepEqual(sent.run, held.run);
 });
