@@ -264,8 +264,8 @@ interface SummarySection {
   entries: readonly AddEntry[];
 }
 
-/** What the summary lists, under its headings in their order, each heading only where it has a row. */
-function summarySections(plans: PlansControl): SummarySection[] {
+/** What the summary lists, under its headings in their order, each heading only where it has a row; `waiting` is what the Inbox's row counts. */
+function summarySections(plans: PlansControl, waiting: number): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
   const entries = [
@@ -276,7 +276,7 @@ function summarySections(plans: PlansControl): SummarySection[] {
       files: shownFiles(plans.shownCode ?? []),
       standing: true,
     }),
-    ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX)),
+    ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX), waiting),
     ...agentEntries(mainTabs, agents, true),
   ];
   // Coding agents stands while only archived agents are left, so their fold has a heading.
@@ -554,12 +554,15 @@ export function PlanSummary({
   plans,
   layout,
   cardId,
+  inbox,
 }: {
   plans: PlansControl;
   layout: SummaryLayout;
   cardId: string;
+  /** How many of the plan's inbox items wait on the developer, which its Inbox row counts. */
+  inbox: number;
 }): React.JSX.Element {
-  const sections = summarySections(plans);
+  const sections = summarySections(plans, inbox);
   const kinds = sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? [];
   return (
     <>

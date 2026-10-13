@@ -314,13 +314,26 @@ export function agentEntries(
  * The plan's Inbox as the "+" menu, the plan's summary, and ⌘K offer it,
  * among the plan's agents, since only they post to it; none on a plan with
  * no agent. Picking it opens the tab where it was closed and chooses it,
- * through `onPick`.
+ * through `onPick`. The summary, which reads what waits, hands in
+ * `waiting`, counted at the row's end in the sidebar's quiet count, and
+ * nothing at none.
  */
-export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
+export function inboxEntries(
+  agents: CodingAgentsControl,
+  onPick: () => void,
+  waiting = 0,
+): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the plan holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
   const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon />, section: AGENTS_SECTION };
-  return [{ row, onPick }];
+  const endMark =
+    waiting === 0 ? undefined : (
+      <span className="inbox-row-count">
+        {waiting}
+        <span className="visually-hidden"> waiting</span>
+      </span>
+    );
+  return [{ row, endMark, onPick }];
 }
 
 /**

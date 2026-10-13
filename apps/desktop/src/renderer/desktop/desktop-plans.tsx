@@ -1,5 +1,4 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import { DocumentIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -19,6 +18,7 @@ import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog } from "../settings/confirm-dialog";
+import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
@@ -27,7 +27,6 @@ import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from ".
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
 import { useTabViews } from "./strip-tabs";
-import { Tab, TabStrip } from "./tab-strip";
 
 /**
  * The work column while Plans is chosen: the open plan's column, its
@@ -108,13 +107,12 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/** What a press on the stand-in tab does: nothing, since it is the column's one tab while no plan is drawn. */
-const CHOOSE_PLAN = () => undefined;
-
 /**
- * The open plan's region: its column, or the state standing in its place,
- * whose strip holds a stand-in for the plan's tab, so the row does not move
- * when the plan is drawn. The captions, handed in while the plan is drawn,
+ * The open plan's region: its column, or the state standing in its place.
+ * While the plan is read, its strip holds one tab-shaped skeleton where the
+ * plan's tab will stand, so the row does not move when the plan is drawn,
+ * and no name is guessed before the read says it; a plan that could not be
+ * drawn has no tab at all. The captions, handed in while the plan is drawn,
  * stand just above the call bar.
  */
 function PlanDocument({
@@ -188,9 +186,11 @@ function PlanDocument({
       <>
         <Toolbar
           heading={
-            <TabStrip label="Plan" className="desktop-toolbar-heading">
-              <Tab icon={<DocumentIcon />} label="Plan" selected quiet onSelect={CHOOSE_PLAN} />
-            </TabStrip>
+            <div className="desktop-toolbar-heading">
+              {region.kind === DOCUMENT_REGION.READING ? (
+                <Skeleton className="tab-skeleton" />
+              ) : null}
+            </div>
           }
         />
         <section className="desktop-empty">
@@ -378,7 +378,12 @@ function PlanDocument({
               </section>
             )}
           </FindScope>
-          <PlanSummary plans={plans} layout={summaryLayout} cardId={summaryCard} />
+          <PlanSummary
+            plans={plans}
+            layout={summaryLayout}
+            cardId={summaryCard}
+            inbox={inbox.board.open.length}
+          />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}

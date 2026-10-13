@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_PART,
@@ -124,6 +131,7 @@ function Page({
   resting,
   failed,
   shelved,
+  inbox,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
@@ -133,6 +141,8 @@ function Page({
   failed: boolean;
   /** The plan's archived agents. */
   shelved: readonly CodingAgentSummary[];
+  /** The plan's inbox items, as its first read answers them. */
+  inbox: readonly InboxItem[];
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
@@ -147,6 +157,11 @@ function Page({
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     ...(archived ? { onUnarchive: () => undefined } : undefined),
+    // Each read past the first is held, as the service holds it, until the inbox changes.
+    readInbox: ({ after }) =>
+      after === INBOX_CURSOR_START
+        ? Promise.resolve({ items: inbox, cursor: `1.${inbox.length}` })
+        : new Promise(() => undefined),
   });
   const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined, false);
   const sidePanel = useSidePanel(
@@ -184,12 +199,40 @@ function mount(
   resting = false,
   failed = false,
   shelved: readonly CodingAgentSummary[] = [],
+  inbox: readonly InboxItem[] = [],
 ): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed, shelved })));
+  act(() =>
+    root.render(createElement(Page, { archived, shownCode, resting, failed, shelved, inbox })),
+  );
   return container;
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** An item the plan's agent posted that waits on the developer's reply. */
+function waitingItem(id: string): InboxItem {
+  return {
+    id,
+    agentId: AGENT.id,
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "What should the email say?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1,
+    updatedAt: 1,
+  };
 }
 
 /** Closes the window, as a quit does, so the next mount is a fresh launch. */
@@ -313,6 +356,23 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     const glyph: Element | null = rowNamed(summary, label).querySelector('[role="img"]');
     assert.equal(glyph?.getAttribute("aria-label"), "Working");
   }
+});
+
+test("the Inbox row counts what waits on the developer at its end, and ends on its label while nothing waits", async () => {
+  const items = [
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000001"),
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000002"),
+  ];
+  const waiting = mount(false, SHOWN, false, false, [], items);
+  await settle();
+  const counted = rowNamed(summaryOf(waiting), "Inbox");
+  assert.equal(counted.textContent, "Inbox2 waiting");
+  assert.equal(counted.lastElementChild?.textContent, "2 waiting");
+  quit();
+
+  const empty = mount(false, SHOWN, false, false, [], []);
+  await settle();
+  assert.equal(rowNamed(summaryOf(empty), "Inbox").textContent, "Inbox");
 });
 
 test("a failed agent's row keeps its harness's mark and says Failed in a mark at its end, to a reader and in its hint, where a working agent's row ends on its label", () => {
