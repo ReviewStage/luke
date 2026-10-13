@@ -74,9 +74,10 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
  * and when, its title, the blocks of context the agent wrote, Markdown as
  * the transcript draws it, a link as the transcript draws one, opened in
- * the browser where it is a web page, code as the Code tab draws a card (`code-pane.tsx`),
- * its lines read from GitHub at the agent's commit through the File tab's
- * own read and opened there in the File tab, and an image the agent took
+ * the browser where it is a web page, code as the Code tab draws a card
+ * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
+ * through the File tab's own read and opened there in the File tab, and an
+ * image the agent took
  * in its sandbox, drawn at the card's own width from the bytes the host
  * fetched under the account (`use-plan-inbox.ts`) and opened larger over
  * the window by a press, in the viewer an attached file opens in
