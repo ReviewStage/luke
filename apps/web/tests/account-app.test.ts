@@ -22,6 +22,12 @@ import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
+  LINEAR_CONNECT_FAILURE,
+  LinearConnect,
+  LinearConnectFailure,
+  type LinearConnectService,
+} from "../server/hosted/linear-connect.js";
+import {
   ModelCatalog,
   ModelCatalogUnavailable,
   modelCatalogOf,
@@ -85,8 +91,12 @@ const SOL_AT_HIGH = { model: "openai/gpt-6.1-sol", effort: "high" } as const sat
 interface Backing {
   deleted: string[];
   forgotten: string[];
+  /** The accounts whose Linear grant Vercel Connect was asked to revoke and did. */
+  revoked: string[];
   stored: Map<string, AccountPreferencesRow>;
   forgetAnalyticsFails: boolean;
+  /** Vercel Connect refuses every revoke, the way an outage there reads. */
+  revokeFails: boolean;
   /** The store refuses every statement, the way an unreachable database does. */
   storeUnavailable: boolean;
   /** The catalog cannot be read, the way an outage at AI Gateway reads. */
@@ -97,8 +107,10 @@ function backing(overrides: Partial<Backing> = {}): Backing {
   return {
     deleted: [],
     forgotten: [],
+    revoked: [],
     stored: new Map(),
     forgetAnalyticsFails: false,
+    revokeFails: false,
     storeUnavailable: false,
     catalogUnavailable: false,
     ...overrides,
@@ -172,6 +184,23 @@ function writePreferences(state: Backing) {
   };
 }
 
+const UNCONFIGURED = new LinearConnectFailure({ reason: LINEAR_CONNECT_FAILURE.NOT_CONFIGURED });
+
+/** Vercel Connect as the delete asks it: only a revoke, which lands or fails as the backing says. */
+function connectDouble(state: Backing): LinearConnectService {
+  return {
+    configured: true,
+    authorize: () => Effect.fail(UNCONFIGURED),
+    token: () => Effect.fail(UNCONFIGURED),
+    revoke: (userId) =>
+      state.revokeFails
+        ? Effect.fail(new LinearConnectFailure({ reason: LINEAR_CONNECT_FAILURE.UNAVAILABLE }))
+        : Effect.sync(() => {
+            state.revoked.push(userId);
+          }),
+  };
+}
+
 /** The catalog as the group reads it: the fixed list, or the outage. */
 function catalogLayer(state: Backing) {
   return state.catalogUnavailable
@@ -201,6 +230,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
       HttpRouter.provideRequest(Layer.succeed(HostedEnvironment, ENVIRONMENT)),
       HttpRouter.provideRequest(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
       HttpRouter.provideRequest(catalogLayer(state)),
+      HttpRouter.provideRequest(Layer.succeed(LinearConnect, connectDouble(state))),
       HttpRouter.provideRequest(noDatabase),
     ),
     { disableLogger: true },
@@ -269,7 +299,7 @@ const EXCHANGES: readonly Exchange[] = [
     name: "delete-success",
     state: () => backing(),
     request: deleteRequest,
-    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID] }),
+    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID], revoked: [USER_ID] }),
   },
   {
     name: "delete-wrong-method",
@@ -287,7 +317,15 @@ const EXCHANGES: readonly Exchange[] = [
     name: "delete-analytics-failure",
     state: () => backing({ forgetAnalyticsFails: true }),
     request: deleteRequest,
-    finalState: () => backing({ deleted: [USER_ID], forgetAnalyticsFails: true }),
+    finalState: () =>
+      backing({ deleted: [USER_ID], revoked: [USER_ID], forgetAnalyticsFails: true }),
+  },
+  // Connect cannot revoke the Linear grant: the account is deleted all the same.
+  {
+    name: "delete-linear-revoke-failure",
+    state: () => backing({ revokeFails: true }),
+    request: deleteRequest,
+    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID], revokeFails: true }),
   },
   {
     name: "preferences-read",
@@ -404,7 +442,7 @@ const EXCHANGES: readonly Exchange[] = [
   },
   // The store is unreachable: the erasure is refused as unavailable, so the
   // caller knows to ask again, and the analytics forget that ran first is
-  // the only thing that landed.
+  // the only thing that landed; the Linear grant stands for the retry.
   {
     name: "delete-store-unavailable",
     state: () => backing({ storeUnavailable: true }),
