@@ -64,7 +64,7 @@ async function mount(answer: string | undefined = undefined, staging: Staging = 
   const control = plansControl();
   const newPlan = {
     ...control.newPlan,
-    ...(staging.preset === undefined ? {} : { preset: staging.preset }),
+    preset: staging.preset ?? control.newPlan.preset,
     start: (name: string, repository: string | null) => {
       starts.push([name, repository]);
       return Promise.resolve(answer);
