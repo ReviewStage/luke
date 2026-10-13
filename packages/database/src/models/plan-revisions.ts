@@ -1,9 +1,3 @@
-import { db } from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { plan } from "@sidecar/database/schemas/plan";
-import { planRevision } from "@sidecar/database/schemas/plan-revision";
-import { voiceSessions } from "@sidecar/database/schemas/voice";
 import type { PlanSectionWriterWho } from "@sidecar/hosted/plan-document";
 import {
   PLAN_ACTOR,
@@ -19,6 +13,12 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
+import { plan } from "../schemas/plan.js";
+import { planRevision } from "../schemas/plan-revision.js";
+import { voiceSessions } from "../schemas/voice.js";
+import { InstantColumnSchema } from "./columns.js";
 
 /**
  * plan-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.
