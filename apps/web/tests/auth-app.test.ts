@@ -104,7 +104,7 @@ const EXCHANGES: readonly Exchange[] = [
   {
     name: "provider-redirect",
     answer: providerRedirect,
-    request: () => new Request(`${AUTH_ORIGIN}/api/auth/callback/github?code=fixture&state=state`),
+    request: () => new Request(`${AUTH_ORIGIN}/api/auth/callback/google?code=fixture&state=state`),
   },
   {
     name: "unknown-endpoint",

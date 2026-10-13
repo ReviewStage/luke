@@ -49,8 +49,17 @@
   gap: var(--control-gap);
 }
 
-/* The window's control height and corner, filled in the text colour the way
-   the new-plan page's start press is. */
+/* Each button and its chip, the chip placed over the button's trailing edge. */
+.sign-in-provider-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The window's control height and corner. The primary one is filled, drawn in
+   the text colour the way the new-plan page's start press is — the provider
+   last signed in with, or Google with none kept — and the other is the quiet
+   one beside it. */
 .sign-in-provider {
   display: flex;
   align-items: center;
@@ -59,8 +68,9 @@
   height: var(--control-height);
   padding: 0 var(--space-12);
   border-radius: var(--control-radius);
-  background: var(--text-primary);
-  color: var(--desktop-ground);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   -webkit-app-region: no-drag;
@@ -70,13 +80,43 @@
 }
 
 .sign-in-provider:hover:not(:disabled) {
+  background: var(--raised-strong);
+}
+
+.sign-in-provider[data-primary="true"] {
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--desktop-ground);
+}
+
+.sign-in-provider[data-primary="true"]:hover:not(:disabled) {
   background: var(--ink);
 }
 
-/* Held while a sign-in begun elsewhere is out; the button waited on from
-   here stays as it was, saying so. */
-.sign-in-provider:disabled[data-waiting="false"] {
+/* Held while a sign-in is out: the button waited on stays as it was, saying
+   so; the other steps back. */
+.sign-in-provider:disabled[data-waiting="false"],
+.sign-in-provider:disabled[data-waiting="false"] + .sign-in-last-used {
   opacity: 0.4;
+}
+
+/* "Last used": a muted pill at the trailing edge of the filled button it
+   marks, in the button's own ink at a tint, the way a devtool's sign-in marks
+   the way in taken last. It lets a press fall through to the button. */
+.sign-in-last-used {
+  position: absolute;
+  top: 50%;
+  right: var(--space-8);
+  padding: 0 var(--space-6);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--desktop-ground) 16%, transparent);
+  color: color-mix(in srgb, var(--desktop-ground) 72%, transparent);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 17px;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity var(--duration-hover) ease;
 }
 
 /* The provider's own mark, at the size its guidelines draw beside a label. */

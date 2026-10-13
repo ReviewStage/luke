@@ -503,7 +503,7 @@ test("decrypts a stored account without asking whether storage is available", as
   assert.equal(cipher.calls.isAvailable, 0);
 });
 
-test("a stored account that signed in with Google still loads, though sign-in is GitHub's alone", async (t) => {
+test("a stored account that signed in with Google still loads", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const signedInWithGoogle = {
     ...TEST_ACCOUNT,

@@ -27,9 +27,9 @@ Requires an Apple silicon Mac on macOS 14 or newer.
 
 1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
 2. Open the DMG and drag **Luke** into **Applications**.
-3. Open Luke and sign in with GitHub. Planning against a repository needs
-   the Luke GitHub App installed on it, which Luke offers from the plan's
-   repository chip.
+3. Open Luke and sign in with Google or GitHub. Planning against a
+   repository needs a GitHub sign-in and the Luke GitHub App installed on it,
+   which Luke offers from the plan's repository chip.
 
 Luke asks for microphone access the first time you start a call.
 
