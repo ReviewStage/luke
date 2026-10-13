@@ -35,7 +35,7 @@ import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/w
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
-import { todosView } from "./tool-call-model";
+import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
@@ -832,8 +832,8 @@ export function startedAgentOf(part: AgentPart): string | undefined {
   if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.START_CODING_AGENT) {
     return undefined;
   }
-  const agent = isRecord(part.output) ? part.output.agent : undefined;
-  return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
+  const target = toolTarget(part);
+  return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */

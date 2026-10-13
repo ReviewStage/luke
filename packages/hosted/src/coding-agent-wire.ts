@@ -559,6 +559,14 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
  */
 export const CODING_AGENT_DELEGATE_TOOL = "delegate";
 
+/**
+ * Where a coding agent's sandbox holds the repository's checkout, which every
+ * path its file tools are handed starts at: a relative path is read from it,
+ * and an absolute one under it names the same file of the repository, as a
+ * transcript's row opens it.
+ */
+export const CODING_AGENT_CHECKOUT_PATH = "/workspace/repository";
+
 /** eve's id for a tool call, as the path names a subagent's transcript by it. */
 export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_ID_CHARS);
 

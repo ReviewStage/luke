@@ -18,11 +18,13 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { SkillFiles } from "../planning/skill-chip";
-import { MAIN_TAB } from "../planning/use-main-tabs";
+import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
 import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
@@ -352,13 +354,42 @@ function PlanDocument({
   };
   // An agent's Changes chip opens its pull request's changes in the side panel, beside its tab.
   const openChanges = (agentId: string) => sidePanel.onChoose({ changes: agentId });
-  // A coding agent's start on the Call tab opens the agent's tab in this
-  // column, which a panel filling the window over it first gives way to,
-  // and hands the keys to this column, so ⌘W closes the tab it opened.
-  const openAgent = (agentId: string) => {
+  // A row that opens a tab of this column, as a coding agent's start on the
+  // Call tab opens the agent's, first has a panel filling the window over it
+  // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
+  const openColumnTab = (opened: MainTab) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    mainTabs.onChoose({ agent: agentId });
+    mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
+  };
+  // A call's row in a transcript opens what the call is about where the
+  // window already draws it: the plan, an agent, or the Inbox in this
+  // column, the rest in the side panel. `agent` is the agent whose
+  // transcript the row stands in, whose Changes its writes open; none on the
+  // Call tab, whose model writes no file.
+  const openTarget = (agent: string | undefined, target: ToolTarget) => {
+    switch (target.kind) {
+      case TOOL_TARGET.AGENT:
+        return openColumnTab({ agent: target.agent });
+      case TOOL_TARGET.PLAN:
+        return openColumnTab(MAIN_TAB.PLAN);
+      case TOOL_TARGET.INBOX:
+        return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.BOARD:
+        return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
+      case TOOL_TARGET.PAGE:
+        return sidePanel.onChoose({ page: target.page });
+      case TOOL_TARGET.SHOWN_CODE: {
+        // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
+        const showing = plans.shownCode?.find((each) => each.callId === target.call);
+        return sidePanel.onOpenFile(target.ref, showing?.code.commit);
+      }
+      case TOOL_TARGET.FILE:
+        // Browsed to, as a skill's file is, so its tab stands on this plan though Luke never showed it.
+        return sidePanel.onBrowseFile(target.path, target.path, true);
+      case TOOL_TARGET.CHANGES:
+        return agent === undefined ? undefined : openChanges(agent);
+    }
   };
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
@@ -484,6 +515,7 @@ function PlanDocument({
                   views={views}
                   onOpenDelegation={openDelegation}
                   onOpenChanges={openChanges}
+                  onOpenTarget={openTarget}
                 />
               </section>
             )}
@@ -527,7 +559,7 @@ function PlanDocument({
           views={views}
           shown={plans.shown}
           focused={sideFocused}
-          onOpenAgent={openAgent}
+          onOpenTarget={(target) => openTarget(undefined, target)}
         />
       ) : null}
     </div>

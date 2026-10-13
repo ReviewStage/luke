@@ -20,6 +20,8 @@ import {
   HourglassIcon,
   InboxIcon,
   LaptopIcon,
+  LayersIcon,
+  LayoutListIcon,
   ListIcon,
   ListTodoIcon,
   type LucideIcon,
@@ -57,6 +59,7 @@ import {
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
 import { HarnessMark } from "../provider-marks";
+import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
@@ -90,7 +93,8 @@ import { WorkingTime } from "./working-time";
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
  * folded under what it holds, a subagent's row as one line like a call's
- * that opens its tab, an agent's to-do list as a call's row that opens onto
+ * that opens its tab, a call about something drawn in a tab of its own as
+ * its line that opens that tab, an agent's to-do list as a call's row that opens onto
  * the list, and a note between the rows. A
  * tab that drew one of these its own way would be a second transcript
  * style, which is what this file is here to refuse.
@@ -233,7 +237,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for an agent read (`CodingAgentsIcon`), never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -257,7 +261,7 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
-  [CALL_KIND.LIST_AGENTS]: WorkflowIcon,
+  [CALL_KIND.LIST_AGENTS]: LayoutListIcon,
   [CALL_KIND.READ_AGENT]: WorkflowIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
@@ -318,40 +322,47 @@ export function TranscriptTool({
 
 /**
  * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began: the call's line as a call's row draws it, its
- * icon, what it did, and where it stands, as the one button that opens that
- * tab rather than folding its input and answer open in place.
+ * does once the agent began, a page once shown, or the board drawn on: the
+ * call's line as a call's row draws it, its icon, what it did, and where it
+ * stands, as the one button that opens that tab rather than folding its
+ * input and answer open in place, its hover saying what it opens.
  */
 export function TranscriptOpeningCall({
   callId,
   kind,
   subject,
   state,
+  hint,
   onOpen,
 }: {
   callId: string;
   kind: CallKind;
   subject: string | undefined;
   state: ToolState;
+  /** What the hover says the row opens. */
+  hint: string;
   onOpen: () => void;
 }): ReactNode {
   const Icon = CALL_ICON[kind];
   const words = CALL_WORDS[kind];
   return (
-    <button
-      type="button"
-      className={cn(TOOL_LINE_CLASS, "w-full text-left text-[12.5px]")}
-      data-call-id={callId}
-      onClick={onOpen}
-    >
-      <ToolLine
-        state={state}
-        icon={<Icon aria-hidden="true" />}
-        label={words.verb}
-        subject={subject}
-        subjectIsCode={words.code}
-      />
-    </button>
+    <Tooltip label={hint}>
+      <button
+        type="button"
+        className={cn(TOOL_LINE_CLASS, "w-full bg-transparent text-left text-[12.5px]")}
+        data-call-id={callId}
+        data-opens=""
+        onClick={onOpen}
+      >
+        <ToolLine
+          state={state}
+          icon={<Icon aria-hidden="true" />}
+          label={words.verb}
+          subject={subject}
+          subjectIsCode={words.code}
+        />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -499,6 +510,9 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
 };
 
+/** What the hover over a subagent's row says it opens. */
+const SUBAGENT_HINT = "Open the subagent";
+
 /** The subagent's glyph: the mark of the harness its model runs in, read from the model's id as its tab reads it (`SubagentMark`), or the worker's robot where the model is no provider's Luke runs, in the muted ink whether it runs or not, since the row's working mark says which. */
 function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode {
   const provider = pair === undefined ? undefined : providerOf(pair.choice.model);
@@ -524,8 +538,9 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
  * drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
- * the one button that opens the subagent's tab, which is where its steps
- * and its answer are read, so it folds nothing open in place. Where it
+ * the one button that opens the subagent's tab, its hover saying so, which
+ * is where its steps and its answer are read, so it folds nothing open in
+ * place. Where it
  * opens no tab it is the same line, pressed by nothing. A call that failed
  * says why in red under the line, open from the start.
  */
@@ -568,15 +583,17 @@ export function TranscriptSubagent({
         {line}
       </div>
     ) : (
-      <button
-        type="button"
-        className={className}
-        data-subagent-row=""
-        data-call-id={callId}
-        onClick={onOpen}
-      >
-        {line}
-      </button>
+      <Tooltip label={SUBAGENT_HINT}>
+        <button
+          type="button"
+          className={className}
+          data-subagent-row=""
+          data-call-id={callId}
+          onClick={onOpen}
+        >
+          {line}
+        </button>
+      </Tooltip>
     );
   if (errorText === undefined) return row;
   return (
@@ -646,9 +663,10 @@ function TurnRowView<B>({
           {trailer}
         </>
       );
+    // A run of calls wears a stack, its calls laid one on another, which no call's own icon is; a finished lead wears a list.
     case TURN_ROW.GROUP:
       return (
-        <TurnFold icon={<WrenchIcon />} summary={row.summary} running={row.running} open={row.open}>
+        <TurnFold icon={<LayersIcon />} summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
