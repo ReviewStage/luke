@@ -16,7 +16,6 @@ import {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
   type LiveVoiceView,
-  LUKE_ENDED_CALL_NOTE,
   LUKE_ENDING_BOUNDS,
 } from "./live-voice-orchestrator.js";
 
@@ -1232,7 +1231,7 @@ function goodbyeCall(f: ReturnType<typeof fixture>) {
 }
 
 it.effect(
-  "Luke's end of the call waits for his goodbye to play, hangs up as the panel's stop does, says he ended it, and the next press opens a new call",
+  "Luke's end of the call waits for his goodbye to play, hangs up as the panel's stop does, leaves no notice behind, and the next press opens a new call",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -1249,7 +1248,7 @@ it.effect(
       const ended = f.views.at(-1);
       assert.deepEqual(
         [ended?.voiceStatus, ended?.voiceNotice, ended?.callPlanId, ended?.lukeEndedCall],
-        [LIVE_STATUS.IDLE, LUKE_ENDED_CALL_NOTE, undefined, "vs-1"],
+        [LIVE_STATUS.IDLE, undefined, undefined, "vs-1"],
       );
 
       const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {

@@ -113,9 +113,6 @@ export const LUKE_ENDING_BOUNDS = {
   PLAYBACK_MS: 15_000,
 } as const;
 
-/** The quiet line the strip says once Luke has hung up, so his end is not read as a drop. */
-export const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
-
 /**
  * Luke ending the standing call, from the host's word until his goodbye has
  * played: the call it is about, the developer's words as they stood when the
@@ -551,9 +548,8 @@ export class LiveVoiceOrchestrator {
       if (this.#lukeEnding !== ending) return;
       this.#lukeEnding = undefined;
       if (Option.isNone(played) || !played.value || this.#call !== ending.call) return;
-      // Said before the stop, which lets the call go at once and reports the view with it.
+      // Set before the stop, which lets the call go at once and reports the view with it.
       this.#lukeEndedCall = this.#callTranscript?.voiceSessionId;
-      this.#strip.showNotice(LUKE_ENDED_CALL_NOTE);
       yield* this.stopCall();
     });
   }
