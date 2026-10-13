@@ -1,7 +1,6 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
-import type { PlanAgentEdit, PlanFieldWriter } from "@sidecar/hosted/plan-template";
-import type { PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
+import type { PlanAgentEdit } from "@sidecar/hosted/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
@@ -12,18 +11,14 @@ import { conversations } from "./storage-schema.js";
  * plan-schema.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it: its name, whether it is pinned or archived, and the one
- * document the planning model saves, a Markdown body and the assumptions list
- * beside it, with the template's fields the body was formatted from, who last
- * changed each field, and the journal of the saves coding agents made on it;
- * or, for a plan that is one free document, its whole text and who last
- * changed each of its sections. A save
- * replaces the document's columns in one statement, so none is left
- * half-written: a save that failed left the row as it stood. What the
- * document held before is kept beside it, in `plan_revision`
- * (`plan-revision-schema.ts`). The document is stored as written, like the
- * conversation, readable by an operator and kept the developer's own by the
- * account it is keyed by.
+ * account that started it: its name, whether it is pinned or archived, its
+ * one document, a free Markdown text, who last changed each of its sections,
+ * and the journal of the saves coding agents made on it. A save replaces the
+ * text in one statement, so none is left half-written: a save that failed
+ * left the row as it stood. What the text held before is kept beside it, in
+ * `plan_revision` (`plan-revision-schema.ts`). The text is stored as written,
+ * like the conversation, readable by an operator and kept the developer's
+ * own by the account it is keyed by.
  *
  * The conversation a plan resumes in is the one row it names, attached once
  * the planning model opens it, and a purged conversation leaves the plan
@@ -38,34 +33,19 @@ export const plan = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /** The document's Markdown body; empty until the first save. */
-    body: text("body").notNull().default(""),
-    /** The document's assumptions, each its text. */
-    assumptions: jsonb("assumptions")
-      .$type<readonly PlanAssumption[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    /** The template's fields the body was formatted from; null until the first save, an untouched template. */
-    fields: jsonb("fields").$type<PlanFields>(),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /** Who last changed each field and when, for the fields a save has changed since this was kept; empty until then. */
-    fieldWriters: jsonb("field_writers")
-      .$type<readonly PlanFieldWriter[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
     /**
      * The plan as one free Markdown document, its whole text: no title line,
-     * and its assumptions a section like any other. Non-null is a plan that is
-     * one document, whose body, assumptions, fields, and field writers above
-     * stand for nothing; null is a plan still kept as the fixed template's
-     * fields (`@sidecar/hosted/plan-document`).
+     * and its assumptions a section like any other
+     * (`@sidecar/hosted/plan-document`). Every row holds one; the column is
+     * made not null with the drop of the fixed template's columns.
      */
     document: text("document"),
-    /** Who last changed each section of a document plan and when, by heading; empty for any other plan, and until a save changes one. */
+    /** Who last changed each section and when, by heading; empty until a save changes one. */
     sectionWriters: jsonb("section_writers")
       .$type<readonly PlanSectionWriter[]>()
       .notNull()
