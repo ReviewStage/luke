@@ -340,12 +340,12 @@ interface DrawnTab {
 
 /**
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
- * subagents, the files, and the agents' changes. A delegated worker's transcript is read whole
- * from the service for a copy, since its tab holds it only while shown; a
- * planning worker's is the session the plan's work already holds. A
- * subagent's tab hangs a card on hover, previewing its latest step from
- * what its tab last held (`heldLatest`) or the plan's work holds, and never
- * reading the service for it.
+ * subagents, the files, and the agents' changes. A delegated worker's
+ * transcript is read whole from the service for a copy, since its tab
+ * holds it only while shown; a planning worker's is the session the plan's
+ * work already holds. A subagent's tab hangs a card on hover, previewing
+ * its latest step from what its tab last held (`heldLatest`) or the plan's
+ * work holds, and never reading the service for it.
  */
 function stripTabs(input: {
   panel: SidePanelControl;
@@ -448,14 +448,11 @@ function stripTabs(input: {
     ),
     close: () => panel.onClose({ file: path }),
   }));
-  const changesTabs = changes.map((tab) => {
-    const agent = agents.agents?.find((each) => each.id === tab.changes);
-    return {
-      tab,
-      look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(agent, models) }),
-      close: () => panel.onClose(tab),
-    };
-  });
+  const changesTabs = changes.map((tab) => ({
+    tab,
+    look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(tab.changes, agents) }),
+    close: () => panel.onClose(tab),
+  }));
   return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs];
 }
 
@@ -1150,10 +1147,7 @@ export function SidePanel({
         : isFileTab(tab)
           ? tab.file
           : isChangesTab(tab)
-            ? changesTabLabel(
-                agents.agents?.find((each) => each.id === tab.changes),
-                agents.models,
-              )
+            ? changesTabLabel(tab.changes, agents)
             : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),

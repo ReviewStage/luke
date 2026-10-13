@@ -31,7 +31,6 @@ import {
   base64Chars,
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
-  CHANGES_UNAVAILABLE,
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -1825,14 +1824,18 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           );
 
         // A branch pushed with no pull request from it has none to read yet.
-        assert.deepEqual(yield* read(), { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST });
+        assert.deepEqual(yield* read(), { pullRequest: null });
 
         repository.pullRequest = pullRequest;
         yield* TestClock.adjust(CODER.PUBLISHED_TTL);
-        const answered = yield* read();
-        assert.ok("changes" in answered);
-        assert.equal(answered.changes.truncated, false);
-        assert.deepEqual(answered.changes.files, [
+        const answered = (yield* read()).pullRequest;
+        assert.ok(answered);
+        assert.equal(
+          answered.url,
+          `https://github.com/${RELAY_FULL_NAME}/pull/${pullRequest.number}`,
+        );
+        assert.equal(answered.truncated, false);
+        assert.deepEqual(answered.files, [
           {
             path: "src/invite.ts",
             previousPath: null,
@@ -1913,14 +1916,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           codingAgentChangesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
-        );
-        assert.ok("changes" in answered);
-        assert.equal(answered.changes.files.length, CHANGES_BOUNDS.MAX_FILES);
-        assert.equal(
-          answered.changes.files.at(-1)?.path,
-          `src/file-${CHANGES_BOUNDS.MAX_FILES - 1}.ts`,
-        );
-        assert.equal(answered.changes.truncated, true);
+        ).pullRequest;
+        assert.ok(answered);
+        assert.equal(answered.files.length, CHANGES_BOUNDS.MAX_FILES);
+        assert.equal(answered.files.at(-1)?.path, `src/file-${CHANGES_BOUNDS.MAX_FILES - 1}.ts`);
+        assert.equal(answered.truncated, true);
       }),
   );
 

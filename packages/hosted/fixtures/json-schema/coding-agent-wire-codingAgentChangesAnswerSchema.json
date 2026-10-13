@@ -1,11 +1,14 @@
 {
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "changes": {
+  "type": "object",
+  "properties": {
+    "pullRequest": {
+      "anyOf": [
+        {
           "type": "object",
           "properties": {
+            "url": {
+              "type": "string"
+            },
             "files": {
               "type": "array",
               "items": {
@@ -81,39 +84,23 @@
             },
             "truncated": {
               "type": "boolean"
-            },
-            "readAt": {
-              "type": "number",
-              "minimum": 0
             }
           },
           "required": [
+            "url",
             "files",
-            "truncated",
-            "readAt"
+            "truncated"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "null"
         }
-      },
-      "required": [
-        "changes"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "unavailable": {
-          "type": "string",
-          "enum": [
-            "no-pull-request"
-          ]
-        }
-      },
-      "required": [
-        "unavailable"
-      ],
-      "additionalProperties": false
+      ]
     }
-  ]
+  },
+  "required": [
+    "pullRequest"
+  ],
+  "additionalProperties": false
 }

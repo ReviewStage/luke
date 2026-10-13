@@ -668,7 +668,7 @@ button.code-card-path:hover {
   background: var(--desktop-well);
 }
 
-/* An agent's Changes tab (changes-view.tsx): a File tab's bar and its
+/* An agent's Changes tab (agent-changes-tab.tsx): a File tab's bar and its
    tree to the right, the chosen file's unified diff in the file's place. */
 .changes-view {
   display: flex;
@@ -735,6 +735,7 @@ button.code-card-path:hover {
 /* What became of the file, as an editor's source control letters it. */
 .changes-status {
   flex: 0 0 auto;
+  color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-weight: 600;
 }
@@ -745,11 +746,6 @@ button.code-card-path:hover {
 
 .changes-status[data-status="deleted"] {
   color: var(--danger-text);
-}
-
-.changes-status[data-status="modified"],
-.changes-status[data-status="renamed"] {
-  color: var(--text-secondary);
 }
 
 /* The diff's rows: the old side's number, the new side's, then the line,

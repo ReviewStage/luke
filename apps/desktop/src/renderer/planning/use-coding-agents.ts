@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
@@ -30,7 +31,6 @@ import {
   withAgent,
   withAgentRun,
 } from "./coding-agent-model";
-import type { ChangesReader } from "./use-agent-changes";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
@@ -170,7 +170,7 @@ export interface CodingAgentsControl {
   /** One read of what an agent published, as its tab asks it. */
   readPullRequest: PullRequestReader;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
-  readChanges: ChangesReader;
+  readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
   /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
@@ -614,7 +614,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readChanges = useCallback<ChangesReader>(
+  const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
     [act],
   );

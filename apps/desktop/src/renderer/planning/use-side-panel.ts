@@ -52,10 +52,10 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. An agent's Changes tab, opened from the
  * Changes chip at its tab's foot, is held to its agent's tab on the same
- * terms, one per agent, and is pinned nowhere. A file's tab, opened from a snippet in
- * the Code tab or from the "+", is the one kind that stands many times, one
- * per file: it is held to the files Luke showed on the open plan the same
- * way, closes, and is kept nowhere. Opening a file
+ * terms, one per agent, and is pinned nowhere. A file's tab, opened from a
+ * snippet in the Code tab or from the "+", is the one kind that stands many
+ * times, one per file: it is held to the files Luke showed on the open plan
+ * the same way, closes, and is kept nowhere. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -147,7 +147,7 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, or one agent's changes. */
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, or one agent's Changes. */
 export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab | ChangesStripTab;
 
 /**
@@ -402,7 +402,7 @@ export interface SidePanelControl {
   subagents: readonly SubagentStripTab[];
   /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
   files: readonly OpenFile[];
-  /** The open Changes tabs in the order opened; they follow the file tabs, and only those whose agent's tab stands open are drawn. */
+  /** The open Changes tabs in the order opened, after the file tabs; only those whose agent's tab stands open are drawn. */
   changes: readonly ChangesStripTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
   tab: SidePanelTab | undefined;

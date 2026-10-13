@@ -178,6 +178,22 @@ export function ChangesChip({
   );
 }
 
+/** The lines a change adds and removes, as GitHub counts them: green, then red. */
+export function LinesChanged({
+  additions,
+  deletions,
+}: {
+  additions: number;
+  deletions: number;
+}): React.JSX.Element {
+  return (
+    <span className="agent-published-lines">
+      <span className="agent-published-added">+{additions}</span>{" "}
+      <span className="agent-published-removed">−{deletions}</span>
+    </span>
+  );
+}
+
 /** The row at the end of a finished transcript: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it. */
 export function PublishedRow({
   pullRequest,
@@ -206,10 +222,7 @@ export function PublishedRow({
           <span className="agent-published-checks">{CHECKS_FAILING}</span>
         ) : null}
         {state === undefined ? null : <span className="agent-published-state">{state}</span>}
-        <span className="agent-published-lines">
-          <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
-          <span className="agent-published-removed">−{pullRequest.deletions}</span>
-        </span>
+        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
       </button>
     </Tooltip>
   );

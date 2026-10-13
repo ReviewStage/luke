@@ -464,7 +464,7 @@ export const CHANGES_BOUNDS = {
  * and removes; and its patch, every hunk of a unified diff from the first
  * `@@` header on, or null with why where it carries none.
  */
-export const codingAgentChangedFileSchema = EffectSchema.Struct({
+const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
   status: EffectSchema.Literals(Object.values(CHANGED_FILE_STATUS)),
@@ -474,39 +474,25 @@ export const codingAgentChangedFileSchema = EffectSchema.Struct({
   omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
 });
 
-export type CodingAgentChangedFile = typeof codingAgentChangedFileSchema.Type;
-
-/** Why an agent has no changes to read yet, which is not the same as having none. */
-export const CHANGES_UNAVAILABLE = {
-  /** The agent has opened no pull request yet. */
-  NO_PULL_REQUEST: "no-pull-request",
-} as const;
-
-export type ChangesUnavailable = (typeof CHANGES_UNAVAILABLE)[keyof typeof CHANGES_UNAVAILABLE];
-
-/** A pull request's changes as read: its files in the order GitHub lists them, whether the list was cut short at the bound, and when it was read, in epoch milliseconds. */
-export const codingAgentChangeSetSchema = EffectSchema.Struct({
-  files: EffectSchema.Array(codingAgentChangedFileSchema).check(
-    EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
-  ),
-  truncated: EffectSchema.Boolean,
-  readAt: countedNumber,
-});
-
-export type CodingAgentChangeSet = typeof codingAgentChangeSetSchema.Type;
+export type CodingAgentChangedFile = typeof changedFileSchema.Type;
 
 /**
- * One agent's changes (GET): the files of the pull request it published as
- * GitHub lists them now, or why there are none to read yet. A changes tab
- * draws them in a viewer that takes no account of where a change set came
- * from, so a later source is another fetcher feeding the same answer.
+ * One agent's changes (GET): the pull request it published, as its page on
+ * GitHub, its files in the order GitHub lists them now, and whether the
+ * list was cut short at the bound; or null where it has opened none yet,
+ * which is not the same as a pull request that changes nothing.
  */
-export const codingAgentChangesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ changes: codingAgentChangeSetSchema }),
-  EffectSchema.Struct({ unavailable: EffectSchema.Literals(Object.values(CHANGES_UNAVAILABLE)) }),
-]);
-
-export type CodingAgentChangesAnswer = typeof codingAgentChangesAnswerSchema.Type;
+export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(
+    EffectSchema.Struct({
+      url: EffectSchema.String,
+      files: EffectSchema.Array(changedFileSchema).check(
+        EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
+      ),
+      truncated: EffectSchema.Boolean,
+    }),
+  ),
+});
 
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the

@@ -85,7 +85,8 @@ const PUBLISHED = {
 
 /** The agent's changes, as the service answers them. */
 const CHANGES = {
-  changes: {
+  pullRequest: {
+    url: "https://github.com/acme/relay/pull/123",
     files: [
       {
         path: "src/invite.ts",
@@ -98,7 +99,6 @@ const CHANGES = {
       },
     ],
     truncated: false,
-    readAt: 1_800_000_000_000,
   },
 };
 

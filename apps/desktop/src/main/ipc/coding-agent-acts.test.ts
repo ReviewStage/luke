@@ -5,7 +5,6 @@ import {
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  CHANGES_UNAVAILABLE,
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
@@ -186,7 +185,7 @@ function fixture() {
       codingAgentChanges: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`changes:${agentId}`);
-          return { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST };
+          return { pullRequest: null };
         }),
       providerKeysRead: () =>
         Effect.sync(() => {
@@ -406,7 +405,7 @@ it.effect(
       });
       assert.deepEqual(answered, {
         status: ACT_OUTCOME_STATUS.DONE,
-        value: { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST },
+        value: { pullRequest: null },
       });
       assert.deepEqual(asked, [`changes:${AGENT_ID}`]);
     }),

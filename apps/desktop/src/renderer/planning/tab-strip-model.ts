@@ -5,8 +5,9 @@
  * open plan (`use-main-tabs.ts`, `use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, or one agent's changes. Two tabs are the same where they name
- * the same thing, so a tab rebuilt on every render is still the tab it was.
+ * started, one subagent, one file, or one agent's changes. Two tabs are the
+ * same where they name the same thing, so a tab rebuilt on every render is
+ * still the tab it was.
  *
  * Each strip keeps, per plan, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both

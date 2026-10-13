@@ -57,9 +57,9 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
-import type { GitHubApp } from "./github/github-app.js";
+import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { pullRequestChanges } from "./hosted/coder-host/changes.js";
+import { pullRequestFiles } from "./github/pull-requests.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
@@ -165,8 +165,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * so a tab asking beside every held page does not ask GitHub as often.
  * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
  * the pull request that answer names, read from GitHub afresh on each ask
- * (`hosted/coder-host/changes.ts`), each with its patch, or a word saying
- * the agent has opened none yet.
+ * (`github/pull-requests.ts`), each with its patch, or none where the
+ * agent has opened none yet.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
@@ -670,7 +670,11 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** GET reads the agent's changes: the files of the pull request its kept published answer names, read from GitHub afresh. */
+/**
+ * GET reads the agent's changes: the files of the pull request its kept
+ * published answer names, read from GitHub afresh on the developer's own
+ * token, or none where it names no pull request yet.
+ */
 const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
   published: PublishedCache,
@@ -681,12 +685,17 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* ownedAgent(seams, request);
-  const standing = yield* keptPublished(published, userId, agent);
-  const readAt = yield* Clock.currentTimeMillis;
-  const answer = yield* githubUserReadOrRefusal(
-    pullRequestChanges(userId, agent, standing, readAt),
+  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
+  const listed = yield* githubUserReadOrRefusal(
+    Effect.gen(function* () {
+      const token = yield* (yield* GitHubApp).userToken(userId);
+      return yield* pullRequestFiles(token, agent.repository, pullRequest);
+    }),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    pullRequest: { url: pullRequest.url, ...listed },
+  });
 });
 
 /** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */

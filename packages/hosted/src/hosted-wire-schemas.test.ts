@@ -67,8 +67,6 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessagesAnswerSchema: codingAgentWire.codingAgentMessagesAnswerSchema,
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
-    codingAgentChangedFileSchema: codingAgentWire.codingAgentChangedFileSchema,
-    codingAgentChangeSetSchema: codingAgentWire.codingAgentChangeSetSchema,
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,

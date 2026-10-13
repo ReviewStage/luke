@@ -2248,17 +2248,17 @@ ended, so the first read after a turn ends is fresh rather than the running
 turn's kept answer; a failed read is kept for no time. A tab reading beside
 every held page thus asks GitHub a few times a minute at most.
 `GET /api/agents/{id}/changes` answers the agent's changes for its Changes
-tab (`coder-host/changes.ts`): the files of the pull request that kept
-answer names, read from GitHub's `pulls/{n}/files` afresh on each ask on
-the developer's own token, a hundred to a page up to
+tab: the files of the pull request that kept answer names, with its page,
+read from GitHub's `pulls/{n}/files` afresh on each ask on the developer's
+own token (`github/pull-requests.ts`), a hundred to a page up to
 `CHANGES_BOUNDS.MAX_FILES`, each with its path, the path it moved from,
 what became of it, its lines added and removed, and its patch; a file
 GitHub sends no patch for, or whose patch runs past
 `CHANGES_BOUNDS.MAX_PATCH_CHARS`, says `binary` or `too-large` instead of
 reading as unchanged, a file only moved carries an empty patch, and a
-change set cut at the bound says so. An agent with no pull request yet
-answers `no-pull-request`. The agent's sandbox is no source: nothing
-outside its session reaches it and its diff is not kept in the store.
+list cut at the bound says so. An agent with no pull request yet answers
+a null one. The agent's sandbox is no source: nothing outside its session
+reaches it and its diff is not kept in the store.
 `tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
