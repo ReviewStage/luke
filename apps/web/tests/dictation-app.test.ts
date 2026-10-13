@@ -12,8 +12,8 @@ import {
   recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { dictationApp } from "../server/dictation-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";

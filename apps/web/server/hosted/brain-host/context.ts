@@ -2,8 +2,8 @@ import { listRecentMessages } from "@sidecar/database/models/message-reads";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
 /**

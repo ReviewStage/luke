@@ -16,8 +16,8 @@
  */
 
 import { Data, Duration, Effect, Option, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /** The protocol revision the session is opened under. */
 const PROTOCOL_VERSION = "2025-06-18";

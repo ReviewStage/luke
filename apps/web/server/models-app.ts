@@ -1,7 +1,7 @@
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Layer, Option } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import { ownKeyProviders } from "./hosted/coder-host/account-keys.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {

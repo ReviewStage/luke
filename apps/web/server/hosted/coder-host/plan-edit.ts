@@ -6,7 +6,7 @@ import {
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {
   PLAN_SAVE_STATUS,

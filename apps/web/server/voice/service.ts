@@ -5,8 +5,8 @@ import type { Duplex } from "node:stream";
 import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,

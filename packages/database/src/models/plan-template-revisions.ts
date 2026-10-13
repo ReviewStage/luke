@@ -9,8 +9,8 @@ import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@sidecar/hos
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { planTemplateRevision } from "../schemas/plan-template-revision.js";
 import { InstantColumnSchema } from "./columns.js";

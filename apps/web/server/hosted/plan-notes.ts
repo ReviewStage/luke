@@ -25,7 +25,7 @@ import {
   type PlanSectionEdit,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**

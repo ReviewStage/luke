@@ -1,9 +1,9 @@
 import type { HostedMacCommandClient } from "@sidecar/hosted";
 import type { MacCommand, MacCommandResult } from "@sidecar/hosted/mac-command-wire";
 import { Config, Duration, Effect, FiberSet, Option } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";

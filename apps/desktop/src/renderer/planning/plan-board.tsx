@@ -2,7 +2,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";

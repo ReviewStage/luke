@@ -25,8 +25,8 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { MESSAGE_ROLE, TURN_STATUS } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";

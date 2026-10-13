@@ -1,10 +1,5 @@
 import { Effect, Layer } from "effect";
-import {
-  type HttpMethod,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
+import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { rendererRuntime } from "./renderer-runtime";
 
 /**

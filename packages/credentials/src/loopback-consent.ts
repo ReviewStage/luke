@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { Deferred, Duration, Effect, Exit, Option, Result, type Scope, Semaphore } from "effect";
-import * as HttpServer from "effect/unstable/http/HttpServer";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as NetAddress from "effect/unstable/net/NetAddress";
+import * as HttpServer from "effect/http/HttpServer";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as NetAddress from "effect/net/NetAddress";
 import {
   accountLoopbackPage,
   LOOPBACK_PAGE_TONE,

@@ -15,8 +15,8 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import {
   codingAgent,

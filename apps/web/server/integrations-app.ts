@@ -49,9 +49,9 @@ import {
   integrationProviderFromWire,
 } from "@sidecar/hosted/integration-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,

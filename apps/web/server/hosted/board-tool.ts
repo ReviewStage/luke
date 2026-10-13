@@ -4,7 +4,7 @@ import { type DrawingElement, drawingElementsSchema } from "@sidecar/hosted/boar
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { layoutFindings } from "./board-layout.js";
 import { logStoreFailure } from "./store-failure.js";
 

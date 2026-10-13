@@ -13,8 +13,8 @@
 
 import { Deferred, Duration, Effect, Layer, Sink, Stream } from "effect";
 import * as PlatformError from "effect/PlatformError";
-import type { ChildProcess } from "effect/unstable/process";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process";
 
 /** What one spawned process does. */
 export interface Script {

@@ -8,8 +8,8 @@ import {
   type PlanTreeRequest,
 } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import type { GitHubApp } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";

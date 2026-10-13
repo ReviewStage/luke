@@ -38,8 +38,8 @@ import {
   HttpRouter,
   HttpServerRequest,
   type HttpServerResponse,
-} from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+} from "effect/http";
+import type { SqlClient } from "effect/sql";
 import {
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,

@@ -13,9 +13,9 @@
 
 import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import { SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import { SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";

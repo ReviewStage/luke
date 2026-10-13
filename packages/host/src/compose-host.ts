@@ -20,7 +20,7 @@ import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
-import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";

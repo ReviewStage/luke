@@ -7,8 +7,8 @@ import {
 } from "@sidecar/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,

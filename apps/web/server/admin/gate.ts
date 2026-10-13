@@ -1,7 +1,7 @@
 import { catchAllButInterrupt, causeKind } from "@sidecar/runtime/effect";
 import { type Cause, Effect } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-effect.js";

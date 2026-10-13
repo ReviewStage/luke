@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreDependencies": ["oxlint"],
+  "ignoreDependencies": ["oxlint", "@effect/sql-pglite"],
   "ignoreBinaries": [
     "iconutil",
     "ditto",

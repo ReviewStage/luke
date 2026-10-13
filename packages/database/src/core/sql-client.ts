@@ -1,7 +1,7 @@
 import { PgClient } from "@effect/sql-pg";
 import { Duration, type Layer, Redacted } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 
 /**
  * A `SqlClient` over the database a connection string names, holding one

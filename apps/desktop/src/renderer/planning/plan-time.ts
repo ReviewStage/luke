@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Clock, Duration, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { rendererRuntime } from "../renderer-runtime";
 
 /**

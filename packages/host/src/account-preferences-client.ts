@@ -16,8 +16,8 @@ import {
   WireValueSchema,
 } from "@sidecar/wire";
 import { Effect, Schema as EffectSchema, type Layer, SchemaGetter, SchemaIssue } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;

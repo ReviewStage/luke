@@ -1,5 +1,5 @@
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,

@@ -18,7 +18,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import {
   agentInboxItems,

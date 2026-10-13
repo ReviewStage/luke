@@ -36,7 +36,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { Clock, Duration, Effect } from "effect";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";

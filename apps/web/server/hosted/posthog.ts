@@ -15,7 +15,7 @@
 
 import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
 import { Data, Effect, type Layer } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {

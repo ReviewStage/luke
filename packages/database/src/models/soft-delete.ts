@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
 import { Duration, Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";

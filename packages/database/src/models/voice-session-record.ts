@@ -1,8 +1,8 @@
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {

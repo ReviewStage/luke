@@ -12,9 +12,9 @@ import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";

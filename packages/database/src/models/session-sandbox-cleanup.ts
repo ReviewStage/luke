@@ -12,8 +12,8 @@
 
 import { asc, eq, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { sessionSandboxCleanup } from "../schemas/session-sandbox.js";
 

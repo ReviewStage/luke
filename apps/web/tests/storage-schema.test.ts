@@ -11,7 +11,7 @@ import {
 } from "@sidecar/wire";
 import { getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {

@@ -1,7 +1,7 @@
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Effect, type Layer, Result, type Scope } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { WebSocket } from "ws";
 import {
   accountCall,

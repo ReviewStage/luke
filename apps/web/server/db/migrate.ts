@@ -3,7 +3,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { Config, Effect, Layer, Redacted } from "effect";
-import * as Migrator from "effect/unstable/sql/Migrator";
+import * as Migrator from "effect/sql/Migrator";
 import { Client } from "pg";
 import { POOL_LIMITS } from "./index.js";
 

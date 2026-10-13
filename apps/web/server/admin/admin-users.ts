@@ -1,5 +1,5 @@
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,

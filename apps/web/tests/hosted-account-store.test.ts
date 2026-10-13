@@ -54,7 +54,7 @@ const countRows = (userId: string) =>
     };
   });
 
-it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

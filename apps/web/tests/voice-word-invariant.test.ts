@@ -23,8 +23,8 @@ import {
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Duration, Effect, Layer, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { SqlClient } from "effect/unstable/sql";
 import { afterAll } from "vitest";
 import { z } from "zod";
 import {

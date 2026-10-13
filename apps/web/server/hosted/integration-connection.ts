@@ -32,8 +32,8 @@
 import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "./brain-host/conversation.js";

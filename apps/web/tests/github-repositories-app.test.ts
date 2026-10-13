@@ -8,8 +8,8 @@ import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/ho
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { githubRepositoriesApp } from "../server/github-repositories-app";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {

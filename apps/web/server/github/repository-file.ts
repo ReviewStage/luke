@@ -12,9 +12,10 @@
  * module no more than it leaves that one.
  */
 
-import { Effect, Encoding, type Redacted, Result, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { Effect, type Redacted, Result, Schema } from "effect";
+import { Base64 } from "effect/encoding";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import {
   GITHUB_FAILURE,
   GITHUB_HTTP_STATUS,
@@ -100,7 +101,7 @@ export function readRepositoryFile(
         if (!Schema.is(FileContentsSchema)(answer)) return NOT_REGULAR;
         const decoded =
           answer.encoding === BASE64
-            ? Result.getOrUndefined(Encoding.decodeBase64(answer.content.replace(/\s/gu, "")))
+            ? Result.getOrUndefined(Base64.decode(answer.content.replace(/\s/gu, "")))
             : undefined;
         return { regular: true, bytes: answer.size, content: decoded } satisfies RepositoryFile;
       }),

@@ -80,7 +80,7 @@ const callWith = (
     return voiceSessionId;
   });
 
-it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
   it.effect(
     "a registered session names its account and its model, keeps its first owner, and answers the owner's re-attach alone",
     () =>

@@ -14,8 +14,8 @@
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { SessionAuth, SessionContext } from "eve/context";
 import {
   type AdmittedConversation,

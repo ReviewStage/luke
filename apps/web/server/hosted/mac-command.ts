@@ -18,7 +18,7 @@ import {
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 

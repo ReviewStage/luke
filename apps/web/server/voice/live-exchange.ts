@@ -17,8 +17,8 @@ import {
 } from "@sidecar/voice/live-session";
 import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";

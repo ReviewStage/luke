@@ -1,9 +1,9 @@
 import { PgClient } from "@effect/sql-pg";
 import { Effect, Layer, Stream } from "effect";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
-import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
+import * as Reactivity from "effect/reactivity/Reactivity";
+import * as SqlClient from "effect/sql/SqlClient";
+import type * as SqlConnection from "effect/sql/SqlConnection";
+import { SqlError, UnknownError } from "effect/sql/SqlError";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 const refused = () =>

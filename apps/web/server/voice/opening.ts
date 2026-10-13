@@ -6,8 +6,8 @@ import type {
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { WebSocket } from "ws";
 import {
   HOSTED_API_ERROR,

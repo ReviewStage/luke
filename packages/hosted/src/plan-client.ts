@@ -6,7 +6,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,

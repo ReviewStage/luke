@@ -6,8 +6,8 @@ import {
   type PlanFileRequest,
 } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlClient } from "effect/unstable/sql";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SqlClient } from "effect/sql";
 import {
   GitHubApp,
   type GitHubRepositoryToken,

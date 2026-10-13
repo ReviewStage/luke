@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Effect, Option } from "effect";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { HTTP_METHOD } from "../server/core.js";
 import { HostedEnvironment } from "../server/hosted/environment.js";

@@ -7,7 +7,7 @@ import {
 } from "@sidecar/hosted/page-wire";
 import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import { db } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { planPageVersion } from "../schemas/plan-page.js";

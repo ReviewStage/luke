@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { hostedUsage, voiceSessionUsage } from "../schemas/usage.js";

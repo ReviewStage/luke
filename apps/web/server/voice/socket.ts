@@ -1,9 +1,9 @@
 import { type Cause, Deferred, Effect, Exit, Option, Queue, type Scope, Stream } from "effect";
-import * as Socket from "effect/unstable/socket/Socket";
+import * as Socket from "effect/socket/Socket";
 import type { WebSocket } from "ws";
 
 /**
- * One `ws` socket as `effect/unstable/socket` speaks it: the frames the peer sent
+ * One `ws` socket as `effect/socket` speaks it: the frames the peer sent
  * read into a queue by a fiber of the caller's own scope, so the service
  * takes the opening frame from the same reader the relay then streams the
  * rest from and nothing arriving between the two lands nowhere. A frame

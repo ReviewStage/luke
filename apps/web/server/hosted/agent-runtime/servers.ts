@@ -26,8 +26,8 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { SqlClient } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";

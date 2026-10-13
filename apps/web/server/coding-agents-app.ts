@@ -45,13 +45,8 @@ import {
 import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import {
   isRecord,
   isWireString,

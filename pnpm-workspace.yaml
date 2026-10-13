@@ -7,10 +7,11 @@ packages:
 
 catalog:
   typescript: 7.0.2
-  effect: 4.0.0-rc.115
-  "@effect/atom-react": 4.0.0-rc.115
-  "@effect/platform-node": 4.0.0-rc.115
-  "@effect/sql-pg": 4.0.0-rc.115
+  effect: 4.0.4
+  "@effect/atom-react": 4.0.4
+  "@effect/platform-node": 4.0.4
+  "@effect/sql-pg": 4.0.4
+  "@effect/sql-pglite": 4.0.4
   "@types/node": 26.2.0
   tsx: 4.23.12
   react: 19.2.8
@@ -18,7 +19,7 @@ catalog:
   ws: 8.21.3
   ai: 7.0.135
   vitest: 5.0.0
-  "@effect/vitest": 4.0.0-rc.115
+  "@effect/vitest": 4.0.4
 
 # The one workspace that resolves a dependency away from the catalog above, and
 # it is the compiler alone. `@types/node` used to be pinned here too, at 22.x,

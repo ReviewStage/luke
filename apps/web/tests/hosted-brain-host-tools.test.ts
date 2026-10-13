@@ -8,7 +8,7 @@ import { type ConversationTarget, storeWriter } from "@sidecar/database/models/w
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";

@@ -8,7 +8,7 @@ import {
   type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
 import { Duration, Effect, Schedule } from "effect";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

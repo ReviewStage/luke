@@ -1,7 +1,7 @@
 import { EXCESS_KEYS, HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,

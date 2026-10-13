@@ -1,6 +1,6 @@
 import { type Cause, type Effect, Layer } from "effect";
-import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin/admin-access.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin/admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin/admin-favorite.js";

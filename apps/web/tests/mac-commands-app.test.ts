@@ -3,8 +3,8 @@ import { it } from "@effect/vitest";
 import { getTestDB } from "@sidecar/database/testing";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { Clock, Effect, Layer, Option } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { macCommandsApp } from "../server/mac-commands-app";
 

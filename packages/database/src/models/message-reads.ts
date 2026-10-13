@@ -34,8 +34,8 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 import { db } from "../core/query.js";
 import { asks, conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";

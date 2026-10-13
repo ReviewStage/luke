@@ -8,9 +8,9 @@ import {
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 /**
  * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.

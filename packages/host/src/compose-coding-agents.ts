@@ -43,8 +43,8 @@ import {
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";

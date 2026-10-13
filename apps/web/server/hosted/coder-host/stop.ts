@@ -9,8 +9,8 @@ import { recordedRuntimeSession } from "@sidecar/database/models/recorded-sessio
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
-import type { HttpClient } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import type { HttpClient } from "effect/http";
+import type { SqlClient } from "effect/sql";
 import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,

@@ -4,7 +4,7 @@ import {
   type MacCommandResult,
 } from "@sidecar/hosted/mac-command-wire";
 import { Duration, Effect, Fiber, Option, Ref, Stream } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
 /**
  * mac-command-runner.ts -- one command an agent asked of this Mac, run in the developer's login shell from their home folder, and what it printed.

@@ -1,5 +1,5 @@
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/sql";
 import { DAY_MS } from "../core.js";
 import {
   ADMIN_TREND_DAYS,

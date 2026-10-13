@@ -19,8 +19,8 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 
 /** What a row's status may say. No row is a disconnected provider. */
 export const INTEGRATION_ROW_STATUS = {

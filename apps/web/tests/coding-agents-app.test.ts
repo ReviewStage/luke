@@ -42,9 +42,9 @@ import {
   Result,
   type Schema,
 } from "effect";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { HttpRouter } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
 import { codingAgentsApp } from "../server/coding-agents-app";
 import {
   BRAIN_REQUEST_STATUS,

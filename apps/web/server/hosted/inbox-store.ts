@@ -24,8 +24,8 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { and, count, desc, eq, isNull, max, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlClient, SqlSchema } from "effect/sql";
+import type { SqlError } from "effect/sql/SqlError";
 
 /**
  * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.

@@ -1,10 +1,10 @@
 import { DICTATION_AUDIO_TYPE } from "@sidecar/hosted/dictation-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
 import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";

@@ -30,7 +30,7 @@
 
 import { PLAN_SKILL_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";
 import { readRepositoryFile } from "../github/repository-file.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";

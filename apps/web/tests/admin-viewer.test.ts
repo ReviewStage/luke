@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Cause, Effect, Layer, Logger } from "effect";
-import { HttpEffect } from "effect/unstable/http";
+import { HttpEffect } from "effect/http";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { adminViewerGate } from "../server/admin/gate";
