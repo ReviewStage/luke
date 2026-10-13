@@ -1,3 +1,9 @@
+import {
+  ASK_DISPATCH_REFUSAL,
+  type AskRecord,
+  type AskRow,
+  type AskVoice,
+} from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   conversationOwnedBy,
@@ -26,7 +32,6 @@ import {
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
-import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**

@@ -1,3 +1,4 @@
+import { askRecord } from "@sidecar/database/models/asks";
 import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
@@ -25,7 +26,6 @@ import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
-import { askRecord } from "../store/asks.js";
 import {
   type ConversationTarget,
   listMessagesPast,

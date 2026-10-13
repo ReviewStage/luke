@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
@@ -32,7 +33,6 @@ import {
   readPlan,
 } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,

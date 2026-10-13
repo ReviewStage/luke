@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -37,7 +38,6 @@ import {
   type VoiceTarget,
   voiceWriter,
 } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,

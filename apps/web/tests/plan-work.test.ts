@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
+import { askRecord } from "@sidecar/database/models/asks";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listJournals } from "@sidecar/database/models/message-reads";
 import { messages, turns } from "@sidecar/database/schemas/storage";
@@ -45,7 +46,6 @@ import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/qu
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";

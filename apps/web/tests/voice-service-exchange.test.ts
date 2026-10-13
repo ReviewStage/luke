@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -31,7 +32,6 @@ import {
   updatePlan,
 } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,

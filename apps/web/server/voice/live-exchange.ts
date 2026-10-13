@@ -1,3 +1,4 @@
+import { askRecord } from "@sidecar/database/models/asks";
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { serialQueue } from "@sidecar/runtime/effect";
@@ -14,7 +15,6 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
-import { askRecord } from "../hosted/store/asks.js";
 import {
   type HostedStore,
   hostedStore,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
 import { isToolUIPart, type ToolSet } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -13,7 +14,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CONNECTION_TOOL } from "../server/hosted/connection-tools";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
