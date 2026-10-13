@@ -26,6 +26,8 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
+import { FailureNote } from "../failure-note";
+import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
@@ -48,6 +50,7 @@ import {
   delegates,
   dockedTodos,
   endLine,
+  endLineReason,
   messageWords,
   newestTodos,
   providerOf,
@@ -561,6 +564,8 @@ export function AgentTranscriptView({
   sessionStarting = false,
   startedAt,
   ended,
+  endReason = FAILURE_REASON.OTHER,
+  onOpenApiKeys,
   onRetry,
   footer,
   overComposer = false,
@@ -584,6 +589,10 @@ export function AgentTranscriptView({
   startedAt?: number | undefined;
   /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
   ended?: string | undefined;
+  /** What mends the turn the end line tells of (`endLineReason`): an API key looked at, or nothing the line offers. */
+  endReason?: FailureReason;
+  /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
+  onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
@@ -633,11 +642,17 @@ export function AgentTranscriptView({
               words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting)]}
             />
           ) : null}
-          {ended !== undefined ? (
+          {ended === undefined ? null : endReason === FAILURE_REASON.API_KEY ? (
+            <FailureNote
+              failure={{ reason: FAILURE_REASON.API_KEY, text: ended }}
+              className="agent-end-line"
+              onRemedy={onOpenApiKeys}
+            />
+          ) : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
             </p>
-          ) : null}
+          )}
           {footer}
           {failed ? (
             <div className="agent-note agent-failure" role="alert">
@@ -692,6 +707,7 @@ function AgentTabView({
   onUnarchive,
   onOpenSubagent,
   openGitHub,
+  onOpenApiKeys,
   keywords,
   skills,
 }: {
@@ -715,6 +731,8 @@ function AgentTabView({
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
+  /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
+  onOpenApiKeys?: (() => void) | undefined;
   /** The words a dictation into the box is likely to say. */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
@@ -740,6 +758,8 @@ function AgentTabView({
         sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
+        endReason={endLineReason(transcript.failure)}
+        onOpenApiKeys={onOpenApiKeys}
         onRetry={transcript.onRetry}
         footer={
           showsPublishedRow(agent.status, published) ? (
@@ -865,6 +885,7 @@ export function AgentTab({
       onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
+      onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}
       skills={control.readSkills}
     />

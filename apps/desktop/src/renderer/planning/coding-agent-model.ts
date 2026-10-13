@@ -33,6 +33,7 @@ import {
 } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { todosView } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
@@ -128,6 +129,13 @@ export function endLine(
     case CODING_AGENT_STATUS.COMPLETED:
       return undefined;
   }
+}
+
+/** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
+export function endLineReason(failure: CodingAgentFailure | undefined): FailureReason {
+  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY
+    ? FAILURE_REASON.API_KEY
+    : FAILURE_REASON.OTHER;
 }
 
 /** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
@@ -242,8 +250,20 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** What a Start that did not start says beside the button. */
-export function startFailureNote(failure: CodingAgentCallFailure): string {
+/** What a Start that did not start says beside the button, and what mends it. */
+export function startFailureNote(failure: CodingAgentCallFailure): Failure {
+  return callFailure(failure, startFailureWords(failure));
+}
+
+/** A refused call's words with what mends them: a sign-in through GitHub where that is why, else trying again. */
+function callFailure(failure: CodingAgentCallFailure, text: string): Failure {
+  return failure === CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
+    ? { reason: FAILURE_REASON.GITHUB_SIGN_IN, text }
+    : { reason: FAILURE_REASON.OTHER, text };
+}
+
+/** What a Start that did not start says, by why. */
+function startFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
       return START_NEEDS_REPOSITORY;
@@ -264,8 +284,13 @@ export function startFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, beside Retry. */
-export function messageFailureNote(failure: CodingAgentCallFailure): string {
+/** What a message that did not reach the agent says under the composer, and what mends it. */
+export function messageFailureNote(failure: CodingAgentCallFailure): Failure {
+  return callFailure(failure, messageFailureWords(failure));
+}
+
+/** What a message that did not reach the agent says, by why. */
+function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";

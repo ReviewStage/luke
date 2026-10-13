@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
+import type { Failure } from "../failure-remedy";
 import { ToastHost } from "../toast";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
@@ -90,6 +91,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       repository: held.repository,
       archived: held.archived === true,
       onOpenIntegrations: () => undefined,
+      onOpenApiKeys: () => undefined,
       onUnarchive: () => {
         unarchives += 1;
       },
@@ -189,11 +191,11 @@ test("a draft asks nothing of the service, one per plan, until its first message
     disabledServers,
   });
 
-  let failed: string | undefined;
+  let failed: Failure | undefined;
   await act(async () => {
     failed = await tab.control().startTask(draft, task, choice, []);
   });
-  assert.equal(failed, "The agent could not be started. Try again.");
+  assert.equal(failed?.text, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 

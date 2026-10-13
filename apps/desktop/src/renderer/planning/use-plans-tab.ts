@@ -431,6 +431,8 @@ export function usePlansTab(input: {
   };
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
+  /** Opens Settings on its Coding agents page, where the developer's API keys are. */
+  onOpenApiKeys: () => void;
 }): PlansControl {
   const { shown, voice } = input;
   const { act, tell } = input.acts;
@@ -527,6 +529,7 @@ export function usePlansTab(input: {
         markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
     },
     onOpenIntegrations: input.onOpenIntegrations,
+    onOpenApiKeys: input.onOpenApiKeys,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });

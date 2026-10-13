@@ -12,7 +12,10 @@ import type { HostOperator } from "../gateway/host-operator";
  * its renderers run before the account they file under is gone.
  */
 export interface AccountSessionDependencies {
-  host: Pick<HostOperator, "beginSignIn" | "cancelSignIn" | "signOut" | "deleteAccount">;
+  host: Pick<
+    HostOperator,
+    "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount"
+  >;
   /**
    * Stops recording before either action runs. Neither can wait for its own
    * account transition to be relayed: a sign-out reports itself before the
@@ -32,6 +35,7 @@ export interface AccountSessionDependencies {
 
 type AccountActKind =
   | typeof ACT_KIND.ACCOUNT_BEGIN_SIGN_IN
+  | typeof ACT_KIND.ACCOUNT_SIGN_IN_AGAIN
   | typeof ACT_KIND.ACCOUNT_CANCEL_SIGN_IN
   | typeof ACT_KIND.ACCOUNT_SIGN_OUT
   | typeof ACT_KIND.ACCOUNT_DELETE;
@@ -49,6 +53,7 @@ export function accountActRows(
 
   return {
     [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: ({ provider }) => host.beginSignIn(provider),
+    [ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: ({ provider }) => host.signInAgain(provider),
     [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: () => host.cancelSignIn(),
     [ACT_KIND.ACCOUNT_SIGN_OUT]: () => halted(host.signOut()),
     // A deletion that landed stands recording down for the run; the host says

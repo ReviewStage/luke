@@ -153,6 +153,7 @@ import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./
  */
 export const ACT_KIND = {
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
@@ -557,6 +558,13 @@ export const ACT = {
     }),
     result: answersAccount,
     refusal: "Could not start signing in on this system.",
+  },
+  [ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: {
+    payload: record({
+      provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
+    }),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Sign-in did not finish.",
   },
   [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
   [ACT_KIND.ACCOUNT_SIGN_OUT]: {

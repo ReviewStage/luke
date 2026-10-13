@@ -8,9 +8,12 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
+import { useAct } from "../act";
 import {
   PROMPT_INPUT_STATUS,
   PromptInput,
@@ -19,13 +22,16 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { FailureNote } from "../failure-note";
+import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { imageFiles } from "../feedback-images";
-import { RetryButton } from "../retry-button";
+import { useIntegrationStatuses } from "../integration-statuses";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
+import { lapsedServer } from "./agent-servers-model";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { DictateButton, DictationStrip } from "./dictation-strip";
@@ -35,7 +41,7 @@ import type { AgentModelControl } from "./use-agent-model";
 import { DICTATION_PHASE, useDictation } from "./use-dictation";
 
 /**
- * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
+ * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * the one the New Plan page draws, at its default type. Its foot is laid
@@ -58,10 +64,13 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
  * one Stop the tab has. A message that did not go stays in the box with why under the card
- * and Retry, which sends it again under the same key, so a send whose
- * answer was lost reaches the agent once; an agent that takes no message
- * any more keeps the box, disabled, with the reason under it; a change of
- * model that did not take says why in the same place. The box takes
+ * and what mends it (`../failure-note.tsx`): Retry, which sends it again
+ * under the same key, so a send whose answer was lost reaches the agent
+ * once, or the GitHub sign-in a refusal needs, after which it is sent again
+ * by itself; an agent that takes no message any more keeps the box,
+ * disabled, with the reason under it; a change of model that did not take
+ * says why in the same place, and with nothing else to say there, a server
+ * the agent has on whose sign-in expired is offered to reconnect. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
  * draws the same box over a start rather than a message, asking for the
@@ -181,10 +190,30 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
-  const note = composer.closed ?? refusal ?? composer.note ?? model?.note;
+  const { act } = useAct();
+  const statuses = useIntegrationStatuses();
+  // The browser opens on the integration's sign-in, whose outcome the window's return reads.
+  const reconnect = (provider: IntegrationProvider) =>
+    act(ACT_KIND.INTEGRATIONS_CONNECT, { provider }).then(
+      (answer) => ("failure" in answer ? undefined : statuses.signInBegun(provider)),
+      () => undefined,
+    );
+  const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
+  const words =
+    composer.closed ?? refusal ?? (composer.note === undefined ? model?.note : undefined);
+  const note: Failure | undefined =
+    words !== undefined
+      ? { reason: FAILURE_REASON.OTHER, text: words }
+      : (composer.note ??
+        (lapsed === undefined
+          ? undefined
+          : {
+              reason: FAILURE_REASON.RECONNECT_INTEGRATION,
+              text: `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
+              provider: lapsed,
+            }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
-  const retries =
-    composer.closed === undefined && refusal === undefined && composer.note !== undefined;
+  const retries = note !== undefined && note === composer.note;
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
   const dictation = useDictation({
@@ -347,7 +376,7 @@ export function AgentComposer({
                     usage={usage}
                   />
                 )}
-                <AgentServersButton servers={servers} />
+                <AgentServersButton servers={servers} statuses={statuses} />
                 <AgentContextRing context={context} brief={brief} />
                 <DictateButton dictation={dictation} disabled={held} />
                 {showsStop ? (
@@ -379,10 +408,12 @@ export function AgentComposer({
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (
-        <p className="agent-note agent-composer-note" role="alert">
-          <span>{note}</span>
-          {retries ? <RetryButton onRetry={composer.retry} /> : null}
-        </p>
+        <FailureNote
+          failure={note}
+          className="agent-note agent-composer-note"
+          onRetry={retries ? composer.retry : undefined}
+          onRemedy={lapsed === undefined ? undefined : () => reconnect(lapsed)}
+        />
       ) : null}
     </div>
   );

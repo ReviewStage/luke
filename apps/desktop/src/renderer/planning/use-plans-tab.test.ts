@@ -154,6 +154,7 @@ function mount(
       inboxPlans: held.inboxPlans,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
+      onOpenApiKeys: () => undefined,
     });
     return null;
   }

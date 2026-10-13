@@ -150,6 +150,7 @@ function InboxPlanItems({
     onUnarchive: () => undefined,
     // The inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
+    onOpenApiKeys: () => undefined,
     onStarted: () => undefined,
   });
   const inbox = usePlanInbox({

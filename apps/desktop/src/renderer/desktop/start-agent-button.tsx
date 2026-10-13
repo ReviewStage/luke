@@ -1,6 +1,8 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
+import { FailureNote } from "../failure-note";
+import { FAILURE_REASON } from "../failure-remedy";
 import { choiceLabel } from "../planning/coding-agent-model";
 import { ModelMenu, settledChoice } from "../planning/model-menu";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -114,9 +116,12 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   return (
     <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
       {start.note !== undefined ? (
-        <p className="desktop-toolbar-note" role="alert">
-          {start.note}
-        </p>
+        // A Start a sign-in mended is pressed again by itself.
+        <FailureNote
+          failure={start.note}
+          className="desktop-toolbar-note"
+          onRetry={start.note.reason === FAILURE_REASON.OTHER ? undefined : () => press()}
+        />
       ) : null}
       <div className="start-agent-split">
         {hint !== undefined ? <Tooltip label={hint}>{main}</Tooltip> : main}

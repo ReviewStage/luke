@@ -8,6 +8,7 @@ import {
   hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
+import type { Failure } from "../failure-remedy";
 import {
   type AgentRun,
   closesComposer,
@@ -59,8 +60,8 @@ export interface AgentComposerControl {
   ) => void;
   /** Whether a message is on its way, during which the box takes nothing. */
   sending: boolean;
-  /** Why the last message did not go, said under the box beside Retry; nothing while none failed. */
-  note: string | undefined;
+  /** Why the last message did not go, said under the box beside what mends it; nothing while none failed. */
+  note: Failure | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
   /** Sends the words in the box, trimmed, and its files under a fresh key; nothing on an empty box, a send out, or a closed agent. */
@@ -82,7 +83,7 @@ interface Held {
    * so the retry's line is read back by the row the first send may already
    * have written, and why not.
    */
-  failed: { clientKey: string; known: ReadonlySet<string>; note: string } | undefined;
+  failed: { clientKey: string; known: ReadonlySet<string>; note: Failure } | undefined;
   closed: string | undefined;
   sent: readonly SentLine[];
   /** The service's rows that have answered a sent line, which no later line is read back by. */
@@ -177,7 +178,7 @@ export function useAgentComposer(input: {
               attachments: empty ? attachments : was.attachments,
               sending: false,
               failed: { clientKey, known, note },
-              closed: closesComposer(answer.failure) ? note : was.closed,
+              closed: closesComposer(answer.failure) ? note.text : was.closed,
               sent: was.sent.filter((each) => each.id !== id),
             };
           });
