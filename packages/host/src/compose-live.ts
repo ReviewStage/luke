@@ -78,6 +78,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
 
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
+    createId: kernel.createId,
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {

@@ -78,12 +78,16 @@ function subject() {
       reattachDelaysMs: [],
     });
     const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    let minted = 0;
     const kernel = hostKernelOver({
       stateRoot: "/nowhere",
       runMode: runModeFor({ capture: false, fixture: false }),
       accountBaseUrl: "https://account.example.test",
       now: () => 0,
-      createId: () => "id",
+      createId: () => {
+        minted += 1;
+        return `request-${minted}`;
+      },
       report: () => undefined,
       emit: (kind, payload) => events.push({ kind, payload }),
     });
@@ -149,19 +153,30 @@ function subject() {
   });
 }
 
-/** The frames the desktop sent after the handshake, by type and reason, so a test reads the avatar's asks. */
+/** The frames the desktop sent after the handshake, by type, so a test reads the avatar's asks. */
 function avatarSends(socket: FakeLiveSocket) {
   return socket.sent
     .map((data) => JSON.parse(data))
     .filter((frame) => String(frame.type).startsWith("avatar."));
 }
 
+function start(requestId: string) {
+  return { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId };
+}
+
+/** The service's grant for the start `requestId` names. */
+function grantFor(socket: FakeLiveSocket, requestId: string, grant: AvatarGrant = GRANT) {
+  socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_STARTED, requestId, ...grant });
+}
+
 function statuses(states: readonly LiveAvatarState[]) {
   return states.map((state) => state.status);
 }
 
+const SECOND_GRANT: AvatarGrant = { ...GRANT, participantToken: SECOND_TOKEN };
+
 it.effect(
-  "turning video on asks the service once, hands its grant on in process alone, and turning it off stops it as the developer's",
+  "turning video on asks the service, hands its grant on in process alone, and turning it off stops it as the developer's",
   () =>
     Effect.gen(function* () {
       const f = yield* subject();
@@ -170,22 +185,26 @@ it.effect(
       assert.deepEqual(yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true }), {
         requested: true,
       });
-      // A second press while the first ask is out mints nothing more.
+      assert.deepEqual(avatarSends(socket), [start("request-1")]);
+
+      grantFor(socket, "request-1");
+      yield* settle();
+      assert.deepEqual(f.grants, [GRANT]);
+      // An avatar already up is not asked for again: each start is a session the plan pays for.
       assert.deepEqual(yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true }), {
         requested: false,
       });
-      assert.deepEqual(avatarSends(socket), [{ type: VOICE_SERVICE_FRAME.AVATAR_START }]);
-
-      socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_STARTED, ...GRANT });
-      yield* settle();
-      assert.deepEqual(f.grants, [GRANT]);
 
       assert.deepEqual(yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false }), {
         requested: true,
       });
       assert.deepEqual(avatarSends(socket), [
-        { type: VOICE_SERVICE_FRAME.AVATAR_START },
-        { type: VOICE_SERVICE_FRAME.AVATAR_STOP, reason: AVATAR_STOP_REASON.USER },
+        start("request-1"),
+        {
+          type: VOICE_SERVICE_FRAME.AVATAR_STOP,
+          requestId: "request-1",
+          reason: AVATAR_STOP_REASON.USER,
+        },
       ]);
       assert.deepEqual(f.grants, [GRANT, undefined]);
       assert.deepEqual(f.states, [
@@ -225,35 +244,74 @@ it.effect("the toggle refuses anything but a boolean", () =>
 );
 
 it.effect(
-  "a refusal ends the start, a grant that lands after it is dropped, and the next start draws a grant of its own",
+  "a grant for a start stopped before it landed is dropped, and the restart's own grant is the one handed on",
   () =>
     Effect.gen(function* () {
       const f = yield* subject();
       const socket = yield* f.openCall;
 
       yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
-      socket.receive({
-        type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
-        reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY,
-      });
-      yield* settle();
-      socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_STARTED, ...GRANT });
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: false });
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+      grantFor(socket, "request-1");
       yield* settle();
       assert.deepEqual(f.grants, []);
-      assert.deepEqual(f.states.at(-1), {
-        status: LIVE_AVATAR_STATUS.ENDED,
-        end: { by: LIVE_AVATAR_END.UNAVAILABLE, reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY },
-      });
+      assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.STARTING);
 
+      grantFor(socket, "request-2", SECOND_GRANT);
+      yield* settle();
+      assert.deepEqual(f.grants, [SECOND_GRANT]);
+      assert.equal(f.tokenCrossedGateway(), false);
+    }),
+);
+
+it.effect(
+  "a start whose answer never came is superseded by the next press, and only the latest start's answer is heard",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject();
+      const socket = yield* f.openCall;
+
+      yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
       assert.deepEqual(yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true }), {
         requested: true,
       });
-      const second = { ...GRANT, participantToken: SECOND_TOKEN };
-      socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_STARTED, ...second });
+      assert.deepEqual(avatarSends(socket), [start("request-1"), start("request-2")]);
+      socket.receive({
+        type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+        requestId: "request-1",
+        reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY,
+      });
       yield* settle();
-      assert.deepEqual(f.grants, [second]);
-      assert.equal(f.tokenCrossedGateway(), false);
+      assert.deepEqual(statuses(f.states), [LIVE_AVATAR_STATUS.OFF, LIVE_AVATAR_STATUS.STARTING]);
+
+      grantFor(socket, "request-2", SECOND_GRANT);
+      yield* settle();
+      assert.deepEqual(f.grants, [SECOND_GRANT]);
     }),
+);
+
+it.effect("a refusal ends the start, and a grant that lands after it is dropped", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    socket.receive({
+      type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+      requestId: "request-1",
+      reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY,
+    });
+    yield* settle();
+    grantFor(socket, "request-1");
+    yield* settle();
+
+    assert.deepEqual(f.grants, []);
+    assert.deepEqual(f.states.at(-1), {
+      status: LIVE_AVATAR_STATUS.ENDED,
+      end: { by: LIVE_AVATAR_END.UNAVAILABLE, reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY },
+    });
+  }),
 );
 
 it.effect("a grant whose room is not a secure socket is read as the avatar unavailable", () =>
@@ -262,11 +320,7 @@ it.effect("a grant whose room is not a secure socket is read as the avatar unava
     const socket = yield* f.openCall;
 
     yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
-    socket.receive({
-      type: VOICE_SERVICE_FRAME.AVATAR_STARTED,
-      ...GRANT,
-      serverUrl: "ws://avatar-room.example.test",
-    });
+    grantFor(socket, "request-1", { ...GRANT, serverUrl: "ws://avatar-room.example.test" });
     yield* settle();
 
     assert.deepEqual(f.grants, []);
@@ -277,13 +331,17 @@ it.effect("a grant whose room is not a secure socket is read as the avatar unava
   }),
 );
 
-it.effect("a refusal whose reason is unreadable still ends the start", () =>
+it.effect("a refusal whose reason is unreadable still ends the start it names", () =>
   Effect.gen(function* () {
     const f = yield* subject();
     const socket = yield* f.openCall;
 
     yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
-    socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE, reason: 42 });
+    socket.receive({
+      type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+      requestId: "request-1",
+      reason: 42,
+    });
     yield* settle();
 
     assert.deepEqual(f.states.at(-1), {
@@ -299,7 +357,7 @@ it.effect("the call's end withdraws the grant and sends no stop of its own", () 
     const socket = yield* f.openCall;
 
     yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
-    socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_STARTED, ...GRANT });
+    grantFor(socket, "request-1");
     yield* settle();
     socket.closeFromServer({ code: 1000 });
     yield* settle();
@@ -309,7 +367,7 @@ it.effect("the call's end withdraws the grant and sends no stop of its own", () 
       status: LIVE_AVATAR_STATUS.ENDED,
       end: { by: LIVE_AVATAR_END.CALL_ENDED },
     });
-    assert.deepEqual(avatarSends(socket), [{ type: VOICE_SERVICE_FRAME.AVATAR_START }]);
+    assert.deepEqual(avatarSends(socket), [start("request-1")]);
     assert.equal(f.tokenCrossedGateway(), false);
   }),
 );

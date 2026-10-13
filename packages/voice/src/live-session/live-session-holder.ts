@@ -74,6 +74,9 @@ import {
  * `avatarGrants`. The grant carries a credential, so it is never emitted,
  * never logged, and never kept: it reaches the subscribers standing when it
  * arrives and nothing after, so a start always draws a grant of its own.
+ * Each start is asked under a request id of its own, and only the answer
+ * echoing the latest is heard, so an answer to an earlier ask, late or
+ * lost, is never mistaken for the current one.
  */
 
 /** Where Luke's avatar stands on the call, as the host knows it; whether the call window drew it is the desktop's to say. */
@@ -109,11 +112,13 @@ export type LiveAvatarState =
   | { readonly status: typeof LIVE_AVATAR_STATUS.ENDED; readonly end: LiveAvatarEnd };
 
 /** The service's grant for one start of the avatar: the room, the single-use token that joins it, and the avatar's identity. */
-export type AvatarGrant = Omit<AvatarStartedFrame, "type">;
+export type AvatarGrant = Omit<AvatarStartedFrame, "type" | "requestId">;
 
 export interface LiveSessionHolderOptions {
   /** Where a session comes from now, or nothing while voice is unavailable. */
   source: () => LiveSessionSource | undefined;
+  /** A fresh id for each avatar start, which the service echoes on its answer. */
+  createId: () => string;
   emit: (change: VoiceLiveSessionChanged) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
@@ -234,6 +239,8 @@ export class LiveSessionHolder {
   #releasing: Deferred.Deferred<void> | undefined;
   /** Where the avatar stands now, which `#avatarStates` replays to a subscriber as it joins. */
   #avatar: LiveAvatarState = { status: LIVE_AVATAR_STATUS.OFF };
+  /** The request id of the latest start, while the avatar it asked for is starting or up. */
+  #avatarRequest: string | undefined;
   readonly #avatarStates: PubSub.PubSub<LiveAvatarState>;
   /** The grants as they arrive, and nothing when the avatar they joined is down; replays nothing, so no grant is kept. */
   readonly #avatarGrants: PubSub.PubSub<AvatarGrant | undefined>;
@@ -627,23 +634,25 @@ export class LiveSessionHolder {
   }
 
   /**
-   * Asks the service for Luke's avatar on the standing call. Answers whether
-   * it was asked: a session with no door for it, or an avatar already asked
-   * for or up, asks nothing, because each start mints a session the plan's
-   * concurrency pays for. An avatar that ended may be asked for again, and
-   * draws a grant of its own.
+   * Asks the service for Luke's avatar on the standing call, under a request
+   * id of its own. Answers whether it was asked: a session with no door for
+   * it, or an avatar already up, asks nothing, because each start mints a
+   * session the plan's concurrency pays for. A start still unanswered is
+   * superseded, since its answer may have been lost with a connection, and
+   * the service closes whatever the earlier ask put up. An avatar that ended
+   * may be asked for again, and draws a grant of its own.
    */
   startAvatar(): boolean {
     const session = this.#held;
     if (!session || session.ended) return false;
     const start = session.opened.startAvatar;
-    if (start === undefined) return false;
-    const { status } = this.#avatar;
-    if (status === LIVE_AVATAR_STATUS.STARTING || status === LIVE_AVATAR_STATUS.GRANTED) {
-      return false;
+    if (start === undefined || this.#avatar.status === LIVE_AVATAR_STATUS.GRANTED) return false;
+    const requestId = this.#options.createId();
+    this.#avatarRequest = requestId;
+    start(requestId);
+    if (this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) {
+      this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
     }
-    start();
-    this.#avatarMoved({ status: LIVE_AVATAR_STATUS.STARTING });
     return true;
   }
 
@@ -657,12 +666,9 @@ export class LiveSessionHolder {
     const session = this.#held;
     if (!session || session.ended) return false;
     const stop = session.opened.stopAvatar;
-    if (stop === undefined) return false;
-    const { status } = this.#avatar;
-    if (status !== LIVE_AVATAR_STATUS.STARTING && status !== LIVE_AVATAR_STATUS.GRANTED) {
-      return false;
-    }
-    stop(reason);
+    const requestId = this.#avatarRequest;
+    if (stop === undefined || requestId === undefined) return false;
+    stop(requestId, reason);
     this.#avatarEnded({ by: LIVE_AVATAR_END.STOPPED, reason });
     return true;
   }
@@ -708,11 +714,12 @@ export class LiveSessionHolder {
 
   /**
    * The service's grant, handed on while the session stands and the start it
-   * answers is still wanted. A grant that lands after the avatar was stopped
-   * or the call ended is dropped here rather than kept for a later start.
+   * answers is the latest and still wanted. A grant for an earlier start, or
+   * one that lands after the avatar was stopped or the call ended, is
+   * dropped here rather than kept for a later start.
    */
   #avatarStarted(session: HeldSession, started: AvatarStartedFrame): void {
-    if (session.ended || this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) return;
+    if (!this.#answersLatestStart(session, started.requestId)) return;
     this.#avatarMoved({ status: LIVE_AVATAR_STATUS.GRANTED });
     PubSub.publishUnsafe(this.#avatarGrants, {
       serverUrl: started.serverUrl,
@@ -721,16 +728,25 @@ export class LiveSessionHolder {
     });
   }
 
-  /** The service's refusal of the start still wanted; the call goes on as voice. */
+  /** The service's refusal of the latest start still wanted; the call goes on as voice. */
   #avatarUnavailable(session: HeldSession, unavailable: AvatarUnavailableFrame): void {
-    if (session.ended || this.#avatar.status !== LIVE_AVATAR_STATUS.STARTING) return;
+    if (!this.#answersLatestStart(session, unavailable.requestId)) return;
     this.#avatarEnded({ by: LIVE_AVATAR_END.UNAVAILABLE, reason: unavailable.reason });
+  }
+
+  #answersLatestStart(session: HeldSession, requestId: string): boolean {
+    return (
+      !session.ended &&
+      this.#avatar.status === LIVE_AVATAR_STATUS.STARTING &&
+      requestId === this.#avatarRequest
+    );
   }
 
   /** The avatar asked for or up has ended, and a grant handed on is withdrawn from its subscribers. */
   #avatarEnded(end: LiveAvatarEnd): void {
     const { status } = this.#avatar;
     if (status !== LIVE_AVATAR_STATUS.STARTING && status !== LIVE_AVATAR_STATUS.GRANTED) return;
+    this.#avatarRequest = undefined;
     this.#avatarMoved({ status: LIVE_AVATAR_STATUS.ENDED, end });
     if (status === LIVE_AVATAR_STATUS.GRANTED) PubSub.publishUnsafe(this.#avatarGrants, undefined);
   }

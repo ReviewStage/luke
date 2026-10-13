@@ -173,13 +173,14 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanCallEnding?(listener: (ending: PlanCallEndingFrame) => void): void;
   /**
    * Asks the service for Luke's avatar on this session, in its own
-   * vocabulary: the service mints the avatar's session on its own key and
-   * answers with `avatar.started` or `avatar.unavailable`. Optional on the
-   * same terms as `reportActivity`.
+   * vocabulary, under the request id the caller minted for this ask: the
+   * service mints the avatar's session on its own key and answers with
+   * `avatar.started` or `avatar.unavailable` echoing that id. Optional on
+   * the same terms as `reportActivity`.
    */
-  startAvatar?(): void;
-  /** Tells the service the avatar is down, and why; the session goes on as voice. Optional on the same terms as `reportActivity`. */
-  stopAvatar?(reason: AvatarStopReason): void;
+  startAvatar?(requestId: string): void;
+  /** Tells the service the avatar the request put up is down, and why; the session goes on as voice. Optional on the same terms as `reportActivity`. */
+  stopAvatar?(requestId: string, reason: AvatarStopReason): void;
   /**
    * Tells the listener the service's grant for the avatar it put up: the
    * room, the per-call token that joins it, and the avatar's identity. The
@@ -990,12 +991,16 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         },
         // The avatar's asks ride the same socket, held through a gap like any
         // send, since the session they are about outlives the gap.
-        startAvatar: () => {
-          const frame: AvatarStartFrame = { type: VOICE_SERVICE_FRAME.AVATAR_START };
+        startAvatar: (requestId) => {
+          const frame: AvatarStartFrame = { type: VOICE_SERVICE_FRAME.AVATAR_START, requestId };
           socket.send(JSON.stringify(frame));
         },
-        stopAvatar: (reason) => {
-          const frame: AvatarStopFrame = { type: VOICE_SERVICE_FRAME.AVATAR_STOP, reason };
+        stopAvatar: (requestId, reason) => {
+          const frame: AvatarStopFrame = {
+            type: VOICE_SERVICE_FRAME.AVATAR_STOP,
+            requestId,
+            reason,
+          };
           socket.send(JSON.stringify(frame));
         },
         onAvatarStarted: (listener) => {
@@ -1027,11 +1032,23 @@ const isServiceFrame = Schema.is(
   }),
 );
 
-/** What an avatar answer its schema refuses is told as: the avatar did not come up, rather than a start left waiting forever. */
-const UNREADABLE_AVATAR_ANSWER: AvatarUnavailableFrame = {
-  type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
-  reason: AVATAR_UNAVAILABLE_REASON.ERROR,
-};
+/** An avatar answer read for the request it names alone, whatever else in it its own schema refuses. */
+const namesAvatarRequest = Schema.is(Schema.Struct({ requestId: Schema.String }));
+
+/**
+ * What an avatar answer its schema refuses is told as: the avatar its
+ * request asked for did not come up, rather than a start left waiting. An
+ * answer naming no request answers no start the host could tell it apart
+ * from, so it is told as nothing.
+ */
+function unreadableAvatarAnswer(value: UnparsedWireValue): AvatarUnavailableFrame | undefined {
+  if (!namesAvatarRequest(value)) return undefined;
+  return {
+    type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+    requestId: value.requestId,
+    reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+  };
+}
 
 /**
  * The socket with the service's own frames, `plan.draft`, `plan.activity`,
@@ -1071,10 +1088,12 @@ function withoutServiceFrames(
       told(planCallEndingFrameFromWire(value), listeners.onPlanCallEnding),
     [VOICE_SERVICE_FRAME.AVATAR_STARTED]: (value: UnparsedWireValue) =>
       told(avatarStartedFrameFromWire(value), listeners.onAvatarStarted) ||
-      told(UNREADABLE_AVATAR_ANSWER, listeners.onAvatarUnavailable),
+      told(unreadableAvatarAnswer(value), listeners.onAvatarUnavailable) ||
+      // Note that a grant nothing could read is still taken off, because it may carry a token.
+      true,
     [VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE]: (value: UnparsedWireValue) =>
       told(
-        avatarUnavailableFrameFromWire(value) ?? UNREADABLE_AVATAR_ANSWER,
+        avatarUnavailableFrameFromWire(value) ?? unreadableAvatarAnswer(value),
         listeners.onAvatarUnavailable,
       ),
   };
