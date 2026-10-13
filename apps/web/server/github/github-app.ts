@@ -228,7 +228,7 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
 
 /** Why a user token could not be had, every case of which the user mends by signing in with GitHub again. */
 export const SIGN_IN_REQUIRED = {
-  /** The user has no GitHub account row: they signed in with Google alone, before sign-in was GitHub's. */
+  /** The user has no GitHub account row: they signed in with Google alone. */
   NO_GITHUB_ACCOUNT: "no-github-account",
   /** The row holds the OAuth App's token from before the GitHub App, which reaches no installation and cannot be refreshed. */
   BEFORE_THE_APP: "before-the-app",
@@ -520,6 +520,20 @@ const writeSealedTokens = SqlSchema.void({
       .where(eq(account.id, sealed.id)),
 });
 
+/**
+ * Every GitHub row of the GitHub user given, whichever Luke account holds it.
+ * Note that Luke writes Better Auth's own `account` table here, because a
+ * webhook carries no session and Better Auth offers no server call that
+ * unlinks a provider account for a user who is not the one asking.
+ */
+const deleteGithubAccountsOf = SqlSchema.void({
+  Request: Schema.String,
+  execute: (githubUserId) =>
+    db
+      .delete(account)
+      .where(and(eq(account.providerId, GITHUB_PROVIDER_ID), eq(account.accountId, githubUserId))),
+});
+
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -574,6 +588,19 @@ function userOf(record: UserRecord): GitHubUser {
  * private: `<id>+<login>@users.noreply.github.com`, which is what a commit
  * by the account is attributed through.
  */
+/**
+ * Forgets a GitHub user's authorization of the App, as GitHub's
+ * `github_app_authorization` delivery reports it revoked: the account row, and
+ * the sealed tokens on it that no longer reach anything, go. The Luke account
+ * keeps every other way it signs in; one whose only way in was GitHub signs
+ * in with GitHub again, which links a fresh row.
+ */
+export function forgetRevokedAuthorization(
+  githubUserId: number,
+): Effect.Effect<void, StoreFailure, SqlClient.SqlClient> {
+  return deleteGithubAccountsOf(String(githubUserId));
+}
+
 export function noreplyAddress(user: GitHubUser): string {
   return `${user.id}+${user.login}@${GITHUB_NOREPLY_DOMAIN}`;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   createCodingAgent,
@@ -8,6 +9,7 @@ import {
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { listWorkspaces } from "@sidecar/database/models/workspace-store";
+import { account, user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
@@ -15,9 +17,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import { GITHUB_PROVIDER_ID } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { syncInstallations } from "../server/hosted/github-installations";
@@ -361,6 +365,58 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.deepEqual(suspended, [{ name: login, active: false }]);
         assert.deepEqual(unsuspended, [{ name: login, active: true }]);
         assert.deepEqual(deleted, [{ name: login, active: false }]);
+      }),
+  );
+
+  it.effect(
+    "a user revoking the App's authorization unlinks that GitHub user alone, and the account keeps its Google sign-in",
+    () =>
+      Effect.gen(function* () {
+        const githubUserIdOf = () => 800_000 + Math.floor(Math.random() * 90_000);
+        const revoked = githubUserIdOf();
+        const kept = revoked + 1;
+        const accountWith = (githubUserId: number) =>
+          Effect.gen(function* () {
+            const userId = `user-${randomUUID()}`;
+            yield* db
+              .insert(user)
+              .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+            for (const [providerId, accountId] of [
+              [GITHUB_PROVIDER_ID, String(githubUserId)],
+              ["google", `google-${userId}`],
+            ] as const) {
+              yield* db.insert(account).values({
+                id: `account-${randomUUID()}`,
+                accountId,
+                providerId,
+                userId,
+              });
+            }
+            return userId;
+          });
+        const providersOf = (userId: string) =>
+          Effect.map(
+            db
+              .select({ providerId: account.providerId })
+              .from(account)
+              .where(eq(account.userId, userId)),
+            (rows) => rows.map((row) => row.providerId).sort(),
+          );
+        const revoking = yield* accountWith(revoked);
+        const other = yield* accountWith(kept);
+
+        const answered = yield* answer(
+          githubReaching([]),
+          SECRET,
+          delivery("github_app_authorization", {
+            action: "revoked",
+            sender: { id: revoked, login: "octo" },
+          }),
+        );
+
+        assert.equal(answered.status, 200);
+        assert.deepEqual(yield* providersOf(revoking), ["google"]);
+        assert.deepEqual(yield* providersOf(other), ["github", "google"]);
       }),
   );
 });

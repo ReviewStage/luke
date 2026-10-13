@@ -19,7 +19,7 @@ import {
   type StoredAccount,
   withIssuedAccountTokens,
 } from "./client.js";
-import { ACCOUNT_STATUS, type AccountSnapshot, type SignInProvider } from "./snapshot.js";
+import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
 
 /** The path the hosted authorize route sends the code back to. */
 const CALLBACK_PATH = "/callback";
@@ -42,10 +42,11 @@ const SIGN_IN_PAGES = {
 } as const;
 
 /**
- * Whose mark the landing card carries. Only the identity provider has one;
- * anything else draws Luke's own mark alone rather than a wrong badge.
+ * Whose mark the landing card carries. Only the two identity providers have
+ * one; anything else draws Luke's own mark alone rather than a wrong badge.
  */
-function connectionSource(provider: SignInProvider): LoopbackConnectionSource | undefined {
+function connectionSource(provider: AccountProvider): LoopbackConnectionSource | undefined {
+  if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;
   if (provider === LOOPBACK_CONNECTION_SOURCE.GITHUB) return LOOPBACK_CONNECTION_SOURCE.GITHUB;
   return undefined;
 }
@@ -286,7 +287,7 @@ export class AccountSessionManager {
    * for the developer's own press rather than ending it, exactly as the held
    * promise it replaces did.
    */
-  beginSignIn(provider: SignInProvider): Effect.Effect<AccountSnapshot, SignInFailed> {
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, SignInFailed> {
     // The decision, the fork, and the store of the fiber are one
     // uninterruptible step, the same guarantee `singleFlightEffect`'s own
     // semaphore states: a second ask landing between them would start a second
@@ -336,7 +337,7 @@ export class AccountSessionManager {
     );
   }
 
-  #consent(provider: SignInProvider, generation: number): LoopbackConsent<AccountSnapshot> {
+  #consent(provider: AccountProvider, generation: number): LoopbackConsent<AccountSnapshot> {
     return loopbackConsent<AccountSnapshot>({
       callbackPath: CALLBACK_PATH,
       // The hosted authorize route reads which provider was chosen back off
@@ -366,7 +367,7 @@ export class AccountSessionManager {
    * leaving a live refresh token nobody holds.
    */
   #exchange(
-    provider: SignInProvider,
+    provider: AccountProvider,
     generation: number,
     input: LoopbackExchange,
   ): Effect.Effect<LoopbackConsentOutcome<AccountSnapshot>> {
