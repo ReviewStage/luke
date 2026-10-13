@@ -60,7 +60,7 @@ test("a command run on the Mac is the command it ran, described as a command is,
   const killed = ran({
     status: "ran",
     exitCode: null,
-    stdout: "ready on :3000\n",
+    stdout: "  ready on :3000\n",
     stderr: "",
     truncated: false,
     timedOut: true,
@@ -71,7 +71,7 @@ test("a command run on the Mac is the command it ran, described as a command is,
   assert.deepEqual(killed.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm dev" });
   assert.deepEqual(killed.output, {
     kind: TOOL_BLOCK.TEXT,
-    text: "ready on :3000\n(killed at its timeout)",
+    text: "  ready on :3000\n(killed at its timeout)",
   });
   const failed = ran({
     status: "ran",

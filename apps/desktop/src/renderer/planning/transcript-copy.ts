@@ -339,9 +339,10 @@ export function latestActivity(transcript: CopiedTranscript): LatestActivity | u
   if (block.kind === COPIED_BLOCK.WORDS) {
     return { kind: LATEST_ACTIVITY.WORDS, text: plainWords(block.text) };
   }
-  // A described command says its description alone, as its row does.
+  // A described command says its description, and where it ran where that is the Mac, as its row does.
   if (block.description !== undefined) {
-    return { kind: LATEST_ACTIVITY.CALL, verb: block.description, subject: "", code: false };
+    const { verb } = callParts(block);
+    return { kind: LATEST_ACTIVITY.CALL, verb, subject: "", code: false };
   }
   // The verb and its joiner as the concise copy's line puts them, the subject drawn apart.
   const { verb, subject, joiner, code } = callParts(block);

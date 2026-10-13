@@ -139,7 +139,8 @@ function macCommandOutput(output: WireValue): ToolBlock {
   }
   const shown = commandOutput(output);
   const timedOut = isRecord(output) && output.timedOut === true;
-  return timedOut ? textBlock(`${shown.text}\n${TIMED_OUT_NOTE}`.trimStart()) : shown;
+  if (!timedOut) return shown;
+  return textBlock(shown.text === "" ? TIMED_OUT_NOTE : `${shown.text}\n${TIMED_OUT_NOTE}`);
 }
 
 /** A patch's answer: the files it changed, one a line, then every problem it reported. */
