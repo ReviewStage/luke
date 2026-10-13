@@ -1,5 +1,13 @@
 import {
   type AccountToken,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarStartedFrame,
+  type AvatarStartFrame,
+  type AvatarStopFrame,
+  type AvatarStopReason,
+  type AvatarUnavailableFrame,
+  avatarStartedFrameFromWire,
+  avatarUnavailableFrameFromWire,
   HOSTED_API_ERROR,
   type HostedApiError,
   type HostedQuota,
@@ -163,6 +171,24 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanWork?(listener: (work: PlanWorkFrame) => void): void;
   /** Tells the listener Luke is ending a planning call once his goodbye has played, on the same terms as `onPlanDraft`. */
   onPlanCallEnding?(listener: (ending: PlanCallEndingFrame) => void): void;
+  /**
+   * Asks the service for Luke's avatar on this session, in its own
+   * vocabulary: the service mints the avatar's session on its own key and
+   * answers with `avatar.started` or `avatar.unavailable`. Optional on the
+   * same terms as `reportActivity`.
+   */
+  startAvatar?(): void;
+  /** Tells the service the avatar is down, and why; the session goes on as voice. Optional on the same terms as `reportActivity`. */
+  stopAvatar?(reason: AvatarStopReason): void;
+  /**
+   * Tells the listener the service's grant for the avatar it put up: the
+   * room, the per-call token that joins it, and the avatar's identity. The
+   * token is a credential, so a listener hands it on in process alone.
+   * Optional on the same terms as `onPlanDraft`.
+   */
+  onAvatarStarted?(listener: (started: AvatarStartedFrame) => void): void;
+  /** Tells the listener the service could not put the avatar up, and why, on the same terms as `onPlanDraft`. */
+  onAvatarUnavailable?(listener: (unavailable: AvatarUnavailableFrame) => void): void;
 }
 
 export interface LiveSessionSource {
@@ -891,6 +917,8 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       const codeListeners = new Set<(code: PlanCodeFrame) => void>();
       const workListeners = new Set<(work: PlanWorkFrame) => void>();
       const endingListeners = new Set<(ending: PlanCallEndingFrame) => void>();
+      const startedListeners = new Set<(started: AvatarStartedFrame) => void>();
+      const unavailableListeners = new Set<(unavailable: AvatarUnavailableFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onPlanDraft: (draft) => {
@@ -907,6 +935,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           },
           onPlanCallEnding: (ending) => {
             for (const listener of [...endingListeners]) listener(ending);
+          },
+          onAvatarStarted: (started) => {
+            for (const listener of [...startedListeners]) listener(started);
+          },
+          onAvatarUnavailable: (unavailable) => {
+            for (const listener of [...unavailableListeners]) listener(unavailable);
           },
         }),
       );
@@ -954,13 +988,29 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanCallEnding: (listener) => {
           endingListeners.add(listener);
         },
+        // The avatar's asks ride the same socket, held through a gap like any
+        // send, since the session they are about outlives the gap.
+        startAvatar: () => {
+          const frame: AvatarStartFrame = { type: VOICE_SERVICE_FRAME.AVATAR_START };
+          socket.send(JSON.stringify(frame));
+        },
+        stopAvatar: (reason) => {
+          const frame: AvatarStopFrame = { type: VOICE_SERVICE_FRAME.AVATAR_STOP, reason };
+          socket.send(JSON.stringify(frame));
+        },
+        onAvatarStarted: (listener) => {
+          startedListeners.add(listener);
+        },
+        onAvatarUnavailable: (listener) => {
+          unavailableListeners.add(listener);
+        },
       };
     });
   }
 }
 
-/** The prefix every service frame's type shares, which no Live event's type begins with. */
-const SERVICE_FRAME_PREFIX = "plan.";
+/** The prefixes the service's own frame types begin with, which no Live event's type begins with. */
+const SERVICE_FRAME_PREFIXES = ["plan.", "avatar."] as const;
 
 /** A frame whose type is one of the service's own, read for its type alone so it can be routed to that type's schema. */
 const isServiceFrame = Schema.is(
@@ -971,16 +1021,26 @@ const isServiceFrame = Schema.is(
       VOICE_SERVICE_FRAME.PLAN_CODE,
       VOICE_SERVICE_FRAME.PLAN_WORK,
       VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
+      VOICE_SERVICE_FRAME.AVATAR_STARTED,
+      VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
     ]),
   }),
 );
 
+/** What an `avatar.started` its schema refuses is told as: the avatar did not come up, rather than a start left waiting forever. */
+const UNREADABLE_AVATAR_GRANT: AvatarUnavailableFrame = {
+  type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+  reason: AVATAR_UNAVAILABLE_REASON.ERROR,
+};
+
 /**
  * The socket with the service's own frames, `plan.draft`, `plan.activity`,
- * `plan.code`, `plan.work`, and `plan.call_ending`, taken off its arrivals and told to their
- * listeners, so the sideband over it reads only what the session said. A
- * frame is routed by the type it decodes to and then checked by that type's
- * own schema. The substring test ahead of the decode only keeps a transcript
+ * `plan.code`, `plan.work`, `plan.call_ending`, `avatar.started`, and
+ * `avatar.unavailable`, taken off its arrivals and told to their listeners,
+ * so the sideband over it reads only what the session said. A frame is
+ * routed by the type it decodes to and then checked by that type's own
+ * schema. An `avatar.started` the schema refuses is still taken off, since
+ * it may carry a token, and is told as the avatar unavailable. The substring test ahead of the decode only keeps a transcript
  * delta from being decoded twice; note that it never picks the frame's kind,
  * because a frame's own text, a command a turn ran or a draft's words, can
  * name another kind's type, and a frame read as the wrong kind would be
@@ -994,6 +1054,8 @@ function withoutServiceFrames(
     readonly onPlanCode: (code: PlanCodeFrame) => void;
     readonly onPlanWork: (work: PlanWorkFrame) => void;
     readonly onPlanCallEnding: (ending: PlanCallEndingFrame) => void;
+    readonly onAvatarStarted: (started: AvatarStartedFrame) => void;
+    readonly onAvatarUnavailable: (unavailable: AvatarUnavailableFrame) => void;
   },
 ): LiveSocket {
   const routes = {
@@ -1007,6 +1069,11 @@ function withoutServiceFrames(
       told(planWorkFrameFromWire(value), listeners.onPlanWork),
     [VOICE_SERVICE_FRAME.PLAN_CALL_ENDING]: (value: UnparsedWireValue) =>
       told(planCallEndingFrameFromWire(value), listeners.onPlanCallEnding),
+    [VOICE_SERVICE_FRAME.AVATAR_STARTED]: (value: UnparsedWireValue) =>
+      told(avatarStartedFrameFromWire(value), listeners.onAvatarStarted) ||
+      told(UNREADABLE_AVATAR_GRANT, listeners.onAvatarUnavailable),
+    [VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE]: (value: UnparsedWireValue) =>
+      told(avatarUnavailableFrameFromWire(value), listeners.onAvatarUnavailable),
   };
   return {
     send: (data) => socket.send(data),
@@ -1014,7 +1081,7 @@ function withoutServiceFrames(
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (!arrival.frame.includes(SERVICE_FRAME_PREFIX)) return true;
+      if (!SERVICE_FRAME_PREFIXES.some((prefix) => arrival.frame.includes(prefix))) return true;
       const value = decodeLivePayload(arrival.frame);
       if (!isServiceFrame(value)) return true;
       return !routes[value.type](value);

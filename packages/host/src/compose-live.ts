@@ -11,12 +11,14 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
 } from "@sidecar/gateway";
-import type {
-  PlanActivityFrame,
-  PlanCodeFrame,
-  PlanDraftFrame,
-  PlanWorkFrame,
+import {
+  AVATAR_STOP_REASON,
+  type PlanActivityFrame,
+  type PlanCodeFrame,
+  type PlanDraftFrame,
+  type PlanWorkFrame,
 } from "@sidecar/hosted";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveSessionHolder } from "@sidecar/voice/live-session";
@@ -32,8 +34,10 @@ export interface LiveComposer extends Composer {
 }
 
 export interface LiveDependencies {
-  settings: SettingsComposer;
-  account: AccountComposer;
+  settings: Pick<SettingsComposer, "recordProductEvent">;
+  account: Pick<AccountComposer, "agentTrace"> & {
+    readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
+  };
   /** The plan the panel has open, the one plan a planning call may be created about; nothing while it has none. */
   activePlanId: () => string | undefined;
   /** Where a draft of the open plan goes as the service's notetaker writes it during a planning call. */
@@ -56,8 +60,10 @@ export interface LiveDependencies {
  * is appended by the service's own exchange over the same socket, and the
  * record is the account's on the service. What this side still does is
  * create the session for the peer's offer about the open plan, end it on the
- * peer's hang-up or the drain, and carry the peer's idle and the stop key to
- * the service. It reaches no brain and writes no record, so it needs no seam
+ * peer's hang-up or the drain, and carry the peer's idle, the stop key, and
+ * the developer's video toggle to the service. The avatar's grant that toggle
+ * draws is the holder's to hand on in process, and no method or event here
+ * carries it. It reaches no brain and writes no record, so it needs no seam
  * for either. The holder stands for this composition's own scope, which is
  * the host's, and its graceful close stays a drain step of `compose-host.ts`
  * rather than a finalizer, so a quit ends the session inside its own
@@ -141,6 +147,19 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     // about Luke's output, so this is the one ask that tells him to stop.
     [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
       Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
+    // The video toggle asks for Luke's avatar or takes it down with the
+    // developer's own reason; the grant the ask draws never comes back here.
+    [GATEWAY_METHOD.VOICE_SET_VIDEO]: (params) => {
+      const request = Result.getOrUndefined(readEither(voiceSetVideoParamsSchema)(params));
+      if (!request) return invalid("on must be a boolean");
+      return Effect.sync(() =>
+        carried({
+          requested: request.on
+            ? service.startAvatar()
+            : service.stopAvatar(AVATAR_STOP_REASON.USER),
+        }),
+      );
+    },
     // What the host knows about why voice is or is not available, carrying no
     // credential and no session's SDP: the source's own reading while one
     // stands, and the reason there is none otherwise.
