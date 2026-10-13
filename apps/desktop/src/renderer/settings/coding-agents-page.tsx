@@ -302,14 +302,19 @@ function CodingAgentsSection({
   useEffect(() => {
     if (!signedIn || !keysRead) return;
     let live = true;
+    // A catalog that could not be read is offered no longer, so the menu says so rather than offering one the keys may have changed.
+    const failModels = () => {
+      setModels(undefined);
+      setModelsFailed(true);
+    };
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
         if (!live) return;
-        if ("failure" in answer) setModelsFailed(true);
+        if ("failure" in answer) failModels();
         else setModels(answer.models);
       },
       () => {
-        if (live) setModelsFailed(true);
+        if (live) failModels();
       },
     );
     return () => {

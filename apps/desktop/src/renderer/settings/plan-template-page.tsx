@@ -178,7 +178,8 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
     held.current.kept = answer.template;
     setText(answer.template);
     setCustom(answer.custom);
-    setLastEdit(edited);
+    // Note that a read names no edit, because the history read beside it may already have named one.
+    if (edited !== undefined) setLastEdit(edited);
   }, []);
 
   useEffect(() => {
