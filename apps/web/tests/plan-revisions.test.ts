@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { writePlanTemplate } from "@sidecar/database/models/account-store";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import {
   listRevisions,
@@ -472,6 +473,28 @@ it.layer(getTestDB())("a plan's history", (it) => {
         assert.deepEqual(
           stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER),
           [],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's first save is read against the template it started from, not one the account wrote since",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* writePlanTemplate(userId, "## Why\n\nSay why.\n\n## How\n\nSay how.\n");
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_HEADING.CONTEXT, "Admins only.")],
+          ON_CALL,
+        );
+
+        const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+        assert.deepEqual(
+          stored.plan.sectionEdits?.map(({ section }) => section),
+          ["Context"],
         );
       }),
   );

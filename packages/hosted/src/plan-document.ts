@@ -177,11 +177,23 @@ function wordsBeneath(section: PlanSection): string {
   return end === -1 ? "" : section.text.slice(end + 1);
 }
 
+/** How many of the sections hold each run of words beneath their heading. */
+function countBeneath(sections: readonly PlanSection[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const section of sections) {
+    const words = wordsBeneath(section);
+    counts.set(words, (counts.get(words) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /**
  * The headings a change renamed and nothing else, each new heading to the
  * one it replaced: a heading only `after` holds whose words beneath stand
- * exactly as those of a heading only `before` held, paired in the order they
- * stand.
+ * exactly as those of a heading only `before` held. Note that a pair is
+ * taken only where those words name one heading on each side, because two
+ * empty sections, one struck and one renamed, cannot be told apart, and an
+ * arbitrary writer carried over is worse than the renamer named.
  */
 function renamedHeadings(
   before: readonly PlanSection[],
@@ -190,16 +202,15 @@ function renamedHeadings(
   const was = new Set(before.map((section) => section.heading));
   const now = new Set(after.map((section) => section.heading));
   const gone = before.filter((section) => section.heading !== "" && !now.has(section.heading));
+  const arrived = after.filter((section) => section.heading !== "" && !was.has(section.heading));
+  const goneCounts = countBeneath(gone);
+  const arrivedCounts = countBeneath(arrived);
   const renamed = new Map<string, string>();
-  for (const section of after) {
-    if (section.heading === "" || was.has(section.heading) || renamed.has(section.heading)) {
-      continue;
-    }
-    const at = gone.findIndex((old) => wordsBeneath(old) === wordsBeneath(section));
-    const old = gone[at];
-    if (old === undefined) continue;
-    renamed.set(section.heading, old.heading);
-    gone.splice(at, 1);
+  for (const section of arrived) {
+    const words = wordsBeneath(section);
+    const old = gone.find((each) => wordsBeneath(each) === words);
+    const alone = goneCounts.get(words) === 1 && arrivedCounts.get(words) === 1;
+    if (old !== undefined && alone) renamed.set(section.heading, old.heading);
   }
   return renamed;
 }

@@ -21,6 +21,7 @@ import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
+import { readTemplateAt } from "./plan-template-revisions.js";
 
 /**
  * plan-store.ts -- the named plans an account owns, and the one document each holds.
@@ -218,6 +219,19 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 }
 
 /**
+ * The text the row's plan started as: a copy of the account's template as it
+ * stood when the plan started, as its history reads, or the template it
+ * holds now where it has no history.
+ */
+function startedText(row: PlanRow): PlanStoreEffect<string> {
+  return Effect.gen(function* () {
+    const held = yield* readTemplateAt(row.userId, row.createdAt);
+    const template = Option.isSome(held) ? held.value : yield* readPlanTemplate(row.userId);
+    return template ?? DEFAULT_PLAN_TEMPLATE;
+  });
+}
+
+/**
  * The row's plan, as the window and the model read it: its text as the
  * document's body with no assumptions, since they are a section of the text,
  * and who last changed each section, as its revisions read. The row's own account is the one its
@@ -229,7 +243,7 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const sectionWriters = yield* readSectionWriters(row.userId, row.id);
+    const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,

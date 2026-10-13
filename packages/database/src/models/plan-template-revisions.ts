@@ -6,7 +6,7 @@ import {
   type PlanTemplateRevisionsAnswer,
 } from "@sidecar/hosted/plan-document-template";
 import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
-import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -122,6 +122,24 @@ const RevisionLineRowSchema = Schema.Struct({
 });
 
 /**
+ * The account's template as it stood at an instant, null for the default:
+ * its newest revision by then, or, before its history began, the template
+ * it held then; nothing for an account with no history, whose template has
+ * stood as it is. Note that a revision keeps only the text its saves left,
+ * so an instant inside one reads as its latest save.
+ */
+export function readTemplateAt(
+  userId: string,
+  at: Date,
+): Effect.Effect<Option.Option<string | null>, RevisionFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const held = yield* findTemplateHeldAt({ userId, at });
+    const found = Option.isSome(held) ? held : yield* findFirstTemplate(userId);
+    return Option.map(found, (row) => row.document);
+  });
+}
+
+/**
  * A page of the account's template revisions, the newest first, before the
  * one `before` names where it names one, with one past the page read to say
  * whether an older page stands. Note that the text itself is not read, only
@@ -176,6 +194,34 @@ const findRevisionContents = SqlSchema.findAll({
       .where(
         and(eq(planTemplateRevision.userId, userId), inArray(planTemplateRevision.seq, [...seqs])),
       ),
+});
+
+const TemplateWordsRowSchema = Schema.Struct({ document: Schema.NullOr(Schema.String) });
+
+/** The account's newest template revision whose latest save was at or before an instant. */
+const findTemplateHeldAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, at: Schema.Date }),
+  Result: TemplateWordsRowSchema,
+  execute: ({ userId, at }) =>
+    db
+      .select({ document: planTemplateRevision.document })
+      .from(planTemplateRevision)
+      .where(and(eq(planTemplateRevision.userId, userId), lte(planTemplateRevision.at, at)))
+      .orderBy(desc(planTemplateRevision.seq))
+      .limit(1),
+});
+
+/** The account's first template revision: the template it held when its history began. */
+const findFirstTemplate = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: TemplateWordsRowSchema,
+  execute: (userId) =>
+    db
+      .select({ document: planTemplateRevision.document })
+      .from(planTemplateRevision)
+      .where(eq(planTemplateRevision.userId, userId))
+      .orderBy(asc(planTemplateRevision.seq))
+      .limit(1),
 });
 
 /** The template's words as they read: its own, or the default's where it holds none. */

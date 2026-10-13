@@ -121,6 +121,20 @@ test("a heading renamed with nothing beneath it changed keeps its writer, and on
   );
 });
 
+test("an empty section struck beside another renamed is no rename, so the renamer is named rather than either writer guessed", () => {
+  const base = "## Goal\n\nx\n\n## Risks\n\ny\n";
+  const emptied = "## Goal\n\n## Risks\n";
+  const renamed = "## Dangers\n";
+
+  assert.deepEqual(
+    sectionWritersOf(base, [
+      { text: emptied, who: { actor: PLAN_ACTOR.NOTETAKER }, at: 1 },
+      { text: renamed, who: { actor: PLAN_ACTOR.DEVELOPER }, at: 5 },
+    ]),
+    [{ section: "Dangers", actor: PLAN_ACTOR.DEVELOPER, at: 5 }],
+  );
+});
+
 test("a heading's closing hashes are no part of its words, and a long run of tabs or hashes reads at once", () => {
   const tabs = "\t".repeat(50_000);
 

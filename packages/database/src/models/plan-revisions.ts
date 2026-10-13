@@ -3,7 +3,6 @@ import {
   type PlanSectionWriterWho,
   sectionWritersOf,
 } from "@sidecar/hosted/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -23,7 +22,6 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { voiceSessions } from "../schemas/voice.js";
-import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
 
 /**
@@ -440,27 +438,24 @@ export function readLastEdit(
 }
 
 /**
- * Who last changed each section of the account's plan, read off its newest
- * revisions (`sectionWritersOf`); none for a plan with no history yet. The
- * oldest read is only the text the next changed where it is past the bound
- * or the plan as it stood before history, `earlier`, which no writer wrote.
- * The plan's first revision is read against the template the account holds
- * now, since a plan starts as a copy of it and its text before the first
- * save is kept nowhere.
+ * Who last changed each section of a plan, read off its newest revisions
+ * (`sectionWritersOf`); none for a plan with no history yet. The oldest read
+ * is only the text the next changed where it is past the bound or the plan
+ * as it stood before history, `earlier`, which no writer wrote. The plan's
+ * first revision is read against `started`, the text the plan started as,
+ * read only where the first revision is among those read.
  */
-export function readSectionWriters(
-  userId: string,
+export function readSectionWriters<E, R>(
   planId: string,
-): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure, SqlClient.SqlClient> {
+  started: Effect.Effect<string, E, R>,
+): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, SqlClient.SqlClient | R> {
   return Effect.gen(function* () {
     const rows = [...(yield* findSectionRevisions(planId))].reverse();
     const first = rows[0];
     if (first === undefined) return [];
     const fromStart =
       rows.length <= PLAN_REVISION.SECTION_HISTORY && first.actor !== PLAN_ACTOR.EARLIER;
-    const base = fromStart
-      ? ((yield* readPlanTemplate(userId)) ?? DEFAULT_PLAN_TEMPLATE)
-      : first.document;
+    const base = fromStart ? yield* started : first.document;
     const written = fromStart ? rows : rows.slice(1);
     return sectionWritersOf(
       base,
