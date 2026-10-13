@@ -69,6 +69,7 @@ import {
   todosSummary,
   todosView,
   toolCallView,
+  type WorkerJobs,
 } from "./tool-call-model";
 import {
   TranscriptNote,
@@ -186,15 +187,19 @@ export interface DelegationDoors {
   onOpenAgent?: ((agentId: string) => void) | undefined;
   /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
+  /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
+  jobs?: WorkerJobs | undefined;
 }
 
-/** One tool call: its row, and its input and answer under it once opened. */
+/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it. */
 function ToolCallView({
   part,
+  jobs,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  jobs?: WorkerJobs | undefined;
 }): ReactNode {
-  const view = toolCallView(part);
+  const view = toolCallView({ ...part, jobs });
   return (
     <TranscriptTool
       data-call-id={part.callId}
@@ -391,7 +396,7 @@ function AgentPartView({
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
       ) : (
-        <ToolCallView part={part} />
+        <ToolCallView part={part} jobs={delegation?.jobs} />
       );
     }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.

@@ -129,53 +129,15 @@ export const PLAN_WORK_STATE = {
 export type PlanWorkState = (typeof PLAN_WORK_STATE)[keyof typeof PLAN_WORK_STATE];
 
 /**
- * Which of the planning model's tools a call is, so the Work tab can say it
- * in words: one kind per tool the planning turn is offered, and `other` for
- * a tool a newer service offers that this vocabulary does not name yet.
- */
-export const PLAN_WORK_TOOL = {
-  REPOSITORY: "repository",
-  /** A command run on the developer's own Mac (`run_on_mac`). */
-  MAC_COMMAND: "mac-command",
-  SEARCH_WEB: "search-web",
-  READ_WEB_PAGE: "read-web-page",
-  SHOW_CODE: "show-code",
-  DRAW_ON_BOARD: "draw-on-board",
-  LOOK_AT_BOARD: "look-at-board",
-  QUEUE_QUESTION: "queue-question",
-  WITHDRAW_QUESTION: "withdraw-question",
-  WORKER: "worker",
-  WORKER_WAIT: "worker-wait",
-  WORKER_CANCEL: "worker-cancel",
-  LIST_AGENTS: "list-agents",
-  READ_AGENT: "read-agent",
-  MESSAGE_AGENT: "message-agent",
-  START_AGENT: "start-agent",
-  END_CALL: "end-call",
-  SHOW_PAGE: "show-page",
-  OTHER: "other",
-} as const;
-
-export type PlanWorkTool = (typeof PLAN_WORK_TOOL)[keyof typeof PLAN_WORK_TOOL];
-
-/** The kinds of part a turn's work is made of, in the order the model wrote them. */
-export const PLAN_WORK_PART = {
-  TEXT: "text",
-  REASONING: "reasoning",
-  TOOL: "tool",
-} as const;
-
-/**
  * How much of a turn one `plan.work` frame carries. The newest parts are
- * kept, and each text, input, and output is cut to its bound, so a turn
- * that read a large file still travels in a frame of tens of kilobytes.
+ * kept, and every string in them is cut to its bound, so a turn that read
+ * a large file still travels in a frame of tens of kilobytes.
  */
 export const PLAN_WORK_BOUNDS = {
   /** The most turns one read of a plan's work carries, the newest before where it began; older ones are read a page at a time. */
   TURNS: 20,
   PARTS: 60,
   TEXT_CHARS: 4_000,
-  SUBJECT_CHARS: 300,
   NAME_CHARS: 64,
   /** The most spoken lines one turn names as its ask. */
   ASKED_LINES: 20,
@@ -184,82 +146,6 @@ export const PLAN_WORK_BOUNDS = {
 } as const;
 
 const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.TEXT_CHARS));
-
-const planWorkTextPartSchema = EffectSchema.Struct({
-  type: EffectSchema.Literal(PLAN_WORK_PART.TEXT),
-  text: workText,
-});
-
-const planWorkReasoningPartSchema = EffectSchema.Struct({
-  type: EffectSchema.Literal(PLAN_WORK_PART.REASONING),
-  text: workText,
-});
-
-/**
- * One call the planning model made: which tool, by kind and by name; its
- * state; the one input a reader looks for first (the command, the query, the
- * page, the file), as its subject; the subagent task it started, sent work
- * to, or stopped; and the whole input and output as text, each cut to its
- * bound.
- */
-const planWorkToolPartSchema = EffectSchema.Struct({
-  type: EffectSchema.Literal(PLAN_WORK_PART.TOOL),
-  id: EffectSchema.String,
-  tool: EffectSchema.Literals(Object.values(PLAN_WORK_TOOL)),
-  name: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
-  state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
-  subject: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
-  ),
-  /** The subagent task a `worker` call started or sent work to, or a `worker-cancel` call stopped, by eve's id for it, so the stop names the subagent it stopped; absent for any other call, before a start answered, and from a service older than it. */
-  task: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
-  ),
-  input: workText,
-  output: EffectSchema.optionalKey(workText),
-});
-
-/** What a subagent's session is made of: its words, its reasoning, and its calls, none of which starts a subagent of its own. */
-const planWorkSessionPartSchema = EffectSchema.Union([
-  planWorkTextPartSchema,
-  planWorkReasoningPartSchema,
-  planWorkToolPartSchema,
-]);
-
-/**
- * A subagent's session as the Work tab draws it: the newest of what it
- * wrote and called, oldest first, in the same parts as the planning
- * model's, when its newest task began and ended, its title, and what that
- * task ran on and spent. Note that it stands one level deep, because the wire shows no
- * recursive declaration and no subagent is offered a subagent of its own.
- */
-const planWorkSessionSchema = EffectSchema.Struct({
-  /** Whether older parts than these were left out. */
-  earlierOmitted: EffectSchema.Boolean,
-  parts: EffectSchema.Array(planWorkSessionPartSchema),
-  /** Epoch milliseconds the subagent began its newest task, which a running one counts from; absent from a service older than it. */
-  startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  /** Epoch milliseconds it answered or ended that task; absent while it runs, and from a service older than it. */
-  endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
-  /** Its short title, generated from the first task it was handed; absent until that lands, where none could be generated, and from a service older than it. */
-  title: EffectSchema.optionalKey(
-    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
-  ),
-  /** What its newest task ran on, which its row names as an agent's subagent row names its pair, and once it ended what it spent and how it ended. */
-  ...turnRecordFields,
-});
-
-const planWorkPartSchema = EffectSchema.Union([
-  planWorkTextPartSchema,
-  planWorkReasoningPartSchema,
-  EffectSchema.Struct({
-    ...planWorkToolPartSchema.fields,
-    /** For a call that started a subagent, the subagent's own session as far as it has got; absent for any other call. */
-    session: EffectSchema.optionalKey(planWorkSessionSchema),
-  }),
-]);
-
-export type PlanWorkPart = typeof planWorkPartSchema.Type;
 
 /**
  * A journal as the agent tab reads one: its parts as the AI SDK stored them
@@ -301,11 +187,11 @@ export type PlanWorkWorker = typeof planWorkWorkerSchema.Type;
 
 /**
  * One planning turn as the Work tab draws it: the turn, when it started and
- * ended, how far it has got, the newest of what the model wrote and called,
- * oldest first, and what it ran on and spent. Unlike `plan.activity`, this
- * carries each call's output: the text a command answered in the plan's
- * repository sandbox, and pages read from the public web, shown back to the
- * developer on their own Mac.
+ * ended, how far it has got, its journal and the workers it handed work to,
+ * and what it ran on and spent. Unlike `plan.activity`, this carries each
+ * call's output: the text a command answered in the plan's repository
+ * sandbox, and pages read from the public web, shown back to the developer
+ * on their own Mac.
  */
 export const planWorkTurnSchema = EffectSchema.Struct({
   turnId: EffectSchema.String,
@@ -314,16 +200,13 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   /** Epoch milliseconds the turn ended; absent while it runs, and from a service older than it. */
   endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
   state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
-  /** Whether older parts than these were left out. */
+  /** Whether older parts than the journal's were left out. */
   earlierOmitted: EffectSchema.Boolean,
-  parts: EffectSchema.Array(planWorkPartSchema),
-  /** The turn's own journal, as the agent tab reads one; absent from a service older than it. */
-  journal: EffectSchema.optionalKey(planWorkJournalSchema),
-  /** The workers the turn handed work to, in the order it started them; absent from a service older than it. */
-  workers: EffectSchema.optionalKey(
-    EffectSchema.Array(planWorkWorkerSchema).check(
-      EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),
-    ),
+  /** The turn's own journal, as the agent tab reads one. */
+  journal: planWorkJournalSchema,
+  /** The workers the turn handed work to, in the order it started them. */
+  workers: EffectSchema.Array(planWorkWorkerSchema).check(
+    EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),
   ),
   /**
    * The developer's spoken lines the turn took as its ask, by the ids the

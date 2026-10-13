@@ -7,9 +7,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/co
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
-  PLAN_WORK_PART,
   PLAN_WORK_STATE,
-  PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanCode,
   type PlanCodeShowing,
@@ -314,7 +312,8 @@ const TURN: PlanWorkTurn = {
   startedAt: 1,
   state: PLAN_WORK_STATE.DONE,
   earlierOmitted: false,
-  parts: [],
+  journal: [],
+  workers: [],
 };
 
 /** The open plan's calls read back: none, and one with a line said on it. */
@@ -372,14 +371,12 @@ function _startedAgent(
 ): PlanWorkTurn {
   return {
     ...TURN,
-    parts: [
+    journal: [
       {
-        type: PLAN_WORK_PART.TOOL,
-        id: "call-start-1",
-        name: "start_coding_agent",
-        tool: PLAN_WORK_TOOL.START_AGENT,
-        state,
-        input: "{}",
+        type: "tool-start_coding_agent",
+        toolCallId: "call-start-1",
+        state: state === PLAN_WORK_STATE.DONE ? "output-available" : "input-available",
+        input: {},
       },
     ],
   };

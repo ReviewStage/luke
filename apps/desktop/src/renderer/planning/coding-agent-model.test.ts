@@ -38,7 +38,6 @@ import {
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
-import { CALL_KIND } from "./turn-rows";
 
 function message(id: string, text: string): CodingAgentMessage {
   return { id, role: "assistant", parts: [{ type: "text", text }] };
@@ -133,7 +132,6 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
       input: { command: "pnpm check" },
       output: undefined,
       errorText: "exit 1",
-      said: undefined,
     },
     {
       kind: AGENT_PART.TOOL,
@@ -143,7 +141,6 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
       input: {},
       output: "ok",
       errorText: undefined,
-      said: undefined,
     },
     { kind: AGENT_PART.TEXT, text: "Done." },
     { kind: AGENT_PART.OTHER },
@@ -456,59 +453,8 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([plan, opened, line], false), "thinking");
 });
 
-test("a part says what its wire read its call as, and one naming a kind this build does not know says nothing; a planning worker is a delegation, and a start names the agent it began only once it answered one", () => {
-  const [worker, started, refused, unknown, coding] = agentParts({
-    id: "turn-1",
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [
-      {
-        type: "tool-worker",
-        toolCallId: "w",
-        state: TOOL_STATE.INPUT_AVAILABLE,
-        input: { message: "Compare the queues." },
-        said: { kind: CALL_KIND.WORKER, subject: "Compare the queues." },
-      },
-      {
-        type: "tool-start_coding_agent",
-        toolCallId: "s",
-        state: TOOL_STATE.OUTPUT_AVAILABLE,
-        input: { task: "Fix the invite emails." },
-        output: { status: "accepted", agent: { id: "agent-1" } },
-        said: { kind: CALL_KIND.START_AGENT, subject: "Fix the invite emails." },
-      },
-      {
-        type: "tool-start_coding_agent",
-        toolCallId: "r",
-        state: TOOL_STATE.OUTPUT_AVAILABLE,
-        input: {},
-        output: { status: "rejected", reason: "The plan has no repository." },
-        said: { kind: CALL_KIND.START_AGENT },
-      },
-      {
-        type: "tool-summon",
-        toolCallId: "u",
-        state: TOOL_STATE.OUTPUT_AVAILABLE,
-        input: {},
-        said: { kind: "summon", subject: "a reviewer" },
-      },
-      { type: "tool-bash", toolCallId: "b", state: TOOL_STATE.OUTPUT_AVAILABLE, input: {} },
-    ],
-  });
-  assert.ok(worker?.kind === AGENT_PART.TOOL && started?.kind === AGENT_PART.TOOL);
-  assert.ok(refused?.kind === AGENT_PART.TOOL && unknown?.kind === AGENT_PART.TOOL);
-  assert.ok(coding?.kind === AGENT_PART.TOOL);
-  assert.deepEqual(worker.said, { kind: CALL_KIND.WORKER, subject: "Compare the queues." });
-  assert.equal(delegates(worker), true);
-  assert.equal(delegates(coding), false);
-  assert.equal(startedAgentOf(started), "agent-1");
-  assert.equal(startedAgentOf(refused), undefined);
-  assert.equal(startedAgentOf(worker), undefined);
-  assert.equal(unknown.said, undefined);
-  assert.equal(coding.said, undefined);
-});
-
 test("a planning transcript's raw parts read as the agent tab reads them: eve's own worker call is a delegation, and a start names the agent it began once it answered one", () => {
-  const [worker, started] = agentParts({
+  const [worker, started, refused, coding] = agentParts({
     id: "turn-raw",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [
@@ -526,9 +472,21 @@ test("a planning transcript's raw parts read as the agent tab reads them: eve's 
         input: { task: "Fix the invite emails." },
         output: { status: "accepted", agent: { id: "agent-9" } },
       },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "r",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: {},
+        output: { status: "rejected", reason: "The plan has no repository." },
+      },
+      { type: "tool-bash", toolCallId: "b", state: TOOL_STATE.OUTPUT_AVAILABLE, input: {} },
     ],
   });
   assert.ok(worker?.kind === AGENT_PART.TOOL && started?.kind === AGENT_PART.TOOL);
+  assert.ok(refused?.kind === AGENT_PART.TOOL && coding?.kind === AGENT_PART.TOOL);
   assert.equal(delegates(worker), true);
+  assert.equal(delegates(coding), false);
   assert.equal(startedAgentOf(started), "agent-9");
+  assert.equal(startedAgentOf(refused), undefined);
+  assert.equal(startedAgentOf(worker), undefined);
 });

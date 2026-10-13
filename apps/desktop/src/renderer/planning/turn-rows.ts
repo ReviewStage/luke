@@ -1,9 +1,9 @@
 /**
  * turn-rows.ts -- what every transcript's turn shares: how its calls are named on their rows, and how its rows fold.
  *
- * Two tabs draw a model's turns, the Call tab from the planning model's
- * parts and an agent's tab from a coding agent's stored message, and each
- * reads its own wire into blocks of its own. What they share is decided
+ * Two tabs draw a model's turns, the Call tab the planning model's and an
+ * agent's tab a coding agent's, each from the message its journal stored,
+ * and each reads it into blocks of its own. What they share is decided
  * here, so the two never drift: a call is one of a few kinds, each with
  * the verb its row says and whether its subject is code; and a turn's
  * blocks fold the way the Call tab folds them (Stagent's walk, Stage's chat
@@ -21,7 +21,7 @@
  * is not folded: its reasoning and words stand as they did while it moved.
  */
 
-/** The kinds of call a row can be, across both wires. */
+/** The kinds of call a row can be, across both tabs. */
 export const CALL_KIND = {
   COMMAND: "command",
   /** A command an agent ran on the developer's own Mac (`run_on_mac`), drawn as a command with where it ran beside it. */
@@ -56,20 +56,6 @@ export const CALL_KIND = {
 } as const;
 
 export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
-
-/**
- * A call as the wire that carried it already read it: its kind, the one
- * input a reader looks for first, and the words a command was said to be
- * for. The planning model's turns arrive read this way (`work-model.ts`),
- * so their calls say it beside the SDK's own part, and the row draws what
- * the wire said rather than reading the tool's input again; a coding
- * agent's calls say nothing, and their rows are read from the part.
- */
-export interface SaidCall {
-  readonly kind: CallKind;
-  readonly subject?: string;
-  readonly description?: string;
-}
 
 /** How a call of each kind says what it did, and whether its subject is code (a command, a path) rather than words. */
 export const CALL_WORDS = {
