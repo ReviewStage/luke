@@ -30,6 +30,8 @@ import {
   EVE_DELEGATION_INPUT,
   EVE_DELEGATION_TOOL,
   EVE_SKILL_TOOL,
+  PLANNER_DELEGATE_TOOL,
+  PLANNER_DELEGATION_TOOLS,
 } from "../hosted/brain-host/planning.js";
 import {
   LIST_CODING_AGENTS_TOOL,
@@ -75,6 +77,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [QUEUE_QUESTION_TOOL.name, PLAN_WORK_TOOL.QUEUE_QUESTION],
   [WITHDRAW_QUESTION_TOOL.name, PLAN_WORK_TOOL.WITHDRAW_QUESTION],
   [EVE_DELEGATION_TOOL.WORKER, PLAN_WORK_TOOL.WORKER],
+  [PLANNER_DELEGATE_TOOL.name, PLAN_WORK_TOOL.WORKER],
   [EVE_DELEGATION_TOOL.TASK_WAIT, PLAN_WORK_TOOL.WORKER_WAIT],
   [EVE_DELEGATION_TOOL.TASK_CANCEL, PLAN_WORK_TOOL.WORKER_CANCEL],
   [LIST_CODING_AGENTS_TOOL.name, PLAN_WORK_TOOL.LIST_AGENTS],
@@ -93,6 +96,25 @@ const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWithdrawalInput = Schema.is(WITHDRAW_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
+const isDelegateInput = Schema.is(PLANNER_DELEGATE_TOOL.storedInputSchema);
+
+/** What a worker call carries, in the one shape the tab reads: the message the worker was handed, and the task a call sent more to. */
+type WorkerInput = { readonly message: string; readonly taskId?: string | null };
+
+/**
+ * A worker call's input in that shape, whichever name the call was made
+ * under: eve's own \`worker\` carries it as it is, and the planning model's
+ * \`delegate\` names the message its task, so every desktop reads the one
+ * field it always has.
+ */
+function workerInputOf(input: StoredToolPart["input"]): WorkerInput | undefined {
+  if (isWorkerInput(input)) return input;
+  if (!isDelegateInput(input)) return undefined;
+  return {
+    message: input.task,
+    ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
+  };
+}
 const isCancelInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.TASK_CANCEL]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
@@ -149,11 +171,9 @@ function cut(text: string, max: number): string {
  * so the JSON the cut message makes stays within the bound.
  */
 function inputOf(tool: PlanWorkTool, part: StoredToolPart): string {
-  const { input } = part;
   const max = PLAN_WORK_BOUNDS.TEXT_CHARS;
-  if (tool !== PLAN_WORK_TOOL.WORKER || !isWorkerInput(input)) {
-    return cut(JSON.stringify(input ?? {}, null, 2), max);
-  }
+  const input = tool === PLAN_WORK_TOOL.WORKER ? workerInputOf(part.input) : undefined;
+  if (input === undefined) return cut(JSON.stringify(part.input ?? {}, null, 2), max);
   const { message } = input;
   const frame = JSON.stringify({ ...input, message: "" }, null, 2).length;
   const escapes = JSON.stringify(message).length - message.length - 2;
@@ -176,7 +196,7 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;
   if (tool === PLAN_WORK_TOOL.QUEUE_QUESTION && isQuestionInput(input)) return input.question;
   if (tool === PLAN_WORK_TOOL.WITHDRAW_QUESTION && isWithdrawalInput(input)) return input.question;
-  if (tool === PLAN_WORK_TOOL.WORKER && isWorkerInput(input)) return input.message;
+  if (tool === PLAN_WORK_TOOL.WORKER) return workerInputOf(input)?.message;
   if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
   if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
   if (tool === PLAN_WORK_TOOL.START_AGENT && isAgentStartInput(input)) return input.task;
@@ -357,14 +377,14 @@ function workerCallsIn(journals: readonly (StoredUIMessage | undefined)[]): Stor
   return journals.flatMap((journal) =>
     (journal?.parts ?? [])
       .filter(isStoredToolPart)
-      .filter((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER),
+      .filter((part) => PLANNER_DELEGATION_TOOLS.has(storedToolName(part))),
   );
 }
 
 /** The task a worker call sent more work to, which its input names; nothing for a call that started one. */
 function sentTaskOf(part: StoredToolPart): string | undefined {
   const { input } = part;
-  return isWorkerInput(input) ? (input.taskId ?? undefined) : undefined;
+  return workerInputOf(input)?.taskId ?? undefined;
 }
 
 /** The task a worker call started, read off its receipt; nothing before it answered or where it started none. */

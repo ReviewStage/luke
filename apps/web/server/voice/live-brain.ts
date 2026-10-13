@@ -3,11 +3,7 @@ import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
 import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
-import {
-  listJournals,
-  listJournalsCalling,
-  type SpokenAskRow,
-} from "@sidecar/database/models/message-reads";
+import { listJournals, type SpokenAskRow } from "@sidecar/database/models/message-reads";
 import type { StoreWriter } from "@sidecar/database/models/writer";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
@@ -51,9 +47,10 @@ import {
   type StopOutcome,
   stopAsk,
 } from "../hosted/brain-ask.js";
-import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
+import { PLANNER_DELEGATION_TOOLS, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { subagentRecordsByCall } from "../hosted/child-models.js";
+import { plannerDelegationJournalsOf } from "../hosted/plan-work-store.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
@@ -289,7 +286,7 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
 function delegatedOf(journal: StoredUIMessage | undefined): boolean {
   return (journal?.parts ?? [])
     .filter(isStoredToolPart)
-    .some((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER);
+    .some((part) => PLANNER_DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
 /** The calls about the plan's questions rather than its work. */
@@ -533,18 +530,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * The conversation's journals that call the worker, where a task an
    * earlier turn started was started; none where they could not be read.
    */
-  const workerJournalsOf = Effect.fnUntraced(function* (conversationId: string) {
-    const read = yield* listJournalsCalling(
-      options.userId,
-      conversationId,
-      HOSTED_TOOL_SET,
-      EVE_DELEGATION_TOOL.WORKER,
-    ).pipe(
+  const workerJournalsOf = (conversationId: string) =>
+    plannerDelegationJournalsOf(options.userId, conversationId).pipe(
       Effect.tapError(logStoreFailure),
-      Effect.orElseSucceed(() => undefined),
+      Effect.orElseSucceed((): StoredUIMessage[] => []),
     );
-    return read?.ok ? read.value.map((row) => row.message) : [];
-  });
 
   /**
    * A turn still under way, as the look answers it: running inside the

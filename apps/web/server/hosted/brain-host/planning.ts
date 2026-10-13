@@ -199,9 +199,9 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 ### Working in parallel
 
-You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's repository. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find. The worker is your own help, never the agent the developer asks for: when they ask for an agent, start a coding agent as below.
+You can hand work to the worker with delegate: a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's repository. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find. The worker is your own help, never the agent the developer asks for: when they ask for an agent, start a coding agent as below.
 
-Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message. The developer reads the message too, so write it as short Markdown in complete sentences, never clipped notes: the objective as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its taskId and the new message; to stop one whose job no longer matters, use task_cancel.
+Each call starts a worker that knows nothing of this conversation, so say everything it needs in the task. The developer reads the task too, so write it as short Markdown in complete sentences, never clipped notes: the objective as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call delegate again with its taskId and the new task; to stop one whose job no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -226,7 +226,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the plan's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the plan's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
-- worker does a job in the background, as above.
+- delegate hands a job to the worker in the background, as above.
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
@@ -528,7 +528,31 @@ const SUBAGENT_CALL_INPUT = Schema.Struct({
   taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
-/** What `task_wait` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
+/**
+ * The planning model's own delegation (`eve/tools/delegate.ts`): one job
+ * handed to the worker, which always runs in the background, because a
+ * foreground wait would hold the spoken turn silent for the worker's whole
+ * run; and what a stored call carries, the task and the id eve adds to a
+ * call that sends a running worker more.
+ */
+export const PLANNER_DELEGATE_TOOL = {
+  name: AGENT_TOOL.DELEGATE,
+  description:
+    "Hand one job to the worker, a subagent that runs in the background while you keep working: research on the public Internet, reading the plan's repository, or both. Returns a receipt at once; a short summary with its sources arrives later as a task result. Never wait for it.",
+  inputSchema: Schema.Struct({ task: Schema.String }),
+  storedInputSchema: Schema.Struct({
+    task: Schema.String,
+    taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+} as const;
+
+/** The planning model's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\` subagent tool, which earlier transcripts name. */
+export const PLANNER_DELEGATION_TOOLS: ReadonlySet<string> = new Set([
+  PLANNER_DELEGATE_TOOL.name,
+  EVE_DELEGATION_TOOL.WORKER,
+]);
+
+/** What \`task_wait\` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
 const TASK_WAIT_INPUT = Schema.Struct({
   timeoutSeconds: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
@@ -597,6 +621,10 @@ export function planningToolSet(): ToolSet {
     [
       EVE_SKILL_TOOL.NAME,
       wireValidatedTool(`eve's own ${EVE_SKILL_TOOL.NAME} tool`, EVE_SKILL_TOOL.INPUT),
+    ],
+    [
+      PLANNER_DELEGATE_TOOL.name,
+      wireValidatedTool(PLANNER_DELEGATE_TOOL.description, PLANNER_DELEGATE_TOOL.storedInputSchema),
     ],
     ...connectionToolEntries(),
   ]);

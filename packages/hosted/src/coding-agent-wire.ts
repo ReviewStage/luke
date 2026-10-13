@@ -568,6 +568,8 @@ export const codingAgentDelegationInputSchema = EffectSchema.Struct({
   task: EffectSchema.String,
   model: EffectSchema.optionalKey(EffectSchema.String),
   effort: EffectSchema.optionalKey(EffectSchema.String),
+  /** Whether the agent keeps working while the worker runs rather than waiting for its answer; waiting where unset. */
+  background: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */

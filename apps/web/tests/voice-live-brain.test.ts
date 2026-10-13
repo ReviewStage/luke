@@ -73,6 +73,7 @@ import {
 import { stampedEveEvent } from "./support/eve-events";
 import {
   FIRST_EVE_TURN,
+  parkedDelegateTurn,
   parkedTurn,
   resumedTurn,
   STARTING_WORKER_CALL,
@@ -1661,6 +1662,23 @@ const parkedOnTask = Effect.fnUntraced(function* (target: ConversationTarget, f:
   return { runId: accepted.runId, standing };
 });
 
+/** A turn parked on the task the planning model's own \`delegate\` started, played up to the park and found by the follow. */
+const parkedOnDelegate = Effect.fnUntraced(function* (target: ConversationTarget, f: ClockStand) {
+  const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
+  if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
+  const standing: RelayStanding = {
+    sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+    target,
+    turn: BRAIN_HOST_TURN.SPOKEN,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+  yield* Effect.promise(() => play(parkedDelegateTurn(FIRST_EVE_TURN, 0, NOW), standing));
+  yield* f.release;
+  yield* f.arrived(2);
+  return { standing };
+});
+
 /** The follow's word on a look past the plain bound, as the events and reports show it. */
 function toldSoFar(f: ClockStand): readonly string[] {
   return f.events.map((event) =>
@@ -1671,6 +1689,34 @@ function toldSoFar(f: ClockStand): readonly string[] {
         : event.kind,
   );
 }
+
+it.effect(
+  "a turn parked on a task its delegate started is followed past the plain bound, as one parked on eve's own worker is, and the findings that land after it are spoken",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const { standing } = yield* parkedOnDelegate(target, f);
+
+      yield* f.polls(POLLS_TO_FOLLOW_BOUND + 1);
+      assert.deepEqual(toldSoFar(f), [
+        LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        "The worker is on it.",
+      ]);
+      assert.deepEqual(f.reports, []);
+
+      yield* Effect.promise(() => play(resumedTurn(FIRST_EVE_TURN, 0, 2, NOW), standing));
+      yield* f.polls(1);
+      yield* f.arrived(4);
+      assert.deepEqual(toldSoFar(f), [
+        LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        "The worker is on it.",
+        "Found it.",
+        `${LIVE_BRAIN_RUN_EVENT.ENDED}:${LIVE_BRAIN_RUN_END.COMPLETED}`,
+      ]);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
 
 it.effect(
   "a turn parked on the worker's task is followed past the plain bound, and the findings that land after it are spoken",
