@@ -72,12 +72,49 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
  * on the migration that drops it. Drizzle names every declared column in an
  * insert, and a deployment migrates while the one before it still serves, so
  * a column leaves its module one deployment before it leaves the database.
- * An entry goes in the same PR as its drop, which the last test below holds
+ * An entry goes in the same PR as its drop, which the last tests below hold
  * by failing on an entry the database no longer carries.
  */
 const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // Migration 0088 moved the fixed kinds into `blocks` and `response`.
   ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
+  // Nothing reads or writes these: the preference outlived the workspace
+  // picker, and the rest outlived observed sessions, the event ledger, the
+  // completion sweep, and the memory flush.
+  ["account_preference", new Set(["default_workspace_provider"])],
+  [
+    "conversations",
+    new Set([
+      "provider_id",
+      "provider_session_id",
+      "workspace",
+      "spawned_by_message_id",
+      "next_event_seq",
+      "memory_flush_operation_id",
+      "memory_flush_outcome",
+      "memory_flushed_at",
+      "completion_delivered_at",
+    ]),
+  ],
+]);
+
+/**
+ * Tables the database still carries that no module declares, on the same
+ * terms as `PENDING_DROP`: nothing reads or writes them, and they leave the
+ * database one deployment after they left their modules.
+ */
+const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([
+  "account_workspace_preference",
+  "devices",
+  "events",
+  "introduction_usage",
+  "observation_pass",
+  "provider_cursors",
+  "provider_key",
+  "roster_snapshot",
+  "transcript_mark",
+  "workspace_embedding",
+  "workspace_file",
 ]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
@@ -220,7 +257,9 @@ test("the schema modules and the migrated database hold the same tables", () => 
   assert.deepEqual(
     {
       declaredAndNotMigrated: surplus(DECLARED.keys(), MIGRATED),
-      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED),
+      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED).filter(
+        (name) => !PENDING_DROP_TABLES.has(name),
+      ),
     },
     { declaredAndNotMigrated: [], migratedAndNotDeclared: [] },
   );
@@ -286,4 +325,8 @@ test("every column waiting on its drop is still in the migrated database", () =>
     }
   }
   assert.deepEqual(dropped, []);
+});
+
+test("every table waiting on its drop is still in the migrated database", () => {
+  assert.deepEqual(surplus(PENDING_DROP_TABLES, MIGRATED), []);
 });

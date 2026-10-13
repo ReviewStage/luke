@@ -6,12 +6,7 @@ export {
   UNKNOWN_ACTION_STATUS,
   type UnknownActionResult,
 } from "./action-result.js";
-export {
-  CONVERSATION_EVENT_KIND,
-  type ConversationEventKind,
-  RATING_WORD,
-  type RatingWord,
-} from "./conversation-event.js";
+export { RATING_WORD, type RatingWord } from "./conversation-event.js";
 export {
   HTTP_METHOD,
   HTTP_STATUS,

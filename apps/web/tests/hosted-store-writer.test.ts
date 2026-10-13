@@ -285,15 +285,12 @@ async function storedTurn(turnId: string) {
   return readTurnById(database.run, turnId);
 }
 
-const CountersRowSchema = Schema.Struct({
-  message: EpochMillisColumnSchema,
-  event: EpochMillisColumnSchema,
-});
+const CountersRowSchema = Schema.Struct({ message: EpochMillisColumnSchema });
 
 async function counters(target: ConversationTarget) {
   const [row] = await database.run(
     db
-      .select({ message: conversations.nextMessageSeq, event: conversations.nextEventSeq })
+      .select({ message: conversations.nextMessageSeq })
       .from(conversations)
       .where(eq(conversations.id, target.conversationId)),
   );
@@ -476,7 +473,7 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
   assert.deepEqual(rows[0]?.metadata, TYPED_ASK);
   assert.deepEqual(rows[1]?.metadata, { author: MESSAGE_AUTHOR.BRAIN });
   assert.deepEqual(rows[1]?.parts, REPLY_PARTS);
-  assert.deepEqual(await counters(target), { message: 3, event: 1 });
+  assert.deepEqual(await counters(target), { message: 3 });
 
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual(
@@ -686,7 +683,7 @@ test("every event delivered twice, and the whole stream replayed, writes one row
     rows.map((row) => row.seq),
     [1, 2],
   );
-  assert.deepEqual(await counters(target), { message: 3, event: 1 });
+  assert.deepEqual(await counters(target), { message: 3 });
 });
 
 test("a refused call settles as an error part carrying the refusal's own reason and no output, in the shape the turn's projection keeps", async () => {
@@ -929,7 +926,7 @@ test("a sequence already taken under the counter is the retry signal: the write 
       [before.message + 1, askId],
     ],
   );
-  assert.deepEqual(await counters(target), { message: before.message + 2, event: 1 });
+  assert.deepEqual(await counters(target), { message: before.message + 2 });
 });
 
 test("a message the reader would refuse is refused at the write, with the reader's own word and path, and leaves no row", async () => {
@@ -1522,7 +1519,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     [stream.turnId, 5, stream.turnId, true],
   ]);
   assert.deepEqual(rows[3]?.parts, REPLY_PARTS);
-  assert.deepEqual(await counters(target), { message: 6, event: 1 });
+  assert.deepEqual(await counters(target), { message: 6 });
 
   // The reading of the answer lands after it, read from the journal where it now stands.
   assert.ok(Result.isSuccess(await spoken("reading", 9_000)));
@@ -1545,7 +1542,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     (await storedMessages(target)).map((row) => row.seq),
     [1, 3, 4, 5, 6],
   );
-  assert.deepEqual(await counters(target), { message: 7, event: 1 });
+  assert.deepEqual(await counters(target), { message: 7 });
 });
 
 test("Luke's words about an ask said before the ask learned its turn follow the ask's line into the turn at the received message, in the order said, and never stand as a group of their own", async () => {
