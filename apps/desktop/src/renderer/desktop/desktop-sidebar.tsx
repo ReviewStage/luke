@@ -180,7 +180,7 @@ interface PinnedRow {
 function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
   const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
   const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
-    const plan = plans.plans.find((each) => each.id === pin.plan);
+    const plan = plans.listed.plans.find((each) => each.id === pin.plan);
     return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
   });
   return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
@@ -601,7 +601,7 @@ function RepositorySection({
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
-  const { archived } = context.plans;
+  const { archived } = context.plans.listed;
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
@@ -714,7 +714,8 @@ export function DesktopSidebar({
   const waiting = inboxRows(plans);
   // A plan's Inbox is on show where main is told it is: open and in sight, nothing over it.
   const inboxShown = (planId: string) => plans.inboxShown === planId;
-  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  // The list is the chosen workspace's; the Inbox and the unread marks above read every plan.
+  const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, plans);
   // A pinned tab is on show where its plan is open and its column shows it:
   // an agent's in the plan's own column, any other in the side panel.
@@ -728,7 +729,9 @@ export function DesktopSidebar({
           sameTab(plans.sidePanel.tab, pin.tab)));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
-  const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  const grouped = repositoryGroups(
+    plans.listed.plans.filter((plan) => plan.pinnedAt === undefined),
+  );
   const pinnedAt = (group: RepositoryGroup) =>
     group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
   const groups = [
@@ -830,8 +833,8 @@ export function DesktopSidebar({
             </div>
           ) : null}
           {plans.signedIn &&
-          plans.plans.length === 0 &&
-          plans.archived.length === 0 &&
+          plans.listed.plans.length === 0 &&
+          plans.listed.archived.length === 0 &&
           !plans.listFailed ? (
             <p className="sidebar-note">No plans yet.</p>
           ) : null}

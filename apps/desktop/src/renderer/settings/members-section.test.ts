@@ -45,12 +45,14 @@ const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
+  active: true,
   role: WORKSPACE_ROLE.MEMBER,
 };
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
   personal: true,
+  active: true,
   role: WORKSPACE_ROLE.OWNER,
 };
 

@@ -52,12 +52,14 @@ const FIXTURE_PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
   personal: true,
+  active: true,
   role: WORKSPACE_ROLE.OWNER,
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
   name: "acme",
   personal: false,
+  active: true,
   role: WORKSPACE_ROLE.MEMBER,
 };
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_PERSONAL, FIXTURE_TEAM];
