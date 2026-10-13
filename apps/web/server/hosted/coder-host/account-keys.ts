@@ -13,6 +13,7 @@ import {
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
 import type { WebStoreRun } from "../../runtime.js";
+import type { MeterSeams } from "../agent-runtime/meter.js";
 import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 
 /**
@@ -32,6 +33,8 @@ import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 /** What the read is handed: Luke's own keys, the deployment's ring as its environment holds it, and the edge's runner for a report. */
 export interface AccountKeysSeams {
   readonly luke: LukeKeys;
+  /** The account's meter, which Luke's own keys carry (`../agent-runtime/meter.ts`). */
+  readonly meter: (userId: string) => MeterSeams;
   readonly ring: Redacted.Redacted | undefined;
   readonly run: WebStoreRun;
 }
@@ -47,7 +50,7 @@ function keyOf(
   if (row === undefined) {
     const luke =
       provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? seams.luke.anthropic : seams.luke.openAi;
-    return luke === undefined ? undefined : { key: luke };
+    return luke === undefined ? undefined : { key: luke, meter: seams.meter(userId) };
   }
   if (ring === undefined) return PROVIDER_KEY_UNREADABLE;
   const opened = openProviderKey(ring, { userId, provider }, row);

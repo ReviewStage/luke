@@ -12,7 +12,7 @@ import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
-import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
+import { coderModel, type LukeKeys, titleModel } from "../server/hosted/coder-host/model";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -20,7 +20,8 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * real dialect and spent against a provider faked at its fetch: the
  * account's own key where it saved one and Luke's where it did not, a step
  * refused rather than moved onto Luke's key where the account's cannot be
- * read, and the row's status kept as the provider answers the account's key.
+ * read, the row's status kept as the provider answers the account's key,
+ * and every step on Luke's key counted on the account's meter.
  *
  * Synthetic keys and accounts; the key-encryption keys are fixed bytes
  * written for this file.
@@ -95,6 +96,17 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
   return userId;
 }
 
+/** The accounts the meter counted a use for, one entry per use. */
+const counted: string[] = [];
+
+/** The meter as the deployment's counts a use, recorded here. */
+const meter = (userId: string) => ({
+  spend: async () => {
+    counted.push(userId);
+  },
+  report: () => undefined,
+});
+
 /** One step's model for the account, as the host would select it, over the provider given. */
 async function stepModel(
   userId: string,
@@ -106,6 +118,7 @@ async function stepModel(
   const keys = await database.run(
     accountProviderKeys(userId, {
       luke: LUKE,
+      meter,
       ring: ring === undefined ? undefined : Redacted.make(ring),
       run: database.run,
     }),
@@ -292,4 +305,36 @@ test("a status written for a key since replaced marks nothing of its successor",
     await statusOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC),
     PROVIDER_KEY_STATUS.VERIFIED,
   );
+});
+
+test("a step on Luke's key counts the account's meter once, and a step on the account's own key counts nothing", async () => {
+  const userId = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+  });
+  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
+  const before = counted.filter((each) => each === userId).length;
+
+  // Its own Anthropic key is the account's to pay for.
+  await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch));
+  assert.equal(counted.filter((each) => each === userId).length, before);
+
+  // It saved no OpenAI key, so the step runs on Luke's and is counted, even one the provider refuses.
+  const openAi = provider([jsonResponse({ error: { message: "fixture: stop here" } }, 500)]);
+  await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, openAi.fetch));
+  assert.equal(counted.filter((each) => each === userId).length, before + 1);
+});
+
+test("a title generated on Luke's key counts the account's meter once", async () => {
+  const userId = await accountWithKeys({});
+  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
+  const model = titleModel(LUKE, meter(userId), anthropic.fetch);
+  assert.ok(model !== undefined);
+
+  await generateText({ model, prompt: "Name this.", maxRetries: 0 });
+
+  assert.deepEqual(
+    counted.filter((each) => each === userId),
+    [userId],
+  );
+  assert.deepEqual(anthropic.keys, [Redacted.value(LUKE.anthropic ?? Redacted.make(""))]);
 });

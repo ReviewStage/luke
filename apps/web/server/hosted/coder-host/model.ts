@@ -14,6 +14,7 @@ import {
 } from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
+import { type MeterSeams, meteredModel } from "../agent-runtime/meter.js";
 import { FAST_PROVIDERS, type ProviderModel, providerModelOf } from "../model-catalog.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
@@ -98,6 +99,8 @@ interface AccountKeyStanding {
 export interface ProviderKey {
   readonly key: Redacted.Redacted;
   readonly account?: AccountKeyStanding;
+  /** The account's meter, which Luke's own key carries and the account's never does (`../agent-runtime/meter.ts`). */
+  readonly meter?: MeterSeams;
 }
 
 /**
@@ -202,7 +205,7 @@ function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddle
   };
 }
 
-/** The provider's model on the key, behind the account's middleware where the key is the account's own. */
+/** The provider's model on the key, behind the account's middleware where the key is the account's own, and the meter where it is Luke's. */
 function modelOnKey(
   provider: ModelProvider,
   modelId: string,
@@ -218,15 +221,25 @@ function modelOnKey(
     provider === MODEL_PROVIDER.ANTHROPIC
       ? createAnthropic(settings)(modelId)
       : createOpenAI(settings).responses(modelId);
-  if (key.account === undefined) return model;
+  if (key.account === undefined) {
+    return key.meter === undefined ? model : meteredModel(model, key.meter);
+  }
   return wrapLanguageModel({ model, middleware: accountKeyMiddleware(key.account) });
 }
 
-/** The model an agent's title is generated on, or nothing where the deployment holds no Anthropic key, which leaves agents untitled. */
-export function titleModel(keys: LukeKeys): LanguageModel | undefined {
+/** The model an agent's title is generated on, on Luke's key behind the account's meter, or nothing where the deployment holds no Anthropic key, which leaves agents untitled. */
+export function titleModel(
+  keys: LukeKeys,
+  meter: MeterSeams,
+  fetch?: typeof globalThis.fetch,
+): LanguageModel | undefined {
   if (keys.anthropic === undefined) return undefined;
   // The key is revealed here alone, into the SDK client that puts it on its requests.
-  return createAnthropic({ apiKey: Redacted.value(keys.anthropic) })(AGENT_TITLE_MODEL_ID);
+  const settings = {
+    apiKey: Redacted.value(keys.anthropic),
+    ...(fetch === undefined ? undefined : { fetch }),
+  };
+  return meteredModel(createAnthropic(settings)(AGENT_TITLE_MODEL_ID), meter);
 }
 
 /** The choice as a step runs it, or why it cannot: a provider Luke does not run, a fast version Luke cannot ask its provider for, an account's key that cannot be read, or no key at all. */

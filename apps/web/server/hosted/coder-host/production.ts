@@ -1,10 +1,12 @@
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
+import { spendHostedMeter } from "@sidecar/database/models/quota";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
+import { accountMeter } from "../agent-runtime/meter.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
@@ -37,8 +39,8 @@ export interface CoderHostSeams {
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
   readonly keys: (userId: string) => PlanStoreEffect<ProviderKeys>;
-  /** The model an agent's title is generated on; nothing leaves every agent untitled. */
-  readonly titleModel: () => LanguageModel | undefined;
+  /** The model one account's agent's title is generated on, behind that account's meter; nothing leaves every agent untitled. */
+  readonly titleModel: (userId: string) => LanguageModel | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of the providers. */
   readonly scriptedModel: () => boolean;
   readonly now: () => number;
@@ -59,6 +61,10 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
       anthropic: environment.anthropicKey,
       openAi: environment.openAiKey,
     };
+    // Every inference on Luke's key is counted on the account's meter, a coding agent's as the brain's is.
+    const spend = (userId: string) =>
+      run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() })));
+    const meter = (userId: string) => accountMeter(spend, userId);
     return {
       writer: () => writer,
       ownership: {
@@ -74,8 +80,13 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
         }),
       keys: (userId) =>
-        accountProviderKeys(userId, { luke, ring: environment.providerKeyEncryptionKeys, run }),
-      titleModel: () => titleModel(luke),
+        accountProviderKeys(userId, {
+          luke,
+          meter,
+          ring: environment.providerKeyEncryptionKeys,
+          run,
+        }),
+      titleModel: (userId) => titleModel(luke, meter(userId)),
       scriptedModel: () =>
         process.env[CODER_ENVIRONMENT.MODEL_FIXTURE] === CODER_MODEL_FIXTURE.SCRIPTED,
       now: () => Date.now(),
