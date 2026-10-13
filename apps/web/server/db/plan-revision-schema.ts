@@ -32,8 +32,8 @@ export const planRevision = pgTable(
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The call the notetaker wrote it on, as `voice_sessions.live_session_id` names it; null for any other writer. */
     liveSessionId: text("live_session_id"),
-    /** The plan's whole text after the revision; every row holds one, and the column is made not null with the drop of the fixed template's columns. */
-    document: text("document"),
+    /** The plan's whole text after the revision. */
+    document: text("document").notNull(),
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),
     /** The revision's first save. */
