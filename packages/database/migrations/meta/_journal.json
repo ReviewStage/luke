@@ -666,6 +666,13 @@
       "when": 1791440000000,
       "tag": "0095_plan_drop_template_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1791863519508,
+      "tag": "20261013035159_account_plan_template_revision",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,10 @@
 import { Schema as EffectSchema } from "effect";
+import {
+  PLAN_HISTORY_BOUNDS,
+  planRevisionAnswerSchema,
+  planRevisionLineSchema,
+  planRevisionSeqSchema,
+} from "./plan-wire.js";
 
 /**
  * plan-document-template.ts -- the Markdown an account's new plans start from, and how `/api/account/plan-template` reads and writes it.
@@ -14,6 +20,12 @@ import { Schema as EffectSchema } from "effect";
  * developer and Luke both read: nothing draws them muted and no code replaces
  * them. Nothing reads the template to start a plan yet; that waits on plans
  * becoming one document (`docs/PLANNING.md`, "The fixed template").
+ *
+ * Every write that changes the template is kept as a revision, read and
+ * restored the way a plan's are: `GET /api/account/plan-template/revisions`
+ * a page at a time, newest first, `GET .../revisions/{seq}` one revision
+ * beside the one before it, and `POST .../revisions/{seq}/restore` puts it
+ * back as a revision of its own, answered as a `PUT` is.
  */
 
 export const PLAN_TEMPLATE_BOUNDS = {
@@ -73,3 +85,41 @@ export type PlanTemplateAnswer = typeof planTemplateAnswerSchema.Type;
 export const planTemplateWriteRequestSchema = EffectSchema.Struct({
   template: EffectSchema.NullOr(planTemplateTextSchema),
 });
+
+/**
+ * One revision of the template as its version history lists it: a plan's
+ * revision line, whose writer is the developer or, for the template as it
+ * stood before its history began, `earlier`, and `default` where the
+ * revision is the built-in default rather than words of the account's own: a
+ * reset, or the default the account held when its history began.
+ */
+export const planTemplateRevisionLineSchema = EffectSchema.Struct({
+  ...planRevisionLineSchema.fields,
+  default: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+});
+
+export type PlanTemplateRevisionLine = typeof planTemplateRevisionLineSchema.Type;
+
+/**
+ * A page of the template's history (GET `/api/account/plan-template/revisions`),
+ * the newest first, before the revision the `before` query names where it
+ * names one; `earlier` is what the next older page is read before, absent on
+ * the oldest.
+ */
+export const planTemplateRevisionsAnswerSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(planTemplateRevisionLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_HISTORY_BOUNDS.PAGE),
+  ),
+  earlier: EffectSchema.optionalKey(planRevisionSeqSchema),
+});
+
+export type PlanTemplateRevisionsAnswer = typeof planTemplateRevisionsAnswerSchema.Type;
+
+/**
+ * One revision's content (GET `/api/account/plan-template/revisions/{seq}`):
+ * the template after it and before it, null for the first, as a plan's
+ * revision answers it, the default drawn as the default's words.
+ */
+export const planTemplateRevisionAnswerSchema = planRevisionAnswerSchema;
+
+export type PlanTemplateRevisionAnswer = typeof planTemplateRevisionAnswerSchema.Type;

@@ -52,6 +52,14 @@
     "dest": "/api/default.js?route=plans/plan&id=$1"
   },
   {
+    "src": "/api/account/plan-template/revisions/([^/]+)/restore",
+    "dest": "/api/default.js?route=account/plan-template/restore&seq=$1"
+  },
+  {
+    "src": "/api/account/plan-template/revisions/([^/]+)",
+    "dest": "/api/default.js?route=account/plan-template/revision&seq=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
   },
@@ -102,6 +110,10 @@
   {
     "src": "/api/account/plan-template",
     "dest": "/api/default.js?route=account/plan-template"
+  },
+  {
+    "src": "/api/account/plan-template/revisions",
+    "dest": "/api/default.js?route=account/plan-template/revisions"
   },
   {
     "src": "/api/account/preferences",
