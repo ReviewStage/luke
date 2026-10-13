@@ -831,18 +831,6 @@ test("on the call standing now, Luke's work stands under the line heard asking f
   );
 });
 
-test("a turn asked aloud whose line is not on screen still leaves its answer to what Luke said", () => {
-  const container = mounted(
-    callTab({
-      region: askingCall(true),
-      turns: [readingTurn("turn-1", PLAN_WORK_STATE.DONE, ["row-not-heard"])],
-      callLive: true,
-    }),
-  );
-  assert.equal(readDown(container).at(-1), "luke's work");
-  assert.equal(container.textContent?.includes("Removal already checks for an admin."), false);
-});
-
 test("a turn no line asked for keeps its words, since nothing said them aloud, and stands where it started", () => {
   const container = mounted(
     callTab({

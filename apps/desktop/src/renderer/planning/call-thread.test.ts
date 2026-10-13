@@ -51,7 +51,7 @@ function turn(
   return { key, startedAt, asked, askedAt, turn: key };
 }
 
-/** The thread as a reader takes it in: each call's lines by their words and each turn's work by its key, marked spoken where it was asked aloud. */
+/** The thread as a reader takes it in: each call's lines by their words and each turn's work by its key, marked spoken where a line asked for it. */
 function read(sections: readonly ThreadSection<string>[]) {
   const said = (entry: ThreadSection<string>) =>
     entry.kind === THREAD_ITEM.WORK
@@ -110,7 +110,7 @@ test("a turn's work stands right under the line that asked for it, Luke's answer
   ]);
 });
 
-test("a turn no line on screen asked for stands where it started: in its call after the lines, between calls once its call had ended, or ahead of every call, and is spoken where it was asked aloud", () => {
+test("a turn no line on screen asked for stands where it started: in its call after the lines, between calls once its call had ended, or ahead of every call", () => {
   const thread = callThread(
     [
       call("call-1", FIRST_CALL, [line("0", USER, "Invites expire.")], FIRST_CALL + MINUTE),
@@ -125,7 +125,7 @@ test("a turn no line on screen asked for stands where it started: in its call af
   );
   assert.deepEqual(read(thread), [
     "work typed-early",
-    ["call-1", ["user: Invites expire.", "work during-first (spoken)"]],
+    ["call-1", ["user: Invites expire.", "work during-first"]],
     "work after-first",
     ["call-2", ["user: Seven days.", "work during-live"]],
   ]);
@@ -195,7 +195,7 @@ test("a line heard on the call standing now, under the voice window's own row id
         "user: Make a fully interactive page.",
         "work turn-page (spoken)",
         "assistant: Okay, I'll take a look.",
-        "work turn-elsewhere (spoken)",
+        "work turn-elsewhere",
       ],
     ],
   ]);

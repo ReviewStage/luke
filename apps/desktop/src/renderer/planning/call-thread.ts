@@ -17,9 +17,7 @@
  * whose lines are past what the transcript holds, stands where it started:
  * inside the call it started on, after its lines, while that call stands or
  * before its recorded end; between calls once it had ended, or where its
- * end is not on record; or ahead of every call. A turn asked aloud is spoken
- * wherever it stands, since Luke said its answer whether or not its line is
- * on screen.
+ * end is not on record; or ahead of every call.
  * Nothing here draws or knows what a turn is beyond its key, start, and
  * ask, so the thread takes a turn in whatever shape its wire reads it.
  */
@@ -51,7 +49,7 @@ export interface CallTurn<T> {
   readonly turn: T;
 }
 
-/** A turn's work as the thread draws it, and whether it was asked aloud, which is when Luke said its words. */
+/** A turn's work as the thread draws it, and whether a line on screen asked for it, which is when Luke said its words aloud. */
 interface ThreadWork<T> {
   readonly kind: typeof THREAD_ITEM.WORK;
   readonly turn: CallTurn<T>;
@@ -165,11 +163,10 @@ export function callThread<T>(
   const anchors = anchorsOf(calls, turns);
   const byStart = turns.toSorted((left, right) => left.startedAt - right.startedAt);
   const placed = byStart.filter((turn) => !anchors.has(turn.key));
-  // Note that a turn is spoken by its ask rather than by where it stands, so its answer is never drawn beside Luke saying it.
   const work = (turn: CallTurn<T>): ThreadWork<T> => ({
     kind: THREAD_ITEM.WORK,
     turn,
-    spoken: turn.asked.length > 0 || turn.askedAt.length > 0,
+    spoken: anchors.has(turn.key),
   });
   const between = (call: number, after: boolean) =>
     placed.filter((turn) => {
