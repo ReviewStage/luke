@@ -17,7 +17,11 @@
  * back to the preview encrypted, and the preview creates its own session in
  * its own branch database. Both ends must be running this plugin under the
  * same encryption secret, which is why production carries it too even though
- * the proxy is inert there.
+ * the proxy is inert there. And production trusts every preview's origin and
+ * the dev server's, as the plugin's docs prescribe: "Since preview and
+ * development servers redirect through production, you need to add them as
+ * `trustedOrigins`". That widens production's origin checks to any host the
+ * preview pattern matches, which is the security model the docs set out.
  */
 
 import { Redacted } from "effect";
@@ -37,7 +41,6 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
   BRANCH_HOST: "VERCEL_BRANCH_URL",
   PRODUCTION_URL: "BETTER_AUTH_URL",
   PROXY_SECRET: "BETTER_AUTH_PROXY_SECRET",
-  PROXY_TRUSTED_ORIGINS: "BETTER_AUTH_PROXY_TRUSTED_ORIGINS",
 } as const;
 
 /**
@@ -71,10 +74,21 @@ export const AUTH_SECRET_ENVIRONMENT = {
 /** Where the site answers when nothing names a deployment: the Vite dev server. */
 const LOCAL_AUTH_URL = "http://localhost:5173";
 
+/**
+ * The origins production trusts beyond its own: every Vercel preview of this
+ * project, by deployment (`luke-<hash>-stage-review.vercel.app`) or by branch
+ * (`luke-web-git-<branch>-stage-review.vercel.app`), and the dev server.
+ */
+const PROXIED_ORIGINS = ["https://luke-*-stage-review.vercel.app", LOCAL_AUTH_URL] as const;
+
 export interface AuthDeployment {
   /** The address this deployment calls itself, and the origin it trusts by default. */
   baseURL: string;
-  /** The deployment's remaining hostnames, which the base URL cannot also be. */
+  /**
+   * The origins trusted beyond the base URL: on a preview, its remaining
+   * hostnames; on production, every preview's and the dev server's, which
+   * sign in through it.
+   */
   trustedOrigins: string[];
   /**
    * The address whose callback the OAuth clients have registered. Every
@@ -84,20 +98,12 @@ export interface AuthDeployment {
    */
   productionURL: string | undefined;
   /**
-   * An encryption secret for the proxy alone, so previews never hold the
-   * secret that signs production's sessions. Without it, every proxy role is
-   * disabled rather than falling back to `BETTER_AUTH_SECRET`.
+   * The OAuth proxy's shared secret, so previews never hold the secret that
+   * signs production's sessions. Without it Better Auth derives the proxy's
+   * keys from `BETTER_AUTH_SECRET`, which differs per deployment, so a
+   * proxied sign-in cannot complete.
    */
   proxySecret: string | undefined;
-  /** Origins production may return an encrypted provider profile to. */
-  proxyTrustedOrigins: string[];
-  /**
-   * Whether this deployment may turn a proxied profile into a local session.
-   * Only a positively identified Preview gets that endpoint; production is
-   * the OAuth relay and must never accept the shared proxy key as session
-   * authority for its own database.
-   */
-  acceptsProxyProfiles: boolean;
 }
 
 /** One social provider's registration; a provider with no registration is configured with nothing, and Better Auth refuses its sign-in. */
@@ -175,11 +181,6 @@ export function socialClientConfigured(client: SocialClient): boolean {
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {
   const productionURL = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PRODUCTION_URL]);
   const proxySecret = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_SECRET]);
-  const proxyTrustedOrigins =
-    text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_TRUSTED_ORIGINS])
-      ?.split(",")
-      .map((origin) => origin.trim())
-      .filter((origin) => origin.length > 0) ?? [];
   const previewOrigins =
     variables[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT] === DEPLOYMENT_ENVIRONMENT.PREVIEW
       ? [
@@ -195,14 +196,11 @@ export function authDeployment(variables: Record<string, string | undefined>): A
 
   return {
     baseURL: previewBaseURL ?? productionURL ?? LOCAL_AUTH_URL,
-    trustedOrigins: previewAliases,
+    trustedOrigins:
+      variables[AUTH_DEPLOYMENT_ENVIRONMENT.ENVIRONMENT] === DEPLOYMENT_ENVIRONMENT.PRODUCTION
+        ? [...PROXIED_ORIGINS]
+        : previewAliases,
     productionURL,
     proxySecret,
-    proxyTrustedOrigins,
-    acceptsProxyProfiles:
-      previewBaseURL !== undefined &&
-      productionURL !== undefined &&
-      proxySecret !== undefined &&
-      previewBaseURL !== productionURL,
   };
 }

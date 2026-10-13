@@ -45,3 +45,12 @@ ignoredBuiltDependencies:
   - core-js
   - electron-winstaller
   - esbuild
+
+# `@better-auth/oauth-provider` 1.7.7 declares its `/oauth2/authorize` OpenAPI
+# parameters with `items?: undefined`, which `exactOptionalPropertyTypes` (on in
+# `tsconfig.base.json`) refuses against better-call's `OpenAPIParameter`, so the
+# plugin stops typing as a `BetterAuthPlugin` and its endpoints fall off
+# `auth.api`. The patch drops those four lines of the emitted declaration and
+# nothing at runtime; delete it when an upstream release types them cleanly.
+patchedDependencies:
+  "@better-auth/oauth-provider@1.7.7": patches/@better-auth__oauth-provider@1.7.7.patch

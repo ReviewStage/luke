@@ -6,8 +6,7 @@ import { HttpRouter } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { auth } from "./auth.js";
-import { hostedUserId } from "./hosted/bearer.js";
+import { resolveHostedUserId } from "./hosted/bearer.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
 import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
@@ -49,9 +48,8 @@ const EVENTS_PATH = "/api/events";
  * Records what the signed-in desktop counted about its own use. The logic
  * lives in `server/hosted/events.ts`; this hands it the deployment's real
  * seams — the project token the desktop never holds, and the same
- * in-process token resolution every other hosted endpoint trusts. The
- * userinfo call is better-auth's own foreign promise, so it is wrapped here,
- * at the seam's implementation, rather than inside the handler.
+ * in-process token resolution every other hosted endpoint trusts, whose
+ * userinfo answer `hosted/bearer.ts` parses at the boundary.
  */
 const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
   request: Request,
@@ -63,8 +61,7 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
       environment.posthogProjectApiKey === undefined
         ? undefined
         : Redacted.value(environment.posthogProjectApiKey),
-    resolveUserId: (incoming) =>
-      hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
+    resolveUserId: resolveHostedUserId,
     // Read from the service's own user row rather than from the request, so
     // the desktop still sends nothing that names anybody.
     readPerson,
