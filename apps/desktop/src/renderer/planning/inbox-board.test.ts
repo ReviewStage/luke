@@ -32,7 +32,7 @@ import { afterEach } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { sheetStyle } from "#testing/css-rules";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { codingAgentsControl } from "#testing/plans-control";
 import { InboxBoard, type InboxCodeDoors } from "./inbox-board";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -493,7 +493,7 @@ it.effect(
 );
 
 it.effect(
-  "a pick sent answers the item with the option and the note under a key of its own, and the card settles saying what was said",
+  "a pick sent answers the item with the option and the note under a key of its own, and the card settles saying what was said, the note selectable",
   () =>
     Effect.gen(function* () {
       const { agents, sent } = service([{ items: [QUEUE], cursor: "1000.1" }], [taking(QUEUE)]);
@@ -531,6 +531,8 @@ it.effect(
       );
       press(settled.querySelector("summary"));
       assert.ok(settled.textContent?.includes("Keep it simple."), "the note inside");
+      const style = yield* Effect.promise(() => sheetStyle());
+      assert.ok(selectedText(style, settled).includes("Keep it simple."), "the note selects");
     }),
 );
 

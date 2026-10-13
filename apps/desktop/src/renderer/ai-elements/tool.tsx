@@ -317,7 +317,7 @@ export function ToolOutput({ block, errorText, className, ...props }: ToolOutput
     return (
       <div className={className} data-tool-output="" {...props}>
         <p
-          className="m-0 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+          className="m-0 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-danger whitespace-pre-wrap [overflow-wrap:anywhere] select-text"
           role="alert"
         >
           {errorText}

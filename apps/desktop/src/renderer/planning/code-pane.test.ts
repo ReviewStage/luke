@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, onTestFinished, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { selectable, selectedText, sheetStyle } from "#testing/css-rules";
 import "../file-tree/index";
 import { CodePane } from "./code-pane";
 import { type CodeFeedCallSource, rangeLabel } from "./code-pane-model";
@@ -259,6 +260,26 @@ test("a card says Luke's note on its lines in words between its heading and the 
     [...bare.children].map((part) => part.className),
     ["code-card-header", "code-lines"],
   );
+});
+
+test("a card's note and lines select and copy as text, the gutter's numbers left out, while its heading stays the card's controls", async () => {
+  const style = await sheetStyle();
+  const { container, draw } = mounted();
+  const note = "The invite is looked up by its token alone.";
+  draw([
+    showing("a", 2_000, {
+      ...windowOf("src/invite.ts", 2, 2),
+      lines: windowOf("src/invite.ts", 2, 2).lines.slice(0, 2),
+      note,
+    }),
+  ]);
+
+  const card = container.querySelector(".code-card");
+  assert.ok(card);
+  assert.equal(selectedText(style, card), `${note}line 1line 2`);
+  const header = card.querySelector(".code-card-header");
+  assert.ok(header);
+  assert.equal(selectable(style, header), false);
 });
 
 test("a run carries its colour in both appearances, so the stylesheet picks one as the appearance changes", () => {

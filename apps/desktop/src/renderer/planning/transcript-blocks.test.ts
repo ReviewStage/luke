@@ -7,7 +7,7 @@ import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { sheetStyle } from "#testing/css-rules";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
@@ -470,6 +470,35 @@ test("every call's line says what it did in full ink and its icon and subject in
   for (const text of [...texts(answer), ...texts(error)]) {
     assert.equal(MUTED_INK.has(inkOf(text) ?? ""), false, `"${text.data}" keeps its own ink`);
   }
+});
+
+test("what a call answered, and the error it ended in, select and copy as text", async () => {
+  const style = await sheetStyle();
+  const container = mounted(
+    createElement(AgentTranscriptView, {
+      messages: [MIXED_TURN],
+      reading: false,
+      failed: false,
+      working: true,
+      onRetry: () => undefined,
+    }),
+  );
+  for (
+    let fold = container.querySelector("[data-turn-fold]:not([open]) > summary");
+    fold instanceof HTMLElement;
+    fold = container.querySelector("[data-turn-fold]:not([open]) > summary")
+  ) {
+    act(() => fold.click());
+  }
+  for (const id of ["call-2", "call-4"]) {
+    act(() => container.querySelector<HTMLElement>(`[data-call-id="${id}"] > summary`)?.click());
+  }
+
+  const answer = container.querySelector('[data-call-id="call-2"] [data-tool-output]');
+  const error = container.querySelector('[data-call-id="call-4"] [role="alert"]');
+  assert.ok(answer && error);
+  assert.equal(selectedText(style, answer), "export const seats = 3;");
+  assert.equal(selectedText(style, error), "grep exited 2");
 });
 
 test.each(surfaces(true))(
