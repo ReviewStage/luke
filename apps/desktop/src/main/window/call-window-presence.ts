@@ -5,15 +5,22 @@
  * keyboard, that window draws it: its call bar on the call's own plan, its
  * call card anywhere else. Once none does (another app in front, Luke
  * minimised or hidden), the floating window draws the same card over
- * whatever is in front, for as long as the call is in progress. Nothing here
- * calls Electron, so the rule is read and tested as the plain decision it is.
+ * whatever is in front, for as long as the call is in progress. Luke's
+ * avatar is the exception: it is drawn in the floating window alone, so while
+ * it is starting or live that window stands whoever has the keyboard, at the
+ * video tile's size. Nothing here calls Electron, so the rule is read and
+ * tested as the plain decision it is.
  */
 
 import type { WebContents } from "electron";
+import { AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
 import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 
 /** The card's window, its shadow's room included, and its gap from the screen's corner. */
 export const CALL_WINDOW_BOUNDS = { WIDTH: 264, HEIGHT: 92, INSET: 8 } as const;
+
+/** The video tile's window: the 320 by 180 tile, and 8 points of its shadow's room on every side. */
+export const CALL_VIDEO_BOUNDS = { WIDTH: 336, HEIGHT: 196 } as const;
 
 export interface CallWindowPoint {
   readonly x: number;
@@ -26,10 +33,21 @@ export interface CallWindowArea extends CallWindowPoint {
   readonly height: number;
 }
 
-/** What the presence shows and hides; the window service's `CallWindow`. */
+/** What the presence shows, hides, and sizes; the window service's `CallWindow`. */
 export interface CallWindowSurface {
   show(): void;
   hide(): void;
+  /** The video tile's size while the avatar is up, and the card's otherwise. */
+  fitVideo(video: boolean): void;
+}
+
+/** The statuses the avatar's tile is drawn in: coming up, and up. */
+function videoUp(status: AvatarStatus): boolean {
+  return status === AVATAR_STATUS.STARTING || status === AVATAR_STATUS.LIVE;
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), Math.max(low, high));
 }
 
 function holds(area: CallWindowArea, point: CallWindowPoint): boolean {
@@ -61,22 +79,49 @@ export function callWindowPosition(input: {
 }
 
 /**
+ * The window's frame once it changes size: its bottom-left corner kept where
+ * it stood, which is the corner the card is anchored to, and the whole frame
+ * pulled back onto the work area it stands on where growing took it off.
+ */
+export function callWindowRefit(input: {
+  frame: CallWindowArea;
+  video: boolean;
+  workArea: CallWindowArea;
+}): CallWindowArea {
+  const { frame, video, workArea } = input;
+  const width = video ? CALL_VIDEO_BOUNDS.WIDTH : CALL_WINDOW_BOUNDS.WIDTH;
+  const height = video ? CALL_VIDEO_BOUNDS.HEIGHT : CALL_WINDOW_BOUNDS.HEIGHT;
+  return {
+    x: clamp(frame.x, workArea.x, workArea.x + workArea.width - width),
+    y: clamp(frame.y + frame.height - height, workArea.y, workArea.y + workArea.height - height),
+    width,
+    height,
+  };
+}
+
+/**
  * The decision, held over what moves it: the voice view the voice window
- * reports, and which panel, if any, has the keyboard. The surface is told
- * only when the answer changes.
+ * reports, the avatar's status the call window reports, and which panel, if
+ * any, has the keyboard. The surface is told only when an answer changes.
  */
 export class CallWindowPresence {
   readonly #surface: CallWindowSurface;
   #view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined;
+  #avatar: AvatarStatus = AVATAR_STATUS.OFF;
   #focused: WebContents | undefined;
   #standing = false;
+  #video = false;
 
   constructor(surface: CallWindowSurface) {
     this.#surface = surface;
   }
 
-  voiceChanged(view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined): void {
+  voiceChanged(
+    view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined,
+    avatar: AvatarStatus,
+  ): void {
     this.#view = view;
+    this.#avatar = avatar;
     this.#decide();
   }
 
@@ -93,7 +138,20 @@ export class CallWindowPresence {
 
   #decide(): void {
     const view = this.#view;
-    const wanted = view !== undefined && callInProgress(view) && this.#focused === undefined;
+    const calling = view !== undefined && callInProgress(view);
+    const video = calling && videoUp(this.#avatar);
+    const wanted = calling && (video || this.#focused === undefined);
+    // Note that the window is sized while it is hidden where it can be:
+    // after a hide and before a show, so neither size is seen in passing.
+    if (!wanted) this.#stand(false);
+    if (video !== this.#video) {
+      this.#video = video;
+      this.#surface.fitVideo(video);
+    }
+    if (wanted) this.#stand(true);
+  }
+
+  #stand(wanted: boolean): void {
     if (wanted === this.#standing) return;
     this.#standing = wanted;
     if (wanted) this.#surface.show();

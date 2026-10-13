@@ -7,11 +7,14 @@ import type { RunMode } from "@sidecar/host";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
+import type { AvatarFeed, AvatarGrant } from "#shared/messages/avatar";
+import { CallAvatarRelay } from "./call-window-avatar";
 import {
   CALL_WINDOW_BOUNDS,
   type CallWindowPoint,
   type CallWindowSurface,
   callWindowPosition,
+  callWindowRefit,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
@@ -41,9 +44,11 @@ function readPlacement(file: string): CallWindowPoint | undefined {
 
 /**
  * The one floating window that draws the standing call while no Luke window
- * has the keyboard. It loads the same renderer bundle as the panels from a
- * document of its own (`call.html`, which may reach no host), under the same
- * hardening, and mounts the call card by the role main answers it. It is
+ * has the keyboard, and Luke's avatar while it is up. It loads the same
+ * renderer bundle as the panels from a document of its own (`call.html`,
+ * whose one host is the LiveKit server Keyframe's grant names, for the
+ * avatar's session), under the same hardening, and mounts the call card by
+ * the role main answers it. It is the one window the grant is sent to. It is
  * transparent and frameless, so the card is the whole of what is seen; a non-activating
  * panel, so pressing a control leaves the developer's editor in front; and it
  * floats over every Space and full-screen app, out of Mission Control.
@@ -59,7 +64,12 @@ export class CallWindow implements CallWindowSurface {
   /** Whether the renderer has drawn its first frame, before which a show would flash an empty window. */
   #ready = false;
   #wanted = false;
+  /** Whether the frame is the video tile's rather than the card's. */
+  #video = false;
   #closedForGood = false;
+  readonly #avatar = new CallAvatarRelay(() =>
+    this.#ready ? this.current()?.webContents : undefined,
+  );
 
   constructor(options: CallWindowOptions) {
     this.#options = options;
@@ -75,6 +85,29 @@ export class CallWindow implements CallWindowSurface {
   hide(): void {
     this.#wanted = false;
     this.current()?.hide();
+  }
+
+  fitVideo(video: boolean): void {
+    this.#video = video;
+    const window = this.current();
+    if (window) this.#refit(window);
+  }
+
+  /** Keyframe's grant for the call's avatar, or nothing once its session is to close. */
+  showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatar.showAvatarSession(grant);
+  }
+
+  /** One message of Luke's voice feed, for the avatar to lip-sync. */
+  feedAvatar(feed: AvatarFeed): void {
+    this.#avatar.feedAvatar(feed);
+  }
+
+  /** The frame resized to what is drawn, on the display it stands on. */
+  #refit(window: BrowserWindow): void {
+    const frame = window.getBounds();
+    const workArea = screen.getDisplayMatching(frame).workArea;
+    window.setBounds(callWindowRefit({ frame, video: this.#video, workArea }));
   }
 
   #open(): BrowserWindow {
@@ -116,6 +149,7 @@ export class CallWindow implements CallWindowSurface {
     });
     this.#window = window;
     this.#ready = false;
+    if (this.#video) this.#refit(window);
     window.setAlwaysOnTop(true, "floating");
     // Kept out of the Window menu's list, where a window nobody chose to open
     // would read as one of Luke's own.
@@ -130,6 +164,7 @@ export class CallWindow implements CallWindowSurface {
     window.once("ready-to-show", () => {
       if (window !== this.#window) return;
       this.#ready = true;
+      this.#avatar.pageDrew();
       if (this.#wanted) window.showInactive();
     });
     // The page is told the window is moving under the pointer, so a hover
@@ -138,9 +173,12 @@ export class CallWindow implements CallWindowSurface {
       if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
     window.on("moved", () => {
-      const [left, top] = window.getPosition();
+      // Kept as the card's own corner whichever size is drawn, since the
+      // frame is anchored at its bottom-left and the card is what opens.
+      const { x, y, height } = window.getBounds();
+      const place = { x, y: y + height - CALL_WINDOW_BOUNDS.HEIGHT };
       try {
-        fs.writeFileSync(this.#options.placementPath, JSON.stringify({ x: left, y: top }));
+        fs.writeFileSync(this.#options.placementPath, JSON.stringify(place));
       } catch {
         // Note that a place that cannot be kept is let go of, because the
         // card opening at its corner next time costs nothing, and a throw

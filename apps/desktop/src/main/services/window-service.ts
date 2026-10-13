@@ -142,7 +142,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call window's document, on the same terms: the one bundle, no host.
+  // The call window's document, on the same terms: the one bundle, and the
+  // one host its avatar's session reaches.
   const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
   const callUrl = pathToFileURL(callHtmlPath).href;
 
@@ -243,7 +244,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (call) send(call.webContents, voiceWindowState(held));
     // The call window follows the document it draws, so it stands and goes
     // on the same version every window is told.
-    callPresence.voiceChanged(held.voice.view);
+    callPresence.voiceChanged(held.voice.view, held.voice.avatar.status);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
