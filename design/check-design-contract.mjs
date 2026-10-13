@@ -120,6 +120,83 @@ function keyframeBodies(source) {
   return blockBodies(source, /@keyframes\s+[\w-]+\s*\{/gu);
 }
 
+// Content arriving rides the pair every arriving element rides, its opacity
+// over `--duration-quick` and any travel on the spring, and content leaving
+// goes first, over `--duration-exit` (docs/DESIGN.md). A keyframes block that
+// holds a `from` alone is an arrival, one that holds a `to` alone an exit.
+const TRAVEL = /\b(?:transform|translate|scale|rotate)\s*:/u;
+const OPACITY = /\bopacity\s*:/u;
+const KEYFRAMES_KIND = { ARRIVAL: "arrival", EXIT: "exit", OTHER: "other" };
+
+// Each keyframes block across the sheets, by name: whether it is an arrival,
+// an exit, or neither, and whether it moves and whether it fades.
+function keyframesByName(sources) {
+  const named = new Map();
+  for (const source of sources) {
+    const names = [...source.matchAll(/@keyframes\s+([\w-]+)\s*\{/gu)].map((match) => match[1]);
+    keyframeBodies(source).forEach((body, index) => {
+      const steps = [...body.matchAll(/([^{}]+)\{([^{}]*)\}/gsu)];
+      const only = steps.length === 1 ? steps[0][1].trim() : undefined;
+      const kind =
+        only === "from"
+          ? KEYFRAMES_KIND.ARRIVAL
+          : only === "to"
+            ? KEYFRAMES_KIND.EXIT
+            : KEYFRAMES_KIND.OTHER;
+      named.set(names[index], { kind, travels: TRAVEL.test(body), fades: OPACITY.test(body) });
+    });
+  }
+  return named;
+}
+
+// The comma-separated parts of a value, commas inside parentheses left whole.
+function topLevelParts(value) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let cursor = 0; cursor <= value.length; cursor += 1) {
+    const character = value[cursor];
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (cursor === value.length || (character === "," && depth === 0)) {
+      parts.push(value.slice(start, cursor).trim());
+      start = cursor + 1;
+    }
+  }
+  return parts;
+}
+
+// What one `animation` shorthand owes the pair: an arrival keeps its fade and
+// its travel apart, fades over `--duration-quick`, and travels on the spring;
+// an exit runs over `--duration-exit` on `--motion-exit`.
+function motionPairFailures(name, selector, value, keyframes) {
+  const found = [];
+  for (const part of topLevelParts(value)) {
+    const frames = part
+      .split(/\s+/u)
+      .map((token) => keyframes.get(token))
+      .find(Boolean);
+    if (frames === undefined || /\binfinite\b/u.test(part)) continue;
+    const where = `${name}: ${selector}`;
+    if (frames.kind === KEYFRAMES_KIND.ARRIVAL) {
+      if (frames.travels && frames.fades) {
+        found.push(`${where} arrives fading and travelling in one keyframes; split the pair`);
+      } else if (frames.fades && !part.includes("var(--duration-quick)")) {
+        found.push(`${where} fades in over another time than --duration-quick`);
+      } else if (frames.travels && !part.includes("var(--spring")) {
+        found.push(`${where} travels in on another curve than the spring`);
+      }
+    }
+    if (
+      frames.kind === KEYFRAMES_KIND.EXIT &&
+      !(part.includes("var(--duration-exit)") && part.includes("var(--motion-exit)"))
+    ) {
+      found.push(`${where} leaves over another time than --duration-exit on --motion-exit`);
+    }
+  }
+  return found;
+}
+
 // The window's native ground shows before the renderer paints and wherever it
 // has not yet, so main's ground for each appearance has to be desktop.css's
 // --desktop-ground for that appearance, or a launch or a resize flashes
@@ -158,7 +235,12 @@ function checkWindowGrounds() {
 
 checkWindowGrounds();
 
-for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".css"))) {
+const SHEETS = readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".css"));
+const KEYFRAMES = keyframesByName(
+  SHEETS.map((name) => readFileSync(join(STYLE_ROOT, name), "utf8")),
+);
+
+for (const name of SHEETS) {
   const source = readFileSync(join(STYLE_ROOT, name), "utf8");
   if (/^[\t ]*@starting-style\b/mu.test(source)) {
     failures.push(`${name}: use a backwards-filled mount animation, not @starting-style`);
@@ -228,6 +310,9 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
       /\b(animation(?:-duration|-delay)?|transition(?:-duration|-delay|-property)?)\s*:\s*([^;]+);/gu,
     )) {
       const [property, value] = declaration.slice(1);
+      if (property === "animation") {
+        failures.push(...motionPairFailures(name, bare, value, KEYFRAMES));
+      }
       if (property.startsWith("animation") && /\binfinite\b/u.test(value)) {
         if (!/animation-play-state\s*:\s*var\(--(?:loop|face)-motion\)/u.test(body)) {
           failures.push(`${name}: ${selector.trim()} loops without a motion play-state token`);

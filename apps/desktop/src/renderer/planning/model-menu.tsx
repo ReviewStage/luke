@@ -116,6 +116,10 @@ export function ModelMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
+  /** The menu is on its way out (`SearchableMenu`'s). */
+  leaving?: boolean | undefined;
+  /** Hands the menu's element to the hold its owner draws it through its exit with. */
+  ref?: ((element: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
   const { models, chosen, onChoose, onClose } = props;
   const read =
@@ -236,6 +240,8 @@ export function ModelMenu(props: {
       onLeave={props.onLeave}
       foot={foot}
       footNote={props.footNote}
+      leaving={props.leaving}
+      ref={props.ref}
     />
   );
 }

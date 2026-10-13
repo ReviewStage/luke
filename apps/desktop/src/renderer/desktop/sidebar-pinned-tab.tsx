@@ -273,10 +273,10 @@ export function SidebarPinnedTab({
           </button>
         </Tooltip>
       </span>
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${pin.label} actions`}
-          menu={menu.open}
+          menu={menu.drawn}
           groups={pinActionGroups(pin, plans, copied)}
           onClose={menu.close}
         />

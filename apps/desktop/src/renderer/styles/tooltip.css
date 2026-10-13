@@ -4,7 +4,8 @@
    chord in muted glyphs; it has no arrow, because it always hangs centred on
    the control it names. It is hidden for the one layout pass that measures
    where it fits, then fades in from just short of its size once the pointer
-   has rested `--hint-delay`, or at once while the window is warm. Reduced
+   has rested `--hint-delay`, or at once while the window is warm: its
+   opacity over `--duration-quick`, its growth on the spring. Reduced
    motion keeps the wait, which is not motion, and drops the fade with the
    tokens. A pill takes no presses: it never stands between the pointer and
    the control beside it. A card is a surface the pointer crosses onto, so it
@@ -31,7 +32,9 @@
   line-height: 16px;
   white-space: nowrap;
   pointer-events: none;
-  animation: tooltip-in var(--duration-quick) var(--motion-exit) var(--hint-delay) both;
+  animation:
+    tooltip-fade var(--duration-quick) var(--motion-exit) var(--hint-delay) both,
+    tooltip-grow var(--duration-fast) var(--spring-fast) var(--hint-delay) both;
   -webkit-app-region: no-drag;
 }
 
@@ -43,7 +46,22 @@
    at the body's end does not stand under, so it is held still here too. */
 body:has(.app-stage[data-capture="true"]) .tooltip {
   --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
   --hint-delay: 0s;
+}
+
+/* Taken down once seen, it fades over `--duration-exit` (desktop.css's
+   `popup-leave`), held drawn and inert until it has; taken down while it
+   still waited, it was never seen, and plays nothing. */
+.tooltip[data-leaving="seen"] {
+  pointer-events: none;
+  animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+}
+
+.tooltip[data-leaving="unseen"] {
+  visibility: hidden;
+  animation: none;
 }
 
 .tooltip-card {
@@ -70,10 +88,15 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
   transform-origin: top left;
 }
 
-@keyframes tooltip-in {
+@keyframes tooltip-fade {
   from {
     visibility: hidden;
     opacity: 0;
+  }
+}
+
+@keyframes tooltip-grow {
+  from {
     transform: scale(0.96);
   }
 }

@@ -27,7 +27,9 @@
  * the window, so Escape closes the palette and nothing else, a call's reply
  * included, and no chord changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
- * acts from where the developer was, as its shortcut would have.
+ * acts from where the developer was, as its shortcut would have. It then
+ * fades out over `--duration-exit`, held by Radix's dialog through the exit
+ * its `data-state` plays, and inert while it does.
  *
  * Every row's value is its place in the list, never words: cmdk writes it
  * into an attribute, which the session recording does not mask
@@ -523,6 +525,7 @@ export function CommandPalette({
   const invoker = useRef<HTMLElement | null>(null);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
+  const field = useRef<HTMLInputElement>(null);
 
   useAppCommand(
     APP_COMMAND.COMMAND_PALETTE,
@@ -545,10 +548,13 @@ export function CommandPalette({
   // Note that what was chosen runs once the palette is gone and focus is
   // back where it was, because a command that moves focus (Delete's
   // question, the new-plan field) would otherwise lose it to the palette's
-  // own going.
+  // own going. The field takes focus as the palette opens, as the dialog
+  // gives it, and also where it opens again while it is still leaving,
+  // which the dialog, never having let it go, does not give it again.
   useEffect(() => {
     if (open) {
       shown.current = true;
+      field.current?.focus();
       return;
     }
     if (!shown.current) return;
@@ -693,11 +699,13 @@ export function CommandPalette({
       loop
       overlayClassName="command-palette-backdrop"
       contentClassName="command-palette"
+      inert={!open}
       onKeyDown={keyDown}
     >
       <div className="command-palette-search">
         <SearchIcon />
         <Command.Input
+          ref={field}
           placeholder={FILTER_PLACEHOLDER[filter]}
           value={query}
           onValueChange={setQuery}

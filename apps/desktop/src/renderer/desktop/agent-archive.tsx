@@ -149,10 +149,10 @@ function ArchivedAgentRow({
           </button>
         </Tooltip>
       </span>
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Archived agent actions"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={[[{ label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: unarchive }]]}
           onClose={menu.close}
         />

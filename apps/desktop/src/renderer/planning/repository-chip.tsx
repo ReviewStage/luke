@@ -7,6 +7,7 @@ import { GitHubMark } from "../account-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { Spinner } from "../spinner";
+import { useDisclosure } from "../use-disclosure";
 import { repositoryFailureNote } from "./planning-model";
 
 /**
@@ -104,6 +105,7 @@ export function RepositoryChip(props: {
 }): React.JSX.Element {
   const { chooser, openRequest } = props;
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const [list, setList] = useState<PlanningRepositoriesAnswer | undefined>(undefined);
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
@@ -212,8 +214,10 @@ export function RepositoryChip(props: {
           {offersInstall ? <ExternalIcon /> : null}
         </button>
       ) : null}
-      {open ? (
+      {drawn.mounted ? (
         <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
           id={menuId}
           label="Repository"
           placeholder="Search repositories"

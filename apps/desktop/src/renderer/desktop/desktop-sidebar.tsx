@@ -569,10 +569,10 @@ function RepositorySection({
           )}
         </span>
       </div>
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
-          menu={menu.open}
+          menu={menu.drawn}
           groups={repositoryActionGroups(group, context.plans)}
           onClose={menu.close}
         />

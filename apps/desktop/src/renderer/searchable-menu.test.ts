@@ -140,6 +140,25 @@ function px(length: string): number {
   return Number.parseFloat(length);
 }
 
+test("a menu its owner holds through its exit takes nothing, and takes the field's focus back when it stands again", () => {
+  const menu = mount();
+  const root = menu.find<HTMLElement>("[role=dialog]");
+  const field = menu.find<HTMLInputElement>("input");
+  assert.ok(document.activeElement === field, "the field takes focus as the menu opens");
+
+  // The owner hands focus back to its trigger as it closes, then holds the menu leaving.
+  const trigger = document.body.appendChild(document.createElement("button"));
+  act(() => trigger.focus());
+  menu.restand({ leaving: true });
+  assert.equal(root.dataset.leaving, "true");
+  assert.equal(root.hasAttribute("inert"), true, "nothing reaches the menu on its way out");
+  assert.ok(document.activeElement === trigger, "focus stays where the owner handed it");
+
+  menu.restand({ leaving: false });
+  assert.equal(root.hasAttribute("inert"), false);
+  assert.ok(document.activeElement === field, "the field takes focus again");
+});
+
 test("a row is one height whether forty rows match or one: the list is no flex column and a row flexes in no column it stands in", () => {
   const menu = mount({ rows: MANY, value: undefined });
   const field = menu.find<HTMLInputElement>("input[role=combobox]");

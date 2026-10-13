@@ -214,12 +214,12 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
-  const { open, show, close } = useActionMenu(plans.shown);
+  const { open, drawn, show, close } = useActionMenu(plans.shown);
   const menu =
-    open === undefined ? null : (
+    drawn === undefined ? null : (
       <ActionMenu
         label="Plan actions"
-        menu={open}
+        menu={drawn}
         groups={planActionGroups(plans, planId, { rename, askDelete: deletion.ask })}
         onClose={close}
       />

@@ -5,7 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { CopyIcon } from "@sidecar/panel";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { GitHubMark } from "../account-marks";
 import {
   ActionMenu,
@@ -13,7 +13,7 @@ import {
   MENU_DROP,
   type MenuAction,
   type MenuPlacement,
-  type OpenMenu,
+  useActionMenu,
 } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
@@ -105,12 +105,7 @@ export function PublishedChip({
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
 }): ReactNode {
-  const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
-  const opener = useRef<HTMLButtonElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setOpen(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
+  const menu = useActionMenu(true);
   const url = published === undefined ? undefined : publishedUrl(published);
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
@@ -119,14 +114,13 @@ export function PublishedChip({
     <>
       <Tooltip label={OPEN_HINT}>
         <button
-          ref={opener}
           type="button"
           className="plan-compose-chip agent-published-chip"
           data-state={pullRequest?.state}
-          data-menu-open={String(open !== undefined)}
+          data-menu-open={String(menu.open !== undefined)}
           aria-label={label}
           onClick={() => {
-            close(false);
+            menu.close(false);
             doors.openGitHub(url);
           }}
           onContextMenu={
@@ -134,19 +128,19 @@ export function PublishedChip({
               ? undefined
               : (event) => {
                   event.preventDefault();
-                  setOpen({ placement: menuPlacement(event), opener: event.currentTarget });
+                  menu.show(menuPlacement(event), event.currentTarget);
                 }
           }
         >
           <PublishedFace published={published} />
         </button>
       </Tooltip>
-      {open === undefined || branch === null ? null : (
+      {menu.drawn === undefined || branch === null ? null : (
         <ActionMenu
-          menu={open}
+          menu={menu.drawn}
           groups={branchActions(branch, doors)}
           label={MENU_LABEL}
-          onClose={close}
+          onClose={menu.close}
         />
       )}
     </>

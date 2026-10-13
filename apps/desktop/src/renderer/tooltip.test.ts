@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { installExits, uninstallExits } from "#testing/exits";
 import { Tooltip } from "./tooltip";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -19,6 +20,9 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let now = 0;
 
 let root: Root | undefined;
+
+/** The exit a pill taken down once seen runs, as tooltip.css plays it. */
+const LEAVING_PILL = '.tooltip[data-leaving="seen"]';
 
 function button(props: ButtonHTMLAttributes<HTMLButtonElement>, text?: string) {
   return createElement("button", { type: "button", ...props }, text);
@@ -162,6 +166,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   delete document.documentElement.dataset.keyboard;
   vi.restoreAllMocks();
+  uninstallExits();
 });
 
 test("resting on a control shows a pill naming it and its chord, and leaving takes it down", () => {
@@ -193,6 +198,48 @@ test("a pill waits out the rest the first time, and the next one shows at once w
   rest(MOTION_DELAY_MS.HINT * 2);
   hover("Hide sidebar");
   assert.equal(pill()?.dataset.instant, "false", "a pointer that paused waits again");
+});
+
+test("a pill taken down once seen fades out inert, describing nothing, and goes when its exit is done", () => {
+  const exits = installExits(LEAVING_PILL);
+  mountToolbar();
+  hover("Hide sidebar");
+  rest(MOTION_DELAY_MS.HINT);
+
+  leave("Hide sidebar");
+  const leaving = pill();
+  assert.ok(leaving, "the pill is drawn through its exit");
+  assert.equal(leaving.dataset.leaving, "seen");
+  assert.equal(leaving.hasAttribute("inert"), true, "it is out of reach on its way out");
+  assert.equal(control("Hide sidebar").getAttribute("aria-describedby"), null);
+
+  act(() => exits[0]?.finish());
+  assert.equal(pill(), null);
+});
+
+test("a pill taken down while it still waited was never seen, and goes at once", () => {
+  installExits(LEAVING_PILL);
+  mountToolbar();
+  hover("Hide sidebar");
+  rest(MOTION_DELAY_MS.HINT / 2);
+
+  leave("Hide sidebar");
+  assert.equal(pill(), null);
+});
+
+test("the pointer back on a control whose pill is leaving takes the pill back", () => {
+  const exits = installExits(LEAVING_PILL);
+  mountToolbar();
+  hover("Hide sidebar");
+  rest(MOTION_DELAY_MS.HINT);
+  leave("Hide sidebar");
+
+  hover("Hide sidebar");
+  const standing = pill();
+  assert.equal(standing?.dataset.leaving, undefined);
+  assert.equal(standing?.hasAttribute("inert"), false);
+  act(() => exits[0]?.finish());
+  assert.ok(pill() === standing, "the exit it was playing takes nothing away");
 });
 
 test("a pill that never finished waiting leaves the next to wait too", () => {
