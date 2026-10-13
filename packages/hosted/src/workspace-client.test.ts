@@ -155,3 +155,74 @@ it.effect("names a members read the service refused: a personal workspace, or no
     assert.deepEqual(outsider, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
   }),
 );
+
+it.effect(
+  "removes a member and leaves a workspace, answered with those who remain and the workspace left",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/members/remove": { answer: () => ({ members: [ADA] }) },
+        "POST /api/workspaces/leave": { answer: () => ({ workspaceId: ACME.id }) },
+      });
+      const workspaces = client();
+
+      const remaining = yield* Effect.provide(
+        workspaces.removeMember(ACME.id, GRACE.userId),
+        api.layer,
+      );
+      const left = yield* Effect.provide(workspaces.leave(ACME.id), api.layer);
+
+      assert.deepEqual(remaining, { ok: true, answer: [ADA] });
+      assert.deepEqual(left, { ok: true, answer: ACME.id });
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/members/remove",
+            body: { workspaceId: ACME.id, userId: GRACE.userId },
+          },
+          { route: "POST /api/workspaces/leave", body: { workspaceId: ACME.id } },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "names a removal or a leave the service refused, and reads a malformed answer as none",
+  () =>
+    Effect.gen(function* () {
+      const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
+      const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
+      const notPermitted = fakeCloudApi({
+        "POST /api/workspaces/members/remove": forbidden,
+        "POST /api/workspaces/leave": forbidden,
+      });
+      const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
+      const notFound = fakeCloudApi({
+        "POST /api/workspaces/members/remove": missing,
+        "POST /api/workspaces/leave": missing,
+      });
+      const elsewhere = fakeCloudApi({
+        "POST /api/workspaces/members/remove": {
+          answer: () => ({ members: [{ ...ADA, role: "guest" }] }),
+        },
+        "POST /api/workspaces/leave": { answer: () => ({ workspaceId: PERSONAL.id }) },
+      });
+      const workspaces = client();
+      const both = (layer: typeof notPermitted.layer) =>
+        Effect.provide(
+          Effect.all([workspaces.removeMember(ACME.id, GRACE.userId), workspaces.leave(ACME.id)]),
+          layer,
+        );
+
+      const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const outside = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
+      const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+      assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
+      assert.deepEqual(yield* both(notFound.layer), [outside, outside]);
+      assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
+    }),
+);

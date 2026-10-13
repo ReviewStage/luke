@@ -401,7 +401,7 @@ with your name and holding you as its owner; it goes when you delete your
 account. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 other than a personal one sees every other member's name, email address, and
-role in it. When an owner or admin connects a GitHub organization to a workspace, the
+role in it, and an owner or admin of it can remove a member. When an owner or admin connects a GitHub organization to a workspace, the
 service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
 whether the installation is active, suspended, or removed; to confirm the
