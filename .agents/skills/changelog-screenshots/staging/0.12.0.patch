@@ -1,5 +1,5 @@
 diff --git a/apps/desktop/bundle-budget.json b/apps/desktop/bundle-budget.json
-index ceb07287..48b642b7 100644
+index ceb07287..8769f7f5 100644
 --- a/apps/desktop/bundle-budget.json
 +++ b/apps/desktop/bundle-budget.json
 @@ -1,10 +1,10 @@
@@ -10,7 +10,7 @@ index ceb07287..48b642b7 100644
 -    "renderer/whiteboard.js": 467697,
 -    "renderer/file-tree.js": 70635,
 -    "renderer/plan-editor.js": 161390,
-+    "renderer/renderer.js": 787099,
++    "renderer/renderer.js": 787094,
 +    "renderer/whiteboard.js": 468605,
 +    "renderer/file-tree.js": 71587,
 +    "renderer/plan-editor.js": 161414,
@@ -2841,7 +2841,7 @@ index 00000000..9c38a934
 +}
 diff --git a/apps/desktop/src/renderer/shots/integrations.ts b/apps/desktop/src/renderer/shots/integrations.ts
 new file mode 100644
-index 00000000..71d62567
+index 00000000..01b0af64
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/integrations.ts
 @@ -0,0 +1,70 @@
@@ -2891,7 +2891,7 @@ index 00000000..71d62567
 +      linear: "connected",
 +      notion: "connected",
 +      sentry: "connected",
-+      slack: "unavailable",
++      slack: "connected",
 +    },
 +  };
 +  return {

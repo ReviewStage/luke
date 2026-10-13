@@ -84,9 +84,10 @@ Every picture, whatever it shows:
   ("Teammate invitations"). Model ids from the repository's real catalog.
 - Positive states: everything connected, checks passing, work done or
   moving. An error, an empty list, a disconnected service, or a "Connect"
-  button goes in only when that state is what the section announces; a state
-  the release really ships that the notes leave out (0.12.0's Slack "Not
-  available") stays rather than being faked away.
+  button goes in only when that state is what the section announces. The
+  staging may answer a status the release would not (0.12.0's Slack, not
+  available yet, shows connected) so a picture reads as a feature working;
+  what it may not do is draw a row or control the release does not have.
 - Real UI only. Stage data and state the app already draws; never add a row,
   label, or control the release does not have (0.12.0's first Integrations
   shot invented a GitHub row and was rejected). Something the release shows

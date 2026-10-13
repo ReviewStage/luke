@@ -236,7 +236,7 @@ server off for that chat, and connects one in place.
 [#2336](https://github.com/ReviewStage/luke/pull/2336),
 [#2358](https://github.com/ReviewStage/luke/pull/2358))
 
-![Settings › Integrations with Linear, Notion, and Sentry connected.](apps/web/public/changelog/0.12.0/integrations.png)
+![Settings › Integrations with every integration connected.](apps/web/public/changelog/0.12.0/integrations.png)
 
 ### The call follows you
 
