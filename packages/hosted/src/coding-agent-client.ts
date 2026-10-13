@@ -14,9 +14,11 @@ import {
   type CallAnswer,
   callAnswered,
 } from "./account-call.js";
+import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentDefaultAnswer,
@@ -94,10 +96,11 @@ import {
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the inbox read are the two calls the service holds open, for as
- * long as it waits on the agent's next message or the inbox's next change,
- * so they travel under a deadline of their own that outlasts that hold;
- * every other call keeps the account call's usual one. The account's plan
+ * read and the two inbox reads, a plan's and the account's, are the calls
+ * the service holds open, for as long as it waits on the agent's next
+ * message or the inbox's next change, so they travel under a deadline of
+ * their own that outlasts that hold; every other call keeps the account
+ * call's usual one. The account's plan
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
@@ -194,9 +197,9 @@ function readAnswer<Answer, Encoded>(
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, what one published, and the plan's
- * inbox of what its agents need of the developer, read past a cursor and
- * answered an item at a time.
+ * and effort changed, one stopped, what one published, the plan's inbox
+ * of what its agents need of the developer, read past a cursor and
+ * answered an item at a time, and what waits across the account's plans.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -473,6 +476,19 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
       (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed. */
+  accountInbox(
+    after: string,
+  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#held.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
+      }),
+      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
     );
   }
 

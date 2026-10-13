@@ -10,6 +10,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
+import type { AppInboxPlan } from "#shared/messages/app-state";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
@@ -207,6 +208,10 @@ export interface PlansControl {
   onShowPlan: (planId: string) => void;
   /** Opens a plan on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
   onShowInbox: (planId: string) => void;
+  /** What waits on the developer across the account's plans, as main's read last answered: each plan with an open inbox item, and its items. */
+  inbox: readonly AppInboxPlan[];
+  /** The plan whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
+  inboxShown: string | null;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
@@ -369,6 +374,8 @@ export function usePlansTab(input: {
   shown: boolean;
   /** The agents main says ended while no one was looking, each until its tab is shown. */
   unseenAgents: readonly string[];
+  /** What main says waits on the developer across the account's plans. */
+  inboxWaiting: readonly AppInboxPlan[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -500,6 +507,7 @@ export function usePlansTab(input: {
     viewed.activePlanId,
     agents.agentIds,
     agents.draft?.id,
+    input.inboxWaiting.some((plan) => plan.planId === viewed.activePlanId),
   );
   mainRef.current = mainTabs;
   const sidePanel = useSidePanel(
@@ -523,24 +531,24 @@ export function usePlansTab(input: {
   useEffect(() => {
     if (viewed.activePlanId !== undefined) onRenamePins(viewed.activePlanId, pinLabels);
   }, [viewed.activePlanId, pinLabels, onRenamePins]);
-  // Main hears which agent's tab is on screen, and none while the tab is
-  // away, the version history stands in the plan's place, the side panel
-  // fills the window over the column, or the column shows something else; a
-  // fixture's staged agents are no one's to announce.
-  const shownAgent =
-    shown &&
-    historyFor === undefined &&
-    fixture === undefined &&
-    !sidePanel.fullScreen &&
-    isAgentTab(mainTabs.tab)
-      ? mainTabs.tab.agent
-      : null;
-  const reportedAgent = useRef<string | null | undefined>(undefined);
+  // Main hears which agent's tab, or which plan's Inbox, is on screen, and
+  // neither while the tab is away, the version history stands in the plan's
+  // place, the side panel fills the window over the column, or the column
+  // shows something else; a fixture's staged agents are no one's to announce.
+  const columnShown =
+    shown && historyFor === undefined && fixture === undefined && !sidePanel.fullScreen;
+  const shownAgent = columnShown && isAgentTab(mainTabs.tab) ? mainTabs.tab.agent : null;
+  const shownInbox =
+    columnShown && mainTabs.tab === MAIN_TAB.INBOX ? (viewed.activePlanId ?? null) : null;
+  const reportedTab = useRef<{ agentId: string | null; inboxPlanId: string | null } | undefined>(
+    undefined,
+  );
   useEffect(() => {
-    if (reportedAgent.current === shownAgent) return;
-    reportedAgent.current = shownAgent;
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
-  }, [shownAgent, tell]);
+    const was = reportedTab.current;
+    if (was?.agentId === shownAgent && was.inboxPlanId === shownInbox) return;
+    reportedTab.current = { agentId: shownAgent, inboxPlanId: shownInbox };
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent, inboxPlanId: shownInbox });
+  }, [shownAgent, shownInbox, tell]);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -1055,6 +1063,8 @@ export function usePlansTab(input: {
     },
     onSelect: select,
     onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
+    inbox: input.inboxWaiting,
+    inboxShown: shownInbox,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the side panel's Transcript or Work, asked to
     // bring the call or the turn into view once it draws.

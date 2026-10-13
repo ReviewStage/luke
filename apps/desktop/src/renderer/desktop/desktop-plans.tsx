@@ -132,9 +132,11 @@ function PlanDocument({
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
   const { act, tell } = useAct();
+  const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const inbox = usePlanInbox({
-    planId: region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
+    planId: inboxPlanId,
     shown: plans.shown,
+    waiting: plans.inbox.some((plan) => plan.planId === inboxPlanId),
     agents: plans.agents,
   });
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);

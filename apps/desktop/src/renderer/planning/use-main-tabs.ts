@@ -56,7 +56,10 @@ import {
  * it stands open, moving it nowhere; an item arriving while it stands open
  * only counts on it. Each plan keeps whether its Inbox is open and the
  * items that waited at its last read, so a closed Inbox stays closed across
- * a launch. A plan with no agent has no Inbox, since only an agent posts.
+ * a launch. A plan with no agent has no Inbox, since only an agent posts,
+ * unless main's read of what waits across the account says an item waits
+ * on it, which an agent started on another Mac posts before this window
+ * has read the plan's agents again.
  *
  * The tabs after the plan's are dragged or moved from the keyboard among
  * themselves, and the plan keeps the order from then on: an agent's tab
@@ -216,11 +219,12 @@ export interface MainTabsControl {
   onNewTabAnswered: () => void;
 }
 
-/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, and its draft's key. */
+/** What the open plan holds for the tabs: its id, its agents, or nothing while unread, its draft's key, and whether an inbox item waits on it. */
 interface DrawnTabs {
   planId: string | undefined;
   agents: readonly string[] | undefined;
   draft: string | undefined;
+  waiting: boolean;
 }
 
 /** The plan's choices. */
@@ -264,7 +268,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.planId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
-  const inbox = choices.inboxOpen === true && (drawn.agents?.length ?? 0) > 0;
+  const inbox = choices.inboxOpen === true && ((drawn.agents?.length ?? 0) > 0 || drawn.waiting);
   const order = choices.order ?? NO_TABS;
   return [
     MAIN_TAB.PLAN,
@@ -343,7 +347,7 @@ function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
 
 /** What a plan other than the open one holds for the tabs, which is unread. */
 function unreadPlan(planId: string): DrawnTabs {
-  return { planId, agents: undefined, draft: undefined };
+  return { planId, agents: undefined, draft: undefined, waiting: false };
 }
 
 /**
@@ -478,14 +482,16 @@ function readStored(): HeldState {
 /**
  * The column's tabs over the open plan: `planId`, none while no plan is
  * open, `agents` its agents by id in the order started, or nothing while
- * unread, and `draft` its draft agent's key, if it holds one. A fixture
- * run's column keeps nothing, and starts from nothing.
+ * unread, `draft` its draft agent's key, if it holds one, and `waiting`
+ * whether an inbox item waits on it. A fixture run's column keeps nothing,
+ * and starts from nothing.
  */
 export function useMainTabs(
   fixture: boolean,
   planId: string | undefined,
   agents: readonly string[] | undefined,
   draft: string | undefined,
+  waiting: boolean,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -498,7 +504,10 @@ export function useMainTabs(
     (change: (held: HeldState) => HeldState) => (fixture ? setStaged : setKept)(change),
     [fixture],
   );
-  const drawn = useMemo(() => ({ planId, agents, draft }), [planId, agents, draft]);
+  const drawn = useMemo(
+    () => ({ planId, agents, draft, waiting }),
+    [planId, agents, draft, waiting],
+  );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {

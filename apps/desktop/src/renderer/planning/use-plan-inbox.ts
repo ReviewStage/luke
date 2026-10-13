@@ -28,7 +28,8 @@ import {
  * lets it go at its own hold, so the loop is one read after another with no
  * clock of its own, as an agent's transcript is read (`use-agent-transcript.ts`);
  * each answer is the inbox whole, which replaces what was held. The loop
- * runs while the window shows the plans and a plan with an agent is open, so the tab's
+ * runs while the window shows the plans and a plan with an agent, or one
+ * main says an item waits on, is open, so the tab's
  * count stands whichever tab is chosen, and another plan starts from
  * nothing of this one's. A read that did not answer ends the loop and says
  * so, with Try again, rather than asking again at once.
@@ -130,6 +131,8 @@ export function usePlanInbox(input: {
   planId: string | undefined;
   /** Whether the window shows the plans. */
   shown: boolean;
+  /** Whether main's read of what waits across the account says an item waits on the plan. */
+  waiting: boolean;
   agents: {
     readonly agentIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
@@ -138,7 +141,7 @@ export function usePlanInbox(input: {
     readonly onRetryList: () => void;
   };
 }): PlanInboxControl {
-  const { planId, shown, agents } = input;
+  const { planId, shown, waiting, agents } = input;
   const [held, setHeld] = useState<Held>(() => fresh(planId));
   if (held.planId !== planId) setHeld(fresh(planId));
   const [attempt, setAttempt] = useState(0);
@@ -153,9 +156,11 @@ export function usePlanInbox(input: {
   const latest = useRef(agents);
   latest.current = agents;
 
-  // A plan with no agent has no Inbox tab and nothing to read, so it holds no read open.
-  const hasAgents = (agents.agentIds?.length ?? 0) > 0;
-  const active = shown && planId !== undefined && hasAgents && !held.failed;
+  // A plan with no agent has no Inbox tab and nothing to read, so it holds
+  // no read open, unless an item waits on it, which an agent this window has
+  // not listed, one started on another Mac, posted.
+  const readable = (agents.agentIds?.length ?? 0) > 0 || waiting;
+  const active = shown && planId !== undefined && readable && !held.failed;
   useEffect(() => {
     if (!active || planId === undefined) return;
     let live = true;

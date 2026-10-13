@@ -94,6 +94,8 @@ export const GATEWAY_METHOD = {
   LINEAR_CONNECT: "linear.connect",
   /** The account's Linear connection ended on the service; where it then stands. */
   LINEAR_DISCONNECT: "linear.disconnect",
+  /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
+  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

@@ -1249,6 +1249,136 @@ test("a press folds Pinned for the next launch too, counting its pins, and the o
   assert.equal(pinnedToggle(relaunched).querySelector(".sidebar-repository-count"), null);
 });
 
+/** Each row under the Inbox as it reads: the plan's name, how many of its items wait as a reader hears it, and its repository beneath. */
+function inboxSection(container: HTMLElement): string[] {
+  return [...container.querySelectorAll<HTMLElement>("nav[aria-label='Inbox'] .sidebar-plan")].map(
+    (row) =>
+      [
+        row.querySelector(".sidebar-plan-name")?.textContent,
+        row.querySelector(".sidebar-inbox-count")?.textContent,
+        row.querySelector(".sidebar-plan-repository-name")?.textContent,
+      ]
+        .filter((words) => words !== undefined)
+        .join(" · "),
+  );
+}
+
+function inboxToggle(container: HTMLElement): HTMLButtonElement {
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "nav[aria-label='Inbox'] .sidebar-repository-toggle",
+  );
+  assert.ok(toggle, "the Inbox draws its header");
+  return toggle;
+}
+
+test("while items wait, the Inbox heads the list with a row for each listed plan counting them, the plan whose item changed latest first, and draws nothing while nothing waits", () => {
+  const billing = { ...listedPlan("Billing"), repository: "acme/relay" };
+  const invites = listedPlan("Invites", { pinnedAt: 5 });
+  const ledger = listedPlan("Ledger", { archivedAt: 3 });
+  const listed = { plans: [invites, billing], archived: [ledger] };
+  const quiet = mount(DEAN, { plans: listed });
+  const waiting = mount(DEAN, {
+    plans: {
+      ...listed,
+      inbox: [
+        { planId: billing.id, items: ["item-1", "item-2"] },
+        { planId: invites.id, items: ["item-3"] },
+        // An archived plan's, or one the list has not read, is drawn nowhere.
+        { planId: ledger.id, items: ["item-4"] },
+        { planId: "plan-Unread", items: ["item-5"] },
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    sections(quiet).map(([heading]) => heading),
+    ["Pinned", "Plans"],
+  );
+  assert.deepEqual(
+    sections(waiting).map(([heading]) => heading),
+    ["Inbox", "Pinned", "Plans"],
+  );
+  assert.deepEqual(inboxSection(waiting), ["Billing · 2 items · acme/relay", "Invites · 1 item"]);
+});
+
+test("a press on a plan under the Inbox opens it on its Inbox tab, bringing the Plans tab forward from Settings, and the row is current while that Inbox is on show", () => {
+  const billing = listedPlan("Billing");
+  const opened: string[] = [];
+  const tabs: PanelTab[] = [];
+  const inbox = [{ planId: billing.id, items: ["item-1"] }];
+  const settings = mount(DEAN, {
+    tab: PANEL_TAB.SETTINGS,
+    onTabChange: (tab) => tabs.push(tab),
+    plans: { plans: [billing], inbox, onShowInbox: (planId) => opened.push(planId) },
+  });
+  press(settings, "nav[aria-label='Inbox'] .sidebar-plan");
+  assert.deepEqual(opened, [billing.id]);
+  assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
+
+  const open = {
+    plans: [billing],
+    inbox,
+    page: PLANS_PAGE.DOCUMENT,
+    activePlanId: billing.id,
+  };
+  const onPlan = mount(DEAN, { plans: open });
+  const onInbox = mount(DEAN, { plans: { ...open, inboxShown: billing.id } });
+  const row = (container: HTMLElement) =>
+    container.querySelector("nav[aria-label='Inbox'] .sidebar-plan")?.getAttribute("aria-current");
+  assert.equal(row(onPlan), null);
+  assert.equal(row(onInbox), "page");
+});
+
+test("a press folds the Inbox for the next launch too, counting every waiting item, and the plan whose Inbox is on show still stands under it", () => {
+  const billing = listedPlan("Billing");
+  const invites = listedPlan("Invites");
+  const plans = {
+    plans: [billing, invites],
+    inbox: [
+      { planId: billing.id, items: ["item-1", "item-2"] },
+      { planId: invites.id, items: ["item-3"] },
+    ],
+    page: PLANS_PAGE.DOCUMENT,
+    activePlanId: invites.id,
+    inboxShown: invites.id,
+  };
+  const container = mount(DEAN, { plans });
+
+  act(() => inboxToggle(container).click());
+  const relaunched = mount(DEAN, { plans });
+
+  for (const sidebar of [container, relaunched]) {
+    assert.equal(inboxToggle(sidebar).getAttribute("aria-expanded"), "false");
+    assert.deepEqual(inboxSection(sidebar), ["Invites · 1 item"]);
+    assert.equal(
+      inboxToggle(sidebar).querySelector(".sidebar-repository-count")?.textContent,
+      "3 items",
+    );
+  }
+});
+
+test("the Inbox's header is drawn as Pinned's, and its counts as a row's time", async () => {
+  const styled = await sheetStyle();
+  const billing = listedPlan("Billing", { pinnedAt: 5 });
+  const container = mount(DEAN, {
+    plans: { plans: [billing], inbox: [{ planId: billing.id, items: ["item-1"] }] },
+  });
+  const count = container.querySelector<HTMLElement>(".sidebar-inbox-count");
+  const time = container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan-time");
+  assert.ok(count && time);
+  const box = (element: HTMLElement, properties: readonly string[]) =>
+    properties.map((property) => styled(element, property));
+  const HEADER = ["padding", "font-size", "font-weight", "gap", "color"] as const;
+  const COUNT = ["color", "font-size", "font-variant-numeric", "text-align", "min-width"] as const;
+
+  assert.deepEqual(box(inboxToggle(container), HEADER), box(pinnedToggle(container), HEADER));
+  assert.equal(
+    inboxToggle(container).querySelector(".sidebar-repository-name")?.textContent,
+    "Inbox",
+  );
+  assert.deepEqual(box(count, COUNT), box(time, COUNT));
+});
+
 test("walking the list passes over the pinned plans Pinned folded away", () => {
   const opened: string[] = [];
   const container = mount(DEAN, {

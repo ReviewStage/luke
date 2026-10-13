@@ -1,3 +1,4 @@
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
   INBOX_BOUNDS,
   INBOX_STATUS,
@@ -9,12 +10,13 @@ import {
   inboxReplySchema,
   inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { codingAgent } from "../db/coding-agent-schema.js";
 import { inboxItem } from "../db/inbox-schema.js";
+import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
@@ -34,8 +36,11 @@ import { InstantColumnSchema } from "./store/database.js";
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
  * changed is refused rather than taken for what it now asks; an answer sent
- * again under the key it was taken by finds it taken. Every function is an
- * effect over the ambient `SqlClient` and names no database of its own.
+ * again under the key it was taken by finds it taken. What waits across
+ * the account, every open item on a plan it has not archived, is read on
+ * its own index, so a desktop can hold that read whichever plan is open.
+ * Every function is an effect over the ambient `SqlClient` and names no
+ * database of its own.
  */
 
 type InboxStoreFailure = SqlError | Schema.SchemaError;
@@ -330,6 +335,72 @@ const findSettledStamps = SqlSchema.findAll({
       .limit(limit),
 });
 
+/**
+ * The account's open items on the plans it has not archived: the rows the
+ * account's read of what waits names. Note that the plan is joined by its
+ * key from each item the account's own index finds, so leaving archived
+ * plans out reads no plan the account has no open item on.
+ */
+function accountWaiting(userId: string) {
+  return and(
+    eq(inboxItem.userId, userId),
+    eq(inboxItem.status, INBOX_STATUS.OPEN),
+    isNull(plan.archivedAt),
+  );
+}
+
+const AccountRequestSchema = Schema.Struct({ userId: Schema.String });
+
+/** One open item as the account's read carries it, with its agent as its row names it now. */
+const WaitingRowSchema = Schema.Struct({
+  id: Schema.String,
+  planId: Schema.String,
+  agentId: Schema.String,
+  agentTitle: Schema.NullOr(Schema.String),
+  agentModel: Schema.String,
+  title: Schema.String,
+  revision: Schema.Number,
+  status: Schema.Literals(Object.values(INBOX_STATUS)),
+  postedAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+});
+
+const findWaitingItems = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: WaitingRowSchema,
+  execute: ({ userId }) =>
+    db
+      .select({
+        id: inboxItem.id,
+        planId: inboxItem.planId,
+        agentId: inboxItem.agentId,
+        agentTitle: codingAgent.title,
+        agentModel: codingAgent.model,
+        title: inboxItem.title,
+        revision: inboxItem.revision,
+        status: inboxItem.status,
+        postedAt: inboxItem.postedAt,
+        updatedAt: inboxItem.updatedAt,
+      })
+      .from(inboxItem)
+      .innerJoin(plan, eq(plan.id, inboxItem.planId))
+      .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+      .where(accountWaiting(userId))
+      .orderBy(...LATEST_FIRST),
+});
+
+const findWaitingStamps = SqlSchema.findAll({
+  Request: AccountRequestSchema,
+  Result: StampRowSchema,
+  execute: ({ userId }) =>
+    db
+      .select(STAMP_COLUMNS)
+      .from(inboxItem)
+      .innerJoin(plan, eq(plan.id, inboxItem.planId))
+      .where(accountWaiting(userId))
+      .orderBy(...LATEST_FIRST),
+});
+
 /** The scope's items: every open one, then the latest settled ones up to the limit. */
 function scopeItems(
   scope: InboxScope,
@@ -533,5 +604,34 @@ export function answerInboxItem(
       answerItem({ userId, itemId, revision, answer, answerKey, now }),
       Option.map((row) => storedItem(row).item),
     ),
+  );
+}
+
+/** One item that waits as the account's read holds it: the entry the wire carries, and where it stands, which a cursor digests. */
+type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
+
+/**
+ * Every item that waits on the developer across the account's plans, the
+ * latest changed first: open, and on a plan the account has not archived.
+ * Note that none is left out for being old, because one left unanswered
+ * while many others changed must still be counted; the open bound per
+ * agent keeps these few.
+ */
+export function accountWaitingItems(
+  userId: string,
+): InboxStoreEffect<readonly AccountWaitingRow[]> {
+  return Effect.map(findWaitingItems({ userId }), (rows) =>
+    rows.map((row) => ({
+      ...row,
+      postedAt: row.postedAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    })),
+  );
+}
+
+/** Where each item `accountWaitingItems` reads stands, the same items and none of their words: what a held read of the account compares between looks. */
+export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
+  return Effect.map(findWaitingStamps({ userId }), (rows) =>
+    rows.map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }

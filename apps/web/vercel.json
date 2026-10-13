@@ -161,6 +161,10 @@
           "dest": "/api/default.js?route=github/webhook"
         },
         {
+          "src": "/api/inbox",
+          "dest": "/api/default.js?route=inbox"
+        },
+        {
           "src": "/api/maintenance/provider-keys-rewrap",
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },

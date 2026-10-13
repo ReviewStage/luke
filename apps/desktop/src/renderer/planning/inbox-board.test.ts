@@ -244,13 +244,15 @@ function Tab({
   planId = PLAN,
   chosen = true,
   code,
+  waiting = false,
 }: {
   agents: CodingAgentsControl;
   planId?: string;
   chosen?: boolean;
   code: InboxCodeDoors;
+  waiting?: boolean;
 }) {
-  const inbox = usePlanInbox({ planId, shown: true, agents });
+  const inbox = usePlanInbox({ planId, shown: true, waiting, agents });
   return chosen
     ? createElement(InboxBoard, {
         control: inbox,
@@ -267,6 +269,7 @@ function mounted(
   agents: CodingAgentsControl,
   registry: Parameters<typeof onRegistry>[0],
   code: InboxCodeDoors = fileDoors().doors,
+  waiting = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -274,7 +277,9 @@ function mounted(
   roots.push(root);
   const draw = (planId: string, chosen: boolean) =>
     act(() =>
-      root.render(onRegistry(registry, createElement(Tab, { agents, planId, chosen, code }))),
+      root.render(
+        onRegistry(registry, createElement(Tab, { agents, planId, chosen, code, waiting })),
+      ),
     );
   draw(PLAN, true);
   return {
@@ -541,6 +546,28 @@ it.effect(
       mount(agents, yield* registryOnTestClock);
       yield* settle;
       assert.deepEqual(reads, []);
+    }),
+);
+
+it.effect(
+  "a plan whose agents this window has not read holds its inbox read open where main says an item waits on it, and draws the item",
+  () =>
+    Effect.gen(function* () {
+      const reads: string[] = [];
+      const agents = codingAgentsControl({
+        agents: [],
+        agentIds: [],
+        readInbox: ({ after }) => {
+          reads.push(after);
+          return after === INBOX_CURSOR_START
+            ? Promise.resolve({ items: [SETTINGS], cursor: "1" })
+            : new Promise(() => undefined);
+        },
+      });
+      const { page } = mounted(agents, yield* registryOnTestClock, fileDoors().doors, true);
+      yield* settle;
+      assert.deepEqual(reads, [INBOX_CURSOR_START, "1"]);
+      assert.ok(card(page, SETTINGS.id));
     }),
 );
 

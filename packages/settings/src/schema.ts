@@ -97,15 +97,16 @@ export const APP_SETTING_SCHEMA = {
   agentNotifications: toggleSetting({
     field: "agentNotifications",
     id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
-    label: "Notify me when a coding agent finishes",
+    label: "Notify me when a coding agent finishes or needs me",
     description:
-      "Whether Luke sends a Mac notification when a coding agent finishes, fails, or opens a " +
-      "pull request while his window is behind. In front, the window says so itself either way. " +
-      "Notifications are also allowed or refused for Luke in System Settings.",
+      "Whether Luke sends a Mac notification when a coding agent finishes, fails, opens a " +
+      "pull request, or posts to your Inbox while his window is behind. In front, the window " +
+      "says so itself either way. Notifications, and the Dock's count of what waits in your " +
+      "Inbox, are also allowed or refused for Luke in System Settings.",
     default: true,
     page: SETTINGS_PAGE.ROOT,
     order: 1,
-    // Nothing to run per write: main reads the setting as each end is announced.
+    // Nothing to run per write: main reads the setting as each end or inbox item is announced.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   voice: choiceSetting({
