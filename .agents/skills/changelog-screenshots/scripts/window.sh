@@ -20,6 +20,12 @@ if [[ ! -x $build || $here/window-id.swift -nt $build ]]; then
 fi
 export LUKE_SHOT_SIZE=${LUKE_SHOT_SIZE:-1600x1000}
 profile=$(mktemp -d /tmp/luke-shot.XXXX)
+# Note that we quit the build and remove its profile on every exit, because a failed capture must not leave either behind.
+cleanup() {
+    pkill -f "user-data-dir=$profile" || true
+    rm -rf "$profile"
+}
+trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"
 (cd "$worktree/apps/desktop" && ./node_modules/.bin/electron . --user-data-dir="$profile" --fixture smoke "$@" >/tmp/luke-shot-window.log 2>&1 &)
 sleep 8
@@ -31,20 +37,21 @@ for pid in $(pgrep -f "user-data-dir=$profile"); do
 done
 if [[ $id == 0 ]]; then
     printf 'error: no window; see /tmp/luke-shot-window.log\n' >&2
-    pkill -f "user-data-dir=$profile" || true
     exit 1
 fi
 export LUKE_SHOT_ZOOM=${LUKE_SHOT_ZOOM:-1}
 expected=$(awk -v w="${LUKE_SHOT_SIZE%x*}" -v z="$LUKE_SHOT_ZOOM" 'BEGIN { printf "%d", w * z * 2 }')
+key=0
 for attempt in 1 2 3 4 5; do
     osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $owner) to true" >/dev/null 2>&1 || true
     sleep 1.2
     screencapture -l"$id" -x "$out"
     width=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
-    if ((width - expected > 150)); then break; fi
+    if ((width - expected > 150)); then key=1; break; fi
     printf 'attempt %s: the window was not key (%s px wide)\n' "$attempt" "$width" >&2
 done
-pkill -f "user-data-dir=$profile" || true
-sleep 1
-rm -rf "$profile"
+if ((key == 0)); then
+    printf 'error: the window never became key, so %s has grey traffic lights; leave the Mac alone and run again\n' "$out" >&2
+    exit 1
+fi
 printf '%s\n' "$out"

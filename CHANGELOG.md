@@ -49,11 +49,11 @@
      the feature in front, as the whole window at 1600 by 1000 points or, with
      `--crop`, a close-up cut from that same framed picture, inside the app and
      as tall as every other screenshot, only narrower. Each shows the state a
-     feature is for, everything connected, passing, and done, never an error or
-     empty state unless that state is the news. Every picture is signed in as
-     Dean Stratakos with his GitHub photo, shows no Update pill or other
-     development chrome, and dates everything minutes or days before the
-     capture, never the fixture's 1970 or an hours-long timer. Its data is
+     feature is for, everything connected, checks passing, work done or moving,
+     never an error or empty state unless that state is the news. Every picture
+     is signed in as Dean Stratakos with his GitHub photo, shows no Update pill
+     or other development chrome, and dates everything minutes or days before
+     the capture, never the fixture's 1970 or an hours-long timer. Its data is
      synthetic: the acme organisation, its teal mark, and its repositories,
      never a real account's titles, branches, or conversations. -->
 

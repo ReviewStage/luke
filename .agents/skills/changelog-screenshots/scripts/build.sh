@@ -19,6 +19,12 @@ if [[ ! -d $worktree ]]; then
     git -C "$repo" fetch --quiet origin
     git -C "$repo" worktree add --detach "$worktree" "$commit"
 fi
+# Note that we refuse a directory that is not a worktree of $repo, because the checkout and clean below would wipe whatever it holds.
+if [[ $(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) != "$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)" ||
+    $(git -C "$worktree" rev-parse --show-toplevel) == "$(git -C "$repo" rev-parse --show-toplevel)" ]]; then
+    printf 'error: %s is not a throwaway worktree of %s\n' "$worktree" "$repo" >&2
+    exit 1
+fi
 cd "$worktree"
 git fetch --quiet origin
 git checkout --quiet --force --detach "$commit"

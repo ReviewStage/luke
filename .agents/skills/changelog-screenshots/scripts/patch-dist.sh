@@ -14,7 +14,8 @@ worktree=${SHOTS_WORKTREE:-$HOME/Developer/luke-changelog-shots}
 main="$worktree/apps/desktop/dist/main.js"
 sed -i '' -E 's/const stateRoot = (import_node_path[0-9]*\.default\.join\([a-z0-9_]+\.getPath\("appData"\), appName\));/const stateRoot = process.argv.find((a) => a.startsWith("--user-data-dir="))?.slice(16) ?? \1;/' "$main"
 if ! grep -q 'startsWith("--user-data-dir=")' "$main"; then
-    printf 'warning: stateRoot was not patched; quit any running Luke before shooting\n' >&2
+    printf 'error: stateRoot was not patched, so a shot would share a running Luke'"'"'s state; adapt the pattern to this release\n' >&2
+    exit 1
 fi
 # Note that we let every window grow past the screen, because macOS clamps a zoomed window's height to the display otherwise.
 if ! grep -q 'enableLargerThanScreen: true' "$main"; then

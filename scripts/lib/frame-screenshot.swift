@@ -36,6 +36,8 @@ let MARGIN = 180
 let OUTPUT_WIDTH = 2400
 /// A pixel this opaque belongs to the window body rather than its shadow.
 let BODY_ALPHA: UInt8 = 250
+/// The largest zoom a capture is taken at; past it the window's pixels outgrow what a Mac will draw.
+let MAX_ZOOM: CGFloat = 4
 /// The resolution macOS records for a point when it does not say, as on a Retina display.
 let DEFAULT_DPI: CGFloat = 144
 
@@ -59,10 +61,12 @@ func pixelsPerPoint(_ url: URL) -> CGFloat {
     return CGFloat(dpi.doubleValue) / 72
 }
 
-/// A crop as `x,y,width,height` in window points.
+/// A crop as `x,y,width,height` in window points: exactly four finite numbers, its size positive.
 func parseCrop(_ text: String) throws -> CGRect {
-    let parts = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-    guard parts.count == 4, parts[2] > 0, parts[3] > 0 else {
+    let fields = text.split(separator: ",", omittingEmptySubsequences: false)
+    let parts = fields.compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    guard fields.count == 4, parts.count == 4, parts.allSatisfy({ $0.isFinite }), parts[2] > 0, parts[3] > 0
+    else {
         throw FrameError(description: "a crop is x,y,width,height in points, got \(text)")
     }
     return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
@@ -211,14 +215,15 @@ func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, zoom: CGFloat, wa
         x: CGFloat(margin) + crop.minX * scale, y: CGFloat(margin) + crop.minY * scale,
         width: crop.width * scale, height: crop.height * scale
     ).integral
-    let outputWidth = Int((cut.width * CGFloat(outputHeight) / cut.height).rounded())
+    let scaledWidth = (cut.width * CGFloat(outputHeight) / cut.height).rounded()
+    guard scaledWidth <= CGFloat(OUTPUT_WIDTH) else {
+        throw FrameError(description: "the crop \(crop) is wider than a whole picture at its height; make it taller")
+    }
+    let outputWidth = Int(scaledWidth)
     guard CGRect(x: 0, y: 0, width: whole.width, height: whole.height).contains(cut),
         let piece = whole.cropping(to: cut)
     else {
         throw FrameError(description: "the crop \(crop) reaches past the wallpaper around the window")
-    }
-    guard outputWidth <= OUTPUT_WIDTH else {
-        throw FrameError(description: "the crop \(crop) is wider than a whole picture at its height; make it taller")
     }
     guard
         let context = CGContext(
@@ -244,7 +249,9 @@ do {
     let capture = try loadImage(captureURL)
     let backdrop = try await wallpaper(cache: URL(fileURLWithPath: arguments[3]))
     let zoom = arguments.count == 6 ? CGFloat(Double(arguments[5]) ?? 0) : 1
-    guard zoom >= 1 else { throw FrameError(description: "a zoom is a number of at least 1") }
+    guard zoom.isFinite, zoom >= 1, zoom <= MAX_ZOOM else {
+        throw FrameError(description: "a zoom is a number from 1 to \(Int(MAX_ZOOM))")
+    }
     let framed =
         arguments.count >= 5
         ? try frameCrop(
