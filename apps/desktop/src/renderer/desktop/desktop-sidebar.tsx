@@ -774,7 +774,13 @@ export function DesktopSidebar({
       <hr className="sidebar-rule" />
       {/* The workspace the list is, while the account is in more than one;
           it stands over the scroller, so it never scrolls away. */}
-      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
+      {plans.signedIn ? (
+        <WorkspaceSwitcher
+          plans={plans}
+          inSight={!sidebar.collapsed}
+          onOpenMembers={() => onTabChange(PANEL_TAB.SETTINGS)}
+        />
+      ) : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}

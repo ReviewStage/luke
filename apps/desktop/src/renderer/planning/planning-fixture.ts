@@ -19,7 +19,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
-import { type Workspace, WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@sidecar/hosted/workspace-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";

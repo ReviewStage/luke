@@ -477,6 +477,12 @@ export function App(): React.JSX.Element {
             settings,
             onFeedback: setFeedbackKind,
             shortcuts,
+            // The workspace Settings shows members of is the one the sidebar lists.
+            workspace: {
+              workspace: plans.workspace,
+              onLeft: plans.onLeftWorkspace,
+              onInstall: plans.onInstallApp,
+            },
           }}
         />
       </div>

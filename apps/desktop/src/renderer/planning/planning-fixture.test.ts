@@ -67,7 +67,7 @@ test("a fixture run under the planning-work profile opens its plan on the Work t
   );
 });
 
-test("a fixture run lists the account's personal workspace first and a team's beside it, and every plan names one of them", () => {
+test("a fixture run lists the account's personal workspace first, a team's beside it, and one to join, and every plan names one it is in", () => {
   const view = fixturePlanningView({ fixtureMode: true, profile: RUN_PROFILE.IDLE });
   assert.ok(view !== undefined);
   const [personal, ...teams] = view.workspaces;
@@ -79,4 +79,5 @@ test("a fixture run lists the account's personal workspace first and a team's be
     true,
   );
   assert.equal(view.plans.filter((plan) => plan.workspaceId === personal?.id).length > 1, true);
+  assert.equal(view.available.length, 1);
 });

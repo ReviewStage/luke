@@ -16,6 +16,7 @@ import {
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan, PlanAgentsSummary, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -1397,25 +1398,32 @@ test("a repository's menu closes when the sidebar folds away, so nothing of a hi
   assert.deepEqual(menuItems(), []);
 });
 
-const PERSONAL = { id: "workspace-personal", name: "Personal", personal: true };
-const ACME = { id: "workspace-acme", name: "Acme", personal: false };
+const PERSONAL = {
+  id: "workspace-personal",
+  name: "Personal",
+  personal: true,
+  role: WORKSPACE_ROLE.OWNER,
+};
+const ACME = { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const GLOBEX = { installationId: 4242, name: "globex" };
 
 function workspaceSwitcher(container: HTMLElement): HTMLButtonElement | null {
   return container.querySelector<HTMLButtonElement>(".sidebar-workspace-toggle");
 }
 
-test("the plans are headed by the workspace listed, whose menu lists every workspace, the listed one checked, and chooses another", () => {
-  const chosen: string[] = [];
-  let managed = 0;
+test("the plans are headed by the workspace listed, whose menu lists every workspace checked where listed, a Join for each to join, the install, and the members of a team's", () => {
+  const pressed: string[] = [];
+  const tabs: PanelTab[] = [];
   const container = mount(DEAN, {
+    onTabChange: (tab) => tabs.push(tab),
     plans: {
       plans: [onRepository("Billing", "acme/ledger")],
       workspaces: [PERSONAL, ACME],
-      workspace: PERSONAL,
-      onChooseWorkspace: (workspaceId) => chosen.push(workspaceId),
-      onManageWorkspaces: () => {
-        managed += 1;
-      },
+      available: [GLOBEX],
+      workspace: ACME,
+      onChooseWorkspace: (workspaceId) => pressed.push(`choose:${workspaceId}`),
+      onJoinWorkspace: (installationId) => pressed.push(`join:${installationId}`),
+      onInstallApp: () => pressed.push("install"),
     },
   });
   const switcher = workspaceSwitcher(container);
@@ -1423,18 +1431,24 @@ test("the plans are headed by the workspace listed, whose menu lists every works
 
   act(() => switcher.click());
   const offered = menuItems().map((item) => [item.textContent, item.querySelector("svg") !== null]);
-  choose("Acme");
+  choose("Personal");
   act(() => switcher.click());
-  choose("Manage workspaces…");
+  choose("Join globex");
+  act(() => switcher.click());
+  choose("Install Luke on GitHub…");
+  act(() => switcher.click());
+  choose("Members…");
 
-  assert.equal(switcher.textContent, "Personal");
+  assert.equal(switcher.textContent, "acme");
   assert.deepEqual(offered, [
-    ["Personal", true],
-    ["Acme", false],
-    ["Manage workspaces…", true],
+    ["Personal", false],
+    ["acme", true],
+    ["Join globex", true],
+    ["Install Luke on GitHub…", true],
+    ["Members…", true],
   ]);
-  assert.deepEqual(chosen, [ACME.id]);
-  assert.equal(managed, 1);
+  assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, `join:${GLOBEX.installationId}`, "install"]);
+  assert.deepEqual(tabs, [PANEL_TAB.SETTINGS]);
   assert.ok(
     switcher.compareDocumentPosition(header(container, "ledger")) &
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1442,7 +1456,22 @@ test("the plans are headed by the workspace listed, whose menu lists every works
   );
 });
 
-test("an account in its personal workspace alone, or signed out, draws no switcher", () => {
+test("the personal workspace listed offers no Members…, and one workspace with one to join still draws the switcher", () => {
+  const container = mount(DEAN, {
+    plans: { workspaces: [PERSONAL], available: [GLOBEX], workspace: PERSONAL },
+  });
+  const switcher = workspaceSwitcher(container);
+  assert.ok(switcher, "a workspace to join draws the switcher");
+
+  act(() => switcher.click());
+
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    ["Personal", "Join globex", "Install Luke on GitHub…"],
+  );
+});
+
+test("an account in its personal workspace alone with none to join, or signed out, draws no switcher", () => {
   const alone = mount(DEAN, {
     plans: {
       plans: [onRepository("Billing", "acme/ledger")],
@@ -1468,7 +1497,7 @@ test("the workspace menu closes when the sidebar folds away", () => {
 
   restages.get(container)?.({ collapsed: true });
 
-  assert.equal(opened, 3);
+  assert.equal(opened, 4);
   assert.deepEqual(menuItems(), []);
 });
 
