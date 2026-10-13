@@ -32,7 +32,8 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
  * (`plan-card.tsx`) as a pinned tab's is: the skill's mark and name at its
  * head, what it is for under it, and its file's line, which opens it too.
  * A chip the composer drew opens the same file on a press
- * (`skill-picker.tsx`). The words stay the message's own underneath, so a copy of the message and a find in the tab read `/name`.
+ * (`skill-picker.tsx`). The words stay the message's own underneath, so a
+ * copy of the message and a find in the tab read `/name`.
  * The skills are the ones the composer offers, read once for the plan
  * (`repository-skills.ts`), and only once a transcript holds a word they
  * could name, so a conversation naming none reads nothing. The "Loaded
