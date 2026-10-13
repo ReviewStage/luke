@@ -8,7 +8,7 @@ import {
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
-  isAccountProvider,
+  isSignInProvider,
 } from "@sidecar/credentials/snapshot";
 import { AgentTraceWriter, agentTraceDirectory } from "@sidecar/devtrace";
 import {
@@ -247,7 +247,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
       Effect.gen(function* () {
         const provider = params.provider;
-        if (!isAccountProvider(provider))
+        if (!isSignInProvider(provider))
           return yield* invalid("provider is not one this build knows");
         settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
           account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,

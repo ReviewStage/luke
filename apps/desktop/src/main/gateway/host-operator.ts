@@ -1,5 +1,5 @@
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot, SignInProvider } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
 import {
@@ -176,7 +176,7 @@ export interface HostOperator {
   ): Effect.Effect<SettingsUpdateResult>;
   resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
+  beginSignIn(provider: SignInProvider): Effect.Effect<AccountSnapshot>;
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
