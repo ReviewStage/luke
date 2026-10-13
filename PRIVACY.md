@@ -364,7 +364,9 @@ own retention policy.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, the address of your profile picture, and which of the two you used.
-Signing in with GitHub authorizes the Luke GitHub App: its token reaches only
+An account made with Google can also link a GitHub account to itself, even
+one under a different email address; signing in with GitHub, or linking it,
+authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents
 and pull requests; reading its checks, commit statuses, and Actions runs with
@@ -374,7 +376,9 @@ token sealed under a server-only secret, read them only on our service, and
 never hand them to your Mac, a browser, or anyone else; they go when you
 delete your account, and you can revoke the App in GitHub's settings under
 Applications, where an account that signed in before the App may also hold
-an unused `repo` permission to revoke. Signing in with Google leaves us
+an unused `repo` permission to revoke. When you revoke it, GitHub tells us,
+and we delete that GitHub link and its tokens; your account keeps any other
+way you sign in. Signing in with Google leaves us
 Google's sign-in tokens, kept on our service and used for nothing after the
 sign-in. Installing the App stores nothing about you: which repositories it
 can see is read from GitHub when you choose one. We also keep the records

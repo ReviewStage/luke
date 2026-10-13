@@ -13,13 +13,16 @@ import {
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { listWorkspaces } from "@sidecar/database/models/workspace-store";
+import { account, user } from "@sidecar/database/schemas/auth";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { getTestDB } from "@sidecar/database/testing";
 import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { GITHUB_PROVIDER_ID } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -260,16 +263,18 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         });
         const now = yield* DateTime.nowAsDate;
         yield* Database.use((db) =>
-          db.insert(githubInstallation).values({
-            organizationId: workspaceId,
-            installationId,
-            accountId: installationId + 1,
-            accountLogin: login,
-            accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
-            status: GITHUB_INSTALLATION_STATUS.ACTIVE,
-            createdAt: now,
-            updatedAt: now,
-          }),
+          Database.use((db) =>
+            db.insert(githubInstallation).values({
+              organizationId: workspaceId,
+              installationId,
+              accountId: installationId + 1,
+              accountLogin: login,
+              accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+              status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+              createdAt: now,
+              updatedAt: now,
+            }),
+          ),
         );
         const connected = () =>
           Effect.map(listWorkspaces(owner), (workspaces) =>
@@ -295,6 +300,64 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.deepEqual(suspended, [{ login, active: false }]);
         assert.deepEqual(unsuspended, [{ login, active: true }]);
         assert.deepEqual(deleted, [{ login, active: false }]);
+      }),
+  );
+
+  it.effect(
+    "a user revoking the App's authorization unlinks that GitHub user alone, and the account keeps its Google sign-in",
+    () =>
+      Effect.gen(function* () {
+        const githubUserIdOf = () => 800_000 + Math.floor(Math.random() * 90_000);
+        const revoked = githubUserIdOf();
+        const kept = revoked + 1;
+        const accountWith = (githubUserId: number) =>
+          Effect.gen(function* () {
+            const userId = `user-${randomUUID()}`;
+            yield* Database.use((db) =>
+              db
+                .insert(user)
+                .values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+            );
+            for (const [providerId, accountId] of [
+              [GITHUB_PROVIDER_ID, String(githubUserId)],
+              ["google", `google-${userId}`],
+            ] as const) {
+              yield* Database.use((db) =>
+                db.insert(account).values({
+                  id: `account-${randomUUID()}`,
+                  accountId,
+                  providerId,
+                  userId,
+                }),
+              );
+            }
+            return userId;
+          });
+        const providersOf = (userId: string) =>
+          Effect.map(
+            Database.use((db) =>
+              db
+                .select({ providerId: account.providerId })
+                .from(account)
+                .where(eq(account.userId, userId)),
+            ),
+            (rows) => rows.map((row) => row.providerId).sort(),
+          );
+        const revoking = yield* accountWith(revoked);
+        const other = yield* accountWith(kept);
+
+        const answered = yield* answer(
+          githubReaching([]),
+          SECRET,
+          delivery("github_app_authorization", {
+            action: "revoked",
+            sender: { id: revoked, login: "octo" },
+          }),
+        );
+
+        assert.equal(answered.status, 200);
+        assert.deepEqual(yield* providersOf(revoking), ["google"]);
+        assert.deepEqual(yield* providersOf(other), ["github", "google"]);
       }),
   );
 });

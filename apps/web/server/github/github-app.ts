@@ -510,6 +510,24 @@ const writeSealedTokens = SqlSchema.void({
     ),
 });
 
+/**
+ * Every GitHub row of the GitHub user given, whichever Luke account holds it.
+ * Note that Luke writes Better Auth's own `account` table here, because a
+ * webhook carries no session and Better Auth offers no server call that
+ * unlinks a provider account for a user who is not the one asking.
+ */
+const deleteGithubAccountsOf = SqlSchema.void({
+  Request: Schema.String,
+  execute: (githubUserId) =>
+    Database.use((db) =>
+      db
+        .delete(account)
+        .where(
+          and(eq(account.providerId, GITHUB_PROVIDER_ID), eq(account.accountId, githubUserId)),
+        ),
+    ),
+});
+
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -564,6 +582,19 @@ function userOf(record: UserRecord): GitHubUser {
  * private: `<id>+<login>@users.noreply.github.com`, which is what a commit
  * by the account is attributed through.
  */
+/**
+ * Forgets a GitHub user's authorization of the App, as GitHub's
+ * `github_app_authorization` delivery reports it revoked: the account row, and
+ * the sealed tokens on it that no longer reach anything, go. The Luke account
+ * keeps every other way it signs in; one whose only way in was GitHub signs
+ * in with GitHub again, which links a fresh row.
+ */
+export function forgetRevokedAuthorization(
+  githubUserId: number,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return deleteGithubAccountsOf(String(githubUserId));
+}
+
 export function noreplyAddress(user: GitHubUser): string {
   return `${user.id}+${user.login}@${GITHUB_NOREPLY_DOMAIN}`;
 }
