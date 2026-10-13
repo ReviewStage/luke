@@ -1408,14 +1408,18 @@ body,
   z-index: var(--z-menu);
   display: flex;
   min-width: 196px;
+  max-width: 280px;
   flex-direction: column;
   padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
   box-shadow: var(--menu-shadow);
-  /* A long menu, as a folder's entries may be, scrolls within the window. */
+  /* A long menu, as a folder's entries may be, scrolls down within the
+     window and never sideways: words wider than the menu, a long email or
+     name, end in an ellipsis inside their row instead. */
   max-height: calc(100vh - 16px);
+  overflow-x: hidden;
   overflow-y: auto;
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
@@ -1486,7 +1490,10 @@ body,
 }
 
 .plan-menu-label {
+  min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* An item's shortcut at its end. */
