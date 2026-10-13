@@ -1293,12 +1293,13 @@ export function SidePanel({
             )}
           </div>
         ) : (
-          // The Board is drawn on a canvas, which keeps a find of its own.
+          // The Board is drawn on a canvas, which keeps a find of its own, and
+          // a page's words stand in a sandboxed frame no find of the window reaches.
           <FindScope
             className="side-panel-content"
             role="tabpanel"
             aria-label={label}
-            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD}
+            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
             subject={{ plan: planId, tab }}
           >
             <TabContent

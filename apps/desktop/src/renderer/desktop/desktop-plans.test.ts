@@ -139,6 +139,7 @@ function Page({
   plan = PLAN,
   holds,
   onRenamePlan,
+  pages,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
@@ -148,6 +149,7 @@ function Page({
   /** What the open plan holds; every fixed kind where absent. */
   holds?: PlanHolds | undefined;
   onRenamePlan?: PlansControl["onRenamePlan"];
+  pages?: PlansControl["pages"];
 }) {
   const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
   const mainTabs = useMainTabs(false, plan.id, agents?.agentIds, agents?.draft?.id, false);
@@ -157,6 +159,7 @@ function Page({
     mainTabs.openAgents,
     workerCallIds(work?.turns),
     files,
+    (pages ?? []).map((each) => each.id),
   );
   useAppKeymap(true);
   useMenuCommands(true);
@@ -178,6 +181,7 @@ function Page({
       ...(agents === undefined ? undefined : { agents }),
       ...(onRenamePlan === undefined ? undefined : { onRenamePlan }),
       shownCode,
+      pages,
     }),
   });
   return createElement(
@@ -204,6 +208,7 @@ function mountOpenPlan(
     agents?: PlansControl["agents"];
     shownCode?: PlansControl["shownCode"];
     holds?: PlanHolds;
+    pages?: PlansControl["pages"];
   } = {},
 ): HTMLElement {
   const container = document.createElement("div");
@@ -2512,9 +2517,15 @@ test("Command-T opens the + of the column holding the focus, the plan's column's
   keydown({ key: "t", metaKey: true });
   assert.ok(document.querySelector(".desktop-toolbar .tab-add-menu"));
 });
-test("Command-F opens the find bar over the chosen tab of the column holding the focus: the plan's document, the side panel's tab once the pointer went into it, and nothing over the Board, whose canvas keeps its own find", () => {
+test("Command-F opens the find bar over the chosen tab of the column holding the focus: the plan's document, the side panel's tab once the pointer went into it, and nothing over the Board, whose canvas keeps its own find, nor over a page, whose frame no find reaches", () => {
   const painted = installHighlights();
-  const page = mountOpenPlan();
+  const funnel = {
+    id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+    title: "Invite funnel",
+    version: 1,
+    at: 1,
+  };
+  const page = mountOpenPlan({ pages: [funnel] });
   const find = () => keydown({ key: "f", code: "KeyF", metaKey: true });
   const barIn = () => page.querySelector(".find-bar")?.parentElement?.className ?? "";
 
@@ -2542,6 +2553,18 @@ test("Command-F opens the find bar over the chosen tab of the column holding the
   assert.equal(find(), true);
   assert.equal(page.querySelectorAll(".find-bar").length, 2, "the column's bar stays open over it");
   assert.match(focused().closest(".find-scope")?.className ?? "", /side-panel-content/u);
+
+  key(focused(), "Escape");
+  act(() => {
+    panel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  keydown({ key: "t", metaKey: true });
+  const row = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].find(
+    (each) => each.textContent?.includes(funnel.title),
+  );
+  assert.ok(row, "the panel's + offers the page");
+  act(() => row.click());
+  assert.equal(find(), false, "a page leaves ⌘F alone");
 });
 test("the + drops the searchable menu over every kind, whether or not it is open, an open one chosen where it stands by a pick and a closed one opened at the strip's end", () => {
   const page = mountOpenPlan();
