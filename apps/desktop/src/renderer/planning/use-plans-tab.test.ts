@@ -1287,9 +1287,6 @@ const readWorkspaceNamed = Schema.decodeUnknownOption(
   Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
 );
 
-/** A join's payload, read back as the act's own schema admits it. */
-const readJoin = Schema.decodeUnknownOption(Schema.Struct({ installationId: Schema.Number }));
-
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
   payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
