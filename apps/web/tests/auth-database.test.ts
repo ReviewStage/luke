@@ -229,73 +229,175 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
 
 const MemberRowSchema = Schema.Struct({ user_id: Schema.String, role: Schema.String });
 
+const SlugRowSchema = Schema.Struct({ slug: Schema.String });
+
+/** What Better Auth answers when a call is refused: its error code, on the body. */
+const RefusalSchema = Schema.Struct({ body: Schema.Struct({ code: Schema.String }) });
+
+/** What a browser posts to an organization endpoint: flat fields, and `update`'s nested `data`. */
+type OrganizationWriteBody = Readonly<Record<string, string | Readonly<Record<string, string>>>>;
+
+/** Every organization write a signed-in browser could ask for over HTTP, with a body it would send. */
+const ORGANIZATION_WRITES: ReadonlyArray<{
+  readonly path: string;
+  readonly body: OrganizationWriteBody;
+}> = [
+  { path: "/organization/create", body: { name: "Acme", slug: "acme" } },
+  { path: "/organization/check-slug", body: { slug: "acme" } },
+  { path: "/organization/update", body: { data: { slug: "acme" } } },
+  { path: "/organization/delete", body: {} },
+  { path: "/organization/set-active", body: {} },
+  { path: "/organization/remove-member", body: { memberIdOrEmail: "owner@example.com" } },
+  { path: "/organization/update-member-role", body: { memberId: "member", role: "owner" } },
+  { path: "/organization/leave", body: {} },
+  {
+    path: "/organization/invite-member",
+    body: { email: "stranger@example.com", role: "member" },
+  },
+];
+
+/** An account signed up through the server API, and the cookie its sign-up set. */
+interface SignedUpAccount {
+  readonly id: string;
+  readonly cookie: string;
+}
+
 /**
- * The organization plugin over the migrated schema, reached the two
- * server-only ways a hosted route writes a workspace: created for an account
- * named by id, with no session, and joined by a second account. Its
- * invitation doors are shut, since an invitation with no mail to send would
- * only sit in the table.
+ * Luke's own organization policy over a migrated PGlite. Email and password
+ * sign-up is on in this instance alone: it is Better Auth's documented
+ * server call that both saves an account and signs it in, which is all the
+ * test needs of an account, and Luke's own instance signs in through its
+ * social providers instead.
  */
-test("Better Auth's organization plugin creates a workspace and adds a member in the migrated schema, and serves no invitation", async () => {
+function organizationAuth(client: Awaited<ReturnType<typeof openMigratedPglite>>) {
+  return betterAuth({
+    database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
+    baseURL: "http://127.0.0.1",
+    secret: "auth-database-test-secret-with-enough-length",
+    emailAndPassword: { enabled: true },
+    disabledPaths: [...DISABLED_AUTH_PATHS],
+    plugins: [organization(ORGANIZATION_OPTIONS)],
+  });
+}
+
+async function signUp(
+  auth: ReturnType<typeof organizationAuth>,
+  name: string,
+): Promise<SignedUpAccount> {
+  const { headers, response } = await auth.api.signUpEmail({
+    body: { name, email: `${name}@example.com`, password: "a-password-long-enough" },
+    returnHeaders: true,
+  });
+  // A browser sends back each cookie's name and value, and none of its attributes.
+  const cookie = headers
+    .getSetCookie()
+    .map((line) => line.split(";")[0])
+    .join("; ");
+  return { id: response.user.id, cookie };
+}
+
+async function withOrganizationAuth(
+  body: (fixture: {
+    readonly auth: ReturnType<typeof organizationAuth>;
+    readonly readRows: <A>(
+      statement: Effect.Effect<ReadonlyArray<unknown>, unknown, SqlClient.SqlClient>,
+      schema: Schema.Codec<A>,
+    ) => Promise<ReadonlyArray<A>>;
+  }) => Promise<void>,
+): Promise<void> {
   const client = await openMigratedPglite();
   const runtime = ManagedRuntime.make(Layer.mergeAll(sqlClientOverPglite(client)));
   try {
-    const created = new Date("2026-10-12T00:00:00.000Z");
-    await runtime.runPromise(
-      Effect.flatMap(
-        SqlClient.SqlClient,
-        (sql) => sql`insert into "user" (id, name, email, created_at, updated_at) values
-          ('owner', 'Owner', 'owner@example.com', ${created}, ${created}),
-          ('teammate', 'Teammate', 'teammate@example.com', ${created}, ${created})`,
-      ),
-    );
-    const auth = betterAuth({
-      database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
-      baseURL: "http://127.0.0.1",
-      secret: "auth-database-test-secret-with-enough-length",
-      disabledPaths: [...DISABLED_AUTH_PATHS],
-      plugins: [organization(ORGANIZATION_OPTIONS)],
+    await body({
+      auth: organizationAuth(client),
+      readRows: async (statement, schema) =>
+        (await runtime.runPromise(statement)).map((row) => Schema.decodeUnknownSync(schema)(row)),
     });
-
-    const workspace = await auth.api.createOrganization({
-      body: { name: "Acme", slug: "acme", userId: "owner" },
-    });
-    assert.ok(workspace);
-    await auth.api.addMember({
-      body: { userId: "teammate", organizationId: workspace.id, role: "member" },
-    });
-
-    const rows = await runtime.runPromise(
-      Effect.flatMap(
-        SqlClient.SqlClient,
-        (sql) =>
-          sql`select user_id, role from member where organization_id = ${workspace.id} order by user_id`,
-      ),
-    );
-    assert.deepEqual(
-      rows.map((row) => Schema.decodeUnknownSync(MemberRowSchema)(row)),
-      [
-        { user_id: "owner", role: "owner" },
-        { user_id: "teammate", role: "member" },
-      ],
-    );
-
-    const invite = await auth.handler(
-      new Request("http://127.0.0.1/api/auth/organization/invite-member", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email: "stranger@example.com",
-          role: "member",
-          organizationId: workspace.id,
-        }),
-      }),
-    );
-    assert.equal(invite.status, 404);
   } finally {
     await runtime.dispose();
     await client.close();
   }
+}
+
+function postAuth(path: string, cookie: string, body: OrganizationWriteBody): Request {
+  return new Request(`http://127.0.0.1/api/auth${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "http://127.0.0.1", cookie },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * The organization plugin over the migrated schema, reached the two
+ * server-only ways a hosted route writes a workspace: created for an account
+ * named by id, with no session, and joined by a second account.
+ */
+test("Better Auth's organization plugin creates a workspace and adds a member in the migrated schema from the server", async () => {
+  await withOrganizationAuth(async ({ auth, readRows }) => {
+    const owner = await signUp(auth, "owner");
+    const teammate = await signUp(auth, "teammate");
+    const workspace = await auth.api.createOrganization({
+      body: { name: "Acme", slug: "acme", userId: owner.id },
+    });
+    assert.ok(workspace);
+    await auth.api.addMember({
+      body: { userId: teammate.id, organizationId: workspace.id, role: "member" },
+    });
+
+    const rows = await readRows(
+      Effect.flatMap(
+        SqlClient.SqlClient,
+        (sql) =>
+          sql`select user_id, role from member where organization_id = ${workspace.id} order by created_at`,
+      ),
+      MemberRowSchema,
+    );
+    assert.deepEqual(rows, [
+      { user_id: owner.id, role: "owner" },
+      { user_id: teammate.id, role: "member" },
+    ]);
+  });
+});
+
+/**
+ * A slug is what a workspace is adopted by, so a signed-in browser that
+ * could create an organization, or rename its own, could take a team's slug
+ * before the team arrives. The owner of a workspace of their own, signed in,
+ * reaches no organization write over HTTP, and is refused the create even
+ * through the server API when the call carries their session.
+ */
+test("a signed-in account creates, renames, and joins no organization over HTTP, and creates none with its session", async () => {
+  await withOrganizationAuth(async ({ auth, readRows }) => {
+    const intruder = await signUp(auth, "intruder");
+    const own = await auth.api.createOrganization({
+      body: { name: "Intruder", slug: "intruder", userId: intruder.id },
+    });
+    assert.ok(own);
+
+    for (const write of ORGANIZATION_WRITES) {
+      const answer = await auth.handler(
+        postAuth(write.path, intruder.cookie, { organizationId: own.id, ...write.body }),
+      );
+      assert.equal(answer.status, 404, write.path);
+    }
+
+    const refusal = await auth.api
+      .createOrganization({
+        headers: new Headers({ cookie: intruder.cookie }),
+        body: { name: "Acme", slug: "acme" },
+      })
+      .then(() => undefined, Schema.decodeUnknownSync(RefusalSchema));
+    assert.equal(refusal?.body.code, "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION");
+
+    const slugs = await readRows(
+      Effect.flatMap(
+        SqlClient.SqlClient,
+        (sql) => sql`select slug from organization order by slug`,
+      ),
+      SlugRowSchema,
+    );
+    assert.deepEqual(slugs, [{ slug: "intruder" }]);
+  });
 });
 
 test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {
