@@ -17,7 +17,7 @@ import {
 import { EmptyState } from "../empty-state";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
-import { AgentMessage, type DelegationDoors, PLANNING_LEAD } from "./agent-tab";
+import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallEnded } from "./call-card";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
 import { AGENT_PART } from "./coding-agent-model";
@@ -189,7 +189,7 @@ function TurnWork({
       <AgentMessage
         message={message}
         plan={false}
-        lead={PLANNING_LEAD}
+        lead={AGENT_LEAD}
         moving={turn.moving}
         delegation={doors.delegation}
         said={spoken}
@@ -222,7 +222,7 @@ function CallEntries({
         key={first.id}
         message={spokenMessage(run)}
         plan={false}
-        lead={PLANNING_LEAD}
+        lead={AGENT_LEAD}
         moving={false}
         delegation={undefined}
       />,

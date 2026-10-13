@@ -1,3 +1,4 @@
+import { catalogIdOf } from "@sidecar/hosted/model-label";
 import {
   type PlanTranscript,
   TRANSCRIPT_BOUNDS,
@@ -27,7 +28,7 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * voice wrote for it in the plan's conversation, found by its call, its
  * speaker, and where on the call their words began. Beside its words, each call says what
  * its session row recorded of it: when and why it ended, its metered
- * seconds, and its model, each only where the row holds it. Every statement names the
+ * seconds, and its model by the catalog's id (`catalogIdOf`), each only where the row holds it. Every statement names the
  * account beside the plan, so a plan another account owns reads as no plan,
  * exactly as in `plan-store.ts`, and a call another account made about a
  * plan of the same id is never gathered. Nothing is written here.
@@ -139,7 +140,7 @@ function recordOf(row: CallRecordRow | undefined): Partial<TranscriptCall> {
     ...(row.closedAt === null ? undefined : { endedAt: row.closedAt.getTime() }),
     ...(row.closeReason === null ? undefined : { ending: row.closeReason }),
     ...(row.usage === null ? undefined : { usage: row.usage }),
-    ...(row.model === null ? undefined : { model: row.model }),
+    ...(row.model === null ? undefined : { model: catalogIdOf(row.model) }),
   };
 }
 

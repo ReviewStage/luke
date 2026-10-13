@@ -6,6 +6,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { HarnessMark } from "../provider-marks";
+import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { spanText } from "./plan-time";
 
@@ -16,9 +17,10 @@ import { spanText } from "./plan-time";
  * the rest a developer reaches for once they wonder what a turn cost or
  * ran on, as Conductor's and Codex's turn footers do. Its head is the
  * model and effort the turn ran on as every place draws the pair
- * (`model-label.tsx`), wearing its harness's mark where the catalog lists
- * the model, as a subagent's row does, though not on Luke's own turns,
- * which ran in no harness; and at its right how the turn ended
+ * (`model-label.tsx`), wearing its provider's mark as read from the
+ * model's id, as a subagent's row and an agent's tab do, so a coding
+ * agent's turn, Luke's own on the Call tab, and a call's card
+ * (`call-card.tsx`) all wear it alike; and at its right how the turn ended
  * where it did not simply answer. Under it, when the turn began and ended,
  * in full. Then, under a hairline, its tokens: the input the model read
  * fresh, the output it wrote, the input its prefix cache answered, and,
@@ -69,19 +71,31 @@ function tokenRows(tokens: TurnTokens): readonly (readonly [TokenRow, number])[]
   return rows;
 }
 
-/** The model's harness mark, where the catalog lists the model; nothing otherwise. */
-function TurnHarness({
+/**
+ * The head's model: its provider's mark, read from the model's id as a
+ * subagent's row and an agent's tab read it, so a model the catalog does not
+ * list wears it too, then the model and effort as every place names them.
+ * No mark for a model of a provider Luke runs nothing on.
+ */
+export function TurnModel({
   model,
+  effort,
   models,
 }: {
   model: string;
+  effort: string;
+  /** The catalog as last read, which names the model; empty before the first read lands, or where the model is none a coding agent runs on. */
   models: readonly CatalogModel[];
-}): React.JSX.Element | null {
-  const listed = models.find((each) => each.id === model);
-  if (listed === undefined) return null;
+}): React.JSX.Element {
+  const provider = providerOf(model);
   return (
-    <span className="turn-card-harness" data-harness={listed.provider}>
-      <HarnessMark provider={listed.provider} />
+    <span className="turn-card-model">
+      {provider === undefined ? null : (
+        <span className="turn-card-harness" data-harness={provider}>
+          <HarnessMark provider={provider} />
+        </span>
+      )}
+      <ModelLabel choice={{ model, effort }} models={models} />
     </span>
   );
 }
@@ -92,13 +106,10 @@ export function TurnCard({
   endedAt,
   record,
   models,
-  harnessed,
 }: {
   startedAt: number;
   endedAt: number;
   record: TurnRecord;
-  /** Whether the turn ran in a harness, an agent's or a subagent's, whose mark the model then wears; Luke's own turns ran in none. */
-  harnessed: boolean;
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models: readonly CatalogModel[];
 }): React.JSX.Element {
@@ -108,10 +119,7 @@ export function TurnCard({
       {model === undefined && ending === undefined ? null : (
         <div className="turn-card-head">
           {model === undefined ? null : (
-            <span className="turn-card-model">
-              {harnessed ? <TurnHarness model={model} models={models} /> : null}
-              <ModelLabel choice={{ model, effort: effort ?? UNRECORDED_EFFORT }} models={models} />
-            </span>
+            <TurnModel model={model} effort={effort ?? UNRECORDED_EFFORT} models={models} />
           )}
           {ending === undefined ? null : (
             <span className="turn-card-ending" data-ending={ending}>

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
@@ -10,12 +11,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
-import {
-  LIVE_CLOSE_REASON,
-  LIVE_DEFAULTS,
-  TRANSCRIPT_SPEAKER,
-  type TranscriptSpeaker,
-} from "@sidecar/live";
+import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@sidecar/live";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
@@ -33,6 +29,7 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
+import { STATUS_LINE_CLASS } from "./working-time";
 
 /** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
 function callTab(
@@ -484,7 +481,7 @@ const drawnOnClock = (region: TranscriptRegion) =>
   });
 
 it.effect(
-  "a call that ended closes on how long it ran and when, and its card says the voice model, when it began and ended, how it ended, and the seconds it was metered for",
+  "a call that ended closes on how long it ran and when, at the column's start in a turn's line's type, and its card says the voice model with its provider's mark, when it began and ended, how it ended, and the seconds it was metered for",
   () =>
     Effect.gen(function* () {
       const tab = yield* drawnOnClock(
@@ -493,14 +490,19 @@ it.effect(
             endedAt: CALL_END,
             ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
             usage: { seconds: 760, confirmed: false },
-            model: LIVE_DEFAULTS.MODEL,
+            // The voice model as the service names it, by the catalog's id.
+            model: "openai/gpt-live-1",
           },
         ]),
       );
       const [ended] = tab.ended();
       assert.ok(ended);
       assert.equal(ended.textContent, "Call ended · 12m 34s · Today, 3:04 PM");
-      assert.ok(ended.classList.contains("select-text"));
+      // Set as a finished turn's "Worked for" line is, at the column's start.
+      assert.deepEqual(
+        STATUS_LINE_CLASS.split(" ").filter((name) => !ended.classList.contains(name)),
+        [],
+      );
       assert.equal(
         ended.querySelector("time")?.getAttribute("datetime"),
         new Date(CALL_END).toISOString(),
@@ -509,6 +511,7 @@ it.effect(
       // The whole line hangs the card, its length as much as its time.
       const card = tab.hover(ended.querySelector("[data-call-length]") ?? ended);
       assert.equal(card?.querySelector(".turn-card-model")?.textContent, "GPT Live 1");
+      assert.ok(card?.querySelector(`[data-harness="${MODEL_PROVIDER.OPENAI}"] .provider-mark`));
       assert.equal(
         card?.querySelector(".turn-card-when")?.textContent,
         "Oct 12, 2026, 2:51 PM → 3:04 PM",

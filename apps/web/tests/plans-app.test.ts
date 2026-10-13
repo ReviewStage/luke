@@ -1584,7 +1584,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a transcript's call says when and why it ended, what it metered, and its model where its row records them, and an earlier build's call says only its words",
+    "a transcript's call says when and why it ended, what it metered, and its model by the catalog's id where its row records them, and an earlier build's call says only its words",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -1627,7 +1627,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
             endedAt: 2_754_000,
             ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
             usage: { seconds: 750, confirmed: false },
-            model: LIVE_DEFAULTS.MODEL,
+            // Named as the catalog names it, under its provider, so the call's card wears its mark.
+            model: "openai/gpt-live-1",
           },
         ]);
       }),

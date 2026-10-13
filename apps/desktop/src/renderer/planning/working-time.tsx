@@ -119,7 +119,6 @@ export function WorkedFor({
   endedAt,
   record = {},
   models = [],
-  harnessed = true,
 }: {
   startedAt: number;
   endedAt: number;
@@ -127,23 +126,13 @@ export function WorkedFor({
   record?: TurnRecord | undefined;
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models?: readonly CatalogModel[] | undefined;
-  /** Whether the turn ran in a harness, as an agent's and a subagent's do; Luke's own turns on the Call tab ran in none. */
-  harnessed?: boolean;
 }): ReactNode {
   const now = useMinute();
   const text = workedForText(startedAt, endedAt, now);
   return (
     <Tooltip
       label={text}
-      card={
-        <TurnCard
-          startedAt={startedAt}
-          endedAt={endedAt}
-          record={record}
-          models={models}
-          harnessed={harnessed}
-        />
-      }
+      card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
     >
       <p className={cn(STATUS_LINE_CLASS, "mt-2 mb-0 w-fit tabular-nums")} data-worked="">
         <span data-worked-length="">
