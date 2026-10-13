@@ -13,6 +13,7 @@
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./dictation-wire": "./src/dictation-wire.js",
+    "./github-connection-wire": "./src/github-connection-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./integration-view": "./src/integration-view.js",

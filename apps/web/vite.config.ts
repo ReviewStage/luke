@@ -19,6 +19,7 @@ export default defineConfig({
         "github-installed": resolveEntry("./github-installed.html"),
         "integration-connected": resolveEntry("./integration-connected.html"),
         admin: resolveEntry("./admin.html"),
+        "connect-github": resolveEntry("./connect-github.html"),
       },
     },
   },
