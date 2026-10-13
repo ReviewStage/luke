@@ -8,7 +8,7 @@ import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
+import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
 import { PlanCall } from "./plan-call";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 
@@ -18,9 +18,8 @@ function callTab(
 ) {
   return createElement(PlanCall, {
     onRetry: () => undefined,
-    turns: [],
+    conversation: undefined,
     callLive: false,
-    earlier: undefined,
     onLoadEarlier: () => Promise.resolve(),
     onOpenSubagent: () => undefined,
     shown: true,
@@ -97,7 +96,7 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   );
 
   const container = mounted(
-    callTab({ region: said(0), turns: [started, stopping], callLive: true }),
+    callTab({ region: said(0), conversation: conversationOf([started, stopping]), callLive: true }),
   );
   const row = (id: string) => container.querySelector(`[data-call-id="${id}"]`)?.textContent;
   assert.match(row("c1") ?? "", /Stopped subagent\s*Read the styling setup\./u);
@@ -140,7 +139,9 @@ test("a finished spoken turn is one folded line under the line that asked for it
     { startedAt: 60_000, endedAt: 67_000, asked: ["row-ask"] },
   );
 
-  const container = mounted(callTab({ region, turns: [ended], callLive: false }));
+  const container = mounted(
+    callTab({ region, conversation: conversationOf([ended]), callLive: false }),
+  );
   const fold = container.querySelector("[data-turn-fold]");
   assert.ok(fold);
   assert.equal(fold.textContent, "1 tool call");

@@ -55,13 +55,21 @@ export const plannerDelegationJournalsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
 ) {
+  const rows = yield* plannerDelegationRowsOf(userId, conversationId);
+  return rows.map((row) => row.message);
+});
+
+/** The rows of the conversation's journals that delegate to the worker, as `plannerDelegationJournalsOf` reads them, each with the turn it is the journal of. */
+export const plannerDelegationRowsOf = Effect.fnUntraced(function* (
+  userId: string,
+  conversationId: string,
+) {
   const reads = yield* Effect.forEach([...PLANNER_DELEGATION_TOOLS], (name) =>
     listJournalsCalling(userId, conversationId, HOSTED_TOOL_SET, name),
   );
   return reads
     .flatMap((read) => (read.ok ? read.value : []))
-    .sort((one, other) => one.seq - other.seq)
-    .map((row) => row.message);
+    .sort((one, other) => one.seq - other.seq);
 });
 
 /** The conversation's journals that call the worker, where a task a later turn sent work to was started; none where they do not read. */

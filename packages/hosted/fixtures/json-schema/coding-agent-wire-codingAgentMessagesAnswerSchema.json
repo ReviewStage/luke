@@ -41,6 +41,9 @@
             },
             "maxItems": 20
           },
+          "earlierOmitted": {
+            "type": "boolean"
+          },
           "role": {
             "type": "string",
             "enum": [

@@ -23,15 +23,3 @@ export const VOICE_SEGMENT_ROLE = {
 } as const;
 
 export type VoiceSegmentRole = (typeof VOICE_SEGMENT_ROLE)[keyof typeof VOICE_SEGMENT_ROLE];
-
-/** Why an avatar session on a call ended. */
-export const AVATAR_END_REASON = {
-  USER: "user",
-  MEDIA_LOST: "media_lost",
-  MAX_DURATION: "max_duration",
-  NO_CREDITS: "no_credits",
-  UNAVAILABLE: "unavailable",
-  ERROR: "error",
-} as const;
-
-export type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END_REASON];

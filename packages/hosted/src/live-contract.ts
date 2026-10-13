@@ -6,7 +6,7 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "@sidecar/live";
-import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
@@ -171,26 +171,6 @@ export const VOICE_SERVICE_FRAME = {
    * the call up if the developer speaks first. It carries no words.
    */
   PLAN_CALL_ENDING: "plan.call_ending",
-  /**
-   * The desktop's ask for Luke's face on the call: the service mints a
-   * LiveAvatar session for this voice session and answers `avatar.started`,
-   * or `avatar.unavailable` where it cannot. The relay reads it and forwards
-   * it nowhere, as it reads a report.
-   */
-  AVATAR_START: "avatar.start",
-  /** The desktop's ask to take the face down again, with why; the voice goes on. */
-  AVATAR_STOP: "avatar.stop",
-  /**
-   * The service's answer to `avatar.start`: the room the face is published
-   * into, the viewer token the call window joins it with, and the media
-   * socket the host speaks Luke's audio into. The token is the one
-   * credential this vocabulary carries, and it reaches the call window alone.
-   */
-  AVATAR_STARTED: "avatar.started",
-  /** The service's word that the face is down, whoever took it down, and why. */
-  AVATAR_ENDED: "avatar.ended",
-  /** The service's answer to an `avatar.start` it could not honour, and why. */
-  AVATAR_UNAVAILABLE: "avatar.unavailable",
 } as const;
 
 /**
@@ -436,141 +416,6 @@ export const planCallEndingFrameSchema = Schema.Struct({
 
 export type PlanCallEndingFrame = typeof planCallEndingFrameSchema.Type;
 
-/** Why the desktop takes the face down: the developer turned video off, or the host lost the media socket. */
-export const AVATAR_STOP_REASON = {
-  USER: "user",
-  MEDIA_LOST: "media_lost",
-} as const;
-
-export type AvatarStopReason = (typeof AVATAR_STOP_REASON)[keyof typeof AVATAR_STOP_REASON];
-
-/**
- * Why the face is down, as the service says it: the desktop's own stop
- * echoed, the session's cap reached, the account's avatar credits spent, or
- * anything else LiveAvatar answered.
- */
-export const AVATAR_END_REASON = {
-  ...AVATAR_STOP_REASON,
-  MAX_DURATION: "max_duration",
-  NO_CREDITS: "no_credits",
-  ERROR: "error",
-} as const;
-
-export type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END_REASON];
-
-/** Why the service could not put the face up: no LiveAvatar key on this deployment, no credits, or an upstream failure. */
-export const AVATAR_UNAVAILABLE_REASON = {
-  NOT_CONFIGURED: "not_configured",
-  NO_CREDITS: "no_credits",
-  ERROR: "error",
-} as const;
-
-export type AvatarUnavailableReason =
-  (typeof AVATAR_UNAVAILABLE_REASON)[keyof typeof AVATAR_UNAVAILABLE_REASON];
-
-/**
- * The bounds of the avatar frames. A LiveKit JWT is a few hundred bytes and a
- * socket URL a few dozen, so each bound only refuses a document standing in
- * for one; the session cap is LiveAvatar's longest plan's, an hour, with room.
- */
-export const AVATAR_FRAME_BOUNDS = {
-  SESSION_ID_CHARS: 256,
-  URL_CHARS: 2_048,
-  TOKEN_CHARS: 8_192,
-  REASON_CHARS: 64,
-  MAX_SECONDS: 86_400,
-} as const;
-
-/** The scheme every avatar address must be on, so a service answer can never point the desktop at a plain socket. */
-const AVATAR_URL_PROTOCOL = "wss:";
-
-function isSecureSocketUrl(value: string): boolean {
-  return URL.canParse(value) && new URL(value).protocol === AVATAR_URL_PROTOCOL;
-}
-
-/** An absolute `wss:` address, bounded, as written. */
-const avatarUrl = Schema.String.check(
-  Schema.isMaxLength(AVATAR_FRAME_BOUNDS.URL_CHARS),
-  Schema.makeFilter(isSecureSocketUrl, wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
-);
-
-/**
- * A reason the service answers with. One a newer service added reads as the
- * fallback rather than refusing the frame, as an answer's unknown key is
- * dropped rather than refused, so a desktop still hears that the face is
- * down when it cannot say why.
- */
-function answeredReason<const Reason extends string>(
-  reasons: readonly Reason[],
-  fallback: Reason,
-): Schema.Codec<Reason, UnparsedWireValue> {
-  const listed = Schema.Literals(reasons);
-  const isListed = Schema.is(listed);
-  return declareReader<Reason>((value) => {
-    if (!isWireString(value) || value.length > AVATAR_FRAME_BOUNDS.REASON_CHARS) {
-      return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] };
-    }
-    return { ok: true, value: isListed(value) ? value : fallback };
-  }, emitJsonSchema(listed));
-}
-
-/** The desktop's ask for the face: the type alone, since the service picks the avatar. */
-export const avatarStartFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_START),
-});
-
-export type AvatarStartFrame = typeof avatarStartFrameSchema.Type;
-
-/** The desktop's ask to take the face down, and why. */
-export const avatarStopFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STOP),
-  reason: Schema.Literals(Object.values(AVATAR_STOP_REASON)),
-});
-
-export type AvatarStopFrame = typeof avatarStopFrameSchema.Type;
-
-/** Either avatar frame the desktop sends after the handshake, read by the service and forwarded nowhere. */
-export const avatarRequestFrameSchema = Schema.Union([
-  avatarStartFrameSchema,
-  avatarStopFrameSchema,
-]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
-
-export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
-
-/**
- * The face is coming up: LiveAvatar's id for its session, the LiveKit room's
- * address and the token the call window watches it with, the media socket's
- * address the host speaks into, and the most seconds the session may run.
- */
-export const avatarStartedFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
-  avatarSessionId: text(AVATAR_FRAME_BOUNDS.SESSION_ID_CHARS),
-  livekitUrl: avatarUrl,
-  viewerToken: verbatimText(AVATAR_FRAME_BOUNDS.TOKEN_CHARS),
-  mediaUrl: avatarUrl,
-  maxSeconds: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: AVATAR_FRAME_BOUNDS.MAX_SECONDS }),
-  ),
-});
-
-export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;
-
-/** The face is down, and why. */
-export const avatarEndedFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_ENDED),
-  reason: answeredReason(Object.values(AVATAR_END_REASON), AVATAR_END_REASON.ERROR),
-});
-
-export type AvatarEndedFrame = typeof avatarEndedFrameSchema.Type;
-
-/** The face could not come up, and why. */
-export const avatarUnavailableFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE),
-  reason: answeredReason(Object.values(AVATAR_UNAVAILABLE_REASON), AVATAR_UNAVAILABLE_REASON.ERROR),
-});
-
-export type AvatarUnavailableFrame = typeof avatarUnavailableFrameSchema.Type;
-
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -662,31 +507,6 @@ export function planCallEndingFrameFromWire(
   value: UnparsedWireValue,
 ): PlanCallEndingFrame | undefined {
   return admittedAnswer(planCallEndingFrameSchema, value);
-}
-
-export function avatarRequestFrameFromWire(
-  value: UnparsedWireValue,
-): AvatarRequestFrame | undefined {
-  return admitted(avatarRequestFrameSchema, value);
-}
-
-/** The face coming up, read the same answering way. */
-export function avatarStartedFrameFromWire(
-  value: UnparsedWireValue,
-): AvatarStartedFrame | undefined {
-  return admittedAnswer(avatarStartedFrameSchema, value);
-}
-
-/** The face down, read the same answering way. */
-export function avatarEndedFrameFromWire(value: UnparsedWireValue): AvatarEndedFrame | undefined {
-  return admittedAnswer(avatarEndedFrameSchema, value);
-}
-
-/** The face refused, read the same answering way. */
-export function avatarUnavailableFrameFromWire(
-  value: UnparsedWireValue,
-): AvatarUnavailableFrame | undefined {
-  return admittedAnswer(avatarUnavailableFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

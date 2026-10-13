@@ -32,7 +32,11 @@ import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { CODER } from "./coder-host/bounds.js";
 import type { TitleAwaited } from "./coder-host/transcript.js";
-import { plannerDelegationJournalsOf, turnJournalOf } from "./plan-work-store.js";
+import {
+  plannerDelegationJournalsOf,
+  plannerDelegationRowsOf,
+  turnJournalOf,
+} from "./plan-work-store.js";
 
 /**
  * planner-transcript.ts -- a plan's planning conversation read as a coding agent's transcript is: its turns' journals past a cursor, held open while a turn or a worker runs.
@@ -61,7 +65,7 @@ import { plannerDelegationJournalsOf, turnJournalOf } from "./plan-work-store.js
 /** How often a held read looks again: the voice's follow's own beat, so the Call tab hears a part as soon as the frame it replaces did. */
 export const PLANNER_POLL = Duration.millis(250);
 
-/** The newest turns whose workers every page says the standing of, so a worker still running under an older turn than the page carries is heard as it ends. */
+/** The newest turns whose workers a page a moving turn let go says the standing of, beside the page's own; a page no journal moved says every worker's (`withStandings`). */
 const STANDING_TURNS = 3;
 
 /** The most raw pages one look reads past a run of the voice's rows to find a turn's journal behind them. */
@@ -86,7 +90,7 @@ const STATUS_OF_WORK_STATE = {
   [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
 } as const;
 
-/** A turn's journal as the agent tab reads a message: its projected parts, the turn it is and the lines that asked for it, and its span and record. */
+/** A turn's journal as the agent tab reads a message: its projected parts and whether older ones were left out, the turn it is and the lines that asked for it, and its span and record. */
 function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
   const { turnId, journal, asked, askedAt, startedAt, endedAt } = work;
   const { model, effort, tokens, ending } = work;
@@ -95,6 +99,7 @@ function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
     role: MESSAGE_ROLE.ASSISTANT,
     parts: journal ?? [],
     turnId,
+    ...(work.earlierOmitted ? { earlierOmitted: true } : undefined),
     ...(asked === undefined ? undefined : { asked }),
     ...(askedAt === undefined ? undefined : { askedAt }),
     startedAt,
@@ -152,19 +157,35 @@ function standingsOf(works: readonly PlanWorkTurn[]) {
   };
 }
 
-/** The planner's status as a page says it, read from its newest turn: running while that turn is queued or runs, failed where it failed, and completed otherwise, a plan never planned on included. */
+/**
+ * The planner's status as a page says it: running while its newest turn is
+ * queued or runs, or while a worker's session does, since a worker in the
+ * background outlives the turn that started it and a reader follows on
+ * while it runs; failed where that turn failed, and completed otherwise, a
+ * plan never planned on included.
+ */
 export const plannerStatusNow = (target: ConversationTarget): PlannerEffect<CodingAgentStatus> =>
-  Effect.map(latestTurnsOf(target.userId, [target.conversationId]), (turns) => {
+  Effect.gen(function* () {
+    const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const status = turns.get(target.conversationId)?.status;
     if (status === TURN_STATUS.QUEUED || status === TURN_STATUS.RUNNING) {
       return CODING_AGENT_STATUS.RUNNING;
     }
+    const workers = yield* runningChildTurns(target.userId, target.conversationId);
+    if (workers.length > 0) return CODING_AGENT_STATUS.RUNNING;
     return status === TURN_STATUS.FAILED
       ? CODING_AGENT_STATUS.FAILED
       : CODING_AGENT_STATUS.COMPLETED;
   });
 
-/** The page with the standing of the workers of its own turns and of the newest turns beside it, read once for the page that is answered. */
+/**
+ * The page with the standing of the workers of its own turns and of the
+ * newest turns beside it, read once for the page that is answered: the
+ * newest few while a turn moves, and every worker the conversation ever
+ * delegated to where no journal moved, which is a page a worker's start or
+ * end, or the hold's end, let go, so a worker under however old a turn is
+ * heard as it ends.
+ */
 const withStandings = (
   target: ConversationTarget,
   page: Omit<PlannerPage, "subagents" | "subagentTitles">,
@@ -178,7 +199,15 @@ const withStandings = (
       STANDING_TURNS,
       undefined,
     );
-    const unread = newest.turns.filter((turn) => !shown.has(turn.id));
+    const delegated =
+      works.length > 0 ? [] : yield* plannerDelegationRowsOf(target.userId, target.conversationId);
+    const named = yield* turnsNamed(target.userId, [
+      ...new Set(delegated.flatMap((row) => row.turnId ?? [])),
+    ]);
+    const unread = [...newest.turns, ...named].filter(
+      (turn, index, all) =>
+        !shown.has(turn.id) && all.findIndex((each) => each.id === turn.id) === index,
+    );
     const more = yield* worksOf(target.userId, target.conversationId, unread);
     return { ...page, ...standingsOf([...works, ...more.map((each) => each.work)]) };
   });

@@ -33,7 +33,6 @@
     "./models/session-sandbox-cleanup": "./src/models/session-sandbox-cleanup.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
     "./models/transcript-store": "./src/models/transcript-store.js",
-    "./models/voice-avatar-sessions": "./src/models/voice-avatar-sessions.js",
     "./models/voice-session-record": "./src/models/voice-session-record.js",
     "./models/voice-writer": "./src/models/voice-writer.js",
     "./models/writer": "./src/models/writer.js",

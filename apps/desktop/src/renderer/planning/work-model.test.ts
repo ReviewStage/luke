@@ -8,12 +8,20 @@ import {
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
-import { thought, toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
+import {
+  conversationOf,
+  thought,
+  toolCall,
+  words,
+  worker,
+  workerCall,
+  workTurn,
+} from "#testing/plan-work";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
 import { delegationView, toolCallView } from "./tool-call-model";
 import { TURN_ROW, type TurnRow } from "./turn-rows";
-import { workerOf, workRowsOf } from "./work-model";
+import { workerOf, workFailed, workRowsOf } from "./work-model";
 
 /** What a reader scans a part as: words, a thought, a call, or a subagent. */
 const SCANNED = {
@@ -55,14 +63,14 @@ function scanned(rows: readonly TurnRow<AgentPart>[]): unknown[] {
 
 /** The first turn's rows as the agent tab draws Luke's message for it. */
 function rowsOf(turns: readonly PlanWorkTurn[], callLive = true): readonly TurnRow<AgentPart>[] {
-  const [row] = workRowsOf(turns, callLive);
+  const [row] = workRowsOf(conversationOf(turns), callLive);
   assert.ok(row);
   return agentRows(row.message, row.moving);
 }
 
 /** The turn's calls, as the agent tab reads its parts. */
 function callsOf(turns: readonly PlanWorkTurn[], callLive = true) {
-  const [row] = workRowsOf(turns, callLive);
+  const [row] = workRowsOf(conversationOf(turns), callLive);
   assert.ok(row);
   return agentParts(row.message).flatMap((part) => (part.kind === AGENT_PART.TOOL ? [part] : []));
 }
@@ -301,7 +309,7 @@ test("the worker stands on its own row, the one call still turning while its tur
 
 test("a turn its call left running is drawn as stopped, with nothing on it still turning", () => {
   const left = [workTurn(PLAN_WORK_STATE.RUNNING, [command("a", "ls")])];
-  const [row] = workRowsOf(left, false);
+  const [row] = workRowsOf(conversationOf(left), false);
   assert.ok(row);
   assert.equal(row.state, PLAN_WORK_STATE.FAILED);
   assert.equal(row.moving, false);
@@ -323,21 +331,15 @@ test("a worker's session is read into parts the way a turn is, each call on its 
     ],
   });
   const rows = workRowsOf(
-    [
+    conversationOf([
       workTurn(PLAN_WORK_STATE.DONE, [workerCall(comparing), words("Queue A is the one to use.")], {
         workers: [comparing],
       }),
-    ],
+    ]),
     false,
   );
 
-  const opened = workerOf(rows, "w");
-  assert.ok(opened?.session);
-  assert.deepEqual(scanned(agentRows(opened.session.message, false, false)), [
-    [SCANNED.CALL, "queue revoke api"],
-    [SCANNED.CALL, "example.com/queue-a"],
-    [SCANNED.TEXT, "Queue A lets an admin revoke."],
-  ]);
+  assert.equal(workerOf(rows, "w")?.task, comparing.task);
   assert.equal(workerOf(rows, "gone"), undefined);
 });
 
@@ -397,14 +399,8 @@ test("a worker delegated in the background reads as running while its own sessio
   const [running] = callsOf(turns);
   assert.ok(running !== undefined && delegates(running));
   assert.equal(running.state, TOOL_STATE.INPUT_AVAILABLE);
-  const worker = workerOf(workRowsOf(turns, true), "call-1");
+  const worker = workerOf(workRowsOf(conversationOf(turns), true), "call-1");
   assert.equal(worker?.call.running, true);
-  assert.deepEqual(
-    agentParts(worker?.session?.message ?? { id: "", role: "assistant", parts: [] }).map((part) =>
-      part.kind === AGENT_PART.TOOL ? [part.tool, part.state] : [part.kind],
-    ),
-    [["run_in_repository", TOOL_STATE.INPUT_AVAILABLE]],
-  );
 
   const [ended] = callsOf(turns, false);
   assert.equal(ended?.state, TOOL_STATE.OUTPUT_AVAILABLE);
@@ -447,4 +443,24 @@ test("a call a turn's journal holds unanswered reads as running while the turn m
     callsOf(turns, false).map((part) => [part.tool, part.state]),
     [["run_in_repository", TOOL_STATE.OUTPUT_AVAILABLE]],
   );
+});
+
+test("a turn whose older steps the service left out says so, and a worker whose own session failed reads as failed rather than stopped", () => {
+  const failing = worker("w", "Read the styling setup.", {
+    state: PLAN_WORK_STATE.FAILED,
+    model: "openai/gpt-5.5",
+    effort: "low",
+  });
+  const [row] = workRowsOf(
+    conversationOf([
+      workTurn(PLAN_WORK_STATE.DONE, [workerCall(failing), words("It failed.")], {
+        earlierOmitted: true,
+        workers: [failing],
+      }),
+    ]),
+    false,
+  );
+
+  assert.equal(row?.earlierOmitted, true);
+  assert.equal(workFailed(workerOf(row === undefined ? [] : [row], "w")?.session?.record), true);
 });

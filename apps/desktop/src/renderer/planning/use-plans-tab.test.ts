@@ -87,7 +87,7 @@ interface Standing {
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
 function mount(
   initial: Partial<Standing> = {},
-  answers: { [Kind in ActKind]?: () => Promise<ActResultFor<Kind>> } = {},
+  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } = {},
   registry?: AtomRegistry,
 ) {
   const told: ActKind[] = [];
@@ -124,11 +124,11 @@ function mount(
         // An act the test does not answer is recorded and refused.
         act: <Kind extends ActKind>(
           kind: Kind,
-          ..._args: unknown[]
+          ...args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
           record(kind);
           const answer = answers[kind];
-          if (answer !== undefined) return answer();
+          if (answer !== undefined) return answer(...args);
           return Promise.reject(new Error("Not answered in this test."));
         },
         tell: (kind: ActKind, ...args: unknown[]) => {
@@ -257,6 +257,34 @@ test("a repository pin still waiting on the service is let go with a sign-out, s
 
   assert.deepEqual(pending, ["acme/secret"]);
   assert.deepEqual(tab.control().pinnedRepositories, []);
+});
+
+test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
+  const asked: unknown[] = [];
+  const page = {
+    messages: [],
+    cursor: "3:1",
+    status: CODING_AGENT_STATUS.RUNNING,
+    title: null,
+  };
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.PLANNING_MESSAGES]: (payload) => {
+        asked.push(payload);
+        return Promise.resolve(page);
+      },
+    },
+  );
+
+  const read = await tab.control().work.readWorker({
+    agentId: "plan-1",
+    after: "0:0",
+    callId: "call-0-0",
+  });
+
+  assert.deepEqual(asked, [{ planId: "plan-1", after: "0:0", callId: "call-0-0" }]);
+  assert.deepEqual(read, page);
 });
 
 /** The words of every call the transcript draws, in order, with whether each call stands now. */
