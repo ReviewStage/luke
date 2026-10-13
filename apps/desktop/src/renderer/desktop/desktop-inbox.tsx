@@ -112,6 +112,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     acts: { act },
     planId,
     repository: chosenPlan?.repository ?? null,
+    // The Inbox draws no Roll out, so its Start always starts one agent.
+    rollout: 0,
     archived: false,
     onUnarchive: () => undefined,
     // The Inbox draws no agent's composer, so nothing here opens Settings.

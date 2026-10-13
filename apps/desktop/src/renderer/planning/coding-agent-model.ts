@@ -30,6 +30,7 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
+import { PLAN_CALL_FAILURE, type PlanningMessageFailure } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
@@ -188,6 +189,30 @@ const SHARED_FAILURE_NOTE = {
     "This agent has ended for good. Start a new one to go on from here.",
   [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This plan is archived. Unarchive it first.",
 } as const;
+
+/** The fixed lines the plan's toolbar hands Luke as the developer's own typed words; there is no composer to write any other. */
+export const PLAN_ASK = {
+  /** Roll out's press: Luke starts a builder for each pull request of the plan's rollout and one stack keeper for the rollout. */
+  ROLL_OUT: "Roll out the plan.",
+} as const;
+
+/** What Roll out says on hover, so it is not read as a Start of one agent. */
+export const ROLL_OUT_HINT = "Luke starts a coding agent per PR and one to keep the stack";
+
+/** What the toast says when a Roll out that did not reach Luke lands after the developer left its plan. */
+export const ROLL_OUT_FAILED_AWAY = "The plan could not be rolled out.";
+
+/** What a Roll out that did not reach Luke says beside the button. */
+export function rollOutFailureNote(failure: PlanningMessageFailure): string {
+  switch (failure) {
+    case PLAN_CALL_FAILURE.UNANSWERED:
+      return "Luke could not be reached. Try again.";
+    case PLAN_CALL_FAILURE.NOT_FOUND:
+      return "This plan no longer exists.";
+    case PLAN_CALL_FAILURE.PLAN_ARCHIVED:
+      return SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED];
+  }
+}
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
 export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
