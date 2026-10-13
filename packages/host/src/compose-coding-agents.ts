@@ -4,6 +4,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -80,6 +81,7 @@ export type CodingAgentClient = Pick<
   | "archive"
   | "stop"
   | "pullRequest"
+  | "changes"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -318,6 +320,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.pullRequest(agentId));
         return carried<CodingAgentPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHANGES]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's changes names one agent",
+        );
+        const answer = yield* asked(client.changes(agentId));
+        return carried<CodingAgentChangesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
       Effect.gen(function* () {

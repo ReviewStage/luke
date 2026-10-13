@@ -1,5 +1,5 @@
 /**
- * pull-requests.ts -- what a coding agent published, as GitHub holds it: a pull request by number or by its branch, a branch, and the checks on a head.
+ * pull-requests.ts -- what a coding agent published, as GitHub holds it: a pull request by number or by its branch, a branch, the checks on a head, and a pull request's changed files.
  *
  * Every read runs on the developer's own GitHub App token
  * (`github-app.ts`'s `userToken`), the same reach that admits the agent's
@@ -11,12 +11,21 @@
  * check runs and its older commit statuses together, since a workflow
  * reports as the one and a deployment may report as the other, and a
  * repository where the App may read neither reads as having none, with a
- * warning, rather than failing the whole answer.
+ * warning, rather than failing the whole answer. A pull request's files
+ * are read a hundred to a page up to the changes bound, each with its
+ * patch where GitHub sends one; GitHub sends none for a file that is not
+ * text, which it counts as changing no line, or for one whose patch is too
+ * large to send, and the file says which rather than reading as unchanged.
  */
 
 import {
+  CHANGED_FILE_STATUS,
+  CHANGES_BOUNDS,
   CHECK_SUMMARY,
+  type ChangedFileStatus,
   type CheckSummary,
+  type CodingAgentChangedFile,
+  PATCH_OMITTED,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -100,6 +109,28 @@ const CheckRunsSchema = Schema.Struct({
     Schema.Struct({ status: Schema.String, conclusion: Schema.NullOr(Schema.String) }),
   ),
 });
+
+/** GitHub pages a pull request's files a hundred to a page. */
+const FILES_PER_PAGE = 100;
+
+/** GitHub's own words for what became of a file; any it adds reads as changed in place. */
+const GITHUB_FILE_STATUS: Readonly<Record<string, ChangedFileStatus>> = {
+  added: CHANGED_FILE_STATUS.ADDED,
+  removed: CHANGED_FILE_STATUS.DELETED,
+  renamed: CHANGED_FILE_STATUS.RENAMED,
+};
+
+const PullRequestFilesSchema = Schema.Array(
+  Schema.Struct({
+    filename: Schema.String,
+    previous_filename: Schema.optionalKey(Schema.String),
+    status: Schema.String,
+    additions: Schema.Number,
+    deletions: Schema.Number,
+    changes: Schema.Number,
+    patch: Schema.optionalKey(Schema.String),
+  }),
+);
 
 const CombinedStatusSchema = Schema.Struct({
   statuses: Schema.Array(Schema.Struct({ state: Schema.String })),
@@ -286,3 +317,65 @@ export function checkSummaryOf(
     }),
   );
 }
+
+/**
+ * One file as GitHub lists it, as the wire carries it. A file GitHub sent
+ * no patch for changed no line where it is not text, and was too large to
+ * send otherwise; a patch past the bound is left out on the same terms. A
+ * file moved and left as it was has no patch either, and changed no line,
+ * so it carries an empty one rather than reading as binary.
+ */
+function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): CodingAgentChangedFile {
+  const status = GITHUB_FILE_STATUS[file.status] ?? CHANGED_FILE_STATUS.MODIFIED;
+  const movedOnly = status === CHANGED_FILE_STATUS.RENAMED && file.changes === 0;
+  const patch = file.patch ?? (movedOnly ? "" : null);
+  const omitted =
+    patch === null
+      ? file.changes === 0
+        ? PATCH_OMITTED.BINARY
+        : PATCH_OMITTED.TOO_LARGE
+      : patch.length > CHANGES_BOUNDS.MAX_PATCH_CHARS
+        ? PATCH_OMITTED.TOO_LARGE
+        : null;
+  return {
+    path: file.filename,
+    previousPath: file.previous_filename ?? null,
+    status,
+    additions: file.additions,
+    deletions: file.deletions,
+    patch: omitted === null ? patch : null,
+    omitted,
+  };
+}
+
+/** A pull request's files as GitHub lists them, up to the changes bound, and whether there were more. */
+export interface PullRequestFiles {
+  readonly files: readonly CodingAgentChangedFile[];
+  readonly truncated: boolean;
+}
+
+/**
+ * The pull request's changed files, a page at a time until a page comes
+ * back short or the bound is reached, cut short where the pull request
+ * counts more files than were read; none where the repository has no such
+ * pull request. `changedFiles` is the count the pull request's own read
+ * answered.
+ */
+export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  pullRequest: { readonly number: number; readonly changedFiles: number },
+): Effect.fn.Return<PullRequestFiles, PullRequestReadFailure, HttpClient.HttpClient> {
+  const files: CodingAgentChangedFile[] = [];
+  const path = `${repositoryPath(fullName)}/pulls/${pullRequest.number}/files`;
+  for (let page = 1; files.length < CHANGES_BOUNDS.MAX_FILES; page += 1) {
+    const request = githubRead(path, token).pipe(
+      HttpClientRequest.setUrlParams({ per_page: String(FILES_PER_PAGE), page: String(page) }),
+    );
+    const read = Option.getOrElse(yield* readOptional(request, PullRequestFilesSchema), () => []);
+    files.push(...read.map(changedFileOf));
+    if (read.length < FILES_PER_PAGE) break;
+  }
+  const kept = files.slice(0, CHANGES_BOUNDS.MAX_FILES);
+  return { files: kept, truncated: pullRequest.changedFiles > kept.length };
+});

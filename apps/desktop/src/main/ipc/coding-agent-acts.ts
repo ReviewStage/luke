@@ -2,6 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
@@ -78,6 +79,9 @@ export interface CodingAgentActsDependencies {
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+    codingAgentChanges(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentChangesAnswerView>;
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
@@ -130,6 +134,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
+  | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
   | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
@@ -235,6 +240,10 @@ export function codingAgentActRows(
       return noted(host.codingAgentPullRequest(params), (answer) => {
         if ("pullRequest" in answer) notices.observePublished(params.agentId, answer.pullRequest);
       });
+    },
+    [ACT_KIND.CODING_AGENTS_CHANGES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHANGES, sender);
+      return host.codingAgentChanges(params);
     },
     [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);

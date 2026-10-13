@@ -4,6 +4,7 @@ import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sideca
 import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
@@ -79,6 +80,25 @@ const PUBLISHED = {
     additions: 210,
     deletions: 14,
     changedFiles: 6,
+  },
+};
+
+/** The agent's changes, as the service answers them. */
+const CHANGES = {
+  changes: {
+    files: [
+      {
+        path: "src/invite.ts",
+        previousPath: null,
+        status: CHANGED_FILE_STATUS.MODIFIED,
+        additions: 1,
+        deletions: 1,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+        omitted: null,
+      },
+    ],
+    truncated: false,
+    readAt: 1_800_000_000_000,
   },
 };
 
@@ -200,6 +220,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);
         return PUBLISHED;
+      }),
+    changes: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`changes:${agentId}`);
+        return CHANGES;
       }),
     readProviderKeys: () =>
       Effect.sync(() => {
@@ -395,6 +420,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       PUBLISHED,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID }),
+      CHANGES,
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
         planId: PLAN_ID,
         after: INBOX_CURSOR_START,
@@ -447,6 +476,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `pull-request:${AGENT_ID}`,
+      `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,

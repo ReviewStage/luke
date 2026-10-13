@@ -21,6 +21,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -49,6 +50,7 @@ import {
   type CodingAgentRenameRequest,
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
@@ -83,6 +85,7 @@ import {
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
 import {
+  agentChangesPath,
   agentMessagesPath,
   agentPath,
   agentPullRequestPath,
@@ -562,6 +565,16 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's changes: the files of its pull request as GitHub holds them now. */
+  changes(
+    agentId: string,
+  ): Effect.Effect<CodingAgentChangesAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
     );
   }
 

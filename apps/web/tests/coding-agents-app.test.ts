@@ -29,6 +29,9 @@ import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
   base64Chars,
+  CHANGED_FILE_STATUS,
+  CHANGES_BOUNDS,
+  CHANGES_UNAVAILABLE,
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -38,9 +41,11 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PATCH_OMITTED,
   PULL_REQUEST_STATE,
   TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -149,6 +154,7 @@ const AGENT_STOP = "/api/agents/stop";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+const AGENT_CHANGES = "/api/agents/changes";
 const AGENT_SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -1767,6 +1773,158 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "an agent's changes are its pull request's files as GitHub lists them, each with its patch, a file with none saying whether it is binary or too large rather than reading as unchanged, a file only moved carrying an empty patch, and none to read before a pull request stands",
+    () =>
+      Effect.gen(function* () {
+        const pullRequest = pullRequestFixture({
+          files: [
+            {
+              filename: "src/invite.ts",
+              status: "modified",
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: "@@ -1,2 +1,2 @@\n-old\n+new\n context",
+            },
+            {
+              filename: "src/invites/send.ts",
+              previous_filename: "src/send.ts",
+              status: "renamed",
+              additions: 0,
+              deletions: 0,
+              changes: 0,
+            },
+            { filename: "logo.png", status: "added", additions: 0, deletions: 0, changes: 0 },
+            {
+              filename: "fixtures/big.json",
+              status: "modified",
+              additions: 9000,
+              deletions: 0,
+              changes: 9000,
+            },
+            {
+              filename: "src/generated.ts",
+              status: "removed",
+              additions: 0,
+              deletions: 1,
+              changes: 1,
+              patch: `@@ -1 +0,0 @@\n-${"x".repeat(CHANGES_BOUNDS.MAX_PATCH_CHARS)}`,
+            },
+          ],
+          changedFiles: 5,
+        });
+        const repository: RepositoryFixture = { pullRequest: undefined, pushed: true };
+        const { owner, other, plan, ask } = yield* openPlan({
+          github: relayRepository(repository),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+        const read = () =>
+          Effect.map(ask(request(AGENT_CHANGES, owner, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentChangesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        // A branch pushed with no pull request from it has none to read yet.
+        assert.deepEqual(yield* read(), { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST });
+
+        repository.pullRequest = pullRequest;
+        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
+        const answered = yield* read();
+        assert.ok("changes" in answered);
+        assert.equal(answered.changes.truncated, false);
+        assert.deepEqual(answered.changes.files, [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 1,
+            deletions: 1,
+            patch: "@@ -1,2 +1,2 @@\n-old\n+new\n context",
+            omitted: null,
+          },
+          {
+            path: "src/invites/send.ts",
+            previousPath: "src/send.ts",
+            status: CHANGED_FILE_STATUS.RENAMED,
+            additions: 0,
+            deletions: 0,
+            patch: "",
+            omitted: null,
+          },
+          {
+            path: "logo.png",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.ADDED,
+            additions: 0,
+            deletions: 0,
+            patch: null,
+            omitted: PATCH_OMITTED.BINARY,
+          },
+          {
+            path: "fixtures/big.json",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 9000,
+            deletions: 0,
+            patch: null,
+            omitted: PATCH_OMITTED.TOO_LARGE,
+          },
+          {
+            path: "src/generated.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.DELETED,
+            additions: 0,
+            deletions: 1,
+            patch: null,
+            omitted: PATCH_OMITTED.TOO_LARGE,
+          },
+        ]);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_CHANGES, other, { id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_CHANGES, owner, { method: "POST", id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a pull request with more files than a read carries is read a page at a time up to the bound and says it was cut short",
+    () =>
+      Effect.gen(function* () {
+        const files = Array.from({ length: CHANGES_BOUNDS.MAX_FILES + 20 }, (_, index) => ({
+          filename: `src/file-${index}.ts`,
+          status: "added",
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: "@@ -0,0 +1 @@\n+line",
+        }));
+        const pullRequest = pullRequestFixture({ files, changedFiles: files.length });
+        const { owner, plan, ask } = yield* openPlan({
+          github: relayRepository({ pullRequest, pushed: true }),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+        const answered = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        );
+        assert.ok("changes" in answered);
+        assert.equal(answered.changes.files.length, CHANGES_BOUNDS.MAX_FILES);
+        assert.equal(
+          answered.changes.files.at(-1)?.path,
+          `src/file-${CHANGES_BOUNDS.MAX_FILES - 1}.ts`,
+        );
+        assert.equal(answered.changes.truncated, true);
+      }),
+  );
+
+  it.effect(
     "every pull request a read of what an agent published finds is kept on the agent's row as GitHub answered it, which is what the plan list reads",
     () =>
       Effect.gen(function* () {
@@ -3144,6 +3302,21 @@ interface PullRequestFixture {
   statuses: readonly string[];
   /** Whether the App may read the head's check runs; a refusal is 403. */
   checksReadable: boolean;
+  /** Its files as GitHub lists them, in GitHub's own spelling. */
+  files: readonly GitHubFileFixture[];
+  /** How many files the pull request counts, which may be more than `files` lists. */
+  changedFiles: number;
+}
+
+/** One file of a pull request as GitHub's listing spells it. */
+interface GitHubFileFixture {
+  filename: string;
+  previous_filename?: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
 }
 
 const HEAD = { ref: "luke/teammate-invitations", sha: "0123abcd" } as const;
@@ -3157,6 +3330,8 @@ function pullRequestFixture(overrides: Partial<PullRequestFixture> = {}): PullRe
     runs: [{ status: "completed", conclusion: "success" }],
     statuses: [],
     checksReadable: true,
+    files: [],
+    changedFiles: 6,
     ...overrides,
   };
 }
@@ -3183,7 +3358,7 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     merged: pull.merged,
     additions: 210,
     deletions: 14,
-    changed_files: 6,
+    changed_files: pull.changedFiles,
     head: { ref: HEAD.ref, sha: HEAD.sha, label: `${RELAY.owner}:${HEAD.ref}` },
     user: { login: "luke[bot]", type: "Bot" },
   });
@@ -3203,6 +3378,11 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     }
     if (path === `/pulls/${pullRequest?.number}` && pullRequest !== undefined) {
       return Response.json(pullJson(pullRequest));
+    }
+    if (path === `/pulls/${pullRequest?.number}/files` && pullRequest !== undefined) {
+      const perPage = Number(url.searchParams.get("per_page") ?? "30");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      return Response.json(pullRequest.files.slice((page - 1) * perPage, page * perPage));
     }
     if (path === `/branches/${encodeURIComponent(HEAD.ref)}`) {
       return fixture.pushed

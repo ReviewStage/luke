@@ -431,6 +431,85 @@ export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
 
+/** What became of one file: made, changed in place, removed, or moved, with or without changes. */
+export const CHANGED_FILE_STATUS = {
+  ADDED: "added",
+  MODIFIED: "modified",
+  DELETED: "deleted",
+  RENAMED: "renamed",
+} as const;
+
+export type ChangedFileStatus = (typeof CHANGED_FILE_STATUS)[keyof typeof CHANGED_FILE_STATUS];
+
+/**
+ * Why a changed file carries no patch: its contents are not text, or its
+ * patch runs past what a read carries, which GitHub leaves out of its own
+ * answer too. A file with neither is drawn from its patch.
+ */
+export const PATCH_OMITTED = {
+  BINARY: "binary",
+  TOO_LARGE: "too-large",
+} as const;
+
+export type PatchOmitted = (typeof PATCH_OMITTED)[keyof typeof PATCH_OMITTED];
+
+export const CHANGES_BOUNDS = {
+  /** The most files one read of a pull request's changes carries; a pull request with more is cut short, and says so. */
+  MAX_FILES: 300,
+  /** The most characters one file's patch may spell before it is left out as too large. */
+  MAX_PATCH_CHARS: 100_000,
+} as const;
+
+/**
+ * One changed file: its path from the repository's root, and the path it
+ * moved from where it was renamed; what became of it; the lines it adds
+ * and removes; and its patch, every hunk of a unified diff from the first
+ * `@@` header on, or null with why where it carries none.
+ */
+export const codingAgentChangedFileSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  previousPath: EffectSchema.NullOr(EffectSchema.String),
+  status: EffectSchema.Literals(Object.values(CHANGED_FILE_STATUS)),
+  additions: countedNumber,
+  deletions: countedNumber,
+  patch: EffectSchema.NullOr(EffectSchema.String),
+  omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
+});
+
+export type CodingAgentChangedFile = typeof codingAgentChangedFileSchema.Type;
+
+/** Why an agent has no changes to read yet, which is not the same as having none. */
+export const CHANGES_UNAVAILABLE = {
+  /** The agent has opened no pull request yet. */
+  NO_PULL_REQUEST: "no-pull-request",
+} as const;
+
+export type ChangesUnavailable = (typeof CHANGES_UNAVAILABLE)[keyof typeof CHANGES_UNAVAILABLE];
+
+/** A pull request's changes as read: its files in the order GitHub lists them, whether the list was cut short at the bound, and when it was read, in epoch milliseconds. */
+export const codingAgentChangeSetSchema = EffectSchema.Struct({
+  files: EffectSchema.Array(codingAgentChangedFileSchema).check(
+    EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
+  ),
+  truncated: EffectSchema.Boolean,
+  readAt: countedNumber,
+});
+
+export type CodingAgentChangeSet = typeof codingAgentChangeSetSchema.Type;
+
+/**
+ * One agent's changes (GET): the files of the pull request it published as
+ * GitHub lists them now, or why there are none to read yet. A changes tab
+ * draws them in a viewer that takes no account of where a change set came
+ * from, so a later source is another fetcher feeding the same answer.
+ */
+export const codingAgentChangesAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ changes: codingAgentChangeSetSchema }),
+  EffectSchema.Struct({ unavailable: EffectSchema.Literals(Object.values(CHANGES_UNAVAILABLE)) }),
+]);
+
+export type CodingAgentChangesAnswer = typeof codingAgentChangesAnswerSchema.Type;
+
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the
  * name its tool part carries in the transcript (`tool-delegate`). The call

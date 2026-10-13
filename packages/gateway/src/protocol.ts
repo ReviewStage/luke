@@ -74,6 +74,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */

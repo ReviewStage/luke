@@ -5,6 +5,7 @@ import {
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHANGES_UNAVAILABLE,
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
@@ -181,6 +182,11 @@ function fixture() {
               changedFiles: 2,
             },
           };
+        }),
+      codingAgentChanges: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`changes:${agentId}`);
+          return { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST };
         }),
       providerKeysRead: () =>
         Effect.sync(() => {
@@ -381,6 +387,28 @@ it.effect(
       );
 
       assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
+    }),
+);
+
+it.effect(
+  "an agent's changes reach the panel as the host answered them, and the voice window is refused them",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = { kind: ACT_KIND.CODING_AGENTS_CHANGES, payload: { agentId: AGENT_ID } } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const answered = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_CHANGES].refusal,
+      });
+      assert.deepEqual(answered, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { unavailable: CHANGES_UNAVAILABLE.NO_PULL_REQUEST },
+      });
+      assert.deepEqual(asked, [`changes:${AGENT_ID}`]);
     }),
 );
 

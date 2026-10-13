@@ -1,0 +1,91 @@
+{
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "previousPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "added",
+              "modified",
+              "deleted",
+              "renamed"
+            ]
+          },
+          "additions": {
+            "type": "number",
+            "minimum": 0
+          },
+          "deletions": {
+            "type": "number",
+            "minimum": 0
+          },
+          "patch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "omitted": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "binary",
+                  "too-large"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "previousPath",
+          "status",
+          "additions",
+          "deletions",
+          "patch",
+          "omitted"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 300
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "readAt": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "files",
+    "truncated",
+    "readAt"
+  ],
+  "additionalProperties": false
+}
