@@ -284,6 +284,10 @@ last active, and your daily counts, on an admin page of our site that only an
 account we have marked as an administrator can open; nothing you type, say,
 or run appears on it.
 
+Every account also has a personal workspace on our service, a record named
+with your name and holding you as its owner; it goes when you delete your
+account.
+
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his
 reasoning, and each tool call with its input and result; and the turn's model

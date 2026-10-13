@@ -108,6 +108,21 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
+Every account has a personal workspace, named for the account, slugged
+`personal-<user id>`, with `{"personal":true}` as its metadata text, and named
+the account's own by a `personal_workspace` row
+(`packages/database/src/schemas/personal-workspace.ts`; its generated migration
+is followed by a custom one that backfills one for every account lacking it in
+one data-modifying statement). `packages/database/src/models/workspace-store.ts`'s
+`ensurePersonalWorkspace` makes it the first time it is asked for, through
+`models/workspace-seams.ts`'s
+`createOrganization` over the plugin, so its organization and owner rows are
+the plugin's own; no transaction encloses it, so two Macs ensuring at once
+settle on the unique slug and the row's primary key, and the one the plugin
+refuses adopts the workspace under the slug. `listWorkspaces` answers every
+workspace the account is a member of, its personal one first and the rest by
+name. `tests/workspace-store.test.ts` holds the three.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
