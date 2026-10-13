@@ -8,6 +8,7 @@ import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
@@ -111,6 +112,8 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
 
 For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.
+
+A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers.
 
 ## The developer's inbox
 

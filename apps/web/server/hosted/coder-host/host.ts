@@ -62,6 +62,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import { agentSkills, type CoderSkill } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -171,6 +172,11 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
+  /** The skills the agent's repository keeps, offered to the session as it starts; none where they could not be read (`skills.ts`). */
+  skills(
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+  ): Effect.Effect<readonly CoderSkill[], never, CheckoutServices>;
   /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
   checkOut(
     admitted: AdmittedConversation,
@@ -434,6 +440,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.map(agentCiReadable(admitted.target, agent), (ciReadable) =>
         promptOf(agent, ciReadable),
       ),
+
+    skills: (admitted, agent) => agentSkills(admitted.target, agent),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>

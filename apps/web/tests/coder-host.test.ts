@@ -86,6 +86,7 @@ import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
+import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 import { titleModelAnswering } from "./support/title-model";
 
 /**
@@ -1051,6 +1052,133 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(!withheld.text.includes("gh pr checks"));
         assert.notEqual(granted.hash, withheld.hash);
         assert.equal(unread.ciReadable, false);
+      }),
+  );
+
+  it.effect(
+    "the session is offered the skills its repository keeps, each loading as its body behind the folder it stands in within the checkout, and none where the App does not reach the repository or GitHub cannot be read",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const keeping = githubReaching(
+          [{ id: 7, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          undefined,
+          skillsRepository({
+            fullName: "acme/relay",
+            branch: "main",
+            roots: { ".agents/skills": { "release-notes": SKILL_ENTRY.FOLDER } },
+            files: {
+              ".agents/skills/release-notes/SKILL.md":
+                "---\nname: release-notes\ndescription: Use when the developer asks for release notes.\n---\nOne line per change; see references/style.md.",
+            },
+          }),
+        ).layer;
+        const elsewhere = githubReaching([
+          { id: 7, login: "acme", repositories: [{ owner: "acme", name: "other" }] },
+        ]).layer;
+
+        const offered = yield* host.skills(admitted, agent).pipe(Effect.provide(keeping));
+        const unreached = yield* host.skills(admitted, agent).pipe(Effect.provide(elsewhere));
+        const unread = yield* host.skills(admitted, agent).pipe(Effect.provide(NO_GITHUB));
+
+        assert.deepEqual(offered, [
+          {
+            name: "release-notes",
+            description: "Use when the developer asks for release notes.",
+            markdown: `This skill is \`${CODER.CHECKOUT_PATH}/.agents/skills/release-notes/SKILL.md\` in the checkout; resolve the files it names relative to \`${CODER.CHECKOUT_PATH}/.agents/skills/release-notes/\`.\n\nOne line per change; see references/style.md.`,
+          },
+        ]);
+        assert.deepEqual(unreached, []);
+        assert.deepEqual(unread, []);
+      }),
+  );
+
+  it.effect(
+    "a skill the agent loads lands as its own call, named as the model called it, holding the skill's body, and a load eve refused lands as a failed call",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const data = { turnId: "turn_0", sequence: 0 };
+        const load = (callId: string, skill: string) =>
+          stamped({
+            type: "actions.requested",
+            data: {
+              ...data,
+              stepIndex: 0,
+              actions: [{ kind: "load-skill", callId, input: { skill } }],
+            },
+          });
+        for (const event of [
+          stamped({ type: "turn.started", data }),
+          stamped({ type: "message.received", data: { ...data, message: "/release-notes" } }),
+          stamped({ type: "step.started", data: { ...data, stepIndex: 0, modelId: "m" } }),
+          load("call-1", "release-notes"),
+          load("call-2", "missing"),
+          stamped({
+            type: "action.result",
+            data: {
+              ...data,
+              stepIndex: 0,
+              status: "completed",
+              result: {
+                kind: "load-skill-result",
+                callId: "call-1",
+                output: "One line per change.",
+              },
+            },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...data,
+              stepIndex: 0,
+              status: "failed",
+              result: {
+                kind: "load-skill-result",
+                callId: "call-2",
+                isError: true,
+                output: 'No skill named "missing".',
+              },
+            },
+          }),
+          stamped({
+            type: "step.completed",
+            data: { ...data, stepIndex: 0, finishReason: "tool-calls" },
+          }),
+          stamped({ type: "turn.completed", data }),
+        ] satisfies MessageStreamEvent[]) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const calls = page.messages.flatMap((message) => message.parts.filter(isToolUIPart));
+        assert.deepEqual(
+          calls.map((call) => [call.type, call.state, call.input, call.output, call.errorText]),
+          [
+            [
+              `tool-${CODER_TOOL.LOAD_SKILL}`,
+              TOOL_PART_STATE.OUTPUT_AVAILABLE,
+              { skill: "release-notes" },
+              "One line per change.",
+              undefined,
+            ],
+            [
+              `tool-${CODER_TOOL.LOAD_SKILL}`,
+              TOOL_PART_STATE.OUTPUT_ERROR,
+              { skill: "missing" },
+              undefined,
+              'No skill named "missing".',
+            ],
+          ],
+        );
       }),
   );
 

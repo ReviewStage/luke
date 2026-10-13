@@ -11,6 +11,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
   type LinearAdmission,
@@ -121,6 +122,26 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/**
+ * The skills the session is offered as it starts, for the agent's own
+ * `skills/repository.ts`: the ones its repository keeps, or none for a
+ * session the host does not admit or whose conversation is no agent's.
+ */
+export function sessionSkills(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<readonly CoderSkill[]> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return [];
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return [];
+      return yield* host.skills(admitted.success, agent.success);
     }),
   );
 }
