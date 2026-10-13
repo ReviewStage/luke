@@ -122,6 +122,14 @@
   --z-toast: 31;
 }
 
+/* In full screen macOS hides the traffic lights, so the title bar's buttons
+   stand at the window's edge, as far in from it as the side panel's toggle
+   stands from the other, and every row that clears them starts that much
+   sooner (`window-full-screen.ts`). */
+:root[data-full-screen="true"] {
+  --title-bar-left: var(--column-inset);
+}
+
 /* The light appearance, which the window answers whenever macOS (or Luke's
    own setting, through it) asks: an off-white ground, the sidebar a step
    darker, the side panel between them, and white for what floats. The window
@@ -279,7 +287,11 @@ body,
   display: flex;
 }
 
-.desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]) {
+/* The Inbox's list stands on the sidebar's ground, so the folded sidebar's
+   buttons over its head do too. */
+.desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .inbox-view)
+  .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
@@ -2496,16 +2508,20 @@ body:has(.app-stage[data-capture="true"])
 /* The window's Inbox, in the plan's place beside the sidebar, and a plan's
    own Inbox tab: the items in a column on the sidebar's ground, under a bar
    the work column's height, and the chosen item beside it, at the Inbox's
-   own measure (`.desktop-inbox`). */
+   own measure (`.desktop-inbox`). The column is as wide as it was last
+   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
+   pane, which is why the Inbox is the container it measures; its edge is
+   drawn as the sidebar's is. */
 .inbox-view {
-  --inbox-list-width: 280px;
+  container-type: inline-size;
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: var(--inbox-list-width) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 .inbox-plans {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -2514,8 +2530,10 @@ body:has(.app-stage[data-capture="true"])
   background: var(--desktop-sidebar);
 }
 
+/* Its buttons end as far in from the list's edge as the side panel's toggle
+   stands from the window's. */
 .inbox-plans-bar {
-  justify-content: space-between;
+  padding-right: var(--column-inset);
 }
 
 .inbox-plans-scroll {
@@ -3297,8 +3315,10 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The toolbar's button is drawn on while the summary is pinned, as it is
-   while the card it hangs stands. */
-.summary-toggle[aria-pressed="true"] {
+   while the card it hangs stands, and the Inbox's Waiting only while the
+   list holds only what waits. */
+.summary-toggle[aria-pressed="true"],
+.inbox-waiting-only[aria-pressed="true"] {
   background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
   color: var(--text-primary);
 }

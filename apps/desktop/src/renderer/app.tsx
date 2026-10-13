@@ -54,6 +54,7 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
+import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -154,6 +155,8 @@ export function App(): React.JSX.Element {
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
   useWindowZoom(settings?.zoom, (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
+  // In full screen the sidebar's toggle stands where the hidden traffic lights were.
+  useWindowFullScreen(state?.window.fullScreen);
 
   // The stop key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.

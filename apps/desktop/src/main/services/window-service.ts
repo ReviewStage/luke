@@ -78,8 +78,8 @@ export interface WindowService extends DesktopService {
   applyAppearance: () => Effect.Effect<void>;
   /**
    * What one window answers for and the document cannot: which surface it
-   * draws, how big it stands, and the display under it. Decided here by which
-   * window asked.
+   * draws, and whether it stands in full screen. Decided here by which window
+   * asked.
    */
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
@@ -158,6 +158,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     placementPath: runMode.takesFocus ? path.join(config.stateRoot, "main-window.json") : undefined,
     closing: () => !launchStanding(),
     onAllClosed: () => config.quit(),
+    // The title bar's buttons move into the traffic lights' place while
+    // macOS hides them, so the window is told as its frame changes.
+    onFullScreenChanged: () => publishAppState(),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
@@ -222,9 +225,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    if (voiceWindow.owns(sender)) return { role: WINDOW_ROLE.VOICE };
-    if (callWindow.owns(sender)) return { role: WINDOW_ROLE.CALL };
-    return { role: WINDOW_ROLE.PANEL };
+    if (voiceWindow.owns(sender)) return { role: WINDOW_ROLE.VOICE, fullScreen: false };
+    if (callWindow.owns(sender)) return { role: WINDOW_ROLE.CALL, fullScreen: false };
+    return { role: WINDOW_ROLE.PANEL, fullScreen: panels.fullScreen(sender) };
   }
 
   function publishAppState(): void {

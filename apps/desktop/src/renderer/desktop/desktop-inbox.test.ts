@@ -299,8 +299,8 @@ test("the pane's crumbs open the item's plan and its agent's tab, each leaving t
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled, and Waiting then lists only what still waits", async () => {
-  const { page } = mount();
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Waiting only then lists only what still waits until pressed again, and outlives a relaunch", async () => {
+  let { page } = mount();
   await settle();
   inboxes.set(INVITES.id, [
     {
@@ -317,19 +317,68 @@ test("a plan main says changed is read again, so an item answered on another Mac
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), [
+  const everything = [
     "# Invites",
     "Expire after 7 days?",
     "# Billing usage alerts",
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
-  ]);
+  ];
+  assert.deepEqual(listed(page), everything);
 
-  const waiting = [...page.querySelectorAll<HTMLButtonElement>(".settings-segment")].find(
-    (each) => each.textContent === "Waiting",
-  );
-  act(() => waiting?.click());
+  const waitingOnly = () => {
+    const button = page.querySelector<HTMLButtonElement>('button[aria-label="Waiting only"]');
+    assert.ok(button, "the head offers Waiting only");
+    return button;
+  };
+  assert.equal(waitingOnly().getAttribute("aria-pressed"), "false");
+  act(() => waitingOnly().click());
+  assert.equal(waitingOnly().getAttribute("aria-pressed"), "true");
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.equal(waitingOnly().getAttribute("aria-pressed"), "true");
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+
+  act(() => waitingOnly().click());
+  assert.equal(waitingOnly().getAttribute("aria-pressed"), "false");
+  assert.deepEqual(listed(page), everything);
+});
+
+test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {
+  let { page } = mount();
+  await settle();
+  const edge = () => {
+    const separator = page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+    assert.ok(separator, "the list has an edge to resize it by");
+    return separator;
+  };
+  const width = () => Number(edge().getAttribute("aria-valuenow"));
+  const press = (key: string) => {
+    act(() => {
+      edge().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    });
+  };
+  assert.equal(width(), 320);
+  press("ArrowRight");
+  assert.equal(width(), 336);
+  press("End");
+  assert.equal(width(), 520);
+  press("ArrowRight");
+  assert.equal(width(), 520, "no wider than its greatest width");
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.equal(width(), 520);
+  press("Home");
+  assert.equal(width(), 300);
+  press("ArrowLeft");
+  assert.equal(width(), 300, "no narrower than its least width");
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
