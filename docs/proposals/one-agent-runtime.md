@@ -1,7 +1,8 @@
 # Proposal: one agent runtime for the planning brain and coding agents
 
-Status: proposed, awaiting Dean's decisions (§8). Nothing is built. Based on
-main at `b057304a`.
+Status: decided by Dean on 2026-10-13 (see "Decisions" below), being built
+as the PR plan in §5 describes. Where what ships differs from the proposal,
+the text says what shipped. Based on main at `b057304a`.
 
 Dean's ask: "I feel like we always have to design for both brain and coding
 agents. But in my mind they should essentially be the same infrastructure.
@@ -260,6 +261,10 @@ intact (`eve/sandbox.ts` header).
 
 ### 3.6 One subagent mechanism
 
+Decided differently (§8, Decision 3): the one `delegate` takes a `background`
+flag for every role, the coder defaulting to foreground and the planner
+offered background alone. The rest of this section stands.
+
 There is one hidden `worker` per root (`tool: false`), reached through one
 `delegate` workflow tool whose implementation is shared:
 
@@ -406,7 +411,10 @@ PR 3.
 
 ## 6. How the in-flight features land
 
-- **Mac command tool** (`docs/proposals/mac-commands.md` on
+- **Mac command tool.** Decided (§8, Decision 5): it reaches the Mac over
+  the account-wide channel as #2359's `run_on_mac` does, with no approvals,
+  and becomes a registry entry. The proposal's text follows.
+- **Mac command tool, as proposed** (`docs/proposals/mac-commands.md` on
   `conductor/local-mac-command-tool-design`). The design recommends the brain
   alone; the orchestrator says it is being built for both roots. On the
   runtime:
@@ -505,20 +513,27 @@ PR 3.
   job (`.github/workflows/ci.yml:117`) on every PR, and they must stay green
   at every step.
 
-## 8. Decisions for Dean (recommendation first)
+## 8. Decisions (Dean, 2026-10-13)
 
-1. **Target shape:** two thin roots over one runtime now, with one root
-   later only if it buys something (§3.9). Alternative: one root as the goal
-   from the start.
-2. **One web-research pair for every role:** the hosted, screened and cited
-   `search_web`/`read_web_page`, on Luke's key and metered. Alternative: eve's
-   provider-run pair for everyone, which loses screening and budgets.
-3. **Delegation mode:** the planner runs in the background (`task`), the coder
-   blocks (`execute`), on one implementation. Alternative: both background,
-   with the coder told to `task_wait`.
-4. **Brain skills: yes,** read during `explore()`. **MCP switches for the
-   planner: later**, always on until a place for the switch is chosen.
-5. **Mac command approval over the account-wide held inbox read** rather than
-   only the call socket, so the coder role works unattended. I'll forward
-   this to the Mac-commands workspace on your say-so.
-6. **Meter every Luke-key inference, coders included.**
+1. **Two thin eve roots now, on one shared runtime.** One root stays a later
+   goal (§3.9).
+2. **The hosted `search_web` and `read_web_page` for every role,** on Luke's
+   key and metered.
+3. **Changed from the proposal: one delegation mechanism with both
+   foreground and background subagents for every role,** as other agents
+   have. The caller either waits for the worker's answer (foreground) or
+   carries on and hears it later (background). The model chooses per call
+   through a `background` flag whose default comes from the role.
+   - **The coder gets both,** defaulting to foreground, as it delegates today.
+   - **The planner gets background only.** A foreground call would hold the
+     spoken turn silent for the worker's whole run, and the voice already
+     follows a turn parked on a background task (`PARKED_FOLLOW`,
+     `voice/live-brain.ts`). Offering the planner no flag at all is the
+     simplest way to keep the voice fast: it is one fewer choice for the
+     model to get wrong mid-call.
+4. **Brain skills now** (the profile flag plus `load_skill`, read during
+   `explore()`). **Per-plan MCP switches later.**
+5. **The Mac tool reaches the Mac over the account-wide channel,** as #2359's
+   `run_on_mac` already does, **with no approvals.** It becomes a registry
+   entry.
+6. **Meter every inference on Luke's key, coders included.**
