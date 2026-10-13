@@ -4,7 +4,6 @@
 
 import assert from "node:assert/strict";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { INTEGRATION_PROVIDER_LIST } from "@sidecar/hosted/integration-wire";
 import { Effect, Layer, Option, Result } from "effect";
@@ -23,6 +22,7 @@ import type { WebAgentRun } from "../server/runtime";
 import { NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
+import { startPlan } from "./support/workspaces";
 
 /**
  * Each door runs under the admission its role's profile names: a root's
@@ -72,8 +72,8 @@ async function openRoot(): Promise<{ host: CoderHost; edge: EdgeKit }> {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
@@ -90,7 +90,7 @@ async function openAgent(host: CoderHost) {
   return database.run(
     Effect.gen(function* () {
       const userId = yield* openGithubUser();
-      const plan = yield* createPlan(userId, { name: "Invitations", repository: "acme/relay" });
+      const plan = yield* startPlan(userId, { name: "Invitations", repository: "acme/relay" });
       const started = yield* createCodingAgent(userId, {
         planId: plan.id,
         idempotencyKey: `start-${mintSession()}`,

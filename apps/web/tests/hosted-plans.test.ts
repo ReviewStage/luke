@@ -207,7 +207,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         const userId = yield* openUser;
         yield* writePlanTemplate(userId, "## Why\n\nSay why.\n\n## How\n\nSay how.\n");
         yield* TestClock.adjust(Duration.minutes(1));
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
         yield* TestClock.adjust(Duration.hours(1));
         // The template changing after the plan started leaves the guidance the plan holds its template's.
         yield* writePlanTemplate(userId, "## Why\n\nSay why, briefly.\n");
@@ -229,7 +229,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const { id: planId } = yield* startPlan(userId, RELAY_PLAN);
         const binding = bound(userId, planId);
         const base = DEFAULT_PLAN_TEMPLATE;
         const guidance = sectionText(base, "Context").split("\n").at(-1) ?? "";
