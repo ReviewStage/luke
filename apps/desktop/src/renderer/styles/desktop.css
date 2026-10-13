@@ -4465,9 +4465,10 @@ body,
    its bottom-right corner, newest at the bottom, in the corner itself
    whatever stands at the window's foot: a call bar, the side panel, or the
    summary. The folded sidebar's call card keeps the other corner, and the
-   window is never narrow enough for the two to meet. Each rises in on the spring and fades first on its way out;
-   the stack itself takes no pointer, so only a card with something to press
-   stands in the way of what is under it. */
+   window is never narrow enough for the two to meet. Each rises in on the
+   spring and fades first on its way out; the stack itself takes no pointer,
+   so only a card with something to press stands in the way of what is under
+   it, and that card is always one the developer can dismiss. */
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
@@ -4475,16 +4476,6 @@ body,
   bottom: var(--space-16);
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-/* A card with something to press would take the presses meant for a plan's
-   call bar beneath it, so while one stands over a call bar the stack steps
-   up just clear of the bar's row, and settles back into the corner on the
-   spring once no such card is left. The step is the bar's row, its padding,
-   and its hairline, less the corner's own inset. */
-body:has(.desktop-call-bar) .toast-stack:has(.toast[data-action="true"]:not([data-leaving])) {
-  transform: translateY(calc(var(--space-16) - var(--call-row-height) - 3 * var(--space-12) - 1px));
 }
 
 .toast-stack > ol {
@@ -4607,9 +4598,8 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   opacity: 0.86;
 }
 
-/* A toast that stands until dismissed shows its × on its corner under the
-   pointer or focus, standing over the card's edge so it takes no room from
-   the words. */
+/* A toast with an action shows its × on its corner under the pointer or
+   focus, standing over the card's edge so it takes no room from the words. */
 .toast-dismiss {
   position: absolute;
   top: calc(-1 * var(--space-8));

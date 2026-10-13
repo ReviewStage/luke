@@ -15,10 +15,12 @@
  * twin above it.
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
- * is in it, or, where it persists, until it is dismissed: by its action, by
- * the × it shows under the pointer or focus, by Escape while focus is in it,
- * or by whoever showed it withdrawing what it is about. One with no action
- * is never pointed at, so clicks pass through it. It arrives on the pair
+ * is in it, or, where it persists, until it is dismissed. One with an action
+ * may always be dismissed before then, since that is how the developer
+ * reaches what it stands over: by its action, by the × it shows under the
+ * pointer or focus, by Escape while focus is in it, or by whoever showed it
+ * withdrawing what it is about. One with no action is never pointed at, so
+ * clicks pass through it. It arrives on the pair
  * every arriving element rides and leaves first over `--duration-exit`, held
  * mounted through its leaving; the ones its coming or going moves glide
  * there, so reduced motion and a capture run hold all of it still at the
@@ -393,7 +395,6 @@ function ToastCard({
   const held = useRef({ pointer: false, focus: false });
   const { id, notice, leaving } = shown;
   const { action } = notice;
-  const persists = notice.persists === true;
   const hold = (by: keyof typeof held.current, holding: boolean) => {
     const was = held.current.pointer || held.current.focus;
     held.current = { ...held.current, [by]: holding };
@@ -426,27 +427,27 @@ function ToastCard({
         {notice.detail === undefined ? null : <span className="toast-detail">{notice.detail}</span>}
       </span>
       {action === undefined ? null : (
-        <button
-          type="button"
-          className="toast-action"
-          onClick={() => {
-            step({ kind: TOAST_STEP.DISMISS, id });
-            action.onPress();
-          }}
-        >
-          {action.label}
-        </button>
+        <>
+          <button
+            type="button"
+            className="toast-action"
+            onClick={() => {
+              step({ kind: TOAST_STEP.DISMISS, id });
+              action.onPress();
+            }}
+          >
+            {action.label}
+          </button>
+          <button
+            type="button"
+            className="toast-dismiss"
+            aria-label={DISMISS_LABEL}
+            onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
+          >
+            <XIcon aria-hidden="true" />
+          </button>
+        </>
       )}
-      {persists ? (
-        <button
-          type="button"
-          className="toast-dismiss"
-          aria-label={DISMISS_LABEL}
-          onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
-        >
-          <XIcon aria-hidden="true" />
-        </button>
-      ) : null}
     </li>
   );
 }
