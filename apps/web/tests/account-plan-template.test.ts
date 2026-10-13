@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  deleteAccount,
+  readAccountPreferences,
+  readPlanTemplate,
+  writeAccountPreferences,
+  writePlanTemplate,
+} from "@sidecar/database/models/account-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -24,13 +31,6 @@ import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { accountApp } from "../server/account-app";
-import {
-  deleteAccount,
-  readAccountPreferences,
-  readPlanTemplate,
-  writeAccountPreferences,
-  writePlanTemplate,
-} from "../server/hosted/account-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { modelCatalogOf } from "../server/hosted/model-catalog";

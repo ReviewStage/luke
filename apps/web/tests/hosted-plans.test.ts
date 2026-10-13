@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { deleteAccount } from "@sidecar/database/models/account-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { plan } from "@sidecar/database/schemas/plan";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -14,7 +15,6 @@ import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { deleteAccount } from "../server/hosted/account-store";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,

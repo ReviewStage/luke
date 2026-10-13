@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { writePlanTemplate } from "@sidecar/database/models/account-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { Effect, Option } from "effect";
-import { writePlanTemplate } from "../server/hosted/account-store";
 import { createPlan, readPlan } from "../server/hosted/plan-store";
 
 /**

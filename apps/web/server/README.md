@@ -646,7 +646,7 @@ snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
 store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
 the same group from the same wiring; the reads and the writes themselves are
-`server/hosted/account-store.ts`'s effects over the ambient `SqlClient`,
+`packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the group as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real

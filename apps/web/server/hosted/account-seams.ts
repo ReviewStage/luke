@@ -1,11 +1,11 @@
-import type { AccountAppSeams } from "../account-app.js";
 import {
   deleteAccount,
   readAccountPreferences,
   readPlanTemplate,
   writeAccountPreferences,
   writePlanTemplate,
-} from "./account-store.js";
+} from "@sidecar/database/models/account-store";
+import type { AccountAppSeams } from "../account-app.js";
 import { resolveHostedUserId } from "./bearer.js";
 
 /**
