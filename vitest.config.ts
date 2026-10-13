@@ -23,6 +23,7 @@ export default defineConfig({
       "packages/analytics",
       "packages/feedback",
       "packages/brain",
+      "packages/database",
       "tools/trace-export",
       "apps/desktop",
       "apps/web",
