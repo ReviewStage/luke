@@ -19,6 +19,7 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import type { PageVersion } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
@@ -135,6 +136,8 @@ interface FakeService extends PlanningClient {
   olderHistory: Record<number, PlanRevisionsAnswer>;
   /** Each revision the service holds, by its number, which a restore puts back as the plan's document. */
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
+  /** Every version of every page the service holds, for any plan. */
+  pages: PageVersion[];
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: PlanEditAnswer | undefined;
   /** The account's pinned repositories, newest pinned first, as the service keeps them. */
@@ -172,6 +175,11 @@ function fakeService(plans: Plan[]): FakeService {
     readRevisions: (_planId, before) =>
       Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
     readRevision: (_planId, seq) => Effect.sync(() => service.revisions[seq]),
+    pages: [],
+    readPageVersion: (_planId, pageId, version) =>
+      Effect.sync(() =>
+        service.pages.find((page) => page.id === pageId && page.version === version),
+      ),
     // The service puts the revision's document back and names the developer its last editor.
     restore: (planId, seq) =>
       Effect.sync(() => {
@@ -1997,6 +2005,30 @@ it.effect(
       assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REVISION, { planId: INVITES, seq: 9 }), {
         failure: PLAN_CALL_FAILURE.UNANSWERED,
       });
+      assert.equal(told.length, viewsTold);
+    }),
+);
+
+it.effect(
+  "a page's version is answered to the frame that asked, and the view never holds its HTML",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const chart: PageVersion = {
+        id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+        title: "Invite funnel",
+        version: 1,
+        at: 100,
+        html: "<!doctype html><p>Invites sent</p>",
+      };
+      service.pages = [chart];
+      const { call, told } = yield* openPlan(service);
+      const viewsTold = told.length;
+      const read = (version: number) =>
+        call(GATEWAY_METHOD.PLANNING_PAGE, { planId: INVITES, pageId: chart.id, version });
+
+      assert.deepEqual(yield* read(1), { page: chart });
+      assert.deepEqual(yield* read(2), { failure: PLAN_CALL_FAILURE.UNANSWERED });
       assert.equal(told.length, viewsTold);
     }),
 );

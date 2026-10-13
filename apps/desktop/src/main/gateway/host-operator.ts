@@ -91,6 +91,8 @@ import {
   type PlanningEditParams,
   type PlanningFileAnswer,
   type PlanningFileParams,
+  type PlanningPageAnswer,
+  type PlanningPageParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
   type PlanningRenameParams,
@@ -110,6 +112,7 @@ import {
   type PlanningView,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
+  planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -242,6 +245,8 @@ export interface HostOperator {
   planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+  /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
+  planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -640,6 +645,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PAGE, {
+          planId: params.planId,
+          pageId: params.pageId,
+          version: params.version,
+        }),
+        (answer): PlanningPageAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

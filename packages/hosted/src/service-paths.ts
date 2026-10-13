@@ -211,6 +211,11 @@ export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
 }
 
+/** One version of one page of one plan, with its HTML (GET). */
+export function planPageVersionPath(planId: string, pageId: string, version: number): string {
+  return `${planPath(planId)}/pages/${encodeURIComponent(pageId)}/versions/${version}`;
+}
+
 /** One revision of the account's plan template: its text beside the text before it (GET). */
 export function planTemplateRevisionPath(seq: number): string {
   return `${HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS}/${seq}`;
