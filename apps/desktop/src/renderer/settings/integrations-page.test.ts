@@ -60,6 +60,7 @@ function answer(request: Act): Promise<ActOutcome> {
             linear: standing,
             notion: INTEGRATION_STATUS.UNAVAILABLE,
             sentry: INTEGRATION_STATUS.UNAVAILABLE,
+            slack: INTEGRATION_STATUS.UNAVAILABLE,
           },
         }),
       );

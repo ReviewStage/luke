@@ -365,6 +365,26 @@ connection's record, and asks Vercel Connect to revoke the grant; what agents
 already changed in Sentry, and the record of it, stays, and a grant Vercel
 Connect could not revoke stays until you revoke Luke in Sentry's own settings.
 
+**Slack, if you connect it.** Connecting Slack in Settings › Integrations
+signs you in to Slack in your browser through Vercel Connect, which stores
+Slack's token for your account, encrypted, and renews it. Luke uses Slack
+read-only: the agents are offered Slack's search and read tools alone, so they
+can search messages, files, channels, and people, and read channels, threads,
+canvases, and profiles your Slack account can see, and cannot post, schedule,
+react, or write anything. Our service never writes the token down: it gets it
+from Vercel Connect when an agent uses Slack, holds it in memory while it is
+used, and sends it only to Slack's MCP server, never to your Mac, a model, or
+a sandbox. We keep only your connection's state (waiting for sign-in,
+connected, or expired) and when it last changed. What Slack answers, which can
+include other people's messages in conversations you can see, goes to the
+model that made the call, and each call, with its input and everything Slack
+answered, is written to the plan's conversation or the agent's transcript like
+any other tool call. Disconnecting and deleting your account work as they do
+for Linear: Luke stops using it from each agent's next step, removes the
+connection's record, and asks Vercel Connect to revoke the grant; the record
+of what agents read stays with the plan, and a grant Vercel Connect could not
+revoke stays until you remove Luke in Slack's own settings.
+
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values
 from a fixed list. A voice session's start is counted with the source that
@@ -538,6 +558,9 @@ only when you press Send.
 - Vercel Connect and Sentry, if you connect Sentry: Vercel Connect keeps
   Sentry's token, and our service sends each Sentry call, with its input, to
   Sentry's MCP server, which keeps it under Sentry's own policy.
+- Vercel Connect and Slack, if you connect Slack: Vercel Connect keeps
+  Slack's token, and our service sends each Slack call, with its input, to
+  Slack's MCP server, which keeps it under Slack's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
   database: everything our service keeps is stored with Neon and passes
   through Vercel. Luke's planning model, its research worker, and each coding
@@ -605,22 +628,22 @@ reports by Sentry.
   counts, preferences, and plan template, your pinned repositories, your plans
   with their history, whiteboards, coding agents, and inbox items and
   pictures, the conversation with its attached files, every call's record,
-  your own API keys, Luke's record of your Linear, Notion, and Sentry
+  your own API keys, Luke's record of your Linear, Notion, Sentry, and Slack
   connections, and everything earlier versions left there — and asks PostHog
   to erase your usage data and recordings, which does not reach a recording
   never attached to your account. Luke stops recording for the rest of the
   session, and starts again the next time you open it or sign in. Sentry
   reporting continues, and earlier anonymous crash reports cannot be
   identified as yours and targeted through account deletion. Deleting does not
-  affect your Google, GitHub, Linear, Notion, or Sentry account, and does not
-  revoke the Luke GitHub App (revoke it in GitHub's settings). It asks Vercel
-  Connect to revoke the Linear, Notion, and Sentry grants it holds; if Vercel
-  Connect cannot be reached, the account is deleted anyway and a grant stays
-  until you revoke Luke in that service's own settings. It ends every session
-  of yours on Vercel Workflow and, shortly after, deletes their sandboxes with
-  the snapshots no other sandbox uses; the session history Vercel Workflow
-  keeps goes as described under "Who we send it to", and anything stored only
-  on your Mac stays there until you remove it.
+  affect your Google, GitHub, Linear, Notion, Sentry, or Slack account, and
+  does not revoke the Luke GitHub App (revoke it in GitHub's settings). It
+  asks Vercel Connect to revoke the Linear, Notion, Sentry, and Slack grants
+  it holds; if Vercel Connect cannot be reached, the account is deleted anyway
+  and a grant stays until you revoke Luke in that service's own settings. It
+  ends every session of yours on Vercel Workflow and, shortly after, deletes
+  their sandboxes with the snapshots no other sandbox uses; the session
+  history Vercel Workflow keeps goes as described under "Who we send it to",
+  and anything stored only on your Mac stays there until you remove it.
 
 ## Google user data
 

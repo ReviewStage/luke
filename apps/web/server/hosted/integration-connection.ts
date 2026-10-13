@@ -8,9 +8,9 @@
  * its provider and its own ownership check, the root's or the delegated one,
  * and nothing else.
  *
- * A connection is the provider's own hosted MCP server, every tool it lists,
- * and no approval: a write runs the moment the model calls it, as the plan
- * decided. Its credential is the account's, read from Vercel Connect under
+ * A connection is the provider's own hosted MCP server, every tool it lists
+ * or the ones its table entry allows, and no approval: a write runs the
+ * moment the model calls it, as the plan decided. Its credential is the account's, read from Vercel Connect under
  * the user id the ownership check admitted, never the session's principal:
  * a spoken planning turn runs as the deployment acting for the account, and
  * eve's own user-scoped auth would refuse it before reading any token. So
@@ -44,7 +44,7 @@ import {
   INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
 } from "./integration-store.js";
-import { INTEGRATION } from "./integrations.js";
+import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 
 /** Why a provider's call ran nothing, in words the model can act on and say. */
 interface UnavailableSentences {
@@ -168,9 +168,13 @@ export function integrationConnection(
   provider: IntegrationProvider,
   read: IntegrationTokenRead,
 ): McpClientConnectionDefinition {
+  const definition: IntegrationDefinition = INTEGRATION[provider];
   return defineMcpClientConnection({
-    url: INTEGRATION[provider].MCP_URL,
-    description: INTEGRATION[provider].DESCRIPTION,
+    url: definition.MCP_URL,
+    description: definition.DESCRIPTION,
+    ...(definition.ALLOWED_TOOLS !== undefined
+      ? { tools: { allow: definition.ALLOWED_TOOLS } }
+      : undefined),
     auth: (ctx) => ({
       credentialOwner: "app",
       getToken: async () => {

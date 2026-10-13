@@ -784,7 +784,9 @@ Every agent Luke runs — the planning assistant, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists and no
 approval step: Linear (`https://mcp.linear.app/mcp`), Notion
-(`https://mcp.notion.com/mcp`), and Sentry (`https://mcp.sentry.dev/mcp`). A connection belongs to the account, so it reaches every plan and
+(`https://mcp.notion.com/mcp`), Sentry (`https://mcp.sentry.dev/mcp`), and
+Slack (`https://mcp.slack.com/mcp`), which is read-only: its entry allows
+Slack's search and read tools alone (`ALLOWED_TOOLS`, eve's tool filter). A connection belongs to the account, so it reaches every plan and
 project the account has. `server/hosted/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, its MCP server
 and what the model is told of it, and the name its nested calls are stored
@@ -868,11 +870,12 @@ vercel link
 vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect create mcp.sentry.dev --name sentry   # Sentry
+vercel connect create slack --name slack             # Slack: Vercel's managed Slack app
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
 Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
-`NOTION_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
+`NOTION_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`, `SLACK_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
 preview, and development. The web, `eve`, and `coder` are services of that
 one project (`vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
