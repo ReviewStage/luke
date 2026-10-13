@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "linear": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "linear"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "integrations"
+  ],
+  "additionalProperties": false
+}

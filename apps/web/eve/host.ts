@@ -1,3 +1,4 @@
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
@@ -7,10 +8,10 @@ import {
 } from "../server/hosted/brain-host/production.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
-  type LinearAdmission,
-  linearAccessToken,
-  linearConnection,
-} from "../server/hosted/linear-connection.js";
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationConnection,
+} from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 
 /**
@@ -55,13 +56,16 @@ export function relayChildEvent(
 }
 
 /**
- * The Linear connection under one of this project's ownership checks, the
- * root's or the worker's, for each agent's own `connections/linear.ts`: the
- * token read runs here, at the edge, under the check that agent's model
- * runs under too.
+ * One integration's connection under one of this project's ownership
+ * checks, the root's or the worker's, for each agent's own
+ * `connections/<provider>.ts`: the token read runs here, at the edge, under
+ * the check that agent's model runs under too.
  */
-export function linearConnectionFor(
-  admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
+export function integrationConnectionFor(
+  provider: IntegrationProvider,
+  admit: (auth: SessionAuth, sessionId: string) => IntegrationAdmission,
 ) {
-  return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
+  return integrationConnection(provider, (auth, sessionId) =>
+    runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  );
 }

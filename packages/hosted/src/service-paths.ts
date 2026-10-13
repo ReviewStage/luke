@@ -1,3 +1,5 @@
+import type { IntegrationProvider } from "./integration-wire.js";
+
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
@@ -37,18 +39,15 @@ export const HOSTED_SERVICE_PATH = {
    * both bodies.
    */
   DICTATION: "/api/dictation",
-  /** Where the account's Linear connection stands (GET). `linear-wire.ts` declares the answer. */
-  ACCOUNT_LINEAR: "/api/account/linear",
-  /** Begins a browser sign-in to Linear for the account (POST), answering the address the browser opens. */
-  ACCOUNT_LINEAR_CONNECT: "/api/account/linear/connect",
-  /** Ends the account's Linear connection (POST); what agents already wrote to Linear stands. */
-  ACCOUNT_LINEAR_DISCONNECT: "/api/account/linear/disconnect",
+  /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
+  ACCOUNT_INTEGRATIONS: "/api/account/integrations",
   /**
-   * Where Vercel Connect returns the browser from a Linear sign-in (GET),
-   * with the sign-in's own state: the route settles it and sends the
-   * browser on to the landing page `linear-wire.ts` names.
+   * Where Vercel Connect returns the browser from an integration's sign-in
+   * (GET), with the sign-in's own state, which names the provider too: the
+   * route settles it and sends the browser on to the landing page
+   * `integration-wire.ts` names.
    */
-  ACCOUNT_LINEAR_CONNECTED: "/api/account/linear/connected",
+  ACCOUNT_INTEGRATIONS_CONNECTED: "/api/account/integrations/connected",
   /**
    * What waits on the developer across the account's plans: every open
    * inbox item, past a cursor (GET), held open while nothing changed, as a
@@ -101,6 +100,16 @@ export const VOICE_SERVICE_PATH = {
   /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
   SESSIONS: "/api/voice/sessions",
 } as const;
+
+/** Begins a browser sign-in to one provider for the account (POST), answering the address the browser opens. */
+export function integrationConnectPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/connect`;
+}
+
+/** Ends the account's connection to one provider (POST); what agents already did there stands. */
+export function integrationDisconnectPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
+}
 
 /** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function planPath(planId: string): string {

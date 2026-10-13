@@ -96,12 +96,12 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** Where the account's Linear connection stands, read from the service now. */
-  LINEAR_STATUS: "linear.status",
-  /** A browser sign-in to Linear begun on the service and opened on this Mac; whether it was opened, never the address. */
-  LINEAR_CONNECT: "linear.connect",
-  /** The account's Linear connection ended on the service; where it then stands. */
-  LINEAR_DISCONNECT: "linear.disconnect",
+  /** Where every one of the account's integrations stands, read from the service now. */
+  INTEGRATIONS_STATUS: "integrations.status",
+  /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  /** The account's connection to one provider ended on the service; where it then stands. */
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */

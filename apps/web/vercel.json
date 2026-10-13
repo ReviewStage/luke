@@ -13,6 +13,14 @@
           "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
         {
+          "src": "/api/account/integrations/([^/]+)/connect",
+          "dest": "/api/default.js?route=account/integrations/connect&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/disconnect",
+          "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/board",
           "dest": "/api/default.js?route=plans/board&id=$1"
         },
@@ -101,20 +109,12 @@
           "dest": "/api/default.js?route=account/delete"
         },
         {
-          "src": "/api/account/linear",
-          "dest": "/api/default.js?route=account/linear"
+          "src": "/api/account/integrations",
+          "dest": "/api/default.js?route=account/integrations"
         },
         {
-          "src": "/api/account/linear/connect",
-          "dest": "/api/default.js?route=account/linear/connect"
-        },
-        {
-          "src": "/api/account/linear/connected",
-          "dest": "/api/default.js?route=account/linear/connected"
-        },
-        {
-          "src": "/api/account/linear/disconnect",
-          "dest": "/api/default.js?route=account/linear/disconnect"
+          "src": "/api/account/integrations/connected",
+          "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
           "src": "/api/account/plan-template",

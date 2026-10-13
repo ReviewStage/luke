@@ -1,0 +1,370 @@
+/**
+ * integrations-app.ts -- the integrations group: an account's connections read, begun, ended, and settled.
+ *
+ * Three endpoints the signed-in desktop calls with its bearer, and one
+ * browser navigation that carries none:
+ *
+ * - `GET /api/account/integrations` answers where every provider's
+ *   connection stands. A sign-in still under way is settled here too, by
+ *   asking Connect for a token afresh, so a desktop that reads again after
+ *   the browser closed learns the outcome whatever address the browser was
+ *   returned to.
+ * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
+ *   to begin a browser sign-in to the provider for the account, records the
+ *   sign-in's one-time state, and answers the address the desktop opens.
+ * - `POST /api/account/integrations/{provider}/disconnect` deletes the
+ *   account's row at the provider before anything else, which is what stops
+ *   every agent's next token read, then asks Connect to revoke the grant; a
+ *   revoke that fails is logged, and the account is disconnected all the
+ *   same.
+ * - `GET /api/account/integrations/connected` is where Connect returns the
+ *   browser from any provider: the sign-in's state names the account and the
+ *   provider, Connect is asked for a token afresh, and the browser is sent
+ *   on to the landing page with the provider and one word.
+ *
+ * The rewrite moves a provider's path segment into the `provider` query, so
+ * the two provider routes read it there. Root AGENTS.md pins that no
+ * credential travels in an answer: what each endpoint answers is status
+ * words or the sign-in address, never a token. The sign-in address is not
+ * logged either, since it begins a grant for the account it was issued for.
+ */
+
+import { randomBytes } from "node:crypto";
+import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import {
+  INTEGRATION_LANDING_STATUS,
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationLandingStatus,
+  type IntegrationProvider,
+  type IntegrationStatus,
+  integrationLandingPath,
+  integrationProviderFromWire,
+} from "@sidecar/hosted/integration-wire";
+import { Effect, Layer, Option, Result } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
+import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedMethod,
+  hostedNotFoundRoute,
+  hostedRefusalResponse,
+  hostedStoreOrUnavailable,
+  type UserIdResolver,
+} from "./hosted/http-effect.js";
+import {
+  INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnect,
+  revokeIntegrationGrant,
+} from "./hosted/integration-connect.js";
+import {
+  INTEGRATION_ROW_STATUS,
+  type IntegrationConnectionRow,
+  type IntegrationStoreEffect,
+} from "./hosted/integration-store.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
+
+/** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
+export const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
+
+/** The paths the group answers, as the rewrites hand them to it. */
+const INTEGRATIONS_PATH = {
+  /** GET reads where every provider stands. */
+  STATUSES: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS,
+  /** POST begins a sign-in; the rewrite moves the path's provider into the `provider` query. */
+  CONNECT: "/api/account/integrations/connect",
+  /** POST ends a connection; the rewrite moves the path's provider into the `provider` query. */
+  DISCONNECT: "/api/account/integrations/disconnect",
+  /** GET is Connect's return from any provider's sign-in. */
+  CONNECTED: HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_CONNECTED,
+} as const;
+
+/** The query the rewrite carries the provider in. */
+const PROVIDER_QUERY = "provider";
+
+/** The query Connect returns the browser with, which is the one Luke put on the callback. */
+const CALLBACK_QUERY = { STATE: "state" } as const;
+
+/** A sign-in's state as one is minted: 32 random bytes, url-safe. */
+const STATE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+const STATE_BYTES = 32;
+
+const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
+
+/** A browser is sent on with 303, so whatever Connect sends becomes the GET the page is. */
+const SEE_OTHER = 303;
+
+export interface IntegrationsAppSeams {
+  resolveUserId: UserIdResolver;
+  readConnections: (userId: string) => IntegrationStoreEffect<readonly IntegrationConnectionRow[]>;
+  readSignIn: (state: string) => IntegrationStoreEffect<IntegrationConnectionRow | undefined>;
+  beginSignIn: (
+    userId: string,
+    provider: IntegrationProvider,
+    state: string,
+  ) => IntegrationStoreEffect<void>;
+  completeSignIn: (
+    userId: string,
+    provider: IntegrationProvider,
+  ) => IntegrationStoreEffect<boolean>;
+  deleteConnection: (userId: string, provider: IntegrationProvider) => IntegrationStoreEffect<void>;
+  /** A fresh sign-in state; random in production, fixed in a test. */
+  mintState: () => string;
+  /** Now, in milliseconds since the epoch. */
+  now: () => number;
+}
+
+/** A sign-in state as production mints it. */
+export function mintIntegrationState(): string {
+  return randomBytes(STATE_BYTES).toString("base64url");
+}
+
+/** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
+const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return account.value;
+});
+
+/** The provider the rewrite put in the query, or the not-found refusal for one this build has no route for. */
+const requestedProvider = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
+  IntegrationProvider,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const query = new URL(request.url, "https://localhost").searchParams;
+  const provider = integrationProviderFromWire(query.get(PROVIDER_QUERY));
+  if (provider === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return provider;
+});
+
+/** Whether a sign-in begun at this instant may still settle. */
+function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undefined): boolean {
+  return (
+    issuedAt !== undefined && seams.now() - issuedAt.getTime() <= INTEGRATION_SIGN_IN_WINDOW_MS
+  );
+}
+
+/**
+ * Asks Connect afresh whether the account now holds a grant at the
+ * provider, and records it connected where it does; answers whether it
+ * does. Connect's own refusal and an outage alike answer no: a sign-in not
+ * yet finished reads the same as one Connect could not be asked about, and
+ * the next read asks again.
+ */
+const settledSignIn = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  row: IntegrationConnectionRow,
+): Effect.fn.Return<boolean, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+  const connector = (yield* IntegrationConnect)[row.provider];
+  const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
+  if (Result.isFailure(issued)) {
+    if (issued.failure.reason !== INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+      yield* Effect.logWarning(
+        `Vercel Connect could not settle a ${INTEGRATION_NAME[row.provider]} sign-in`,
+        issued.failure.message,
+      );
+    }
+    return false;
+  }
+  return yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider));
+});
+
+/** The status a stored row stands for, settling a sign-in still under way. */
+const standingStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  row: IntegrationConnectionRow | undefined,
+): Effect.fn.Return<IntegrationStatus, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+  if (row === undefined) return INTEGRATION_STATUS.DISCONNECTED;
+  if (row.status === INTEGRATION_ROW_STATUS.CONNECTED) return INTEGRATION_STATUS.CONNECTED;
+  const underWay = signInStands(seams, row.stateIssuedAt);
+  if (underWay && (yield* settledSignIn(seams, row))) return INTEGRATION_STATUS.CONNECTED;
+  if (row.status === INTEGRATION_ROW_STATUS.EXPIRED) return INTEGRATION_STATUS.EXPIRED;
+  // A first sign-in that ran out of time never connected anything.
+  return underWay ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.DISCONNECTED;
+});
+
+/** GET: where every one of the caller's connections stands; a provider with no connector here is unavailable. */
+const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+> {
+  yield* hostedMethod(HTTP_METHOD.GET);
+  const userId = yield* resolvedUserId(seams);
+  const connect = yield* IntegrationConnect;
+  const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
+  const integrations = Object.fromEntries(
+    yield* Effect.forEach(INTEGRATION_PROVIDER_LIST, (provider) =>
+      Effect.map(
+        connect[provider].configured
+          ? standingStatus(
+              seams,
+              rows.find((row) => row.provider === provider),
+            )
+          : Effect.succeed(INTEGRATION_STATUS.UNAVAILABLE),
+        (status) => [provider, status] as const,
+      ),
+    ),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { integrations });
+});
+
+/** The callback Connect returns the browser to, on the host the desktop asked through. */
+function callbackUrl(requestUrl: string, state: string): string {
+  const url = new URL(INTEGRATIONS_PATH.CONNECTED, requestUrl);
+  url.searchParams.set(CALLBACK_QUERY.STATE, state);
+  return url.toString();
+}
+
+/**
+ * POST: begins a browser sign-in to one provider. Connect is asked first,
+ * so a sign-in it refused leaves the row as it stood; the state is recorded
+ * before the address is answered, so no browser can return before the
+ * callback can read it.
+ */
+const connectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+> {
+  yield* hostedMethod(HTTP_METHOD.POST);
+  const provider = yield* requestedProvider();
+  const userId = yield* resolvedUserId(seams);
+  const connector = (yield* IntegrationConnect)[provider];
+  if (!connector.configured) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const state = seams.mintState();
+  const url = yield* connector.authorize(userId, callbackUrl(request.url, state)).pipe(
+    Effect.tapError((failure) =>
+      Effect.logWarning(
+        `Vercel Connect could not begin a ${INTEGRATION_NAME[provider]} sign-in`,
+        failure.message,
+      ),
+    ),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+  yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, provider, state));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url });
+});
+
+/**
+ * POST: ends one provider's connection. The row goes first, so whatever
+ * Connect answers, no agent reads a token again; the revoke after it is the
+ * courtesy of telling the provider, and a failed one is logged rather than
+ * answered, since the account asked to be disconnected and is.
+ */
+const disconnectEndpoint = /* @__PURE__ */ Effect.fn("web/integrationDisconnectEndpoint")(
+  function* (
+    seams: IntegrationsAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+  > {
+    yield* hostedMethod(HTTP_METHOD.POST);
+    const provider = yield* requestedProvider();
+    const userId = yield* resolvedUserId(seams);
+    yield* hostedStoreOrUnavailable(seams.deleteConnection(userId, provider));
+    yield* revokeIntegrationGrant(userId, provider);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { status: INTEGRATION_STATUS.DISCONNECTED });
+  },
+);
+
+/** Where the browser lands, with the provider where the sign-in named one. */
+interface Landing {
+  readonly provider: IntegrationProvider | undefined;
+  readonly status: IntegrationLandingStatus;
+}
+
+function landing({ provider, status }: Landing): HttpServerResponse.HttpServerResponse {
+  return HttpServerResponse.redirect(integrationLandingPath(provider, status), {
+    status: SEE_OTHER,
+  });
+}
+
+/** How the sign-in the browser returned from settled. */
+const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: IntegrationsAppSeams,
+  state: string | null,
+): Effect.fn.Return<Landing, HostedRefusal, SqlClient.SqlClient | IntegrationConnect> {
+  const expired = { provider: undefined, status: INTEGRATION_LANDING_STATUS.EXPIRED } as const;
+  if (state === null || !STATE_PATTERN.test(state)) return expired;
+  const row = yield* hostedStoreOrUnavailable(seams.readSignIn(state));
+  if (row === undefined) return expired;
+  const landed = (status: IntegrationLandingStatus): Landing => ({
+    provider: row.provider,
+    status,
+  });
+  if (!signInStands(seams, row.stateIssuedAt)) return landed(INTEGRATION_LANDING_STATUS.EXPIRED);
+  const connector = (yield* IntegrationConnect)[row.provider];
+  const issued = yield* Effect.result(connector.token(row.userId, { fresh: true }));
+  if (Result.isFailure(issued)) {
+    if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+      return landed(INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
+    }
+    yield* Effect.logWarning(
+      `Vercel Connect could not settle a ${INTEGRATION_NAME[row.provider]} sign-in`,
+      issued.failure.message,
+    );
+    return landed(INTEGRATION_LANDING_STATUS.UNAVAILABLE);
+  }
+  const completed = yield* hostedStoreOrUnavailable(seams.completeSignIn(row.userId, row.provider));
+  // A Disconnect pressed while the browser was away wins: the account stays disconnected.
+  return landed(
+    completed ? INTEGRATION_LANDING_STATUS.CONNECTED : INTEGRATION_LANDING_STATUS.NOT_COMPLETED,
+  );
+});
+
+/** GET: Connect's return. Whatever it brought, the browser lands on the page with a word. */
+const connectedEndpoint = /* @__PURE__ */ Effect.fn("web/integrationConnectedEndpoint")(function* (
+  seams: IntegrationsAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | IntegrationConnect
+> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const query = new URL(request.url, "https://localhost").searchParams;
+  const landed = yield* callbackLanding(seams, query.get(CALLBACK_QUERY.STATE)).pipe(
+    Effect.catch(() =>
+      Effect.succeed({ provider: undefined, status: INTEGRATION_LANDING_STATUS.UNAVAILABLE }),
+    ),
+  );
+  return landing(landed);
+});
+
+/** An endpoint's refusal carried back onto the answer channel, as the account group does. */
+function refusing<R>(
+  endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> {
+  return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
+}
+
+/** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
+export function integrationsApp(
+  seams: IntegrationsAppSeams,
+): WebRoutes<SqlClient.SqlClient | IntegrationConnect> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.STATUSES, refusing(statusesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECT, refusing(connectEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.DISCONNECT, refusing(disconnectEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, INTEGRATIONS_PATH.CONNECTED, connectedEndpoint(seams)),
+    hostedNotFoundRoute,
+  );
+}

@@ -17,7 +17,8 @@ export function searchAnchorProps(id: string) {
 /**
  * The ids of the searchable rows that are not stored settings, shared with
  * the panel so the entry and the anchor its row wears cannot drift apart. A
- * setting anchors by its schema id, and a window shortcut by its command.
+ * setting anchors by its schema id, a window shortcut by its command, and an
+ * integration's row by its provider.
  */
 export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
@@ -25,7 +26,6 @@ export const SETTINGS_SEARCH_ROW = {
   FEEDBACK: "feedback",
   SIGN_OUT: "sign-out",
   DELETE_ACCOUNT: "delete-account",
-  LINEAR: "linear",
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
   STOP_KEY: "stop-key",

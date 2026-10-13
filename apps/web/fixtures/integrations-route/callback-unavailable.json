@@ -1,0 +1,11 @@
+{
+  "status": 303,
+  "statusText": "",
+  "headers": [
+    [
+      "location",
+      "/integration-connected.html?provider=linear&status=unavailable"
+    ]
+  ],
+  "body": ""
+}

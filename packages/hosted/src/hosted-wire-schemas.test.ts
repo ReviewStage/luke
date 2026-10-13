@@ -14,8 +14,8 @@ import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
-import * as linearView from "./linear-view.js";
-import * as linearWire from "./linear-wire.js";
+import * as integrationView from "./integration-view.js";
+import * as integrationWire from "./integration-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
@@ -144,14 +144,18 @@ const EFFECT_MODULE_SCHEMAS = {
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
     githubRepositoriesAnswerSchema: githubRepositoriesWire.githubRepositoriesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
-  "linear-view": {
-    linearStatusViewSchema: linearView.linearStatusViewSchema,
-    linearConnectViewSchema: linearView.linearConnectViewSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof linearView>,
-  "linear-wire": {
-    linearStatusAnswerSchema: linearWire.linearStatusAnswerSchema,
-    linearConnectAnswerSchema: linearWire.linearConnectAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
+  "integration-view": {
+    integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
+    integrationStatusesViewSchema: integrationView.integrationStatusesViewSchema,
+    integrationStatusViewSchema: integrationView.integrationStatusViewSchema,
+    integrationConnectViewSchema: integrationView.integrationConnectViewSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof integrationView>,
+  "integration-wire": {
+    integrationProviderSchema: integrationWire.integrationProviderSchema,
+    integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
+    integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,
+    integrationConnectAnswerSchema: integrationWire.integrationConnectAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,

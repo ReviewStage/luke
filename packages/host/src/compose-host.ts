@@ -7,7 +7,7 @@ import {
 } from "@sidecar/gateway";
 import {
   HostedCodingAgentClient,
-  HostedLinearClient,
+  HostedIntegrationsClient,
   HostedPlanClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
@@ -20,7 +20,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
-import { composeLinear } from "./compose-linear.js";
+import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
@@ -46,7 +46,7 @@ export const HOST_CONCERN = {
   LIVE: "live",
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
-  LINEAR: "linear",
+  INTEGRATIONS: "integrations",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -61,7 +61,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.LIVE,
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
-  HOST_CONCERN.LINEAR,
+  HOST_CONCERN.INTEGRATIONS,
 ];
 
 /**
@@ -130,10 +130,10 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
-    const linear = yield* composeLinear({
+    const integrations = yield* composeIntegrations({
       kernel,
       account,
-      client: new HostedLinearClient({
+      client: new HostedIntegrationsClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
@@ -191,7 +191,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
-      [HOST_CONCERN.LINEAR]: linear,
+      [HOST_CONCERN.INTEGRATIONS]: integrations,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

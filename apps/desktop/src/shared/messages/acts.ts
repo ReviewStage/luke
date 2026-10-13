@@ -63,11 +63,14 @@ import {
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  type LinearConnectView,
-  type LinearStatusView,
-  linearConnectViewSchema,
-  linearStatusViewSchema,
-} from "@sidecar/hosted/linear-view";
+  type IntegrationConnectView,
+  type IntegrationStatusesView,
+  type IntegrationStatusView,
+  integrationConnectViewSchema,
+  integrationProviderParamsSchema,
+  integrationStatusesViewSchema,
+  integrationStatusViewSchema,
+} from "@sidecar/hosted/integration-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type CodeLines,
@@ -146,13 +149,14 @@ export const ACT_KIND = {
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
   /**
-   * The account's Linear connection: where it stands, a browser sign-in
-   * begun and opened by the host, and the connection ended. The window
-   * hears whether the browser was sent, never the address it was sent to.
+   * The account's integrations: where every one stands, a browser sign-in
+   * to one begun and opened by the host, and one connection ended. The
+   * window hears whether the browser was sent, never the address it was
+   * sent to.
    */
-  LINEAR_STATUS: "linear.status",
-  LINEAR_CONNECT: "linear.connect",
-  LINEAR_DISCONNECT: "linear.disconnect",
+  INTEGRATIONS_STATUS: "integrations.status",
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   UPDATE_CHECK: "update.check",
@@ -648,20 +652,20 @@ export const ACT = {
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",
   ),
-  [ACT_KIND.LINEAR_STATUS]: {
+  [ACT_KIND.INTEGRATIONS_STATUS]: {
     payload: noPayload,
-    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
-    refusal: "Could not read the Linear connection on this system.",
+    result: wireResult<IntegrationStatusesView>(isReadable(integrationStatusesViewSchema)),
+    refusal: "Could not read your integrations on this system.",
   },
-  [ACT_KIND.LINEAR_CONNECT]: {
-    payload: noPayload,
-    result: wireResult<LinearConnectView>(isReadable(linearConnectViewSchema)),
-    refusal: "Could not connect Linear on this system.",
+  [ACT_KIND.INTEGRATIONS_CONNECT]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationConnectView>(isReadable(integrationConnectViewSchema)),
+    refusal: "Could not connect that integration on this system.",
   },
-  [ACT_KIND.LINEAR_DISCONNECT]: {
-    payload: noPayload,
-    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
-    refusal: "Could not disconnect Linear on this system.",
+  [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
+    refusal: "Could not disconnect that integration on this system.",
   },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,

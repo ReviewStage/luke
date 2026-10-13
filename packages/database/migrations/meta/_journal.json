@@ -680,6 +680,13 @@
       "when": 1791866783103,
       "tag": "20261013044623_session_sandbox_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791867433330,
+      "tag": "20261013045713_integration_connection",
+      "breakpoints": true
     }
   ]
 }

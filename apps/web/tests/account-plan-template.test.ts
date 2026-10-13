@@ -44,8 +44,8 @@ import { SqlClient } from "effect/unstable/sql";
 import { accountApp } from "../server/account-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { LinearConnect, type LinearConnectService } from "../server/hosted/linear-connect";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 
 /**
@@ -137,14 +137,6 @@ const openAccounts = Effect.gen(function* () {
   return { owner, other, ask };
 });
 
-/** Vercel Connect, which only a delete asks, and this suite deletes nothing. */
-const CONNECT_ASKED_NOTHING: LinearConnectService = {
-  configured: true,
-  authorize: () => Effect.die(new Error("this suite asks Connect nothing")),
-  token: () => Effect.die(new Error("this suite asks Connect nothing")),
-  revoke: () => Effect.die(new Error("this suite asks Connect nothing")),
-};
-
 const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -155,7 +147,8 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,
       modelCatalogOf(CATALOG),
-      Layer.succeed(LinearConnect, CONNECT_ASKED_NOTHING),
+      // Only a delete asks Connect anything, and this suite deletes nothing.
+      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       app.pipe(HttpRouter.provideRequest(services)),

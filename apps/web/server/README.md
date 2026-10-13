@@ -778,75 +778,90 @@ and a meter the database refused is logged while the text is still answered.
 There is no path on an account's own key. `tests/dictation-app.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
-## The Linear connection
+## Integrations
 
 Every agent Luke runs — the planning assistant, the coding agent, and each
-one's declared worker — can use the signed-in account's Linear through
-Linear's own hosted MCP server, `https://mcp.linear.app/mcp`, with every tool
-it lists and no approval step. The connection belongs to the account, so it
-reaches every plan and project the account has.
+one's declared worker — can use the signed-in account's integrations, each
+through the provider's own hosted MCP server with every tool it lists and no
+approval step. Linear (`https://mcp.linear.app/mcp`) is the one integration
+today. A connection belongs to the account, so it reaches every plan and
+project the account has. `server/hosted/integrations.ts` is the one table of
+providers: the variable each connector's UID is read from, its MCP server
+and what the model is told of it, and the name its nested calls are stored
+under. Everything below is the same for every provider.
 
-**Who holds what.** Vercel Connect holds the Linear grant, encrypted, and
-refreshes it; Luke never stores a token. Luke holds one row per account in
-`linear_connection` (migration 0089, `db/linear-schema.ts`), which is its
-own word on whether its agents may use the grant: `connected` lets them,
-anything else or no row does not. Connect has no way to ask whether a
-sign-in finished and its SDK caches tokens in process, so this row is also
-what makes a Disconnect take effect regardless of any cache.
+**Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
+it; Luke never stores a token. Luke holds one row per account and provider
+in `integration_connection` (`schemas/integration.ts`), which is its own word
+on whether its agents may use the grant: `connected` lets them, anything else
+or no row does not. Connect has no way to ask whether a sign-in finished and
+its SDK caches tokens in process, so this row is also what makes a Disconnect
+take effect regardless of any cache. The migration that made the table copied
+every `linear_connection` row in as Linear's; that table is read by nothing
+and is dropped by the next migration.
 
-**The routes** (`server/linear-app.ts`, `fixtures/linear-route/`):
+**The routes** (`server/integrations-app.ts`, `fixtures/integrations-route/`):
 
-- `GET /api/account/linear` answers `connected`, `pending`, `expired`,
-  `disconnected`, or `unavailable` (no connector on this deployment). A
-  sign-in still under way, begun within the last fifteen minutes, is
+- `GET /api/account/integrations` answers `{ integrations: { <provider>:
+  status } }`, each status `connected`, `pending`, `expired`,
+  `disconnected`, or `unavailable` (no connector for it on this deployment).
+  A sign-in still under way, begun within the last fifteen minutes, is
   settled here by asking Connect for a token afresh.
-- `POST /api/account/linear/connect` asks Connect's `startAuthorization` for
-  the account, with Luke's own user id as the subject and
-  `/api/account/linear/connected?state=…` as the callback, records the
-  sign-in's one-time state, and answers the address. The desktop's host
-  opens it through the native node; no window draws it and nothing logs it.
-- `POST /api/account/linear/disconnect` deletes the row first, then asks
-  Connect to revoke the grant. A failed revoke is logged and the account is
-  disconnected all the same. Connect revokes at Linear where Linear allows
-  it; otherwise Linear's token stands until it expires, though Luke no
-  longer uses it.
-- `GET /api/account/linear/connected` is where Connect returns the browser.
-  The state names the account, Connect is asked for a token afresh, and the
-  browser lands on `/linear-connected.html` with one word: `connected`,
+- `POST /api/account/integrations/{provider}/connect` asks Connect's
+  `startAuthorization` for the account, with Luke's own user id as the
+  subject and `/api/account/integrations/connected?state=…` as the callback,
+  records the sign-in's one-time state, and answers the address. The
+  desktop's host opens it through the native node; no window draws it and
+  nothing logs it.
+- `POST /api/account/integrations/{provider}/disconnect` deletes the row
+  first, then asks Connect to revoke the grant. A failed revoke is logged and
+  the account is disconnected all the same. Connect revokes at the provider
+  where the provider allows it; otherwise its token stands until it expires,
+  though Luke no longer uses it. Deleting the account revokes every
+  provider's grant the same way.
+- `GET /api/account/integrations/connected` is where Connect returns the
+  browser from any provider. The state names the account and the provider,
+  Connect is asked for a token afresh, and the browser lands on
+  `/integration-connected.html` with the provider and one word: `connected`,
   `not-completed` (declined or cancelled), `expired`, or `unavailable`.
 
-**The agents** (`server/hosted/linear-connection.ts`). eve hands a declared
-subagent none of its parent's connections, so each of the four agent roots
-registers `connections/linear.ts`, and each file is the one definition over
-that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. The definition's auth is eve's plain `getToken` form,
-credentialed as the app, and the account is the admitted conversation's
-owner, never the session's principal. That matters because a spoken planning
-turn runs as the deployment acting for the account, and eve's user-scoped
-auth (`connect()` from `@vercel/connect/eve`) would refuse it before reading
-any token. That form has no interactive half either, so eve never pauses a
-run for a sign-in. eve opens the client once per model step: the row is read
-at each opening, and again after Connect answers, so a Disconnect takes
-effect from the next step. A connection that cannot be used throws one of
-`LINEAR_UNAVAILABLE`'s fixed sentences, which fails only the call that tried
-it; every other tool, and the run, carries on. Workers stay read-only in the
-checkout and change Linear only when their task explicitly asks them to.
+The rewrite moves a provider's path segment into the `provider` query
+(`function-rewrites.ts`), as a plan's id is moved into `id`.
+
+**The agents** (`server/hosted/integration-connection.ts`). eve hands a
+declared subagent none of its parent's connections, so each of the four
+agent roots registers `connections/<provider>.ts` for every provider, and
+each file is the one definition over its provider and that agent's own
+ownership check: the root's `admit`, or a worker's `admitDelegated`. The
+definition's auth is eve's plain `getToken` form, credentialed as the app,
+and the account is the admitted conversation's owner, never the session's
+principal. That matters because a spoken planning turn runs as the
+deployment acting for the account, and eve's user-scoped auth (`connect()`
+from `@vercel/connect/eve`) would refuse it before reading any token. That
+form has no interactive half either, so eve never pauses a run for a
+sign-in. eve opens the client once per model step: the row is read at each
+opening, and again after Connect answers, so a Disconnect takes effect from
+the next step. A connection that cannot be used throws one of
+`integrationUnavailable`'s fixed sentences, which fails only the call that
+tried it; every other tool, and the run, carries on. Workers stay read-only
+in the checkout and change an integration only when their task explicitly
+asks them to.
 
 **Transcripts** (`server/hosted/connection-tools.ts`). eve offers a
 connection through `connection_search` and `connection_execute`, and tells a
 remote call as a call of its own nested under the `connection_execute` that
-ran it, named `linear__<tool>`, with id `<wrapper>:1`. The relay stores the
-nested call under the fixed name `linear_remote`, whose input is
-`{ remoteTool, parentCallId, input }`, and settles it with what Linear
-answered, before the wrapper's own result. All three names are in both
-agents' tool sets whatever any account's connection stands at, so a
-transcript reads back the same after a Disconnect. Rows now hold Linear
-content (issue titles, descriptions, comments); no token reaches a row. A
-turn cancelled while Linear was answering leaves the call's outcome unknown
-("it may have run"), never a failure to retry.
+ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
+the nested call under the provider's fixed name (`linear_remote` for
+Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
+with what the provider answered, before the wrapper's own result. Every name
+is in both agents' tool sets whatever any account's connections stand at, so
+a transcript reads back the same after a Disconnect. Rows hold provider
+content (Linear's issue titles, descriptions, comments); no token reaches a
+row. A turn cancelled while a provider was answering leaves the call's
+outcome unknown ("it may have run"), never a failure to retry.
 
-**Provisioning a deployment.** From the `apps/web` Vercel project's
-directory:
+**Provisioning a deployment.** For each provider, from the `apps/web` Vercel
+project's directory:
 
 ```
 vercel link
@@ -854,16 +869,17 @@ vercel connect create mcp.linear.app --name <name>   # prints the connector UID
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
-Then set `LINEAR_CONNECTOR_UID` to that UID in the web project and in both
-eve projects (`eve`, `coder`), because the agents read tokens too. Asking
-Connect about an arbitrary user id needs the deployment's own Vercel OIDC
-token, which the SDK reads from the request (`x-vercel-oidc-token`) or
-`VERCEL_OIDC_TOKEN`. Keep OIDC enabled for all three projects, and make sure
-each one is linked to the connector for the environments it runs in. For
-local development, `vercel env pull` writes a short-lived
-`VERCEL_OIDC_TOKEN`. A deployment without `LINEAR_CONNECTOR_UID` runs every
-agent without Linear, and Settings shows the row as unavailable. Every token
-request is billed by Connect and rate-limited per team.
+Then set the provider's variable (`LINEAR_CONNECTOR_UID` for Linear) to that
+UID in the web project and in both eve projects (`eve`, `coder`), because
+the agents read tokens too. Asking Connect about an arbitrary user id needs
+the deployment's own Vercel OIDC token, which the SDK reads from the request
+(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for all
+three projects, and make sure each one is linked to the connector for the
+environments it runs in. For local development, `vercel env pull` writes a
+short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
+runs every agent without that provider, and Settings shows its row as
+unavailable. Every token request is billed by Connect and rate-limited per
+team.
 
 ## The models group
 

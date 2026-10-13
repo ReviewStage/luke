@@ -1,4 +1,5 @@
-import { host, linearConnectionFor } from "../host.js";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { host, integrationConnectionFor } from "../host.js";
 
-/** The account's Linear, for the planning model, under the root's own ownership check (`server/hosted/linear-connection.ts`). */
-export default linearConnectionFor(host.admit);
+/** The account's Linear, for the planning model, under the root's own ownership check (`server/hosted/integration-connection.ts`). */
+export default integrationConnectionFor(INTEGRATION_PROVIDER.LINEAR, host.admit);

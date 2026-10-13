@@ -492,7 +492,7 @@
    the same way. */
 .account-signout:hover:not(:disabled),
 .account-delete:hover:not(:disabled),
-.account-linear-disconnect:hover:not(:disabled) {
+.integration-disconnect:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger-text);
 }

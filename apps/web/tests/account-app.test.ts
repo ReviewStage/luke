@@ -7,6 +7,10 @@ import type {
 import type { StandingSession } from "@sidecar/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
+import {
   type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
   MODEL_PROVIDER,
@@ -25,16 +29,17 @@ import { EVE_RESET_OUTCOME, type EveSessions } from "../server/hosted/brain-host
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
-  LINEAR_CONNECT_FAILURE,
-  LinearConnect,
-  LinearConnectFailure,
-  type LinearConnectService,
-} from "../server/hosted/linear-connect.js";
+  type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnectFailure,
+  UNCONFIGURED_CONNECTOR,
+} from "../server/hosted/integration-connect.js";
 import {
   ModelCatalog,
   ModelCatalogUnavailable,
   modelCatalogOf,
 } from "../server/hosted/model-catalog.js";
+import { integrationConnectOf } from "./support/integration-connect.js";
 import { noDatabase } from "./support/no-database.js";
 import {
   type RecordedResponse,
@@ -104,12 +109,14 @@ interface Backing {
   retired: string[];
   deleted: string[];
   forgotten: string[];
-  /** The accounts whose Linear grant Vercel Connect was asked to revoke and did. */
-  revoked: string[];
+  /** Each grant Vercel Connect was asked to revoke and did, as its provider and its account. */
+  revoked: (readonly [IntegrationProvider, string])[];
   stored: Map<string, AccountPreferencesRow>;
   forgetAnalyticsFails: boolean;
   /** Vercel Connect refuses every revoke, the way an outage there reads. */
   revokeFails: boolean;
+  /** The deployment names no connector for any integration. */
+  connectUnconfigured: boolean;
   /** The store refuses every statement, the way an unreachable database does. */
   storeUnavailable: boolean;
   /** The catalog cannot be read, the way an outage at AI Gateway reads. */
@@ -126,6 +133,7 @@ function backing(overrides: Partial<Backing> = {}): Backing {
     stored: new Map(),
     forgetAnalyticsFails: false,
     revokeFails: false,
+    connectUnconfigured: false,
     storeUnavailable: false,
     catalogUnavailable: false,
     ...overrides,
@@ -199,21 +207,37 @@ function writePreferences(state: Backing) {
   };
 }
 
-const UNCONFIGURED = new LinearConnectFailure({ reason: LINEAR_CONNECT_FAILURE.NOT_CONFIGURED });
+const UNCONFIGURED = new IntegrationConnectFailure({
+  reason: INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED,
+});
 
-/** Vercel Connect as the delete asks it: only a revoke, which lands or fails as the backing says. */
-function connectDouble(state: Backing): LinearConnectService {
+/** Vercel Connect as the delete asks it about one provider: only a revoke, which lands or fails as the backing says. */
+function connectorDouble(state: Backing, provider: IntegrationProvider): ConnectorService {
   return {
     configured: true,
     authorize: () => Effect.fail(UNCONFIGURED),
     token: () => Effect.fail(UNCONFIGURED),
     revoke: (userId) =>
       state.revokeFails
-        ? Effect.fail(new LinearConnectFailure({ reason: LINEAR_CONNECT_FAILURE.UNAVAILABLE }))
+        ? Effect.fail(
+            new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE }),
+          )
         : Effect.sync(() => {
-            state.revoked.push(userId);
+            state.revoked.push([provider, userId]);
           }),
   };
+}
+
+/** Every provider's connector, configured over the backing or named by no variable at all. */
+function connectLayer(state: Backing) {
+  return integrationConnectOf((provider) =>
+    state.connectUnconfigured ? UNCONFIGURED_CONNECTOR : connectorDouble(state, provider),
+  );
+}
+
+/** Every provider's grant for the account, as a delete revokes them all. */
+function everyGrantOf(userId: string): (readonly [IntegrationProvider, string])[] {
+  return INTEGRATION_PROVIDER_LIST.map((provider) => [provider, userId] as const);
 }
 
 /** The catalog as the group reads it: the fixed list, or the outage. */
@@ -266,7 +290,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
       HttpRouter.provideRequest(Layer.succeed(HostedEnvironment, ENVIRONMENT)),
       HttpRouter.provideRequest(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
       HttpRouter.provideRequest(catalogLayer(state)),
-      HttpRouter.provideRequest(Layer.succeed(LinearConnect, connectDouble(state))),
+      HttpRouter.provideRequest(connectLayer(state)),
       HttpRouter.provideRequest(noDatabase),
     ),
     { disableLogger: true },
@@ -341,7 +365,7 @@ const EXCHANGES: readonly Exchange[] = [
         retired: SESSIONS.map(({ sessionId }) => sessionId),
         deleted: [USER_ID],
         forgotten: [USER_ID],
-        revoked: [USER_ID],
+        revoked: everyGrantOf(USER_ID),
       }),
   },
   {
@@ -361,14 +385,22 @@ const EXCHANGES: readonly Exchange[] = [
     state: () => backing({ forgetAnalyticsFails: true }),
     request: deleteRequest,
     finalState: () =>
-      backing({ deleted: [USER_ID], revoked: [USER_ID], forgetAnalyticsFails: true }),
+      backing({ deleted: [USER_ID], revoked: everyGrantOf(USER_ID), forgetAnalyticsFails: true }),
   },
-  // Connect cannot revoke the Linear grant: the account is deleted all the same.
+  // Connect cannot revoke the grants: the account is deleted all the same.
   {
-    name: "delete-linear-revoke-failure",
+    name: "delete-revoke-failure",
     state: () => backing({ revokeFails: true }),
     request: deleteRequest,
     finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID], revokeFails: true }),
+  },
+  // A deployment naming no connector asks Connect nothing.
+  {
+    name: "delete-connect-unconfigured",
+    state: () => backing({ connectUnconfigured: true }),
+    request: deleteRequest,
+    finalState: () =>
+      backing({ deleted: [USER_ID], forgotten: [USER_ID], connectUnconfigured: true }),
   },
   {
     name: "preferences-read",
@@ -485,8 +517,8 @@ const EXCHANGES: readonly Exchange[] = [
   },
   // The store is unreachable: the erasure is refused as unavailable before
   // anything lands, since the account's sessions cannot even be read, so the
-  // caller asks again with every session, the analytics person, and the
-  // Linear grant still standing for the retry.
+  // caller asks again with every session, the analytics person, and every
+  // grant still standing for the retry.
   {
     name: "delete-store-unavailable",
     state: () => backing({ storeUnavailable: true }),

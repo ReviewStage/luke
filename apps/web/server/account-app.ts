@@ -42,7 +42,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { type LinearConnect, revokeLinearGrant } from "./hosted/linear-connect.js";
+import { type IntegrationConnect, revokeIntegrationGrants } from "./hosted/integration-connect.js";
 import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { retireSessions } from "./hosted/retire-sessions.js";
@@ -199,9 +199,9 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * the developer, while eve's door still admits them to it
  * (`retire-sessions.ts`); a session eve did not retire is logged and the
  * delete proceeds, and the delete itself queues the sandbox of every session
- * the account ran for the sweep. The account's Linear grant is revoked at
- * Vercel Connect once the rows are gone, as a Disconnect revokes it, so the
- * grant does not outlive the account; a revoke that fails is logged by its
+ * the account ran for the sweep. The account's grant at every integration is
+ * revoked at Vercel Connect once the rows are gone, as a Disconnect revokes
+ * one, so no grant outlives the account; a revoke that fails is logged by its
  * word and the account is deleted all the same.
  */
 const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoint")(function* (
@@ -212,7 +212,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   | HostedEnvironment
   | HttpClient.HttpClient
   | SqlClient.SqlClient
-  | LinearConnect
+  | IntegrationConnect
   | HttpServerRequest.HttpServerRequest
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
@@ -223,7 +223,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   yield* forgetAnalytics(userId);
   yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
-  yield* revokeLinearGrant(userId);
+  yield* revokeIntegrationGrants(userId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
@@ -484,7 +484,11 @@ function refusing<R>(
 export function accountApp(
   seams: AccountAppSeams,
 ): WebRoutes<
-  HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient | ModelCatalog | LinearConnect
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | ModelCatalog
+  | IntegrationConnect
 > {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),

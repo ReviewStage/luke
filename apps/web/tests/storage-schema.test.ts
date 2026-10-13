@@ -76,6 +76,7 @@ const DECLARED_TABLES = [
   "hosted_usage",
   "inbox_attachment",
   "inbox_item",
+  "integration_connection",
   "introduction_usage",
   "jwks",
   "linear_connection",
