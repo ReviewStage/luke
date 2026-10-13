@@ -664,17 +664,6 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
 
-/** Why a workspace call answered nothing a window can draw. */
-export const WORKSPACE_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
-  /** The account's role does not allow it, or the workspace is a personal one: a member removing someone, an owner removed or leaving. */
-  NOT_PERMITTED: "not-permitted",
-} as const;
-
-export type WorkspaceCallFailure =
-  (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];
-
 /** One version of one page of a plan, as the frame drawing it names it. */
 export const planningPageParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
