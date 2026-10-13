@@ -1,0 +1,1156 @@
+diff --git a/apps/desktop/bundle-budget.json b/apps/desktop/bundle-budget.json
+index 04bd9553..c62b27ff 100644
+--- a/apps/desktop/bundle-budget.json
++++ b/apps/desktop/bundle-budget.json
+@@ -1,7 +1,7 @@
+ {
+   "slack": 0.05,
+   "gzipBytes": {
+-    "renderer/renderer.js": 664696,
+-    "renderer/whiteboard.js": 467697
++    "renderer/renderer.js": 705578,
++    "renderer/whiteboard.js": 468579
+   }
+ }
+diff --git a/apps/desktop/src/renderer/act.ts b/apps/desktop/src/renderer/act.ts
+index c7b8f8a2..5a078244 100644
+--- a/apps/desktop/src/renderer/act.ts
++++ b/apps/desktop/src/renderer/act.ts
+@@ -12,6 +12,7 @@ import {
+   type ActResultFor,
+   type SettingUpdatePayload,
+ } from "#shared/messages/acts";
++import { cannedOutcome } from "./shots/canned-acts";
+ 
+ /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
+ type ActArguments<Kind extends ActKind> =
+@@ -54,7 +55,9 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome):
+  * transcript read is held open by the service for seconds, and any act sent
+  * meanwhile would have handed the reader its answer, and taken the reader's.
+  */
+-const send = (request: Act): Promise<ActOutcome> => window.sidecar.act(request);
++const send = (request: Act): Promise<ActOutcome> =>
++  // Throwaway: a changelog shot answers the acts it stages itself (`shots/canned-acts.ts`).
++  cannedOutcome(request) ?? window.sidecar.act(request);
+ 
+ async function performAct<Kind extends ActKind>(
+   send: (request: Act) => Promise<ActOutcome>,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index e8574969..398ead2f 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -24,6 +24,9 @@ import { usePlansTab } from "./planning/use-plans-tab";
+ import { applySessionReplay } from "./session-replay";
+ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
+ import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
++import { shotAccount } from "./shots/account";
++import { shotSpec } from "./shots/shot-profiles";
++import { useShotStaging } from "./shots/use-shot-staging";
+ import { useSignInFaceCycle } from "./sign-in-gate";
+ import { CAPTION_TONE } from "./strip-hold";
+ import { useAppState } from "./use-app-state";
+@@ -48,7 +51,9 @@ export function App(): React.JSX.Element {
+   // window's own facts beside it. There is no second reading to reconcile
+   // against: what arrives is the whole document at a version that only rises.
+   const state = useAppState();
+-  const account = state?.account;
++  // Throwaway: a changelog shot is signed in as Dean (`shots/`).
++  const shot = shotSpec(state?.run);
++  const account = shot !== undefined ? shotAccount() : state?.account;
+   const outputAudio = state?.audio.outputAudio;
+   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
+   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+@@ -218,6 +223,8 @@ export function App(): React.JSX.Element {
+   // The sidebar folds only where it is drawn: Settings keeps its page list,
+   // and the sign-in gate draws no sidebar at all.
+   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
++  // Throwaway: lays a changelog shot's window out, once (`shots/use-shot-staging.ts`).
++  useShotStaging({ plans, sidebar }, state !== undefined && !accountGated);
+ 
+   const caption = useCaptionPresentation({
+     lukeCaptions,
+@@ -409,7 +416,7 @@ export function App(): React.JSX.Element {
+           history={history}
+           sidebar={sidebar}
+           settings={{
+-            account: state.account,
++            account: account ?? state.account,
+             onSignOut: async () => {
+               await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+             },
+diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+index 3733dbc7..84c186f7 100644
+--- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
++++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+@@ -11,6 +11,7 @@ import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
+ import type { MicrophoneStatus } from "#shared/messages/audio";
+ import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+ import type { ActHandle } from "../act";
++import { shotSpec } from "../shots/shot-profiles";
+ import {
+   FIXTURE_PLANNING_CALL,
+   fixturePlanningView,
+@@ -201,7 +202,9 @@ export function usePlansTab(input: {
+ 
+   // A fixture run draws its synthetic plans in place of the account's,
+   // signed out as every fixture run is.
+-  const fixture = fixturePlanningView(input.run);
++  // Throwaway: a changelog shot draws its own plans, agents, and repositories (`shots/`).
++  const shot = shotSpec(input.run);
++  const fixture = shot?.planning ?? fixturePlanningView(input.run);
+   const viewed = fixture ?? input.planning;
+   // A started agent's tab opens selected; the panel is built after the
+   // agents it draws, so the opening reaches it through this late binding.
+@@ -210,12 +213,12 @@ export function usePlansTab(input: {
+   // A fixture's plans have no agents, as they are read from nowhere.
+   const agents = useCodingAgents({
+     acts: input.acts,
+-    planId: fixture === undefined ? viewed.activePlanId : undefined,
++    planId: fixture === undefined || shot !== undefined ? viewed.activePlanId : undefined,
+     repository:
+       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
+   });
+-  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds);
++  const sidePanel = useSidePanel(shot?.sidePanel ?? fixtureSidePanel(input.run), agents.agentIds);
+   panelRef.current = sidePanel;
+   // Main hears which agent's tab is on screen, and none while the tab is
+   // away or the panel shows something else; a fixture's staged agents are
+@@ -350,7 +353,7 @@ export function usePlansTab(input: {
+   // A fixture's repositories are read from nowhere, as its plans are.
+   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
+     fixture !== undefined
+-      ? Promise.resolve(fixtureRepositories())
++      ? Promise.resolve(shot?.repositories ?? fixtureRepositories())
+       : act(ACT_KIND.PLANNING_REPOSITORIES).catch(() => ({
+           failure: PLAN_CALL_FAILURE.UNANSWERED,
+         }));
+@@ -384,7 +387,8 @@ export function usePlansTab(input: {
+   // The calls heard on the open plan, each held past its end until the
+   // record's copy catches up; a fixture's open plan is drawn with its own
+   // call's words.
+-  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
++  // Throwaway: a changelog shot stands on no call (`shots/`).
++  const reported = fixture === undefined || shot !== undefined ? voice.view : FIXTURE_PLANNING_CALL;
+   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
+   useEffect(() => {
+     setHeard((held) =>
+diff --git a/apps/desktop/src/renderer/shots/account.ts b/apps/desktop/src/renderer/shots/account.ts
+new file mode 100644
+index 00000000..21c764e2
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/account.ts
+@@ -0,0 +1,24 @@
++/**
++ * account.ts -- the account every shot is signed in as: Dean Stratakos, with his GitHub photo.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed. A fixture run signs in to nothing, so the
++ * sidebar's foot would read "Not signed in"; the shots draw this account in
++ * its place, and every surface gated on a signed-in account draws as signed in.
++ */
++
++import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
++import { DEAN_AVATAR_DATA_URL } from "./dean-avatar";
++
++/** The account, built once, so a render reads the same object each time. */
++let held: AccountSnapshot | undefined;
++
++export function shotAccount(): AccountSnapshot {
++  held ??= {
++    status: ACCOUNT_STATUS.SIGNED_IN,
++    name: "Dean Stratakos",
++    email: "dean@example.com",
++    provider: "github",
++    pictureUrl: DEAN_AVATAR_DATA_URL,
++  };
++  return held;
++}
+diff --git a/apps/desktop/src/renderer/shots/canned-acts.ts b/apps/desktop/src/renderer/shots/canned-acts.ts
+new file mode 100644
+index 00000000..57749eb2
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/canned-acts.ts
+@@ -0,0 +1,33 @@
++/**
++ * canned-acts.ts -- the act seam: a shot answers the acts it stages from its own data, in place of main, which answers a fixture run's service reads with nothing.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed. `act.ts`'s one door asks here first; an act the
++ * shot does not answer goes to main as it would. Every answer is still read
++ * through its kind's own guard by the door, so a canned value that the wire
++ * would refuse is refused here too. A {@link NEVER} answer is a promise that
++ * never settles, which is how a long-poll loop that asks again as soon as an
++ * answer lands is answered once and then held.
++ */
++
++import { ACT_OUTCOME_STATUS, type Act, type ActKind, type ActOutcome } from "#shared/messages/acts";
++import { currentShot } from "./shot-profiles";
++import { NEVER, type ShotAnswer } from "./shot-spec";
++
++/** The one promise every held read is handed: it never settles. */
++const HELD: Promise<ActOutcome> = new Promise<ActOutcome>(() => undefined);
++
++/** The shot's answer to the act, or nothing where the act goes to main. */
++export function cannedOutcome(request: Act): Promise<ActOutcome> | undefined {
++  const answers = currentShot()?.answers;
++  if (answers === undefined) return undefined;
++  // SAFETY: the table is keyed by kind, each answer taking that kind's payload.
++  const answer = answers[request.kind] as ShotAnswer<ActKind> | undefined;
++  if (answer === undefined) return undefined;
++  const payload = "payload" in request ? request.payload : undefined;
++  // SAFETY: the payload is the one the request's kind declares.
++  const value = answer(payload as never);
++  if (value === undefined) return undefined;
++  if (value === NEVER) return HELD;
++  // SAFETY: the answer is the kind's own result; the door's guard reads it again.
++  return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value } as ActOutcome);
++}
+diff --git a/apps/desktop/src/renderer/shots/clock.ts b/apps/desktop/src/renderer/shots/clock.ts
+new file mode 100644
+index 00000000..6d87e7b0
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/clock.ts
+@@ -0,0 +1,31 @@
++/**
++ * clock.ts -- the shot profiles' one clock: every canned timestamp is counted back from the moment this module loaded.
++ *
++ * Throwaway: the changelog screenshots' staging, never committed. Imports
++ * nothing, so it can be read by any shot module at load without a cycle.
++ */
++
++/** The launch, as the shots count from it. */
++export const LAUNCHED_AT = Date.now();
++
++const MINUTE_MS = 60_000;
++
++/** Epoch milliseconds `minutes` before launch. */
++export function ago(minutes: number): number {
++  return LAUNCHED_AT - Math.round(minutes * MINUTE_MS);
++}
++
++/** Epoch milliseconds `hours` before launch. */
++export function hoursAgo(hours: number): number {
++  return ago(hours * 60);
++}
++
++/** Epoch milliseconds `days` before launch. */
++export function daysAgo(days: number): number {
++  return ago(days * 24 * 60);
++}
++
++/** Epoch milliseconds `seconds` before launch. */
++export function secondsAgo(seconds: number): number {
++  return LAUNCHED_AT - Math.round(seconds * 1000);
++}
+diff --git a/apps/desktop/src/renderer/shots/coding-agents.ts b/apps/desktop/src/renderer/shots/coding-agents.ts
+new file mode 100644
+index 00000000..088fadf5
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/coding-agents.ts
+@@ -0,0 +1,392 @@
++/**
++ * coding-agents.ts -- the "Coding agents" shot: the side panel full screen on "Add teammate invitations" mid-run, its transcript, the steer it took, PR #214 in its head, and the message box with Stop.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed.
++ * The sidebar folds away and the panel fills the window on the plan's first
++ * agent, Claude Opus 5.5 at high effort, started fourteen minutes before
++ * launch. Its transcript reads the memberships code, writes the migration
++ * and the invite route, runs `pnpm test src/members`, and opens #214; then
++ * the developer's message steers it (links last 14 days, any admin may
++ * withdraw) and it is acting on that, the members tests running again, so
++ * the tab ends on "Working…" with Stop in the box. A second agent,
++ * "Invite emails" on GPT-6.1 Sol, stands as the tab beside it. Every tool
++ * here is one this release names a row for (bash, read_file, grep,
++ * apply_patch); every model id is one the catalog lists.
++ */
++
++import type {
++  CodingAgentDefaultAnswer,
++  CodingAgentListAnswer,
++  CodingAgentMessagesAnswerView,
++  CodingAgentModelsAnswer,
++  CodingAgentPullRequestAnswerView,
++} from "@sidecar/hosted/coding-agent-view";
++import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
++import type { WireRecord, WireValue } from "@sidecar/wire";
++import { ACT_KIND } from "#shared/messages/acts";
++import { SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
++import { ago } from "./clock";
++import { PLAN_BODY, PLAN_REPOSITORY, SHOT_ID, shotOpenPlanView } from "./plan-world";
++import { NEVER, type ShotAnswers, type ShotSpec } from "./shot-spec";
++
++/** The catalog ids the agents run on, as AI Gateway's catalog spells them. */
++const MODEL = {
++  OPUS: "anthropic/claude-opus-5.5",
++  OPUS_FAST: "anthropic/claude-opus-5.5-fast",
++  SONNET: "anthropic/claude-sonnet-5.5",
++  FABLE: "anthropic/claude-fable-5",
++  SOL: "openai/gpt-6.1-sol",
++  ASTRA: "openai/gpt-6-astra",
++} as const;
++
++/** The cursor a reader starts from, and the one the one page ends on. */
++const START = "0:0";
++const READ_THROUGH = "9:1";
++
++/** The turn each agent's status is read from. */
++const TURN_ID = {
++  AGENT: "a4c6e8f0-1b3d-4f5a-8c7e-9d0b1c2d3e4f",
++  AGENT_2: "b5d7f901-2c4e-4a6b-9d8f-0e1c2d3e4f50",
++} as const;
++
++/** Where the sandbox checks the repository out, as eve's tools name its files. */
++const ROOT = "/workspace/repository";
++
++/** The models the service offers, in the catalog's order. */
++function shotModels(): CodingAgentModelsAnswer {
++  return {
++    models: [
++      {
++        id: MODEL.OPUS,
++        name: "Claude Opus 5.5",
++        provider: "anthropic",
++        efforts: ["low", "medium", "high", "max"],
++      },
++      {
++        id: MODEL.OPUS_FAST,
++        name: "Claude Opus 5.5 (Fast)",
++        provider: "anthropic",
++        efforts: ["low", "medium", "high", "max"],
++      },
++      {
++        id: MODEL.SONNET,
++        name: "Claude Sonnet 5.5",
++        provider: "anthropic",
++        efforts: ["low", "medium", "high"],
++      },
++      { id: MODEL.FABLE, name: "Claude Fable 5", provider: "anthropic", efforts: ["low", "high"] },
++      {
++        id: MODEL.SOL,
++        name: "GPT-6.1 Sol",
++        provider: "openai",
++        efforts: ["low", "medium", "high", "xhigh"],
++      },
++      { id: MODEL.ASTRA, name: "GPT-6 Astra", provider: "openai", efforts: ["low", "medium", "high"] },
++    ],
++  };
++}
++
++/** The plan's two agents, in the order started: the one the shot shows, then "Invite emails". */
++function shotAgents(): CodingAgentSummary[] {
++  return [
++    {
++      id: SHOT_ID.AGENT,
++      planId: SHOT_ID.PLAN,
++      model: MODEL.OPUS,
++      effort: "high",
++      createdAt: ago(14),
++      status: "running",
++      turnId: TURN_ID.AGENT,
++    },
++    {
++      id: SHOT_ID.AGENT_2,
++      planId: SHOT_ID.PLAN,
++      model: MODEL.SOL,
++      effort: "high",
++      createdAt: ago(3),
++      status: "running",
++      turnId: TURN_ID.AGENT_2,
++    },
++  ];
++}
++
++/** One tool call as the SDK stores its part: answered, or still running with no output. */
++function toolPart(tool: string, toolCallId: string, input: WireRecord, output?: WireValue): WireRecord {
++  return output === undefined
++    ? { type: `tool-${tool}`, toolCallId, state: "input-available", input }
++    : { type: `tool-${tool}`, toolCallId, state: "output-available", input, output };
++}
++
++/** A command the sandbox ran, answered as eve's bash tool answers. */
++function bash(toolCallId: string, command: string, stdout?: string): WireRecord {
++  return toolPart(
++    "bash",
++    toolCallId,
++    { command },
++    stdout === undefined
++      ? undefined
++      : { exitCode: 0, stdout, stderr: "", truncated: false },
++  );
++}
++
++/** A file read whole, answered with its words. */
++function readFile(toolCallId: string, path: string, content: string): WireRecord {
++  return toolPart("read_file", toolCallId, { filePath: `${ROOT}/${path}` }, { content });
++}
++
++/** A patch applied, answered with the files it changed. */
++function applyPatch(
++  toolCallId: string,
++  patch: readonly string[],
++  files: readonly { operation: string; path: string }[],
++): WireRecord {
++  return toolPart(
++    "apply_patch",
++    toolCallId,
++    { root: ROOT, patchText: ["*** Begin Patch", ...patch, "*** End Patch"].join("\n") },
++    { files: files.map((file) => ({ ...file })) },
++  );
++}
++
++const SCHEMA_FILE = [
++  "export const memberships = pgTable('memberships', {",
++  "  id: uuid('id').primaryKey().defaultRandom(),",
++  "  workspaceId: uuid('workspace_id').notNull(),",
++  "  userId: uuid('user_id').notNull(),",
++  "  role: text('role', { enum: ['admin', 'member'] }).notNull(),",
++  "  createdAt: timestamp('created_at').defaultNow(),",
++  "});",
++  "",
++].join("\n");
++
++const REMOVE_FILE = [
++  "export async function removeMember(member: Member, by: Member) {",
++  "  assertAdmin(by);",
++  "  await db.delete(memberships).where(eq(memberships.id, member.id));",
++  "}",
++  "",
++].join("\n");
++
++const FIRST_PATCH = [
++  "*** Add File: src/db/migrations/0042_memberships_state.sql",
++  "+ALTER TABLE memberships ADD COLUMN state text NOT NULL DEFAULT 'active';",
++  "+ALTER TABLE memberships ADD COLUMN invite_token text UNIQUE;",
++  "+ALTER TABLE memberships ALTER COLUMN user_id DROP NOT NULL;",
++  "*** Update File: src/db/schema/memberships.ts",
++  "@@",
++  "   role: text('role', { enum: ['admin', 'member'] }).notNull(),",
++  "+  state: text('state', { enum: ['pending', 'active'] }).notNull().default('active'),",
++  "+  inviteToken: text('invite_token').unique(),",
++  "*** Add File: src/members/invite.ts",
++  "+const INVITE_TTL_DAYS = 7;",
++  "+",
++  "+export async function inviteMember(workspaceId: string, email: string, by: Member) {",
++  "+  const token = randomToken();",
++  "+  const membership = await insertPendingMembership({ workspaceId, email, token, invitedBy: by.id });",
++  "+  await mail.invite(email, acceptUrl(token), INVITE_TTL_DAYS);",
++  "+  return membership;",
++  "+}",
++];
++
++const ROUTES_PATCH = [
++  "*** Add File: src/routes/invites.ts",
++  "+invites.post('/', requireMember, async (c) => {",
++  "+  const { email } = await c.req.json<{ email: string }>();",
++  "+  return c.json(await inviteMember(c.var.workspace.id, email, c.var.member), 201);",
++  "+});",
++  "+",
++  "+invites.get('/:token', requireSession, async (c) => c.json(await acceptInvite(c.req.param('token'), c.var.user)));",
++  "*** Update File: src/members/list.ts",
++  "@@",
++  "-  return db.select().from(memberships).where(eq(memberships.workspaceId, id));",
++  "+  return db.select().from(memberships).where(and(eq(memberships.workspaceId, id), eq(memberships.state, 'active')));",
++];
++
++const STEER_PATCH = [
++  "*** Update File: src/members/invite.ts",
++  "@@",
++  "-const INVITE_TTL_DAYS = 7;",
++  "+const INVITE_TTL_DAYS = 14;",
++  "*** Add File: src/members/withdraw.ts",
++  "+export async function withdrawInvite(invite: Membership, by: Member) {",
++  "+  if (invite.invitedBy !== by.id) assertAdmin(by);",
++  "+  await db.delete(memberships).where(and(eq(memberships.id, invite.id), eq(memberships.state, 'pending')));",
++  "+}",
++];
++
++const TEST_OUTPUT = [
++  " RUN  v3.2.4 /workspace/repository",
++  "",
++  " ✓ src/members/invite.test.ts (6 tests) 412ms",
++  " ✓ src/members/accept.test.ts (4 tests) 298ms",
++  " ✓ src/members/remove.test.ts (5 tests) 187ms",
++  "",
++  " Test Files  3 passed (3)",
++  "      Tests  15 passed (15)",
++].join("\n");
++
++/** What the developer sent the agent while it worked. */
++const STEER =
++  "Make the invite link last 14 days, not 7. And let any admin withdraw an invite, not only the member who sent it.";
++
++/** The agent's transcript as it stands: the plan, the turn that opened #214, the steer, and the turn acting on it. */
++function shotAgentMessages(): CodingAgentMessage[] {
++  return [
++    { id: "m-plan", role: "user", parts: [{ type: "text", text: PLAN_BODY }] },
++    {
++      id: "m-turn-1",
++      role: "assistant",
++      parts: [
++        { type: "step-start" },
++        {
++          type: "reasoning",
++          text: "The plan models an invite as a pending membership. Before touching anything, read the memberships schema and how removal works, since withdrawing an invite should follow it.",
++        },
++        bash(
++          "call_1a",
++          'grep -rn "memberships" src/db/schema src/members',
++          "src/db/schema/memberships.ts:3:export const memberships = pgTable('memberships', {\n" +
++            "src/members/remove.ts:3:  await db.delete(memberships).where(eq(memberships.id, member.id));\n" +
++            "src/members/list.ts:8:  return db.select().from(memberships).where(eq(memberships.workspaceId, id));",
++        ),
++        readFile("call_2b", "src/db/schema/memberships.ts", SCHEMA_FILE),
++        readFile("call_3c", "src/members/remove.ts", REMOVE_FILE),
++        toolPart(
++          "grep",
++          "call_4d",
++          { pattern: "from(memberships)", path: "src" },
++          {
++            content:
++              "src/members/list.ts:8\nsrc/billing/seats.ts:21\nsrc/auth/workspace-access.ts:34",
++          },
++        ),
++        applyPatch("call_5e", FIRST_PATCH, [
++          { operation: "add", path: "src/db/migrations/0042_memberships_state.sql" },
++          { operation: "update", path: "src/db/schema/memberships.ts" },
++          { operation: "add", path: "src/members/invite.ts" },
++        ]),
++        applyPatch("call_6f", ROUTES_PATCH, [
++          { operation: "add", path: "src/routes/invites.ts" },
++          { operation: "update", path: "src/members/list.ts" },
++        ]),
++        bash("call_7g", "pnpm test src/members", TEST_OUTPUT),
++        bash(
++          "call_8h",
++          'git push -u origin luke/teammate-invitations && gh pr create --title "Add teammate invitations" --fill',
++          "https://github.com/acme/relay/pull/214\n",
++        ),
++        { type: "step-start" },
++        {
++          type: "text",
++          text:
++            "Opened [#214](https://github.com/acme/relay/pull/214). An invite is a `memberships` row with `state = pending`: " +
++            "`POST /invites` creates it and mails a one-time link, and `/invites/:token` turns it active once the visitor signs in. " +
++            "The members list now skips pending rows. Next, pending invites in **Settings › Members**.",
++        },
++        readFile(
++          "call_9i",
++          "src/web/settings/members-page.tsx",
++          "export function MembersPage({ members }: { members: Member[] }) {\n  return <MemberTable rows={members} />;\n}\n",
++        ),
++      ],
++    },
++    { id: "m-steer", role: "user", parts: [{ type: "text", text: STEER }] },
++    {
++      id: "m-turn-2",
++      role: "assistant",
++      parts: [
++        { type: "step-start" },
++        {
++          type: "reasoning",
++          text: "Two changes: the link's lifetime, and who may withdraw. Removal already asserts an admin, so withdrawing can reuse that check for anyone but the sender.",
++        },
++        toolPart(
++          "grep",
++          "call_10j",
++          { pattern: "INVITE_TTL_DAYS", path: "src" },
++          { content: "src/members/invite.ts:1:const INVITE_TTL_DAYS = 7;" },
++        ),
++        applyPatch("call_11k", STEER_PATCH, [
++          { operation: "update", path: "src/members/invite.ts" },
++          { operation: "add", path: "src/members/withdraw.ts" },
++        ]),
++        { type: "step-start" },
++        {
++          type: "text",
++          text: "Invite links now last 14 days, and any admin can withdraw an invite as well as its sender. Running the members tests again before I push to #214.",
++        },
++        bash("call_12l", "pnpm test src/members"),
++      ],
++    },
++  ];
++}
++
++/** One page of a transcript read past `after`: the agent's whole transcript at the start, then a hold that never lets go. */
++function transcriptPage(
++  agentId: string,
++  after: string,
++): CodingAgentMessagesAnswerView | typeof NEVER | undefined {
++  if (agentId !== SHOT_ID.AGENT && agentId !== SHOT_ID.AGENT_2) return undefined;
++  if (after !== START) return NEVER;
++  return {
++    messages: agentId === SHOT_ID.AGENT ? shotAgentMessages() : [],
++    cursor: READ_THROUGH,
++    status: "running",
++  };
++}
++
++/** What each agent published: the first its branch and #214, open, its checks passing; the second nothing yet. */
++function shotPullRequest(agentId: string): CodingAgentPullRequestAnswerView {
++  if (agentId !== SHOT_ID.AGENT) return { repository: PLAN_REPOSITORY, branch: null, pullRequest: null };
++  return {
++    repository: PLAN_REPOSITORY,
++    branch: "luke/teammate-invitations",
++    pullRequest: {
++      number: 214,
++      title: "Add teammate invitations",
++      url: "https://github.com/acme/relay/pull/214",
++      state: "open",
++      checks: "passing",
++      additions: 412,
++      deletions: 38,
++      changedFiles: 9,
++    },
++  };
++}
++
++/** The plan's agents as the acts answer them: list, transcripts, pull requests, models, and the default. */
++function codingAgentAnswers(): ShotAnswers {
++  const list: CodingAgentListAnswer = { agents: shotAgents() };
++  const models = shotModels();
++  const defaultChoice: CodingAgentDefaultAnswer = { choice: { model: MODEL.OPUS, effort: "high" } };
++  return {
++    [ACT_KIND.CODING_AGENTS_LIST]: (payload) =>
++      payload.planId === SHOT_ID.PLAN ? list : { agents: [] },
++    [ACT_KIND.CODING_AGENTS_MESSAGES]: (payload) => transcriptPage(payload.agentId, payload.after),
++    [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (payload) => shotPullRequest(payload.agentId),
++    [ACT_KIND.CODING_AGENTS_MODELS]: () => models,
++    [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: () => defaultChoice,
++  };
++}
++
++export function codingAgentsShot(): ShotSpec {
++  return {
++    planning: shotOpenPlanView(),
++    sidePanel: {
++      open: true,
++      tabs: SIDE_PANEL_TABS,
++      tab: { agent: SHOT_ID.AGENT },
++      width: SIDE_PANEL_WIDTH.DEFAULT,
++    },
++    answers: codingAgentAnswers(),
++    layout: { sidebarCollapsed: true, sidePanelFullScreen: true },
++    steps: [
++      {
++        // The tabs name their models by the catalog's own names once it is read, as a Start menu opening reads it.
++        key: "models",
++        ready: ({ plans }) => plans.agents.agentIds !== undefined,
++        run: ({ plans }) => plans.agents.readModels(),
++      },
++    ],
++  };
++}
+diff --git a/apps/desktop/src/renderer/shots/dean-avatar.ts b/apps/desktop/src/renderer/shots/dean-avatar.ts
+new file mode 100644
+index 00000000..05eb3f68
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/dean-avatar.ts
+@@ -0,0 +1,7 @@
++/**
++ * dean-avatar.ts -- generated: Dean Stratakos's GitHub photo (160px JPEG) as a data URL, for the shot profiles' signed-in account.
++ *
++ * Regenerate with: base64 -w0 avatar.jpg. Throwaway: never committed.
++ */
++export const DEAN_AVATAR_DATA_URL =
++  "data:image/jpeg;base64,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";
+diff --git a/apps/desktop/src/renderer/shots/github-repository.ts b/apps/desktop/src/renderer/shots/github-repository.ts
+new file mode 100644
+index 00000000..bd1b294d
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/github-repository.ts
+@@ -0,0 +1,98 @@
++/**
++ * github-repository.ts -- the "Planning on a GitHub repository" shot: the new-plan composer with its repository chip's menu held open over acme's repositories.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed.
++ * The sidebar folds away so the composer stands alone in the window's
++ * middle, a name is typed into it ("Invite link expiry", the follow-up the
++ * Teammate invitations plan left open), and the chip's menu is opened as a
++ * press would open it: the search field, the recent repositories the plans
++ * were about (acme/relay, chosen, then acme/ledger and acme/web), the rest
++ * the Luke GitHub App reaches, and the GitHub row pinned under the list.
++ * The menu closes when focus leaves it, which a window losing focus does,
++ * so it is opened again whenever the window takes focus back; the capture
++ * is of the focused window.
++ */
++
++import type { PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
++import { daysAgo, hoursAgo } from "./clock";
++import { shotHomeView } from "./plan-world";
++import type { ShotSpec } from "./shot-spec";
++
++/** The name typed into the composer. */
++const PLAN_NAME_TYPED = "Invite link expiry";
++
++/** The composer's name field and the chip, as the page draws them. */
++const NAME_FIELD = 'textarea[aria-label="Plan name"]';
++const CHIP = ".plan-compose .plan-compose-chip";
++
++/** One acme repository, as GitHub lists it. */
++function repository(name: string, updatedAt: number, isPrivate = true) {
++  return {
++    owner: "acme",
++    name,
++    fullName: `acme/${name}`,
++    defaultBranch: "main",
++    private: isPrivate,
++    updatedAt,
++  };
++}
++
++/** Every repository the App reaches on acme, most recently updated first. */
++function shotRepositories(): PlanningRepositoriesAnswer {
++  return {
++    repositories: {
++      installed: true,
++      repositories: [
++        repository("relay", hoursAgo(1)),
++        repository("web", hoursAgo(3)),
++        repository("ledger", hoursAgo(6)),
++        repository("relay-mobile", daysAgo(1)),
++        repository("design-system", daysAgo(2), false),
++        repository("infra", daysAgo(3)),
++        repository("docs", daysAgo(5), false),
++        repository("status-page", daysAgo(9), false),
++      ],
++      installationUrl: "https://github.com/apps/luke/installations/new",
++    },
++  };
++}
++
++/** Types the name into the composer's field the way a keystroke reaches React: the native setter, then an input event. */
++function typeName(field: HTMLTextAreaElement): void {
++  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
++  setter?.call(field, PLAN_NAME_TYPED);
++  field.dispatchEvent(new Event("input", { bubbles: true }));
++}
++
++/** Presses the chip where its menu is not open. */
++function openMenu(): void {
++  const chip = document.querySelector<HTMLButtonElement>(CHIP);
++  if (chip !== null && chip.getAttribute("aria-expanded") !== "true") chip.click();
++}
++
++export function githubRepositoryShot(): ShotSpec {
++  return {
++    planning: shotHomeView(),
++    repositories: shotRepositories(),
++    layout: { sidebarCollapsed: true },
++    steps: [
++      {
++        key: "name",
++        ready: () => document.querySelector(NAME_FIELD) !== null,
++        run: () => {
++          const field = document.querySelector<HTMLTextAreaElement>(NAME_FIELD);
++          if (field !== null) typeName(field);
++        },
++      },
++      {
++        key: "menu",
++        ready: () => document.querySelector(CHIP) !== null,
++        run: () => {
++          window.addEventListener("focus", () => window.setTimeout(openMenu, 50));
++          window.setTimeout(openMenu, 300);
++        },
++      },
++    ],
++  };
++}
++
+diff --git a/apps/desktop/src/renderer/shots/plan-world.ts b/apps/desktop/src/renderer/shots/plan-world.ts
+new file mode 100644
+index 00000000..fba5dda8
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/plan-world.ts
+@@ -0,0 +1,190 @@
++/**
++ * plan-world.ts -- the shots' plans: "Teammate invitations" written into this release's template, its siblings across acme's three repositories, and the planning view they make.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed.
++ * Every name, repository, and line here is invented and belongs to the
++ * shared screenshot world (acme, `.agents/skills/changelog-screenshots/WORLD.md`);
++ * nothing is read from an account. Every timestamp is counted back from
++ * launch (`clock.ts`).
++ */
++
++import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
++import { ago, daysAgo, hoursAgo } from "./clock";
++
++/** The ids the shots share, so a plan and its agents agree with one another. */
++export const SHOT_ID = {
++  PLAN: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
++  BILLING: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
++  WEBHOOKS: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
++  AUDIT: "3c9d5f7b-1e4a-4b62-8d8a-4f5a6b7c8d93",
++  ONBOARDING: "4dae6a8c-2f5b-4c73-9e9b-5a6b7c8d9ea4",
++  DARK_MODE: "5ebf7b9d-3a6c-4d84-8fac-6b7c8d9eafb5",
++  INVOICES: "6fc08cae-4b7d-4e95-9abd-7c8d9eafb0c6",
++  /** "Add teammate invitations", the plan's first agent, at work. */
++  AGENT: "8b2a0ec1-6d9f-4ab7-9cdf-9eafb0c1d2e8",
++  /** "Invite emails", the plan's second agent, started after it. */
++  AGENT_2: "9c3b1fd2-7eaf-4bc8-8de0-afb0c1d2e3f9",
++} as const;
++
++/** The plan everything is about. */
++export const PLAN_NAME = "Teammate invitations";
++export const PLAN_REPOSITORY = "acme/relay";
++
++/** The plan written into this release's template, as it stood when its first agent was started. */
++const PLAN_FIELDS: PlanFields = {
++  ...EMPTY_PLAN_FIELDS,
++  goal: {
++    problem:
++      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
++      "members wait on an admin to bring a teammate in.",
++    outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
++  },
++  scope: {
++    included:
++      "- Inviting by email from **Settings › Members**.\n" +
++      "- The accept link, signing in or signing up on the way.\n" +
++      "- Pending invites listed beside members, with Withdraw.",
++    excluded: "- Bulk invites from a CSV.\n- Invite-only roles: an invitee joins as a member.",
++    constraints: null,
++  },
++  rules: [
++    {
++      statement: "Any member may invite by email.",
++      examples: [
++        {
++          given: "A member invites sam@acme.dev",
++          when: "Sam opens the link",
++          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract.
++          then: "Sam joins the workspace as a member", // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++    {
++      statement: "A withdrawn or accepted invite link never grants access again.",
++      examples: [
++        {
++          given: "An invite Sam already accepted",
++          when: "anyone opens its link again",
++          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract.
++          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key.
++        },
++      ],
++    },
++  ],
++  implementation: {
++    changeMap:
++      "- `src/db/schema/memberships.ts`: a `pending` state and an invite token.\n" +
++      "- `src/members/invite.ts`: new, sending and accepting an invite.\n" +
++      "- `src/routes/invites.ts`: `POST /invites` and `/invites/:token`.",
++    contracts: null,
++    patterns: "Follow `src/members/remove.ts` for the admin check.",
++    order: "1. Migration. 2. `POST /invites` and the email. 3. The accept link. 4. Settings › Members.",
++  },
++  decisions:
++    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
++    "invites and members alike. Rejected: a separate `invitations` table.",
++  verification: "`pnpm test src/members`, then invite a second account on a preview deploy.",
++  openQuestions: [
++    "Who can withdraw an invite: the member who sent it, any admin, or both?",
++    "Should an invite link last 7 days or 14?",
++  ],
++};
++
++/** The plan's document as its first agent was handed it. */
++export const PLAN_BODY = planBody({ name: PLAN_NAME }, PLAN_FIELDS);
++
++/** The open plan. */
++export function shotPlan(): Plan {
++  return {
++    id: SHOT_ID.PLAN,
++    name: PLAN_NAME,
++    createdAt: daysAgo(1),
++    updatedAt: ago(4),
++    repository: PLAN_REPOSITORY,
++    document: {
++      body: PLAN_BODY,
++      assumptions: [
++        { text: "Invites reuse memberships with a pending state." },
++        { text: "Members and admins can both invite." },
++      ],
++    },
++  };
++}
++
++/** The plan's siblings, across acme's three repositories, newest started first. */
++function shotOtherPlans(): PlanSummary[] {
++  return [
++    {
++      id: SHOT_ID.BILLING,
++      name: "Usage-based billing",
++      createdAt: daysAgo(1.5),
++      updatedAt: ago(26),
++      repository: "acme/ledger",
++    },
++    {
++      id: SHOT_ID.ONBOARDING,
++      name: "Onboarding checklist",
++      createdAt: daysAgo(2.5),
++      updatedAt: hoursAgo(5),
++      repository: "acme/web",
++    },
++    {
++      id: SHOT_ID.WEBHOOKS,
++      name: "Webhook retries",
++      createdAt: daysAgo(3),
++      updatedAt: hoursAgo(2),
++      repository: "acme/relay",
++    },
++    {
++      id: SHOT_ID.AUDIT,
++      name: "Audit log export",
++      createdAt: daysAgo(6),
++      updatedAt: daysAgo(1.1),
++      repository: "acme/relay",
++    },
++    {
++      id: SHOT_ID.INVOICES,
++      name: "Invoice PDF redesign",
++      createdAt: daysAgo(9),
++      updatedAt: daysAgo(3),
++      repository: "acme/ledger",
++    },
++    {
++      id: SHOT_ID.DARK_MODE,
++      name: "Dark mode for the dashboard",
++      createdAt: daysAgo(12),
++      updatedAt: daysAgo(4),
++      repository: "acme/web",
++    },
++  ];
++}
++
++/** The account's plans, the open one first, as the sidebar lists them. */
++export function shotPlans(): PlanSummary[] {
++  const { document: _document, ...plan } = shotPlan();
++  return [plan, ...shotOtherPlans()];
++}
++
++/** The plans with the open plan on its document, nothing on a call. */
++export function shotOpenPlanView(): PlanningView {
++  const plan = shotPlan();
++  return {
++    plans: shotPlans(),
++    listStatus: PLANNING_READ.READY,
++    activePlanId: plan.id,
++    document: { status: PLANNING_READ.READY, plan },
++    transcript: { status: PLANNING_READ.READY, transcript: { calls: [], earlierOmitted: false } },
++    work: [],
++  };
++}
++
++/** The plans with none open, which is the new-plan page. */
++export function shotHomeView(): PlanningView {
++  return {
++    plans: shotPlans(),
++    listStatus: PLANNING_READ.READY,
++    document: { status: PLANNING_READ.IDLE },
++  };
++}
+diff --git a/apps/desktop/src/renderer/shots/shot-profiles.ts b/apps/desktop/src/renderer/shots/shot-profiles.ts
+new file mode 100644
+index 00000000..872198c1
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/shot-profiles.ts
+@@ -0,0 +1,43 @@
++/**
++ * shot-profiles.ts -- the registry: which shot each `--profile shot-*` launch stages, built once on first use.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed.
++ * Only a fixture run stages a shot. Each shot's builder lives in a file of
++ * its own and is called lazily, the first time the shot is asked for, so no
++ * shot module reads another module's values at load; the spec built is
++ * kept, so every reader is handed the same objects render after render.
++ */
++
++import { RUN_PROFILE } from "#shared/messages/app-state";
++import { appStateNow } from "../use-app-state";
++import { codingAgentsShot } from "./coding-agents";
++import { githubRepositoryShot } from "./github-repository";
++import type { ShotSpec } from "./shot-spec";
++
++/** Each shot's builder, by its profile. */
++const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
++  [RUN_PROFILE.SHOT_CODING_AGENTS, codingAgentsShot],
++  [RUN_PROFILE.SHOT_GITHUB_REPOSITORY, githubRepositoryShot],
++]);
++
++/** Each shot as built, by its profile. */
++const built = new Map<string, ShotSpec>();
++
++/** The shot a run stages: one of the shot profiles in a fixture run, else none. */
++export function shotSpec(
++  run: { readonly fixtureMode: boolean; readonly profile: string } | undefined,
++): ShotSpec | undefined {
++  if (run === undefined || !run.fixtureMode) return undefined;
++  const build = BUILDERS.get(run.profile);
++  if (build === undefined) return undefined;
++  const held = built.get(run.profile);
++  if (held !== undefined) return held;
++  const spec = build();
++  built.set(run.profile, spec);
++  return spec;
++}
++
++/** The shot this window stages, read from the state as it stands; none before the state has arrived. */
++export function currentShot(): ShotSpec | undefined {
++  return shotSpec(appStateNow()?.run);
++}
+diff --git a/apps/desktop/src/renderer/shots/shot-spec.ts b/apps/desktop/src/renderer/shots/shot-spec.ts
+new file mode 100644
+index 00000000..586c706d
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/shot-spec.ts
+@@ -0,0 +1,65 @@
++/**
++ * shot-spec.ts -- what one changelog shot stages: the plans and canned answers it draws, and the layout it opens on.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, applied on a Mac to
++ * the release commit and never committed. Only types and one marker live
++ * here, so every shot module and every hook into the app can import it
++ * without an evaluation-order cycle.
++ */
++
++import type { PlanningRepositoriesAnswer, PlanningView } from "@sidecar/hosted/planning-view";
++import type { ActKind, ActPayload, ActResultFor } from "#shared/messages/acts";
++import type { SidebarCollapse } from "../desktop/sidebar-collapse";
++import type { PlansControl } from "../planning/use-plans-tab";
++import type { SidePanelState } from "../planning/use-side-panel";
++
++/** An answer that never settles: what a long-poll loop is handed once it has read what it will read. */
++export const NEVER: unique symbol = Symbol("shot-never");
++
++/**
++ * One kind's canned answer, from its payload: a value its own guard admits,
++ * {@link NEVER} for a read held open forever, or nothing to let the act go
++ * to main as it would.
++ */
++export type ShotAnswer<Kind extends ActKind> = (
++  payload: ActPayload<Kind>,
++) => ActResultFor<Kind> | typeof NEVER | undefined;
++
++/** Every kind a shot answers itself, each by its own answer. */
++export type ShotAnswers = { readonly [Kind in ActKind]?: ShotAnswer<Kind> };
++
++/** What the staging effect hands each step: the Plans tab and the sidebar. */
++export interface ShotStageContext {
++  readonly plans: PlansControl;
++  readonly sidebar: SidebarCollapse;
++}
++
++/** One staging step, run once, the first render it is ready on. */
++export interface ShotStep {
++  readonly key: string;
++  readonly ready: (context: ShotStageContext) => boolean;
++  readonly run: (context: ShotStageContext) => void;
++}
++
++/** The window's layout as the shot opens on it; anything left out stays as the fixture run opens it. */
++export interface ShotLayout {
++  /** Folds the sidebar away. */
++  readonly sidebarCollapsed?: boolean;
++  /** The side panel fills the window over the plan's document. */
++  readonly sidePanelFullScreen?: boolean;
++}
++
++/** One shot: everything it draws in place of the fixture's, and how it is laid out. */
++export interface ShotSpec {
++  /** The plans the Plans tab draws, its open one included. */
++  readonly planning: PlanningView;
++  /** The side panel the open plan starts with; referentially stable, as the spec is built once. */
++  readonly sidePanel?: SidePanelState;
++  /** The repositories the chip lists, read from nowhere as a fixture's are. */
++  readonly repositories?: PlanningRepositoriesAnswer;
++  /** The acts the shot answers itself (`canned-acts.ts`). */
++  readonly answers?: ShotAnswers;
++  readonly layout?: ShotLayout;
++  /** Staging the layout cannot say, run after it (`use-shot-staging.ts`). */
++  readonly steps?: readonly ShotStep[];
++}
+diff --git a/apps/desktop/src/renderer/shots/use-shot-staging.ts b/apps/desktop/src/renderer/shots/use-shot-staging.ts
+new file mode 100644
+index 00000000..eb6534e8
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/use-shot-staging.ts
+@@ -0,0 +1,62 @@
++/**
++ * use-shot-staging.ts -- the one fixture-only effect that lays a shot's window out: the sidebar's fold and the side panel's full screen, then the shot's own steps, each once, the first render it can be.
++ *
++ * Throwaway: the 0.10.0 changelog screenshots' staging, never committed.
++ * Called from `App` with the Plans tab and the sidebar. Each step runs once,
++ * the first render on which what it needs is drawn: a full-screen panel
++ * once the plan is drawn and its panel open, a step of the shot's own once
++ * its element is in the page.
++ */
++
++import { useEffect, useRef } from "react";
++import { DOCUMENT_REGION } from "../planning/planning-model";
++import { currentShot } from "./shot-profiles";
++import type { ShotSpec, ShotStageContext, ShotStep } from "./shot-spec";
++
++/** Whether the open plan is drawn. */
++function planDrawn(context: ShotStageContext): boolean {
++  return context.plans.region.kind === DOCUMENT_REGION.READY;
++}
++
++/** The steps a shot's layout asks for, in the order they run. */
++function layoutSteps(shot: ShotSpec): ShotStep[] {
++  const layout = shot.layout ?? {};
++  const steps: ShotStep[] = [];
++  const { sidebarCollapsed } = layout;
++  if (sidebarCollapsed !== undefined) {
++    steps.push({
++      key: "sidebar",
++      ready: () => true,
++      run: ({ sidebar }) => {
++        if (sidebar.collapsed !== sidebarCollapsed) sidebar.onToggle();
++      },
++    });
++  }
++  if (layout.sidePanelFullScreen === true) {
++    steps.push({
++      key: "full-screen",
++      ready: (context) => planDrawn(context) && context.plans.sidePanel.open,
++      run: ({ plans }) => {
++        if (!plans.sidePanel.fullScreen) plans.sidePanel.onToggleFullScreen();
++      },
++    });
++  }
++  return steps;
++}
++
++/** Stages the shot this run is for, if any; `known` once the state has arrived and the window is past its gate. */
++export function useShotStaging(context: ShotStageContext, known: boolean): void {
++  const done = useRef(new Set<string>());
++  const latest = useRef(context);
++  latest.current = context;
++  useEffect(() => {
++    if (!known) return;
++    const shot = currentShot();
++    if (shot === undefined) return;
++    for (const step of [...layoutSteps(shot), ...(shot.steps ?? [])]) {
++      if (done.current.has(step.key) || !step.ready(latest.current)) continue;
++      done.current.add(step.key);
++      step.run(latest.current);
++    }
++  });
++}
+diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
+index 6fd5455a..e5053543 100644
+--- a/apps/desktop/src/shared/messages/app-state.ts
++++ b/apps/desktop/src/shared/messages/app-state.ts
+@@ -27,6 +27,9 @@ export const RUN_PROFILE = {
+   PLANNING_TRANSCRIPT: "planning-transcript",
+   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
+   PLANNING_WORK: "planning-work",
++  /** Throwaway: the 0.10.0 changelog shots (`renderer/shots/`), each staging one picture. */
++  SHOT_CODING_AGENTS: "shot-coding-agents",
++  SHOT_GITHUB_REPOSITORY: "shot-github-repository",
+ } as const;
+ 
+ export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

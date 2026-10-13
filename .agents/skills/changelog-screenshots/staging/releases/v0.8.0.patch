@@ -1,0 +1,939 @@
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 263070c8..c0dc079a 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -37,6 +37,10 @@ import { useMeasuredHeight } from "./use-measured-height";
+ import type { PanelEntrySurface } from "./use-panel-entry";
+ import { usePanelPresentation } from "./use-panel-presentation";
+ import { usePrefersReducedMotion } from "./use-reduced-motion";
++// Throwaway: the 0.8.0 changelog shots (`shots/`).
++import { shotAccount } from "./shots/account";
++import { shotSpec } from "./shots/shot-profiles";
++import { useShotStaging } from "./shots/use-shot-staging";
+ import { useSignIn } from "./use-sign-in";
+ import { useStateWithRef } from "./use-state-with-ref";
+ import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
+@@ -65,7 +69,9 @@ export function App(): React.JSX.Element {
+   // window's own facts beside it. There is no second reading to reconcile
+   // against: what arrives is the whole document at a version that only rises.
+   const state = useAppState();
+-  const account = state?.account;
++  // Throwaway: a changelog shot is signed in as Dean (`shots/account.ts`).
++  const shot = shotSpec(state?.run);
++  const account = shot !== undefined ? shotAccount() : state?.account;
+   const outputAudio = state?.audio.outputAudio;
+   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
+   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+@@ -275,6 +281,8 @@ export function App(): React.JSX.Element {
+   // The sidebar folds only where it is drawn: Settings keeps its page list,
+   // and the sign-in gate draws no sidebar at all.
+   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
++  // Throwaway: lays a changelog shot's window out, once (`shots/use-shot-staging.ts`).
++  useShotStaging({ plans, sidebar }, state !== undefined);
+ 
+   const caption = useCaptionPresentation({
+     lukeCaptions,
+@@ -532,7 +540,7 @@ export function App(): React.JSX.Element {
+           // One caret anywhere in the panel is hands being here.
+           onSettingsSearchEngaged={changeAskEngagement}
+           settings={{
+-            account: state.account,
++            account: account ?? state.account,
+             onSignOut: async () => {
+               await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+             },
+diff --git a/apps/desktop/src/renderer/desktop/plan-actions.tsx b/apps/desktop/src/renderer/desktop/plan-actions.tsx
+index a6234986..95f96831 100644
+--- a/apps/desktop/src/renderer/desktop/plan-actions.tsx
++++ b/apps/desktop/src/renderer/desktop/plan-actions.tsx
+@@ -13,6 +13,8 @@ import { APP_COMMAND } from "#shared/shortcuts";
+ import { useAppCommand } from "../app-commands";
+ import { DOCUMENT_REGION, folderLine } from "../planning/planning-model";
+ import type { PlansControl } from "../planning/use-plans-tab";
++// Throwaway: the 0.8.0 changelog shots (`renderer/shots/`).
++import { currentShot } from "../shots/shot-profiles";
+ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
+ import { confirmAsked } from "../settings/confirm-state";
+ import { Tooltip } from "../tooltip";
+@@ -192,8 +194,10 @@ function ActionMenu({
+     };
+     const leave = () => onClose(false);
+     document.addEventListener("pointerdown", pressed, true);
+-    window.addEventListener("blur", leave);
+-    window.addEventListener("resize", leave);
++    // Throwaway: a changelog shot's menu outlives the capture's own resize and focus (`shots/`).
++    const held = currentShot() !== undefined;
++    if (!held) window.addEventListener("blur", leave);
++    if (!held) window.addEventListener("resize", leave);
+     return () => {
+       document.removeEventListener("pointerdown", pressed, true);
+       window.removeEventListener("blur", leave);
+@@ -380,6 +384,27 @@ export function SidebarPlan({
+     refocus.current = false;
+     row.current?.focus();
+   }, [rename.editing]);
++  // Throwaway: a changelog shot holds this row's menu open (`shots/`), opened as a
++  // right-click a little in from the row's left would open it, once the
++  // window has taken its capture size.
++  const menuHeld = currentShot()?.layout?.planMenuFor === plan.id;
++  useEffect(() => {
++    if (!menuHeld) return;
++    const timer = window.setTimeout(() => {
++      const bounds = row.current?.getBoundingClientRect();
++      if (bounds === undefined) return;
++      row.current?.dispatchEvent(
++        new MouseEvent("contextmenu", {
++          bubbles: true,
++          cancelable: true,
++          button: 2,
++          clientX: bounds.left + 132,
++          clientY: bounds.top + bounds.height / 2 + 4,
++        }),
++      );
++    }, 5000);
++    return () => window.clearTimeout(timer);
++  }, [menuHeld]);
+   const repository =
+     folderPath !== undefined ? (
+       <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
+diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+index 0198760c..1a62e6ef 100644
+--- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
++++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+@@ -6,6 +6,8 @@ import { ACT_KIND } from "#shared/messages/acts";
+ import type { MicrophoneStatus } from "#shared/messages/audio";
+ import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+ import type { ActHandle } from "../act";
++// Throwaway: the 0.8.0 changelog shots (`renderer/shots/`).
++import { shotSpec } from "../shots/shot-profiles";
+ import { FIXTURE_PLANNING_CALL, fixturePlanningView, fixtureSidePanel } from "./planning-fixture";
+ import {
+   type CallStatus,
+@@ -151,8 +153,10 @@ export function usePlansTab(input: {
+ 
+   // A fixture run draws its synthetic plans in place of the account's,
+   // signed out as every fixture run is.
+-  const fixture = fixturePlanningView(input.run);
+-  const sidePanel = useSidePanel(fixtureSidePanel(input.run));
++  // Throwaway: a changelog shot draws its own plans, panel, and call (`shots/`).
++  const shot = shotSpec(input.run);
++  const fixture = shot?.planning ?? fixturePlanningView(input.run);
++  const sidePanel = useSidePanel(shot?.sidePanel ?? fixtureSidePanel(input.run));
+   const viewed = fixture ?? input.planning;
+   // A name given here stands until main's view carries it, so a rename that
+   // landed never flickers back while main's copy of the view catches up.
+@@ -260,7 +264,12 @@ export function usePlansTab(input: {
+   // The calls heard on the open plan, each held past its end until the
+   // record's copy catches up; a fixture's open plan is drawn with its own
+   // call's words.
+-  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
++  const reported =
++    fixture === undefined
++      ? voice.view
++      : shot !== undefined
++        ? (shot.call ?? voice.view)
++        : FIXTURE_PLANNING_CALL;
+   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
+   useEffect(() => {
+     setHeard((held) =>
+diff --git a/apps/desktop/src/renderer/shots/account.ts b/apps/desktop/src/renderer/shots/account.ts
+new file mode 100644
+index 00000000..096398a6
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/account.ts
+@@ -0,0 +1,24 @@
++/**
++ * account.ts -- the account every shot is signed in as: Dean Stratakos, with his GitHub photo.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. A fixture run signs in to nothing, so the
++ * sidebar's foot would read "Settings" beside a blank face; the shots draw this account in
++ * its place, and every surface gated on a signed-in account draws as signed in.
++ */
++
++import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
++import { DEAN_AVATAR_DATA_URL } from "./dean-avatar";
++
++/** The account, built once, so a render reads the same object each time. */
++let held: AccountSnapshot | undefined;
++
++export function shotAccount(): AccountSnapshot {
++  held ??= {
++    status: ACCOUNT_STATUS.SIGNED_IN,
++    name: "Dean Stratakos",
++    email: "dean@example.com",
++    provider: "github",
++    pictureUrl: DEAN_AVATAR_DATA_URL,
++  };
++  return held;
++}
+diff --git a/apps/desktop/src/renderer/shots/board.ts b/apps/desktop/src/renderer/shots/board.ts
+new file mode 100644
+index 00000000..b02b9acd
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/board.ts
+@@ -0,0 +1,145 @@
++/**
++ * board.ts -- shot "A side panel for the board, the code, and the transcript": the side panel full screen on the Board tab, over the sidebar folded away, holding Luke's drawing of the invite flow.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. The drawing is in
++ * the vocabulary Luke's `draw_on_board` call sends, not yet on the board, so
++ * the canvas converts it with Excalidraw's own converter exactly as it does
++ * a drawing of his, and it keeps his grid (`brain-host/planning.ts`): boxes
++ * 80px tall and 12px a character, 140px between boxes an arrow with a label
++ * joins, a titled zone with 40px inside its edges, and his palette: blue for
++ * what exists, green for what the plan adds, red for what fails, yellow for
++ * a decision, violet for a service outside the codebase. The canvas fits it
++ * again once the window has taken its capture size (`layout.boardRefit`).
++ */
++
++import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
++import type { DrawingElement } from "@sidecar/hosted/board-wire";
++import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
++import type { ShotSpec } from "./shot-spec";
++import { shotOpenPlan } from "./world";
++
++const PALETTE = {
++  EXISTS: "#a5d8ff",
++  ADDS: "#b2f2bb",
++  FAILS: "#ffc9c9",
++  DECIDES: "#fff3bf",
++  OUTSIDE: "#d0bfff",
++} as const;
++
++const { RECTANGLE, ELLIPSE, DIAMOND, TEXT, ARROW } = BOARD_ELEMENT_TYPE;
++
++/** The invite flow, from the member who sends it to the teammate who joins or is turned away. */
++const INVITE_FLOW: readonly DrawingElement[] = [
++  { type: TEXT, id: "title", x: 0, y: -150, text: "Inviting a teammate", fontSize: 28 },
++  {
++    type: DRAWING_ZONE,
++    id: "service",
++    x: 260,
++    y: -80,
++    width: 340,
++    height: 440,
++    title: "Invites service",
++  },
++  {
++    type: RECTANGLE,
++    id: "member",
++    x: 0,
++    y: 0,
++    width: 180,
++    label: "Member",
++    backgroundColor: PALETTE.EXISTS,
++  },
++  {
++    type: RECTANGLE,
++    id: "invites",
++    x: 320,
++    y: 0,
++    width: 220,
++    label: "POST /invites",
++    backgroundColor: PALETTE.ADDS,
++  },
++  {
++    type: ELLIPSE,
++    id: "email",
++    x: 680,
++    y: -10,
++    width: 240,
++    height: 100,
++    label: "Invite email",
++    backgroundColor: PALETTE.OUTSIDE,
++  },
++  {
++    type: RECTANGLE,
++    id: "accept",
++    x: 1080,
++    y: 0,
++    width: 260,
++    label: "GET /invites/:token",
++    backgroundColor: PALETTE.ADDS,
++  },
++  {
++    type: RECTANGLE,
++    id: "pending",
++    x: 300,
++    y: 240,
++    width: 260,
++    label: "memberships · pending",
++    backgroundColor: PALETTE.EXISTS,
++  },
++  {
++    type: RECTANGLE,
++    id: "joined",
++    x: 700,
++    y: 240,
++    width: 220,
++    label: "Joins workspace",
++    backgroundColor: PALETTE.ADDS,
++  },
++  {
++    type: DIAMOND,
++    id: "valid",
++    x: 1070,
++    y: 200,
++    width: 280,
++    height: 160,
++    label: "Link still valid?",
++    backgroundColor: PALETTE.DECIDES,
++  },
++  {
++    type: RECTANGLE,
++    id: "expiry",
++    x: 660,
++    y: 480,
++    width: 280,
++    label: "Lasts 14 days",
++    backgroundColor: PALETTE.ADDS,
++  },
++  {
++    type: RECTANGLE,
++    id: "invalid",
++    x: 1020,
++    y: 480,
++    width: 380,
++    label: "This invite is no longer valid",
++    backgroundColor: PALETTE.FAILS,
++  },
++  { type: ARROW, id: "sends", from: "member", to: "invites", label: "by email" },
++  { type: ARROW, id: "mails", from: "invites", to: "email", label: "Postmark" },
++  { type: ARROW, id: "opens", from: "email", to: "accept", label: "opens" },
++  { type: ARROW, id: "inserts", from: "invites", to: "pending", label: "inserts" },
++  { type: ARROW, id: "checks", from: "accept", to: "valid" },
++  { type: ARROW, id: "yes", from: "valid", to: "joined", label: "yes" },
++  { type: ARROW, id: "activates", from: "joined", to: "pending", label: "activates" },
++  { type: ARROW, id: "no", from: "valid", to: "invalid", label: "no" },
++  { type: ARROW, id: "bounds", from: "expiry", to: "valid" },
++];
++
++export function boardShot(): ShotSpec {
++  return {
++    planning: shotOpenPlan({
++      board: { elements: [], appliedDrawing: 0, drawing: { number: 1, elements: INVITE_FLOW } },
++    }),
++    sidePanel: { open: true, tab: SIDE_PANEL_TAB.BOARD, width: SIDE_PANEL_WIDTH.DEFAULT },
++    layout: { sidebarCollapsed: true, sidePanelFullScreen: true, boardRefit: true },
++  };
++}
+diff --git a/apps/desktop/src/renderer/shots/clock.ts b/apps/desktop/src/renderer/shots/clock.ts
+new file mode 100644
+index 00000000..679364db
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/clock.ts
+@@ -0,0 +1,31 @@
++/**
++ * clock.ts -- the shot profiles' one clock: every canned timestamp is counted back from the moment this module loaded.
++ *
++ * Throwaway: the 0.8.0 changelog screenshots' staging, never committed. Imports
++ * nothing, so it can be read by any shot module at load without a cycle.
++ */
++
++/** The launch, as the shots count from it. */
++export const LAUNCHED_AT = Date.now();
++
++const MINUTE_MS = 60_000;
++
++/** Epoch milliseconds `minutes` before launch. */
++export function ago(minutes: number): number {
++  return LAUNCHED_AT - Math.round(minutes * MINUTE_MS);
++}
++
++/** Epoch milliseconds `hours` before launch. */
++export function hoursAgo(hours: number): number {
++  return ago(hours * 60);
++}
++
++/** Epoch milliseconds `days` before launch. */
++export function daysAgo(days: number): number {
++  return ago(days * 24 * 60);
++}
++
++/** Epoch milliseconds `seconds` before launch. */
++export function secondsAgo(seconds: number): number {
++  return LAUNCHED_AT - Math.round(seconds * 1000);
++}
+diff --git a/apps/desktop/src/renderer/shots/dean-avatar.ts b/apps/desktop/src/renderer/shots/dean-avatar.ts
+new file mode 100644
+index 00000000..05eb3f68
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/dean-avatar.ts
+@@ -0,0 +1,7 @@
++/**
++ * dean-avatar.ts -- generated: Dean Stratakos's GitHub photo (160px JPEG) as a data URL, for the shot profiles' signed-in account.
++ *
++ * Regenerate with: base64 -w0 avatar.jpg. Throwaway: never committed.
++ */
++export const DEAN_AVATAR_DATA_URL =
++  "data:image/jpeg;base64,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";
+diff --git a/apps/desktop/src/renderer/shots/home.ts b/apps/desktop/src/renderer/shots/home.ts
+new file mode 100644
+index 00000000..d334732e
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/home.ts
+@@ -0,0 +1,22 @@
++/**
++ * home.ts -- shot "A new home for your plans": the new-plan composer beside the sidebar of plans, newest first, one plan's right-click menu held open.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. No plan is open, so
++ * the work column is the composer ("What are we planning?") on the folder of
++ * the newest plan. The sidebar lists acme's seven plans, each under its
++ * folder, Dean's account row at its foot. "Webhook retries", not the open
++ * plan, has its menu open where a right-click left it: Rename, Reveal in
++ * Finder, Change folder, and Delete plan.
++ */
++
++import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
++import type { ShotSpec } from "./shot-spec";
++import { SHOT_ID, shotPlanList } from "./world";
++
++export function homeShot(): ShotSpec {
++  return {
++    planning: shotPlanList(),
++    sidePanel: { open: false, tab: SIDE_PANEL_TAB.BOARD, width: SIDE_PANEL_WIDTH.DEFAULT },
++    layout: { planMenuFor: SHOT_ID.WEBHOOKS },
++  };
++}
+diff --git a/apps/desktop/src/renderer/shots/shot-profiles.ts b/apps/desktop/src/renderer/shots/shot-profiles.ts
+new file mode 100644
+index 00000000..e3e25993
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/shot-profiles.ts
+@@ -0,0 +1,45 @@
++/**
++ * shot-profiles.ts -- the registry: which shot each `--profile shot-*` launch stages, built once on first use.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. Only a fixture run
++ * stages a shot. Each builder lives in a file of its own and is called
++ * lazily, the first time its shot is asked for, so nothing here is caught in
++ * an import cycle; the spec built is kept, so every reader is handed the
++ * same objects render after render.
++ */
++
++import { RUN_PROFILE } from "#shared/messages/app-state";
++import { appStateNow } from "../use-app-state";
++import { boardShot } from "./board";
++import { homeShot } from "./home";
++import type { ShotSpec } from "./shot-spec";
++import { teammateShot } from "./teammate";
++
++/** Each shot's builder, by its profile. */
++const BUILDERS: ReadonlyMap<string, () => ShotSpec> = new Map([
++  [RUN_PROFILE.SHOT_HOME, homeShot],
++  [RUN_PROFILE.SHOT_BOARD, boardShot],
++  [RUN_PROFILE.SHOT_TEAMMATE, teammateShot],
++]);
++
++/** Each shot as built, by its profile. */
++const built = new Map<string, ShotSpec>();
++
++/** The shot a run stages: one of the shot profiles in a fixture run, else none. */
++export function shotSpec(
++  run: { readonly fixtureMode: boolean; readonly profile: string } | undefined,
++): ShotSpec | undefined {
++  if (run === undefined || !run.fixtureMode) return undefined;
++  const build = BUILDERS.get(run.profile);
++  if (build === undefined) return undefined;
++  const held = built.get(run.profile);
++  if (held !== undefined) return held;
++  const spec = build();
++  built.set(run.profile, spec);
++  return spec;
++}
++
++/** The shot this window stages, read from the state as it stands; none before the state has arrived. */
++export function currentShot(): ShotSpec | undefined {
++  return shotSpec(appStateNow()?.run);
++}
+diff --git a/apps/desktop/src/renderer/shots/shot-spec.ts b/apps/desktop/src/renderer/shots/shot-spec.ts
+new file mode 100644
+index 00000000..ad20164f
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/shot-spec.ts
+@@ -0,0 +1,34 @@
++/**
++ * shot-spec.ts -- what one 0.8.0 changelog shot stages: the plans it draws, the side panel and call it opens on, and its layout.
++ *
++ * Throwaway: the 0.8.0 changelog screenshots' staging, applied on a Mac to
++ * the release commit and never committed. Types only, so every shot module
++ * and every hook into the app can import it without an evaluation-order cycle.
++ */
++
++import type { PlanningView } from "@sidecar/hosted/planning-view";
++import type { VoiceView } from "#shared/messages/voice-view";
++import type { SidePanelState } from "../planning/use-side-panel";
++
++/** The window's layout as the shot opens on it, each part staged once what it needs is drawn. */
++export interface ShotLayout {
++  /** Folds the sidebar away. */
++  readonly sidebarCollapsed?: boolean;
++  /** The side panel fills the window over the plan's document. */
++  readonly sidePanelFullScreen?: boolean;
++  /** The sidebar plan whose right-click menu stands open. */
++  readonly planMenuFor?: string;
++  /** Fits the board to the canvas again once the window has taken its capture size. */
++  readonly boardRefit?: boolean;
++}
++
++/** One shot: everything it draws in place of the fixture's, and how it is laid out. */
++export interface ShotSpec {
++  /** The plans the Plans tab draws, its open one included. */
++  readonly planning: PlanningView;
++  /** The side panel the open plan starts with; referentially stable, as the spec is built once. */
++  readonly sidePanel: SidePanelState;
++  /** The call standing on the open plan, as the voice window would report it; none where the shot is not about a call. */
++  readonly call?: Pick<VoiceView, "voiceStatus" | "callPlanId" | "callTranscript">;
++  readonly layout?: ShotLayout;
++}
+diff --git a/apps/desktop/src/renderer/shots/teammate.ts b/apps/desktop/src/renderer/shots/teammate.ts
+new file mode 100644
+index 00000000..50953d5a
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/teammate.ts
+@@ -0,0 +1,57 @@
++/**
++ * teammate.ts -- shot "Luke as a planning teammate": the side panel's Transcript tab, yesterday's call above today's live one, which Luke opens on what yesterday left open and where he reports a background worker's result at a pause.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. Yesterday's call is
++ * on record (`world.ts`); today's is the standing call as the voice window
++ * reports it, so the tab draws it live under "Today". The panel is at its
++ * widest beside the plan's document, which the notetaker is writing as the
++ * call goes. Captured at zoom 2 and cropped to the panel.
++ */
++
++import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
++import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../planning/use-side-panel";
++import type { ShotSpec } from "./shot-spec";
++import { SHOT_ID, shotOpenPlan } from "./world";
++
++const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
++
++/** Today's call so far, as the voice window reports it. */
++const TODAY: readonly (readonly [typeof USER | typeof ASSISTANT, string])[] = [
++  [
++    ASSISTANT,
++    "Last time we settled that an invite is a pending membership any member can send. " +
++      "Where did you land on expiry?",
++  ],
++  [USER, "Fourteen days. People go on holiday."],
++  [
++    ASSISTANT,
++    "Fourteen it is. I've asked a worker to check how relay decides who's a member while " +
++      "we talk. Who can withdraw an invite?",
++  ],
++  [USER, "Whoever sent it, or any admin."],
++  [
++    ASSISTANT,
++    "Got it, the sender or any admin. And the check came back: access counts every " +
++      "membership row, so a pending invite would already let someone in. I've added " +
++      "counting only active memberships to the plan.",
++  ],
++];
++
++export function teammateShot(): ShotSpec {
++  return {
++    planning: shotOpenPlan({ activity: { notes: true } }),
++    sidePanel: { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT, width: SIDE_PANEL_WIDTH.MAX },
++    call: {
++      voiceStatus: LIVE_STATUS.LISTENING,
++      callPlanId: SHOT_ID.PLAN,
++      callTranscript: {
++        voiceSessionId: SHOT_ID.TODAY_CALL,
++        lines: TODAY.map(([speaker, words], index) => ({
++          rowId: `today-${index}`,
++          speaker,
++          words,
++        })),
++      },
++    },
++  };
++}
+diff --git a/apps/desktop/src/renderer/shots/use-shot-staging.ts b/apps/desktop/src/renderer/shots/use-shot-staging.ts
+new file mode 100644
+index 00000000..f0bb548f
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/use-shot-staging.ts
+@@ -0,0 +1,76 @@
++/**
++ * use-shot-staging.ts -- the one fixture-only effect that lays a 0.8.0 shot's window out: the sidebar's fold, the side panel full screen, and the board's refit, each once, the first render it can be.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. Called from `App`
++ * with the Plans tab and the sidebar once the state has arrived, which is
++ * when the sidebar's fold becomes the fixture run's own. The plan menu a shot
++ * holds open is opened by the sidebar row itself (`desktop/plan-actions.tsx`).
++ */
++
++import { useEffect, useRef } from "react";
++import type { SidebarCollapse } from "../desktop/sidebar-collapse";
++import { DOCUMENT_REGION } from "../planning/planning-model";
++import type { PlansControl } from "../planning/use-plans-tab";
++import { currentShot } from "./shot-profiles";
++
++interface ShotStageContext {
++  readonly plans: PlansControl;
++  readonly sidebar: SidebarCollapse;
++}
++
++/** One staging step, run once, the first render it is ready on. */
++interface ShotStep {
++  readonly key: string;
++  readonly ready: (context: ShotStageContext) => boolean;
++  readonly run: (context: ShotStageContext) => void;
++}
++
++/** The steps the shot's layout asks for, in the order they run. */
++function layoutSteps(): ShotStep[] {
++  const layout = currentShot()?.layout ?? {};
++  const steps: ShotStep[] = [];
++  if (layout.boardRefit === true) {
++    steps.push({
++      key: "board-refit",
++      ready: () => true,
++      run: () => {
++        document.documentElement.dataset.shotBoardRefit = "true";
++      },
++    });
++  }
++  if (layout.sidebarCollapsed !== undefined) {
++    const collapsed = layout.sidebarCollapsed;
++    steps.push({
++      key: "sidebar",
++      ready: () => true,
++      run: ({ sidebar }) => {
++        if (sidebar.collapsed !== collapsed) sidebar.onToggle();
++      },
++    });
++  }
++  if (layout.sidePanelFullScreen === true) {
++    steps.push({
++      key: "full-screen",
++      ready: ({ plans }) => plans.region.kind === DOCUMENT_REGION.READY && plans.sidePanel.open,
++      run: ({ plans }) => {
++        if (!plans.sidePanel.fullScreen) plans.sidePanel.onToggleFullScreen();
++      },
++    });
++  }
++  return steps;
++}
++
++/** Stages the shot this run is for, if any; `known` once the state has arrived. */
++export function useShotStaging(context: ShotStageContext, known: boolean): void {
++  const done = useRef(new Set<string>());
++  const latest = useRef(context);
++  latest.current = context;
++  useEffect(() => {
++    if (!known || currentShot() === undefined) return;
++    for (const step of layoutSteps()) {
++      if (done.current.has(step.key) || !step.ready(latest.current)) continue;
++      done.current.add(step.key);
++      step.run(latest.current);
++    }
++  });
++}
+diff --git a/apps/desktop/src/renderer/shots/world.ts b/apps/desktop/src/renderer/shots/world.ts
+new file mode 100644
+index 00000000..2a3e0b46
+--- /dev/null
++++ b/apps/desktop/src/renderer/shots/world.ts
+@@ -0,0 +1,244 @@
++/**
++ * world.ts -- the 0.8.0 shots' shared world: acme's plans in their folders, the "Teammate invitations" plan as the notetaker has written it, and yesterday's call about it.
++ *
++ * Throwaway: the 0.8.0 changelog shots, never committed. 0.8.0 plans against
++ * a folder on this Mac rather than a GitHub repository, so each plan points
++ * at acme's checkout in `~/code`. Every time is counted back from launch
++ * (`clock.ts`), so nothing draws a 1969 date.
++ */
++
++import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
++import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
++import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
++import {
++  type PlanTranscript,
++  TRANSCRIPT_PART_TYPE,
++  type TranscriptMessage,
++} from "@sidecar/hosted/transcript-wire";
++import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
++import { ago, daysAgo, hoursAgo, LAUNCHED_AT } from "./clock";
++
++/** The ids every shot agrees on. */
++export const SHOT_ID = {
++  PLAN: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
++  WEBHOOKS: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
++  BILLING: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
++  ONBOARDING: "3c9d5f7b-1e4a-4b62-8d8a-4f5a6b7c8d93",
++  AUDIT: "4d0e6a8c-2f5b-4c73-9e9b-5a6b7c8d9ea4",
++  INVOICE: "5e1f7b9d-3a6c-4d84-8fac-6b7c8d9eafb5",
++  DARK_MODE: "6f2a8c0e-4b7d-4e95-9abd-7c8d9eafb0c6",
++  YESTERDAY_CALL: "7a3b9d1f-5c8e-4fa6-8bce-8d9eafb0c1d7",
++  TODAY_CALL: "8b4c0e2a-6d9f-4ab7-9cdf-9eafb0c1d2e8",
++} as const;
++
++/** acme's checkouts on Dean's Mac. */
++const FOLDER = {
++  RELAY: "/Users/dean/code/relay",
++  LEDGER: "/Users/dean/code/ledger",
++  WEB: "/Users/dean/code/web",
++} as const;
++
++/** The plans, newest edited first, as the sidebar lists them. */
++function planRows(): readonly (PlanSummary & { readonly folder: string })[] {
++  return [
++    {
++      id: SHOT_ID.PLAN,
++      name: "Teammate invitations",
++      createdAt: daysAgo(1),
++      updatedAt: ago(4),
++      folder: FOLDER.RELAY,
++    },
++    {
++      id: SHOT_ID.WEBHOOKS,
++      name: "Webhook retries",
++      createdAt: daysAgo(2),
++      updatedAt: ago(26),
++      folder: FOLDER.RELAY,
++    },
++    {
++      id: SHOT_ID.BILLING,
++      name: "Usage-based billing",
++      createdAt: daysAgo(4),
++      updatedAt: hoursAgo(3),
++      folder: FOLDER.LEDGER,
++    },
++    {
++      id: SHOT_ID.ONBOARDING,
++      name: "Onboarding checklist",
++      createdAt: daysAgo(3),
++      updatedAt: hoursAgo(20),
++      folder: FOLDER.WEB,
++    },
++    {
++      id: SHOT_ID.AUDIT,
++      name: "Audit log export",
++      createdAt: daysAgo(5),
++      updatedAt: daysAgo(2),
++      folder: FOLDER.RELAY,
++    },
++    {
++      id: SHOT_ID.INVOICE,
++      name: "Invoice PDF redesign",
++      createdAt: daysAgo(6),
++      updatedAt: daysAgo(3),
++      folder: FOLDER.LEDGER,
++    },
++    {
++      id: SHOT_ID.DARK_MODE,
++      name: "Dark mode for the dashboard",
++      createdAt: daysAgo(8),
++      updatedAt: daysAgo(4),
++      folder: FOLDER.WEB,
++    },
++  ];
++}
++
++/**
++ * The plan as the notetaker has it after today's call settled the link's
++ * life: the goal, three rules with their examples, the change map, and the
++ * decisions, with one question still open.
++ */
++const PLAN_FIELDS: PlanFields = {
++  ...EMPTY_PLAN_FIELDS,
++  goal: {
++    problem:
++      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
++      "members wait days on an admin to bring a teammate in.",
++    outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
++  },
++  scope: {
++    included: "Inviting by email, accepting the link, and withdrawing an invite.",
++    excluded: "Bulk invites and invite links shared without an email.",
++    constraints: null,
++  },
++  rules: [
++    {
++      statement: "Any member may invite by email.",
++      examples: [
++        {
++          given: "Jordan, a member, invites sam@acme.dev",
++          when: "Sam opens the link",
++          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract.
++          then: "Sam joins the workspace as a member", // oxlint-disable-line unicorn/no-thenable
++        },
++      ],
++    },
++    {
++      statement: "An invite link lasts 14 days.",
++      examples: [
++        {
++          given: "An invite sent 15 days ago",
++          when: "Sam opens its link",
++          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract.
++          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable
++        },
++      ],
++    },
++    {
++      statement: "The sender or any admin may withdraw an invite.",
++      examples: [
++        {
++          given: "Dana, an admin, withdraws Jordan's invite",
++          when: "Sam opens its link",
++          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract.
++          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable
++        },
++      ],
++    },
++  ],
++  implementation: {
++    ...EMPTY_PLAN_FIELDS.implementation,
++    changeMap:
++      "- `src/db/schema/memberships.ts`: a `pending` state and an `expiresAt`.\n" +
++      "- `src/routes/invites.ts`: new, `POST /invites` and `GET /invites/:token`.\n" +
++      "- `src/members/access.ts`: count only `state = active` memberships.\n" +
++      "- `src/mail/templates/invite.tsx`: new, the invite email, sent through Postmark.",
++  },
++  decisions:
++    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
++    "invites and members alike. Rejected: a separate `invitations` table.",
++  openQuestions: ["Should an admin see invites a member sent before they are accepted?"],
++};
++
++/** The "Teammate invitations" plan, open. */
++export function shotPlan(): Plan {
++  return {
++    id: SHOT_ID.PLAN,
++    name: "Teammate invitations",
++    createdAt: daysAgo(1),
++    updatedAt: ago(4),
++    document: {
++      body: planBody({ name: "Teammate invitations" }, PLAN_FIELDS),
++      assumptions: [
++        { text: "Invites reuse memberships with a pending state." },
++        { text: "Postmark already sends relay's mail." },
++      ],
++    },
++  };
++}
++
++/** The plans and their folders, none open: the window's home. */
++export function shotPlanList(): PlanningView {
++  const rows = planRows();
++  return {
++    plans: rows.map(({ folder: _folder, ...plan }) => plan),
++    listStatus: PLANNING_READ.READY,
++    document: { status: PLANNING_READ.IDLE },
++    folders: Object.fromEntries(rows.map((row) => [row.id, row.folder])),
++  };
++}
++
++const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
++
++/** Lines as the record answers them: each a message named by its place on its call. */
++function messages(
++  lines: readonly (readonly [typeof USER | typeof ASSISTANT, string])[],
++): TranscriptMessage[] {
++  return lines.map(([role, text], index) => ({
++    id: String(index),
++    role,
++    parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
++  }));
++}
++
++/** Yesterday at 4:20 PM, local time, whenever the capture runs: the call reads "Yesterday, 4:20 PM". */
++function yesterdayAfternoon(): number {
++  const day = new Date(LAUNCHED_AT);
++  day.setDate(day.getDate() - 1);
++  day.setHours(16, 20, 0, 0);
++  return day.getTime();
++}
++
++/** What was said on yesterday's call about the plan, as the record answers it. */
++export function yesterdayTranscript(): PlanTranscript {
++  return {
++    calls: [
++      {
++        id: SHOT_ID.YESTERDAY_CALL,
++        startedAt: yesterdayAfternoon(),
++        messages: messages([
++          [USER, "Any member should be able to invite a teammate by email, not just admins."],
++          [
++            ASSISTANT,
++            "So today an admin creates the account by hand? I'd make an invite a pending " +
++              "membership, so withdrawing one works like removing a member.",
++          ],
++          [USER, "Yes. And the link should expire. Seven days, maybe fourteen."],
++          [ASSISTANT, "Let's leave that open for now. I've written it down as a question."],
++        ]),
++      },
++    ],
++    earlierOmitted: false,
++  };
++}
++
++/** The plan open, with its transcript read and the plans listed beside it. */
++export function shotOpenPlan(extra: Partial<PlanningView> = {}): PlanningView {
++  return {
++    ...shotPlanList(),
++    activePlanId: SHOT_ID.PLAN,
++    document: { status: PLANNING_READ.READY, plan: shotPlan() },
++    transcript: { status: PLANNING_READ.READY, transcript: yesterdayTranscript() },
++    ...extra,
++  };
++}
+diff --git a/apps/desktop/src/renderer/whiteboard/index.tsx b/apps/desktop/src/renderer/whiteboard/index.tsx
+index f0f03e1c..4bafe898 100644
+--- a/apps/desktop/src/renderer/whiteboard/index.tsx
++++ b/apps/desktop/src/renderer/whiteboard/index.tsx
+@@ -319,6 +319,22 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
+     props.onScene(elements, applied);
+   }
+ 
++  // Throwaway: a changelog shot fits the board again once the window has
++  // taken its capture size, or the panel has grown full screen, either of
++  // which can land after the board first fitted (`renderer/shots/`,
++  // `layout.boardRefit`).
++  let refit: number | undefined;
++  const refitOnResize = () => {
++    if (document.documentElement.dataset.shotBoardRefit !== "true") return;
++    window.clearTimeout(refit);
++    refit = window.setTimeout(
++      () => api?.scrollToContent(undefined, { fitToContent: true, animate: false }),
++      600,
++    );
++  };
++  const resized = new ResizeObserver(refitOnResize);
++  resized.observe(host);
++
+   root.render(
+     <Excalidraw
+       excalidrawAPI={(ready) => {
+@@ -342,7 +358,10 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
+       api === undefined || !loaded
+         ? undefined
+         : { elements: api.getSceneElements(), appliedDrawing: applied },
+-    unmount: () => root.unmount(),
++    unmount: () => {
++      resized.disconnect();
++      root.unmount();
++    },
+   };
+ }
+ 
+diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
+index 31181b08..fe75237f 100644
+--- a/apps/desktop/src/shared/messages/app-state.ts
++++ b/apps/desktop/src/shared/messages/app-state.ts
+@@ -31,6 +31,12 @@ export const RUN_PROFILE = {
+   PLANNING_BOARD: "planning-board",
+   /** The same plan mid-call, opened at launch on the transcript of what was said on its calls. */
+   PLANNING_TRANSCRIPT: "planning-transcript",
++  /** Throwaway: the 0.8.0 changelog shots (`renderer/shots/`). The composer, the sidebar, and a plan's menu. */
++  SHOT_HOME: "shot-home",
++  /** Throwaway: the side panel full screen on the board Luke drew. */
++  SHOT_BOARD: "shot-board",
++  /** Throwaway: the transcript of yesterday's call and today's live one. */
++  SHOT_TEAMMATE: "shot-teammate",
+ } as const;
+ 
+ export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

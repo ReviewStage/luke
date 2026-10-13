@@ -18,12 +18,21 @@ build=${TMPDIR:-/tmp}/luke-changelog-window-id
 if [[ ! -x $build || $here/window-id.swift -nt $build ]]; then
     xcrun swiftc -O -o "$build" "$here/window-id.swift"
 fi
+park=${TMPDIR:-/tmp}/luke-changelog-park-cursor
+if [[ ! -x $park || $here/park-cursor.swift -nt $park ]]; then
+    xcrun swiftc -O -o "$park" "$here/park-cursor.swift"
+fi
 export LUKE_SHOT_SIZE=${LUKE_SHOT_SIZE:-1600x1000}
 profile=$(mktemp -d /tmp/luke-shot.XXXX)
 # Note that we quit the build and remove its profile on every exit, because a failed capture must not leave either behind.
+# Note that we wait for the build to quit before removing its profile, because it is still writing there as it goes.
 cleanup() {
     pkill -f "user-data-dir=$profile" || true
-    rm -rf "$profile"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        pgrep -f "user-data-dir=$profile" >/dev/null || break
+        sleep 0.5
+    done
+    rm -rf "$profile" || true
 }
 trap cleanup EXIT
 mkdir -p "$(dirname -- "$out")"
@@ -41,6 +50,8 @@ if [[ $id == 0 ]]; then
 fi
 export LUKE_SHOT_ZOOM=${LUKE_SHOT_ZOOM:-1}
 expected=$(awk -v w="${LUKE_SHOT_SIZE%x*}" -v z="$LUKE_SHOT_ZOOM" 'BEGIN { printf "%d", w * z * 2 }')
+# Note that we park the pointer on the menu bar, because a window as large as the screen draws a hover wherever the pointer rests.
+"$park"
 key=0
 for attempt in 1 2 3 4 5; do
     osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $owner) to true" >/dev/null 2>&1 || true
