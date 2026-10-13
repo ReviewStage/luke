@@ -19,7 +19,7 @@
    and a hand-written rule read one vocabulary and no second gray or hairline
    is invented here. Only the tokens something draws with. */
 @theme inline {
-  --color-background: var(--surface-overlay);
+  --color-background: var(--surface-popover);
   --color-foreground: var(--text-primary);
   --color-muted: var(--raised);
   --color-muted-foreground: var(--text-secondary);

@@ -120,6 +120,20 @@ function hover(element: Element | undefined): void {
   act(() => element?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
 }
 
+/**
+ * A computed length with the sheet's tokens resolved, which jsdom leaves as
+ * `var(--…)`: a token the sheet's `:root` names reads as what it names there.
+ */
+function sized(element: Element, property: "width" | "height" | "minHeight"): string {
+  let length = getComputedStyle(element)[property];
+  const root = getComputedStyle(document.documentElement);
+  for (let token = /^var\((--[\w-]+)\)$/u.exec(length); token; ) {
+    length = root.getPropertyValue(token[1] ?? "").trim();
+    token = /^var\((--[\w-]+)\)$/u.exec(length);
+  }
+  return length;
+}
+
 /** The pixel count a computed length names. */
 function px(length: string): number {
   assert.match(length, /^\d+(\.\d+)?px$/u, `${length} is a length in pixels`);
@@ -131,14 +145,15 @@ test("a row is one height whether forty rows match or one: the list is no flex c
   const field = menu.find<HTMLInputElement>("input[role=combobox]");
   const list = menu.find(".plan-compose-menu-list");
   assert.equal(menu.rows().length, 40);
-  const tall = menu.rows().map((row) => getComputedStyle(row));
+  const tall = menu.rows().map((row) => sized(row, "height"));
   type(field, "repo-7");
   assert.equal(menu.rows().length, 1);
-  const [one] = menu.rows().map((row) => getComputedStyle(row));
-  assert.ok(one);
-  assert.equal(px(one.height), px(tall[0]?.height ?? ""));
+  const [row] = menu.rows();
+  assert.ok(row);
+  const one = getComputedStyle(row);
+  assert.equal(px(sized(row, "height")), px(tall[0] ?? ""));
   assert.ok(
-    tall.every((row) => row.height === one.height),
+    tall.every((height) => height === sized(row, "height")),
     "every row is the same height",
   );
   // Note that the height alone is not the whole invariant, because a flex
@@ -155,26 +170,25 @@ test("the check stands in an end slot every row draws at one width, so a name en
   assert.equal(slots.length, ROWS.length);
   for (const slot of slots) {
     assert.ok(slot, "every row has the slot, checked or not");
-    const style = getComputedStyle(slot);
-    assert.equal(style.width, "16px");
-    assert.equal(style.height, "16px");
-    assert.equal(style.flexShrink, "0");
+    assert.equal(sized(slot, "width"), "16px");
+    assert.equal(sized(slot, "height"), "16px");
+    assert.equal(getComputedStyle(slot).flexShrink, "0");
   }
   const checked = menu.rows().find((row) => row.getAttribute("aria-current") === "true");
   const check = checked?.querySelector(".plan-compose-menu-end svg.credential-check");
   assert.ok(check, "the check stands in the chosen row's slot");
-  assert.equal(getComputedStyle(check).width, "16px");
+  assert.equal(sized(check, "width"), "16px");
   const unchecked = menu.rows().find((row) => row.getAttribute("aria-current") !== "true");
   assert.equal(unchecked?.querySelector(".plan-compose-menu-end")?.childElementCount, 0);
 });
 
 test("a search that matches nothing leaves one quiet line at a row's height or more, never a sliver", () => {
   const menu = mount();
-  const rowHeight = px(getComputedStyle(menu.rows()[0] ?? menu.container).height);
+  const rowHeight = px(sized(menu.rows()[0] ?? menu.container, "height"));
   type(menu.find<HTMLInputElement>("input[role=combobox]"), "nothing here");
   const note = menu.find(".plan-compose-menu-note");
   assert.equal(note.textContent, "No repositories match");
-  assert.ok(px(getComputedStyle(note).minHeight) >= rowHeight, "at least a row tall");
+  assert.ok(px(sized(note, "minHeight")) >= rowHeight, "at least a row tall");
   assert.equal(getComputedStyle(note).textAlign, "center");
 });
 
@@ -410,11 +424,11 @@ test("every icon in the menu has a size from the sheet, so none fills the compos
   const icons = [...menu.container.querySelectorAll("svg")];
   assert.ok(icons.length >= ROWS.length + 2, "the search glyph, each row's mark, and the check");
   for (const icon of icons) {
-    const { width, height } = getComputedStyle(icon);
+    const width = sized(icon, "width");
     assert.match(width, /^\d+px$/u, `${icon.getAttribute("class")} has a width`);
-    assert.equal(height, width, `${icon.getAttribute("class")} is square`);
+    assert.equal(sized(icon, "height"), width, `${icon.getAttribute("class")} is square`);
   }
-  assert.equal(getComputedStyle(menu.find(".plan-compose-menu-search svg")).width, "16px");
+  assert.equal(sized(menu.find(".plan-compose-menu-search svg"), "width"), "16px");
 });
 
 test("the list scrolls past a bounded height, inside itself and never sideways, and the foot stands outside it", () => {

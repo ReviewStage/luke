@@ -29,7 +29,6 @@
   --danger: #ff7e7e;
   --danger-text: #ff9b9b;
   --error-text: #ff8c8c;
-  --surface-overlay: #111214;
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -183,7 +182,6 @@
     --danger: #e0383e;
     --danger-text: #b8232a;
     --error-text: #b8232a;
-    --surface-overlay: #fff;
 
     --text-primary: rgba(0, 0, 0, 0.88);
     --text-secondary: rgba(0, 0, 0, 0.6);

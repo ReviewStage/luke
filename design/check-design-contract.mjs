@@ -24,6 +24,32 @@ const MASK_PROPERTY = /^(?:-webkit-)?mask(?:-image)?$/u;
 const RING_REMOVED = /(?<![\w-])outline(?:-style)?\s*:\s*(?:none|0)\s*;(?![ \t]*\/\*\s*no ring:)/u;
 const FOCUS_SELECTOR = /:focus(?:-visible|-within)?\b/u;
 const OUTLINE_DECLARATION = /(?<![\w-])(outline(?:-color|-width|-offset)?)\s*:\s*([^;]+);/gu;
+// Every menu and popover draws its corner, shadow, and ground from the menu
+// tokens in desktop.css's :root, and every menu row its height and corner, so
+// no two of them disagree (docs/DESIGN.md). The command palette is a dialog,
+// cornered and shadowed as one, so only its rows are held to the menu's.
+const MENU_TOKENS = [
+  {
+    classes: [
+      "plan-menu",
+      "plan-compose-menu",
+      "plan-compose-submenu",
+      "file-crumb-tree",
+      "find-bar",
+      "tooltip-card",
+      "agent-context-popover",
+    ],
+    spend: {
+      "border-radius": "var(--menu-radius)",
+      "box-shadow": "var(--menu-shadow)",
+      background: "var(--surface-popover)",
+    },
+  },
+  {
+    classes: ["plan-menu-item", "plan-compose-menu-row", "command-palette-row"],
+    spend: { height: "var(--menu-row-height)", "border-radius": "var(--menu-row-radius)" },
+  },
+];
 
 // A value less every calc that spends a token, which may adjust it by a pixel
 // as a border asks.
@@ -60,6 +86,34 @@ function blockBodies(source, pattern) {
     bodies.push(source.slice(opening + 1, cursor - 1));
   }
   return bodies;
+}
+
+// The menu tokens a rule's selector owes, read off the last compound of each
+// selector in its list: `.anchored-popover > .plan-compose-menu` styles the
+// menu, `.plan-compose-menu-row svg` styles a glyph.
+function menuTokensOwed(selector) {
+  const owed = {};
+  let depth = 0;
+  let start = 0;
+  const selectors = [];
+  for (let cursor = 0; cursor <= selector.length; cursor += 1) {
+    const character = selector[cursor];
+    if (character === "(") depth += 1;
+    if (character === ")") depth -= 1;
+    if (cursor === selector.length || (character === "," && depth === 0)) {
+      selectors.push(selector.slice(start, cursor).trim());
+      start = cursor + 1;
+    }
+  }
+  for (const one of selectors) {
+    const subject = one.split(/\s*[>+~]\s*|\s+/u).at(-1) ?? "";
+    for (const { classes, spend } of MENU_TOKENS) {
+      if (classes.some((name) => new RegExp(`\\.${name}(?![\\w-])`, "u").test(subject))) {
+        Object.assign(owed, spend);
+      }
+    }
+  }
+  return owed;
 }
 
 function keyframeBodies(source) {
@@ -145,6 +199,18 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
     );
     if (FOCUS_SELECTOR.test(bare) && offTokens) {
       failures.push(`${name}: ${oneLine} draws a focus ring off the --focus-ring tokens`);
+    }
+
+    const owed = menuTokensOwed(bare);
+    for (const declaration of body.replace(/\/\*[\s\S]*?\*\//gu, "").split(";")) {
+      const colon = declaration.indexOf(":");
+      const property = declaration.slice(0, colon).trim();
+      const token = owed[property];
+      if (colon < 0 || token === undefined) continue;
+      const value = declaration.slice(colon + 1).trim();
+      if (value !== token) {
+        failures.push(`${name}: ${bare} spends ${value} for its ${property}; use ${token}`);
+      }
     }
 
     if (SPACED_SHEETS.has(name)) {
