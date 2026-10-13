@@ -17,7 +17,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { UnparsedWireValue } from "../../core.js";
+import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
@@ -31,6 +31,7 @@ import {
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
+import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -250,6 +251,12 @@ export interface CoderHost {
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
+  /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
+  showPage(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, SqlClient.SqlClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -549,6 +556,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+      ),
+
+    showPage: (admitted, input, sandbox) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return showPageRejected(found.failure);
+        const binding = {
+          userId: admitted.target.userId,
+          planId: found.success.planId,
+          sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
+        };
+        return yield* runShowPage(binding, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
       ),
 
     title: (admitted) =>

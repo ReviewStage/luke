@@ -10,6 +10,7 @@ import { type ConversationTarget, storeWriter } from "@sidecar/database/models/w
 import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { TURN_ENDING } from "@sidecar/hosted/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -225,6 +226,7 @@ const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>
   [READ_CODING_AGENT_TOOL.name, { agentId: AGENT_ID }],
   [MESSAGE_CODING_AGENT_TOOL.name, { agentId: AGENT_ID, text: "Also add tests." }],
   [START_CODING_AGENT_TOOL.name, { task: "Fix the invite email." }],
+  [SHOW_PAGE_TOOL_NAME, { title: "Invite funnel", html: "<!doctype html><p>Funnel</p>" }],
 ]);
 
 /** A part as a reader of the tab takes it in: its kind, and its words or its call's kind, subject, state, and output. */
@@ -341,6 +343,29 @@ test("a file put on screen reads as its path and lines, and a long output is cut
   assert.ok(ran?.type === PLAN_WORK_PART.TOOL);
   assert.equal(ran.output?.length, PLAN_WORK_BOUNDS.TEXT_CHARS);
   assert.ok(ran.output?.endsWith("x…"));
+});
+
+test("a page shown reads as its title, and its call carries no HTML to the Mac", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_PAGE_TOOL_NAME,
+          input: { title: "Invite funnel", html: "<!doctype html><p>secret-looking page body</p>" },
+          output: { status: "accepted", page: { id: "page-1", version: 1 } },
+        },
+      ]),
+    ],
+    standing,
+  );
+
+  const [shown] = (await worked(target, standing)).parts;
+  assert.ok(shown?.type === PLAN_WORK_PART.TOOL);
+  assert.deepEqual([shown.tool, shown.subject], [PLAN_WORK_TOOL.SHOW_PAGE, "Invite funnel"]);
+  assert.ok(!shown.input.includes("page body"));
 });
 
 test("a worker handed a task longer than the bound carries it cut inside its input, so the input still reads as the message, marked where it was cut", async () => {

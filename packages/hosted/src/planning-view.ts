@@ -150,6 +150,7 @@ export const PLAN_WORK_TOOL = {
   MESSAGE_AGENT: "message-agent",
   START_AGENT: "start-agent",
   END_CALL: "end-call",
+  SHOW_PAGE: "show-page",
   OTHER: "other",
 } as const;
 

@@ -1,7 +1,7 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "../server/core.js";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../server/core.js";
 import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
 import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
 import { turnServers } from "../server/hosted/agent-runtime/servers.js";
@@ -9,6 +9,7 @@ import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
+import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
@@ -18,6 +19,7 @@ import {
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import { integrationAccessToken } from "../server/hosted/integration-connection.js";
+import { showPageRejected } from "../server/hosted/page-tool.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -122,6 +124,22 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/** One `show_page` call run under the agent's session, its path read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+export function runShowPageTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+): Promise<WireRecord> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
+      return yield* host.showPage(admitted.success, input, sandbox);
     }),
   );
 }

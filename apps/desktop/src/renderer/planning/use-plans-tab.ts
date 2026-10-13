@@ -360,6 +360,9 @@ interface PlanAsk {
 /** No repository pin given here and still waiting on main's view. */
 const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 
+/** A plan with no page, the same array every render, so the arrivals read no change in it. */
+const NO_PAGES: NonNullable<PlanningView["pages"]> = [];
+
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
@@ -934,6 +937,7 @@ export function usePlansTab(input: {
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
     code: live ? (planning.shownCode ?? []) : undefined,
+    pages: live ? (planning.pages ?? NO_PAGES) : undefined,
     panel: sidePanel,
   });
   // An agent that ended unseen marks its tab unread as an arrival does; main

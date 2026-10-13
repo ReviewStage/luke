@@ -1,6 +1,7 @@
 import type { StoredMessageRecord, StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -75,6 +76,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
   [START_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.START_AGENT],
   [END_CALL_TOOL.name, PLAN_WORK_TOOL.END_CALL],
+  [SHOW_PAGE_TOOL_NAME, PLAN_WORK_TOOL.SHOW_PAGE],
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
@@ -90,6 +92,7 @@ const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
 const isText = Schema.is(Schema.String);
 const isSkillInput = Schema.is(EVE_SKILL_TOOL.INPUT);
+const isPageCall = Schema.is(Schema.Struct({ title: Schema.String }));
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -152,6 +155,7 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
   if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
   if (tool === PLAN_WORK_TOOL.START_AGENT && isAgentStartInput(input)) return input.task;
+  if (tool === PLAN_WORK_TOOL.SHOW_PAGE && isPageCall(input)) return input.title;
   if (tool === PLAN_WORK_TOOL.SHOW_CODE && isCodeInput(input)) {
     if (input.startLine === undefined) return input.path;
     const end = input.endLine ?? input.startLine;
@@ -226,10 +230,23 @@ type ToolPart = Omit<Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>
 /** A part as the walk below draws it: words, reasoning, or a call with no session joined yet. */
 type WalkedPart = ToolPart | Exclude<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>;
 
+/**
+ * A `show_page` call as the tab reads it: its title and the page it
+ * revises, never the page's HTML, which only the frame drawing the page
+ * reads (`page-tool.ts`).
+ */
+function withoutPageHtml(part: StoredToolPart): StoredToolPart {
+  const { input } = part;
+  if (!(input instanceof Object) || !("html" in input)) return part;
+  const { html: _html, ...rest } = input;
+  return { ...part, input: rest };
+}
+
 /** One tool part as the tab draws it, a worker's state read off the turn's steps. */
-function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolean): ToolPart {
-  const name = storedToolName(part);
+function toolPartOf(stored: StoredToolPart, state: PlanWorkState, answered: boolean): ToolPart {
+  const name = storedToolName(stored);
   const tool = TOOL_OF_NAME.get(name) ?? PLAN_WORK_TOOL.OTHER;
+  const part = tool === PLAN_WORK_TOOL.SHOW_PAGE ? withoutPageHtml(stored) : stored;
   const called = callStateOf(part, state);
   const subject = subjectOf(tool, part);
   const task = taskOf(tool, part);

@@ -19,7 +19,7 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
+import { type PageLine, type PageVersion, SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
@@ -2035,6 +2035,33 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
       assert.equal(last()?.pages, undefined);
     }),
+);
+
+it.effect("a page the planning model showed on the call is listed once its call settles", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const chart: PageLine = {
+        id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+        title: "Invite funnel",
+        version: 1,
+        at: 100,
+      };
+      const { call, last, planning } = yield* subject(service);
+      yield* planning.lifetime;
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.equal(last()?.pages, undefined);
+
+      service.pageLines[INVITES] = [chart];
+      planning.showActivity(
+        activityFrame(INVITES, { planner: { action: SHOW_PAGE_TOOL_NAME }, notes: false }),
+      );
+      planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+      assert.deepEqual(last()?.pages, [chart]);
+    }),
+  ),
 );
 
 it.effect(

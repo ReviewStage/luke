@@ -1,6 +1,7 @@
 import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
+import { SHOW_PAGE_TOOL } from "../server/hosted/page-tool";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
@@ -43,6 +44,14 @@ test("draw_on_board offers exactly operations on the board, with no account or p
     ROOT,
     "draw-on-board-tool-input",
     jsonSchemaOf(DRAW_ON_BOARD_TOOL.inputSchema),
+  );
+});
+
+test("show_page offers a title, the page inline or by its path, and the page it revises, with no account or plan to name", async () => {
+  await settleJsonSchemaGolden(
+    ROOT,
+    "show-page-tool-input",
+    jsonSchemaOf(SHOW_PAGE_TOOL.inputSchema),
   );
 });
 
