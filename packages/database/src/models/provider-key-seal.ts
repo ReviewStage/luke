@@ -21,7 +21,7 @@ import { Redacted, Result } from "effect";
  * must not use.
  *
  * Rotation is a new version at the head of the environment's list: new
- * saves wrap under it, and `scripts/rewrap-provider-keys.ts` moves every
+ * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
  * standing row onto it by unwrapping and rewrapping its data key, never
  * touching the provider key itself. A version stays in the list until no
  * row names it.

@@ -30,7 +30,7 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * than starting forever, as one that never started: eve took the session,
  * and its first turn lands in seconds or not at all. A line that awaits its turn reads as running
  * whatever the newest turn says, because the session took the message and
- * the turn it opens is on its way (`store/message-reads.ts`'s
+ * the turn it opens is on its way (`@sidecar/database/models/message-reads`'s
  * `awaitingLinesOf` is where a line is counted as waiting). A failed turn
  * is also read for why, as one of the wire's fixed words: the sweep's own
  * word for a turn it settled, else the host's refusal sentences where the

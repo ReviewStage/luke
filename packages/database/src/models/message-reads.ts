@@ -63,7 +63,7 @@ import {
  *
  * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` over
  * the ambient client, its statement a Drizzle builder over the tables
- * `db/storage-schema.ts` declares and its row a `Schema` decodes rather than
+ * `schemas/storage.ts` declares and its row a `Schema` decodes rather than
  * trusts. Two things follow from the builder. A projection names its own
  * fields, so a result schema is spelled in the same words the rest of the
  * module is; and the vocabulary a text column holds — a turn's origin and

@@ -5,12 +5,12 @@ import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
 /**
- * plan-revision-schema.ts -- a plan's history, one revision per row.
+ * plan-revision.ts -- a plan's history, one revision per row.
  *
  * One row per revision, each the plan's content as it
  * stood after the revision, under the writer who made it. Saves the same
  * writer makes one after another, on one call or within a few minutes, are
- * one revision that each save moves on (`hosted/plan-revisions.ts`), so a
+ * one revision that each save moves on (`models/plan-revisions.ts`), so a
  * call is about one row rather than one per pause in the speech. The content
  * is the plan's whole text; a rename is not a revision. A plan from before
  * history starts it with the one revision its

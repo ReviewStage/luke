@@ -93,9 +93,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`hosted/board-store.ts`). `/api/plans/{id}/transcript` is what was
+ * winning (`@sidecar/database/models/board-store`). `/api/plans/{id}/transcript` is what was
  * said on the plan's calls, read and never written here
- * (`hosted/transcript-store.ts`). `/api/plans/{id}/work` is what Luke's
+ * (`@sidecar/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
  * planning model wrote and ran on them, a page at a time, and every code he
  * showed, read back from the plan's conversation
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
@@ -110,7 +110,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's, answered with the
- * plan (`hosted/plan-revisions.ts`).
+ * plan (`@sidecar/database/models/plan-revisions`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once

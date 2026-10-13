@@ -1312,7 +1312,7 @@ directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
-one atomic upsert before each upstream call (`server/hosted/quota.ts`).
+one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
 seconds of audio in the row's `dictation_seconds`, beside the voice seconds
 `voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on

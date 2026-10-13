@@ -108,7 +108,7 @@ import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
  * is composed, and refuses to exist over a catalog that fails it.
  *
  * Every statement is a Drizzle builder over the tables
- * `db/storage-schema.ts` declares, yielded as the `Effect` over the ambient
+ * `schemas/storage.ts` declares, yielded as the `Effect` over the ambient
  * `SqlClient` that `packages/database/src/core/drizzle.ts`'s bridge makes it; the transaction is
  * that client's own and the bridge reads it from the running fiber, which is
  * what puts the sequence allocation and the writes that follow it inside the

@@ -8,7 +8,7 @@ import { user } from "./auth.js";
 import { conversations } from "./storage.js";
 
 /**
- * plan-schema.ts -- a named feature plan and its one current document.
+ * plan.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
  * account that started it: its name, whether it is pinned or archived, its
@@ -16,7 +16,7 @@ import { conversations } from "./storage.js";
  * and the journal of the saves coding agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
  * left the row as it stood. What the text held before is kept beside it, in
- * `plan_revision` (`plan-revision-schema.ts`). The text is stored as written,
+ * `plan_revision` (`plan-revision.ts`). The text is stored as written,
  * like the conversation, readable by an operator and kept the developer's
  * own by the account it is keyed by.
  *
