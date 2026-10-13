@@ -18,6 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, onTestFinished, test, vi } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap } from "../app-commands";
@@ -151,6 +152,17 @@ it.effect(
       assert.doesNotMatch(tab.container.textContent ?? "", /Reading/u);
     }),
 );
+
+test("the keyboard's ring on a Show lines row is drawn whole, inside the row, since the row runs the lines' whole width", async () => {
+  const styled = await sheetStyle();
+  watchedRows();
+  const tab = mounted(numberedFile(1_200));
+  await tab.draw({ path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 });
+  const edges = [...tab.container.querySelectorAll<HTMLElement>(".file-tab-edge")];
+
+  assert.equal(edges.length, 2);
+  assert.deepEqual(edges.map((edge) => ringClipping(styled, edge)).filter(Boolean), []);
+});
 
 test("a file opens on the window holding its lit lines, and the windows above and below are read as their rows scroll into view, joined into one run", async () => {
   const rows = watchedRows();

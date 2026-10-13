@@ -22,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { navigationHistory } from "#testing/navigation-history";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
@@ -728,6 +729,24 @@ it.effect(
         yield* closeMenu();
       }
       assert.deepEqual(offered, [true, false, true, false]);
+    }),
+);
+
+it.effect(
+  "the keyboard's ring is drawn whole on every version row, its ⋯, and every row of the sections slid in",
+  () =>
+    Effect.gen(function* () {
+      const styled = yield* Effect.promise(() => sheetStyle());
+      const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
+      const clipped = () =>
+        [...page.querySelectorAll<HTMLElement>(".version-log-track button")]
+          .map((control) => ringClipping(styled, control))
+          .filter(Boolean);
+
+      assert.deepEqual(clipped(), []);
+      yield* openSections(page, "Luke2h2 changes");
+      assert.ok(page.querySelector(".version-section-row"), "the sections stand");
+      assert.deepEqual(clipped(), []);
     }),
 );
 

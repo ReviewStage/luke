@@ -17,7 +17,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { finishAll, installAnimations, MOTION, motion, running } from "#testing/animations";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { selectable, selectedText, sheetStyle } from "#testing/css-rules";
+import { ringClipping, selectable, selectedText, sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
@@ -1037,6 +1037,16 @@ test("every range of the file with a note stands its own card, in the file's ord
     view.container.querySelectorAll(".file-note-words")[1]?.textContent ?? "",
     /now twice/u,
   );
+});
+
+test("the keyboard's ring on a note's fold is drawn whole, inside the fold, since the note's card clips it", async () => {
+  const styled = await sheetStyle();
+  const view = mounted([shownLines("call-guard", 4, 6, "The guard.")], undefined, numberedFile(40));
+  await view.draw(FILE, { startLine: 4, endLine: 6 });
+  const fold = view.container.querySelector<HTMLElement>(".file-note-fold");
+  assert.ok(fold);
+
+  assert.equal(ringClipping(styled, fold), undefined);
 });
 
 test("a note folds to its header, its words cut to one line there, as the tab holds it, and opens again; its link asks for the call's card in the Code tab", async () => {

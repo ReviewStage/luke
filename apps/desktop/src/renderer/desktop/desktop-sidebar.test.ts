@@ -27,7 +27,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { sheetStyle } from "#testing/css-rules";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { navigationHistory } from "#testing/navigation-history";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -283,6 +283,7 @@ beforeEach(() => {
 afterEach(() => {
   unmountAll();
   window.localStorage.clear();
+  delete document.documentElement.dataset.keyboard;
 });
 
 test("the gear is the one press to Settings, beside the account, and marks Settings while it is on show", () => {
@@ -1462,6 +1463,29 @@ test("Pinned's header is drawn as Archived's, led by the Pin action's own glyph"
     pinAction.innerHTML,
   );
   assert.ok(pinned.querySelector(".sidebar-repository-glyph > .settings-chevron"));
+});
+
+test("the keyboard's ring is drawn whole on every control of the plans, and a header rings whole for its fold, at a plan row's height", async () => {
+  const styled = await sheetStyle();
+  const container = mount(DEAN, {
+    plans: withPins([{ plan: "plan-Search", tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 9 }], {
+      plans: [listedPlan("Invites", { pinnedAt: 5 }), onRepository("Search", "acme/relay")],
+      archived: [listedPlan("Old", { archivedAt: 9 })],
+    }),
+  });
+  const controls = [...container.querySelectorAll<HTMLElement>(".sidebar-section button")];
+  const relay = header(container, "relay");
+  const fold = relay.querySelector<HTMLElement>(".sidebar-repository-toggle");
+  const row = container.querySelector<HTMLElement>(".sidebar-plan");
+  assert.ok(fold && row);
+
+  assert.ok(controls.length >= 10, "rows, their Pin and Archive, a pinned tab, and every header");
+  assert.deepEqual(controls.map((control) => ringClipping(styled, control)).filter(Boolean), []);
+  document.documentElement.dataset.keyboard = "true";
+  fold.dataset.focusVisible = "";
+  assert.equal(styled(fold, "outline"), "none");
+  assert.match(styled(relay, "outline") ?? "", /var\(--focus-ring\)/u, "the header wears it");
+  assert.equal(styled(fold, "padding"), styled(row, "padding"));
 });
 
 test("a press folds Pinned for the next launch too, counting its pins, and the open plan and the pinned tab on show still stand under it", () => {

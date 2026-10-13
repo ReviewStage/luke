@@ -9,6 +9,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { sheetStyle, withKeyboardOn } from "#testing/css-rules";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { settingsSearchEntries } from "../settings-search";
@@ -200,6 +201,21 @@ test("recording the talk key says so in place, and Escape keeps the key that was
   assert.deepEqual(stored, []);
   assert.equal(recording(), false);
   assert.deepEqual(caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)), ["⌥", "Space"]);
+});
+
+test("recording from the keyboard wears one ring, the recording field's, not a second around the button holding it", async () => {
+  const styled = await sheetStyle();
+  mountPage();
+  act(() => changeButton().click());
+  const field = changeButton();
+  const ringed = withKeyboardOn(field, () =>
+    [field, ...field.querySelectorAll("*")]
+      .filter((each) => (styled(each, "outline") ?? "").includes("var(--focus-ring)"))
+      .map((each) => each.className),
+  );
+
+  assert.equal(recording(), true);
+  assert.deepEqual(ringed, ["shortcut-state"]);
 });
 
 test("a talk key that would take one of the window's own shortcuts is refused, and says whose it is", async () => {

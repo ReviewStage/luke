@@ -47,6 +47,7 @@ import {
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { installHighlights } from "#testing/find-highlights";
 import {
@@ -455,6 +456,17 @@ test("the panel's tabs hang no pill, their words being enough, while Copy plan's
   const before = copies;
   assert.equal(keydown({ key: "c", code: "KeyC", metaKey: true, shiftKey: true }), true);
   assert.equal(copies, before + 1);
+});
+
+test("the keyboard's ring is drawn whole on every tab of the plan's strip and the panel's, the first and the last included", async () => {
+  const styled = await sheetStyle();
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const tabs = [...page.querySelectorAll<HTMLElement>(".tab-strip button")];
+
+  assert.ok(page.querySelectorAll(".tab-strip").length === 2, "the plan's strip and the panel's");
+  assert.ok(tabs.length >= 4);
+  assert.deepEqual(tabs.map((tab) => ringClipping(styled, tab)).filter(Boolean), []);
 });
 
 test("a panel too narrow for its tabs whole still draws every tab's label, hanging no pill on one whose label shows whole", () => {

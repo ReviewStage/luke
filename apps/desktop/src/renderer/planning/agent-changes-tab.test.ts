@@ -125,6 +125,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  delete document.documentElement.dataset.keyboard;
   document.body.innerHTML = "";
 });
 
@@ -207,6 +208,30 @@ test("the tab reads as it shows and draws the first file's hunks, each row numbe
     kind: ACT_KIND.GITHUB_OPEN,
     payload: { url: `${PULL_REQUEST}/files` },
   });
+});
+
+test("the tree of changed files rings its focused row in the window's ring, drawn inside the row, and in no colour until the keyboard has moved focus", async () => {
+  const style = await sheetStyle();
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([INVITE, LOGO]));
+  const host = tab.container.querySelector<HTMLElement>(".file-tree-host");
+  assert.ok(host, "the tab draws the tree");
+  // Pierre's shadow root reads these from the host it stands in.
+  const ring = () =>
+    ["color", "width", "offset"].map((part) => style(host, `--trees-focus-ring-${part}-override`));
+
+  assert.deepEqual(ring(), [
+    "transparent",
+    "var(--focus-ring-width)",
+    "calc(var(--focus-ring-width) * -1)",
+  ]);
+  document.documentElement.dataset.keyboard = "true";
+  assert.deepEqual(ring(), [
+    "var(--focus-ring)",
+    "var(--focus-ring-width)",
+    "calc(var(--focus-ring-width) * -1)",
+  ]);
 });
 
 test("a diff's lines select and copy as text, both gutters' numbers left out and a blank line kept as one", async () => {

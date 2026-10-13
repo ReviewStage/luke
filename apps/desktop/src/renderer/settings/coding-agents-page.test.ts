@@ -26,6 +26,7 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringInside, sheetStyle } from "#testing/css-rules";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { CodingAgentsPage } from "./coding-agents-page";
@@ -341,6 +342,18 @@ test("arrows and Enter pick from the keyboard, and Escape closes the menu withou
   assert.equal(document.activeElement, chip(page));
   assert.ok(!reachedWindow.includes("Escape"));
   window.removeEventListener("keydown", listen);
+});
+
+test("the keyboard's ring on an effort's segment is drawn inside it, since its trough leaves no room around it", async () => {
+  const styled = await sheetStyle();
+  const page = await mount();
+  const segments = [...page.querySelectorAll<HTMLElement>(".settings-segment")];
+
+  assert.ok(segments.length > 1);
+  assert.deepEqual(
+    segments.filter((segment) => !ringInside(styled, segment)).map((each) => each.textContent),
+    [],
+  );
 });
 
 test("choosing an effort writes the default once and draws what the service kept", async () => {
