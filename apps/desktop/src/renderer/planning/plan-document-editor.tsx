@@ -177,6 +177,14 @@ function typedName(element: HTMLElement): string {
   return (element.textContent ?? "").trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
 }
 
+/** The title's words held to the bound as they are typed, as the name field's `maxLength` holds its own, so no word stands past what is saved. */
+function boundTitle(element: HTMLElement): void {
+  const words = element.textContent ?? "";
+  if (words.length <= PLAN_BOUNDS.MAX_NAME_CHARS) return;
+  element.textContent = words.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS);
+  caretAtEnd(element);
+}
+
 /**
  * The title over the text, edited where it stands. A click puts the caret
  * in it; Return or ↓ saves it and goes into the text at its start; Esc saves
@@ -186,8 +194,9 @@ function typedName(element: HTMLElement): string {
  * as it is left. A title left empty or unchanged renames nothing, as a
  * rename anywhere else does, and one left empty is drawn as the saved name
  * again. Its words are the name's own but while they are typed, so a
- * refused rename that puts the old name back puts it back here too, unless
- * the typing has moved on past the name refused.
+ * refused rename puts the saved name back here and everywhere, unless words
+ * were typed since it was asked for, which are the newest and are kept for
+ * the next pause to ask for again.
  */
 export function EditableTitle({
   name,
@@ -200,7 +209,8 @@ export function EditableTitle({
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: PlanEditing;
-  onRename: (name: string) => void;
+  /** Renames the plan, answering whether the name was taken. */
+  onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
 }): React.JSX.Element {
   const block = useRef<HTMLDivElement>(null);
@@ -215,7 +225,7 @@ export function EditableTitle({
   const saved = useRef(true);
   // Whether words were typed since the last pause saved them.
   const typed = useRef(false);
-  // The name last saved or asked for, which words typed back to rename nothing.
+  // The name last saved or asked for, which words typed back to rename nothing; none while the last asked for was refused.
   const base = useRef(name);
   // The draft this title last drew, which comes back to it as `name` and is not drawn over its own words.
   const echo = useRef<string | undefined>(undefined);
@@ -231,12 +241,23 @@ export function EditableTitle({
     element.textContent = name;
     if (typing) caretAtEnd(element);
   }, [name]);
+  // Note that a refusal is judged by what was typed since the ask, not by
+  // the words, because words typed away and back are a newer edit of their own.
   const rename = (element: HTMLElement) => {
     typed.current = false;
     const next = typedName(element);
     if (next === "" || next === base.current) return;
     base.current = next;
-    doors.current.onRename(next);
+    const asked = stamp.current;
+    doors.current.onRename(next).then((renamed) => {
+      if (renamed) return;
+      if (stamp.current !== asked) {
+        if (base.current === next) base.current = "";
+        return;
+      }
+      if (element === document.activeElement) echo.current = next;
+      doors.current.onDraft(undefined);
+    });
   };
   const save = (element: HTMLElement) => {
     if (saved.current) return;
@@ -302,6 +323,7 @@ export function EditableTitle({
           onInput={(event) => {
             saved.current = false;
             typed.current = true;
+            boundTitle(event.currentTarget);
             const next = typedName(event.currentTarget);
             echo.current = next === "" ? undefined : next;
             onDraft(echo.current);

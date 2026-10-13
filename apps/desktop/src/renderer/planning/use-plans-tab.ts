@@ -256,8 +256,7 @@ export interface PlansControl {
   onRenamePlan: (planId: string, name: string) => Promise<boolean>;
   /**
    * Draws a name being typed for a plan everywhere the plan is named, before
-   * any of it is saved, or none, which draws its saved name again; a refused
-   * rename of the name drawn lets it go too.
+   * any of it is saved, or none, which draws its saved name again.
    */
   onDraftName: (planId: string, name: string | undefined) => void;
   /**
@@ -652,23 +651,17 @@ export function usePlansTab(input: {
     return DELETE_REFUSED;
   };
 
-  // A fixture's plans are renamed nowhere, as they are read from nowhere. A
-  // refusal lets go of the name drawn, and of the draft it was typed as while
-  // no later typing replaced it, so the saved name stands everywhere again.
+  // A fixture's plans are renamed nowhere, as they are read from nowhere.
   const renamePlan = async (planId: string, name: string): Promise<boolean> => {
-    const unnamed = (held: PendingRenames) =>
-      held.get(planId) === name
-        ? new Map([...held].filter(([pending]) => pending !== planId))
-        : held;
-    if (fixture !== undefined) {
-      setDrafts(unnamed);
-      return false;
-    }
+    if (fixture !== undefined) return false;
     setRenames((held) => new Map(held).set(planId, name));
     const renamed = await act(ACT_KIND.PLANNING_RENAME, { planId, name }).catch(() => false);
     if (!renamed) {
-      setRenames(unnamed);
-      setDrafts(unnamed);
+      setRenames((held) =>
+        held.get(planId) === name
+          ? new Map([...held].filter(([pending]) => pending !== planId))
+          : held,
+      );
     }
     return renamed;
   };

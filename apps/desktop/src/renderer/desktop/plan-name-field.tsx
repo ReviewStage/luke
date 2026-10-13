@@ -97,16 +97,18 @@ export function usePlanRename(
     setRefused(undefined);
     setEditing(planId);
   };
-  const end = ({ name }: NameEdit) => {
+  // Answers whether the name asked for was taken; an edit that asks for none has nothing refused.
+  const end = ({ name }: NameEdit): Promise<boolean> => {
     setEditing(undefined);
-    if (planId === undefined || name === undefined) return;
+    if (planId === undefined || name === undefined) return Promise.resolve(true);
     edits.current += 1;
     setRefused(undefined);
     const edit = edits.current;
     const refuse = () => {
       if (edit === edits.current) setRefused(planId);
+      return false;
     };
-    onRename(planId, name).then((renamed) => (renamed ? undefined : refuse()), refuse);
+    return onRename(planId, name).then((renamed) => renamed || refuse(), refuse);
   };
   const shown = planId !== undefined;
   return {

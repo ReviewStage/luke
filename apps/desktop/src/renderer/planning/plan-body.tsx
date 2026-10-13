@@ -330,8 +330,8 @@ export function PlanBody({
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
-  /** Renames the plan, from its title. */
-  onRename?: (name: string) => void;
+  /** Renames the plan, from its title, answering whether the name was taken. */
+  onRename?: (name: string) => Promise<boolean>;
   /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;

@@ -772,24 +772,29 @@ const readRename = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 /**
  * The window as `App` stands it, over the plans hook itself on that plan,
  * keeping each name the service was asked to rename it to and answering
- * the renames in turn with `renames`, the last again once they run out;
- * every other act is refused.
+ * each rename with `answer`, by how many were asked so far; every other act
+ * is refused.
  */
-function NamedWindow({ asked, renames }: { asked: string[]; renames: readonly boolean[] }) {
+function NamedWindow({
+  asked,
+  answer,
+}: {
+  asked: string[];
+  answer: (asks: number) => Promise<boolean>;
+}) {
   const sidebar = useSidebarCollapse(false);
   useAppKeymap(true);
   const answers: ActAnswers = {
-    [ACT_KIND.PLANNING_RENAME]: () =>
-      Promise.resolve(renames[asked.length - 1] ?? renames.at(-1) ?? true),
+    [ACT_KIND.PLANNING_RENAME]: () => answer(asked.length),
   };
   const plans = usePlansTab({
     acts: {
       act: <Kind extends ActKind>(kind: Kind, ...args: unknown[]): Promise<ActResultFor<Kind>> => {
-        const answer = answers[kind];
-        if (answer === undefined) return Promise.reject(new Error("Not answered in this test."));
+        const answered = answers[kind];
+        if (answered === undefined) return Promise.reject(new Error("Not answered in this test."));
         const rename = Option.getOrUndefined(readRename(args[0]));
         if (rename !== undefined) asked.push(rename.name);
-        return answer();
+        return answered();
       },
       tell: ignore,
     },
@@ -821,13 +826,13 @@ function NamedWindow({ asked, renames }: { asked: string[]; renames: readonly bo
   });
 }
 
-/** Opens the window on the named plan under `registry`, answering the renames it asks for the service as `renames` says. */
-function showNamed(registry: AtomRegistry, renames: readonly boolean[]): string[] {
+/** Opens the window on the named plan under `registry`, the service answering its renames with `answer`. */
+function showNamed(registry: AtomRegistry, answer: (asks: number) => Promise<boolean>): string[] {
   installScrollIntoView();
   const asked: string[] = [];
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(onRegistry(registry, createElement(NamedWindow, { asked, renames })));
+    root.render(onRegistry(registry, createElement(NamedWindow, { asked, answer })));
   });
   return asked;
 }
@@ -863,7 +868,7 @@ it.effect(
   "the title's words name the plan on its tab and its sidebar row as they are typed, before anything is saved, and a pause saves them with one rename",
   () =>
     Effect.gen(function* () {
-      const asked = showNamed(yield* registryOnTestClock, [true]);
+      const asked = showNamed(yield* registryOnTestClock, () => Promise.resolve(true));
 
       typeTitle("Teammate");
       typeTitle("Teammate invites");
@@ -892,7 +897,7 @@ it.effect(
   "a rename refused at a pause puts the saved name back on the tab, the sidebar row, and the title, and says so beside the toolbar until a later pause saves",
   () =>
     Effect.gen(function* () {
-      const asked = showNamed(yield* registryOnTestClock, [false, true]);
+      const asked = showNamed(yield* registryOnTestClock, (asks) => Promise.resolve(asks > 1));
 
       typeTitle("Teammate invites");
       yield* TestClock.adjust(PAST_PAUSE);
@@ -909,5 +914,33 @@ it.effect(
       assert.deepEqual(asked, ["Teammate invites", "Team invites"]);
       assert.equal(namedAs().tab, "Team invites");
       assert.equal(note(), undefined, "the refusal no longer says anything of the name drawn");
+    }),
+);
+
+it.effect(
+  "a rename refused after the title was typed away and back keeps the newest words, which the next pause asks for again",
+  () =>
+    Effect.gen(function* () {
+      let refuse: ((renamed: boolean) => void) | undefined;
+      const held = new Promise<boolean>((answer) => {
+        refuse = answer;
+      });
+      const asked = showNamed(yield* registryOnTestClock, (asks) =>
+        asks === 1 ? held : Promise.resolve(true),
+      );
+
+      typeTitle("Teammate invites");
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      typeTitle("Teammate invites!");
+      typeTitle("Teammate invites");
+      yield* Effect.promise(() => act(async () => refuse?.(false)));
+      yield* landed;
+
+      const newest = "Teammate invites";
+      assert.deepEqual(namedAs(), { tab: newest, row: newest, title: newest });
+      yield* TestClock.adjust(PAST_PAUSE);
+      yield* landed;
+      assert.deepEqual(asked, [newest, newest]);
     }),
 );
