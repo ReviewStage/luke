@@ -139,7 +139,6 @@ function sidebarPlan(
       plan,
       current,
       unread: false,
-      repositoryShown: true,
       now: plan.updatedAt,
       onOpen: () => asked.opened.push(plan.id),
     }),
@@ -309,7 +308,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
 
   assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
-  assert.equal(other.textContent, "Billing exportnowacme/billing");
+  assert.equal(other.textContent, "Billing exportnow");
 });
 
 test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin, rename, or repository", () => {
