@@ -2473,6 +2473,54 @@ body:has(.app-stage[data-capture="true"])
   margin: var(--space-4) var(--space-4) 0;
 }
 
+/* A settled item: its row and, beside it, the chevron that unfolds the
+   note and context under it, lit as one row while either is hovered. */
+.inbox-settled {
+  --sidebar-plan-mark: 22px;
+}
+
+.inbox-settled-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+  border-radius: var(--control-radius);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-settled-line:hover {
+  background: var(--raised);
+}
+
+.inbox-settled-line > .plan-summary-row:hover {
+  background: none;
+}
+
+.inbox-settled-more {
+  width: var(--sidebar-plan-mark);
+  flex: none;
+}
+
+.inbox-settled-more .settings-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-settled-more[aria-expanded="true"] .settings-chevron {
+  transform: rotate(90deg);
+}
+
+/* What unfolds starts where the row's words do, past its glyph. */
+.inbox-settled-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--row-inset) var(--space-8)
+    calc(var(--row-inset) + var(--control-glyph) + var(--glyph-gap));
+  font-size: 13px;
+}
+
 .inbox-view-items {
   display: flex;
   min-width: 0;

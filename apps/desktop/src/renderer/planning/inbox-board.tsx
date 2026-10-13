@@ -18,6 +18,7 @@ import {
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import { ChevronRightIcon } from "@sidecar/panel";
 import { CircleCheckIcon, ClockIcon, InboxIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
@@ -93,7 +94,7 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * says so, since answering it messages nobody. What waits stands first,
  * under Waiting; what is settled, answered or taken back by its agent,
  * under Settled, each a row in the plan summary's shape saying what came
- * of it and when. Both headers are the sidebar's own group header
+ * of it and when, the note and the item's context unfolding under it. Both headers are the sidebar's own group header
  * (`sidebar-group-header.tsx`), folding their section and, folded,
  * counting it while hovered; Waiting starts open and is kept folded or
  * open across launches as a sidebar group is, and Settled starts folded,
@@ -845,46 +846,101 @@ function OpenCard({
   );
 }
 
+/** What a settled row's disclosure says, open and shut. */
+const DETAILS = {
+  SHOW: "Show details",
+  HIDE: "Hide details",
+} as const;
+
 /**
  * One item settled, as a row in the summary's own shape: the agent's mark,
- * the item's title with what came of it after, and when at its end, the
- * developer's note, where they wrote one, in the words' hint. A press opens
- * the agent's tab, as the head of a waiting card does, where the transcript
- * holds the item as it was posted.
+ * the item's title with what came of it after, and when at its end. A press
+ * on the row opens the agent's tab, as the head of a waiting card does.
+ * Where the developer wrote a note or the agent gave context, a chevron at
+ * the row's end, beside the row rather than inside it so pressing it opens
+ * nothing, unfolds them under the row: the note as it was written, its
+ * lines kept and selectable, then the item's blocks, muted, a picture among
+ * them read only once unfolded. A row with nothing to unfold keeps the
+ * chevron's room, so the times stand in one column.
  */
 function SettledRow({
   item,
   agent,
   now,
   onOpenAgent,
+  images,
+  onImage,
+  onRetryImage,
+  openLink,
+  code,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
   now: number;
   onOpenAgent: (agentId: string) => void;
+  images: PlanInboxControl["images"];
+  onImage: PlanInboxControl["onImage"];
+  onRetryImage: PlanInboxControl["onRetryImage"];
+  openLink: (url: string) => void;
+  code: InboxCodeDoors;
 }): React.JSX.Element {
+  const [unfolded, setUnfolded] = useState(false);
   const words = settledWords(item);
+  const holds = words.note !== undefined || item.blocks.length > 0;
+  const details = unfolded ? DETAILS.HIDE : DETAILS.SHOW;
   return (
-    <li>
-      <button
-        type="button"
-        className="plan-summary-row"
-        data-item-id={item.id}
-        onClick={() => onOpenAgent(item.agentId)}
-      >
-        <span className="plan-summary-glyph">
-          <AuthorGlyph agent={agent} />
-        </span>
-        {/* Note that the note's hint stands on the words alone, because the time beside them shows its own moment. */}
-        <Tooltip label={words.note}>
+    <li className="inbox-settled" data-item-id={item.id}>
+      <div className="inbox-settled-line">
+        <button
+          type="button"
+          className="plan-summary-row"
+          onClick={() => onOpenAgent(item.agentId)}
+        >
+          <span className="plan-summary-glyph">
+            <AuthorGlyph agent={agent} />
+          </span>
           <span className="plan-summary-label">
             {cardTitle(item.title)}
             <span className="plan-summary-detail">{words.lead}</span>
           </span>
-        </Tooltip>
-        {agent === undefined ? null : agentEndMark(agent, true)}
-        <Moment at={item.updatedAt} now={now} />
-      </button>
+          {agent === undefined ? null : agentEndMark(agent, true)}
+          <Moment at={item.updatedAt} now={now} />
+        </button>
+        {holds ? (
+          <Tooltip label={details}>
+            <button
+              type="button"
+              className="sidebar-plan-mark inbox-settled-more"
+              aria-label={details}
+              aria-expanded={unfolded}
+              onClick={() => setUnfolded((was) => !was)}
+            >
+              <ChevronRightIcon />
+            </button>
+          </Tooltip>
+        ) : (
+          <span className="inbox-settled-more" aria-hidden="true" />
+        )}
+      </div>
+      {holds && unfolded ? (
+        <div className="inbox-settled-body">
+          {words.note === undefined ? null : (
+            <p className="m-0 whitespace-pre-line select-text">{words.note}</p>
+          )}
+          {item.blocks.length === 0 ? null : (
+            <div className="text-muted-foreground">
+              <Blocks
+                item={item}
+                images={images}
+                onImage={onImage}
+                onRetryImage={onRetryImage}
+                openLink={openLink}
+                code={code}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -985,6 +1041,11 @@ export function InboxBoard({
                   agent={agentOf(item)}
                   now={now}
                   onOpenAgent={onOpenAgent}
+                  images={control.images}
+                  onImage={control.onImage}
+                  onRetryImage={control.onRetryImage}
+                  openLink={openLink}
+                  code={code}
                 />
               ))}
             </ul>

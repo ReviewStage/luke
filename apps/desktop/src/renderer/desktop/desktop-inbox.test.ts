@@ -393,7 +393,7 @@ test("a settled item opens its agent on its plan's own page, as a waiting item's
   );
   assert.ok(settled);
   act(() => settled.click());
-  const row = page.querySelector<HTMLButtonElement>(`[data-item-id="${ITEM_D}"]`);
+  const row = page.querySelector<HTMLButtonElement>(`[data-item-id="${ITEM_D}"] .plan-summary-row`);
   assert.ok(row);
   act(() => row.click());
   assert.deepEqual(asked.shownAgents, [[AUDIT.id, AGENT.id]]);

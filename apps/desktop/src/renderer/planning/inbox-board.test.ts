@@ -32,7 +32,7 @@ import { afterEach } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { sheetStyle } from "#testing/css-rules";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { codingAgentsControl } from "#testing/plans-control";
 import { InboxBoard, type InboxCodeDoors } from "./inbox-board";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -508,7 +508,7 @@ it.effect(
 );
 
 it.effect(
-  "a pick sent answers the item with the option and the note under a key of its own, and the item settles saying what was said, the note in its words' hint",
+  "a pick sent answers the item with the option and the note under a key of its own, and the item settles saying what was said, the note unfolding under it, selectable",
   () =>
     Effect.gen(function* () {
       const { agents, sent } = service([{ items: [QUEUE], cursor: "1000.1" }], [taking(QUEUE)]);
@@ -537,9 +537,16 @@ it.effect(
       assert.ok((answer?.clientKey ?? "").length > 0);
       assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
       press(sectionToggle(page, "Settled"));
-      const words = card(page, QUEUE.id).querySelector(".plan-summary-label");
-      assert.equal(words?.textContent, "Which queue sends the invitation emails?Chose Redis");
-      assert.equal(tooltipOver(words), "Keep it simple.");
+      const settled = card(page, QUEUE.id);
+      assert.equal(
+        settled.querySelector(".plan-summary-label")?.textContent,
+        "Which queue sends the invitation emails?Chose Redis",
+      );
+      assert.ok(!settled.textContent?.includes("Keep it simple."), "the note folded at first");
+      press(buttonNamed(settled, "Show details"));
+      assert.ok(settled.textContent?.includes("Keep it simple."), "the note under the row");
+      const style = yield* Effect.promise(() => sheetStyle());
+      assert.ok(selectedText(style, settled).includes("Keep it simple."), "the note selects");
     }),
 );
 
@@ -1057,6 +1064,40 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an image inside a settled item is not read until its details are unfolded, and then once, and unfolding opens no agent",
+  () =>
+    Effect.gen(function* () {
+      const settled = item({
+        ...SHOT,
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "favicon",
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.APPROVED },
+        updatedAt: 5_000,
+      });
+      const { agents, imageReads } = service(
+        [{ items: [settled, QUEUE], cursor: "1" }],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(sectionToggle(page, "Settled"));
+      yield* settle;
+      assert.deepEqual(imageReads, [], "a folded picture is not asked for");
+
+      press(buttonNamed(card(page, settled.id), "Show details"));
+      yield* settle;
+      assert.deepEqual(imageReads, [{ itemId: settled.id, attachmentId: ATTACHMENT }]);
+      assert.ok(
+        card(page, settled.id).querySelector("[data-inbox-image] img"),
+        "the picture is drawn",
+      );
+      assert.deepEqual(openedAgents, []);
+    }),
+);
+
 /** The window's one tooltip once the pointer comes over the element: what it says, while one stands. */
 function tooltipOver(element: Element | null | undefined): string | undefined {
   assert.ok(element, "nothing to point at");
@@ -1115,7 +1156,12 @@ it.effect(
         "Which email provider?Closed by the agent",
       );
       assert.match(tooltipOver(row.querySelector("time")) ?? "", /Jun 15, 2026/u);
-      press(row);
+      assert.equal(
+        row.querySelector(".inbox-settled-more[aria-expanded]"),
+        null,
+        "nothing to unfold",
+      );
+      press(row.querySelector(".plan-summary-row"));
       assert.deepEqual(openedAgents, [SETTINGS.agentId, closed.agentId]);
     }),
 );
