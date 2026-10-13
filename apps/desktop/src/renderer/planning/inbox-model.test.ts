@@ -9,6 +9,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
+import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import {
@@ -17,9 +18,15 @@ import {
   codeReadOf,
   codeWindow,
   EMPTY_INBOX_DRAFT,
+  firstChoice,
+  INBOX_GROUPING,
+  type InboxListView,
   inboxBoard,
+  inboxList,
   inboxReply,
-  settledWords,
+  proposedOptions,
+  SETTLED_BY,
+  settlementOf,
   withChoice,
   withValue,
 } from "./inbox-model";
@@ -200,19 +207,20 @@ test("an approval, a task, and an item asking nothing are answered by their pres
   });
 });
 
-test("a settled card says what was answered and the note, a form's values a line each, or that the agent took it back and why", () => {
+test("a settled item says who settled it and what they did: the developer's pick, a form's values a line each, and their note, or the agent taking it back and why; an open one is not settled", () => {
+  assert.equal(settlementOf(QUEUE), undefined);
   assert.deepEqual(
-    settledWords(
+    settlementOf(
       item({
         id: "a",
         status: INBOX_STATUS.ANSWERED,
         answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis", "Postgres"], note: "Fine." },
       }),
     ),
-    { lead: "Chose Redis, Postgres", note: "Fine." },
+    { by: SETTLED_BY.DEVELOPER, lead: "You chose Redis, Postgres", words: "Fine." },
   );
   assert.deepEqual(
-    settledWords(
+    settlementOf(
       item({
         id: "f",
         status: INBOX_STATUS.ANSWERED,
@@ -225,18 +233,151 @@ test("a settled card says what was answered and the note, a form's values a line
         },
       }),
     ),
-    { lead: "Filled in", note: "Port: 587\nVerify certificate: yes" },
+    {
+      by: SETTLED_BY.DEVELOPER,
+      lead: "You filled it in",
+      words: "Port: 587\nVerify certificate: yes",
+    },
   );
   assert.deepEqual(
-    settledWords(
+    settlementOf(
       item({ id: "n", status: INBOX_STATUS.ANSWERED, answer: { reply: INBOX_REPLY.ACKNOWLEDGED } }),
     ),
-    { lead: "Acknowledged" },
+    { by: SETTLED_BY.DEVELOPER, lead: "You acknowledged it" },
   );
   assert.deepEqual(
-    settledWords(item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." })),
-    { lead: "Closed by the agent", note: "Found it." },
+    settlementOf(item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." })),
+    { by: SETTLED_BY.AGENT, lead: "Withdrawn by the agent", words: "Found it." },
   );
+});
+
+test("a settled choice keeps every option the agent offered with the developer's pick marked, one answered in their own words marks none, a settled approval keeps both presses with the one pressed marked, and words or a form, or an item still open, offer nothing to mark", () => {
+  const offered = item({
+    id: "q",
+    status: INBOX_STATUS.ANSWERED,
+    response: {
+      type: INBOX_RESPONSE.CHOICE,
+      options: [{ label: "Postgres", detail: "Already deployed." }, { label: "Redis" }],
+      recommended: "Postgres",
+    },
+    answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis"] },
+  });
+  assert.deepEqual(proposedOptions(offered), [
+    { label: "Postgres", detail: "Already deployed.", recommended: true, picked: false },
+    { label: "Redis", recommended: false, picked: true },
+  ]);
+  assert.deepEqual(
+    proposedOptions({ ...offered, answer: { reply: INBOX_REPLY.ANSWERED, note: "Use SQS." } }).map(
+      (option) => option.picked,
+    ),
+    [false, false],
+  );
+  const approval = item({
+    id: "ship",
+    status: INBOX_STATUS.ANSWERED,
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    answer: { reply: INBOX_REPLY.APPROVED, note: "After 6pm." },
+  });
+  assert.deepEqual(proposedOptions(approval), [
+    { label: "Decline", recommended: false, picked: false },
+    { label: "Approve", recommended: false, picked: true },
+  ]);
+  assert.deepEqual(
+    proposedOptions(
+      item({ id: "withdrawn", status: INBOX_STATUS.CLOSED, response: approval.response }),
+    ).map((option) => option.picked),
+    [false, false],
+    "taken back, nothing was pressed",
+  );
+  assert.deepEqual(proposedOptions({ ...offered, status: INBOX_STATUS.OPEN }), []);
+  assert.deepEqual(
+    proposedOptions({
+      ...SMTP,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.SUBMITTED },
+    }),
+    [],
+  );
+});
+
+/** A plan of the account's, holding inbox items. */
+function plan(id: string, name: string): PlanSummary {
+  return { id, name, createdAt: 1, updatedAt: 2, repository: null };
+}
+
+const BILLING = plan("7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", "Billing alerts");
+const INVITES = plan("9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invites");
+const PLANS = [
+  {
+    plan: BILLING,
+    items: [
+      item({ id: "threshold", updatedAt: 30 }),
+      item({ id: "retry", status: INBOX_STATUS.ANSWERED, updatedAt: 50 }),
+      item({ id: "channel", status: INBOX_STATUS.CLOSED, updatedAt: 10 }),
+    ],
+  },
+  { plan: INVITES, items: [item({ id: "expiry", updatedAt: 40 })] },
+];
+
+/** Each group of a list as its plan's name and its items' ids, or the one run's ids. */
+function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
+  return view.grouping === INBOX_GROUPING.PLAN
+    ? view.groups.map(({ plan, items }) => [plan.name, items.map((each) => each.id)] as const)
+    : view.items.map(({ item }) => item.id);
+}
+
+test("the list holds every item the latest changed first, under its plan, the plan whose item changed latest first, or in one run across plans", () => {
+  const chosen = undefined;
+  assert.deepEqual(
+    drawn(inboxList(PLANS, { grouping: INBOX_GROUPING.PLAN, waitingOnly: false, chosen })),
+    [
+      ["Billing alerts", ["retry", "threshold", "channel"]],
+      ["Invites", ["expiry"]],
+    ],
+  );
+  assert.deepEqual(
+    drawn(inboxList(PLANS, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: false, chosen })),
+    ["retry", "expiry", "threshold", "channel"],
+  );
+});
+
+test("Waiting lists only what waits and the item chosen, so one just answered stays listed, and a plan with nothing listed has no group", () => {
+  const waiting = { grouping: INBOX_GROUPING.PLAN, waitingOnly: true } as const;
+  assert.deepEqual(drawn(inboxList(PLANS, { ...waiting, chosen: undefined })), [
+    ["Invites", ["expiry"]],
+    ["Billing alerts", ["threshold"]],
+  ]);
+  assert.deepEqual(drawn(inboxList(PLANS, { ...waiting, chosen: "retry" })), [
+    ["Billing alerts", ["retry", "threshold"]],
+    ["Invites", ["expiry"]],
+  ]);
+  assert.deepEqual(
+    drawn(
+      inboxList([{ plan: BILLING, items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] }], {
+        ...waiting,
+        chosen: undefined,
+      }),
+    ),
+    [],
+  );
+});
+
+test("with nothing chosen, the first listed item that waits stands chosen, else the first listed, and nothing where nothing is listed", () => {
+  const all = { waitingOnly: false, chosen: undefined } as const;
+  assert.equal(
+    firstChoice(inboxList(PLANS, { ...all, grouping: INBOX_GROUPING.PLAN }))?.item.id,
+    "threshold",
+  );
+  assert.equal(
+    firstChoice(inboxList(PLANS, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
+    "expiry",
+  );
+  const settled = [{ plan: BILLING, items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] }];
+  assert.equal(
+    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
+    "done",
+  );
+  assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.PLAN })), undefined);
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {

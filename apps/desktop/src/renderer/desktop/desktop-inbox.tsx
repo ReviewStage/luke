@@ -1,159 +1,126 @@
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { ExternalLinkIcon, InboxIcon } from "lucide-react";
-import { useEffect } from "react";
+import type { CodingAgentInboxParams } from "@sidecar/hosted/coding-agent-view";
+import type { InboxItem } from "@sidecar/hosted/inbox-wire";
+import { InboxIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
+import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
-import { InboxBoard } from "../planning/inbox-board";
+import { InboxList } from "../planning/inbox-list";
+import {
+  firstChoice,
+  type InboxListed,
+  type InboxPlanItems,
+  inboxList,
+  listedItems,
+} from "../planning/inbox-model";
+import { InboxPane } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
+import { useInboxItems } from "../planning/use-inbox-items";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { SidebarPlan } from "./plan-actions";
+import { RetryButton } from "../retry-button";
+import { SPINNER_SIZE, Spinner } from "../spinner";
+import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
+import { PlanCard } from "./plan-card";
 
 /**
- * desktop-inbox.tsx -- the window's Inbox: every plan holding an inbox item in a column of its own, and the chosen plan's items beside it.
+ * desktop-inbox.tsx -- the window's Inbox: every item of every plan holding one in a list of its own, and the chosen item read beside it.
  *
  * It stands in the plan's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
- * folders. The column lists each plan holding an item, waiting or settled,
- * the plan whose item changed latest first, each on the sidebar's own plan
- * row (`plan-actions.tsx`), its card, menu, and buttons with it: the name,
- * in the heavier weight while an item waits on the developer, and how many
- * wait in the time's place. Waiting is the Inbox's one word for an item not
- * yet answered, and the sidebar's Inbox row counts the same items. Its head
- * names the Inbox and offers All and Waiting, which lists only the plans
- * with an item waiting; the plan chosen stays listed as its items are
- * answered, so what the developer answers does not slip away from under
- * them.
- *
- * The chosen plan's items stand beside the column, drawn by the per-plan
- * Inbox tab's own board (`inbox-board.tsx`), answered in place, under a
- * toolbar naming the plan with Open plan at its end. They are read on the
- * plan's own held read, whichever plan the host has open. An
- * agent's name opens the plan on its tab, and a code block's Open its
- * file, each leaving the Inbox. With nothing listed, it says so under the
- * Inbox's glyph (`empty-state.tsx`). Escape leaves it for the plan it
- * stood over, and so does any row of the sidebar.
+ * folders. The list (`inbox-list.tsx`) holds the items of each plan main
+ * says holds one, waiting or settled, each plan read whole as main says it
+ * changed (`use-inbox-items.ts`), under its plan or newest first, all or
+ * only what waits, as the developer last chose; waiting is the Inbox's one
+ * word for an item not yet answered, and the sidebar's Inbox row counts
+ * the same items. A press on a row chooses it, and the pane beside the
+ * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
+ * plan's own held read, which stands in for the list's read of that plan
+ * so an answer shows at once. With nothing chosen, the first item listed
+ * that waits stands chosen, else the first listed. The pane's crumbs open
+ * the plan or the agent's tab, and a code block's Open its file, each
+ * leaving the Inbox. With nothing listed, it says so under the Inbox's
+ * glyph (`empty-state.tsx`). Escape leaves it for the plan it stood over,
+ * and so does any row of the sidebar.
  */
 
-/** What the Inbox says with no plan holding an item, or none waiting under the filter. */
+/** What the Inbox says with no item listed under the filter. */
 const NOTHING_WAITING = "Nothing is waiting on you.";
 
-/** The column's two lists, as its segments name them. */
-const INBOX_FILTER = {
-  ALL: "All",
-  WAITING: "Waiting",
-} as const;
+/** What the list says where a plan's read did not answer. */
+const NOT_READ = "Some items could not be read.";
 
-/** One plan the column lists: the plan, and how many of its items wait on the developer. */
-interface InboxPlanRow {
-  readonly plan: PlanSummary;
-  readonly waiting: number;
+/** The plans the list holds items of, in main's order: each holding one that the account's list holds, so an archived plan, or one not yet read, is listed nowhere. */
+function listedHoldings(
+  holdings: PlansControl["inboxPlans"],
+  listed: PlansControl["plans"],
+): readonly AppInboxPlanHolding[] {
+  return holdings.filter((holding) => listed.some((plan) => plan.id === holding.planId));
 }
 
-/**
- * The column's rows in main's order, the plan whose item changed latest
- * first: each plan holding an item that the account's list holds. A plan
- * out of the list, archived or not yet read, is listed nowhere, as a pinned
- * tab of one is not.
- */
-function inboxRows(plans: PlansControl): InboxPlanRow[] {
-  return plans.inboxPlans.flatMap((holding): InboxPlanRow[] => {
-    const plan = plans.plans.find((each) => each.id === holding.planId);
-    if (plan === undefined) return [];
-    const waiting = plans.inbox.find((each) => each.planId === holding.planId)?.items.length ?? 0;
-    return [{ plan, waiting }];
-  });
-}
-
-/** The column: its head with the filter, then a sidebar plan row for each plan, or the filter's note where none waits. */
-function InboxPlanList({
-  plans,
-  rows,
-  chosen,
-  waitingOnly,
-  onChoose,
-  onWaitingOnly,
+/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, or the filter's empty line. */
+function ListNote({
+  failed,
+  reading,
+  empty,
+  onRetry,
 }: {
-  plans: PlansControl;
-  rows: readonly InboxPlanRow[];
-  chosen: string | undefined;
-  waitingOnly: boolean;
-  onChoose: (planId: string) => void;
-  onWaitingOnly: (waitingOnly: boolean) => void;
-}): React.JSX.Element {
-  const now = useMinute();
-  return (
-    <nav className="inbox-plans" aria-label="Plans with inbox items">
-      <header className="desktop-toolbar inbox-plans-bar">
-        <h1 className="desktop-toolbar-title">Inbox</h1>
-        <fieldset className="settings-segments" aria-label="Show">
-          {[INBOX_FILTER.ALL, INBOX_FILTER.WAITING].map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              className="settings-segment"
-              aria-pressed={(filter === INBOX_FILTER.WAITING) === waitingOnly}
-              onClick={() => onWaitingOnly(filter === INBOX_FILTER.WAITING)}
-            >
-              {filter}
-            </button>
-          ))}
-        </fieldset>
-      </header>
-      <div className="inbox-plans-scroll">
-        {rows.length === 0 && waitingOnly ? (
-          <p className="sidebar-note">{NOTHING_WAITING}</p>
-        ) : null}
-        <ul className="sidebar-plans">
-          {rows.map(({ plan, waiting }) => (
-            <SidebarPlan
-              key={plan.id}
-              plans={plans}
-              plan={plan}
-              current={plan.id === chosen}
-              unread={waiting > 0}
-              now={now}
-              onOpen={() => onChoose(plan.id)}
-              inbox={{ waiting, onOpenPlan: () => plans.onShowPlan(plan.id) }}
-            />
-          ))}
-        </ul>
+  failed: boolean;
+  reading: boolean;
+  empty: boolean;
+  onRetry: () => void;
+}): React.JSX.Element | null {
+  if (failed) {
+    return (
+      <div className="sidebar-note flex items-center gap-2" role="alert">
+        <span>{NOT_READ}</span>
+        <RetryButton onRetry={onRetry} />
       </div>
-    </nav>
-  );
+    );
+  }
+  if (!empty) return null;
+  if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
+  return <p className="sidebar-note">{NOTHING_WAITING}</p>;
 }
 
-/**
- * The chosen plan's items under a toolbar naming the plan, with Open plan
- * at its end, read on the plan's own held read.
- */
-function InboxPlanItems({
-  plans,
-  plan,
-}: {
-  plans: PlansControl;
-  plan: PlanSummary;
-}): React.JSX.Element {
+/** The window's Inbox, in the plan's place: every plan's items, and the chosen one read beside them. */
+export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Element {
+  const view = plans.inboxView;
+  useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
   const { act } = useAct();
   const openLink = useOpenLink();
-  const planId = plan.id;
+  const now = useMinute();
+  const choices = useInboxViewChoices();
+  const folds = useInboxPlanFolds();
+  const readInbox = useCallback(
+    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
+    [act],
+  );
+  const { inboxPlans, plans: listedPlans } = plans;
+  const holdings = useMemo(
+    () => listedHoldings(inboxPlans, listedPlans),
+    [inboxPlans, listedPlans],
+  );
+  const read = useInboxItems({ holdings, readInbox });
+  const chosenPlan = plans.plans.find((plan) => plan.id === view.chosen?.planId);
+  const planId = chosenPlan?.id;
   const agents = useCodingAgents({
     acts: { act },
     planId,
-    repository: plan.repository,
+    repository: chosenPlan?.repository ?? null,
     archived: false,
     onUnarchive: () => undefined,
-    // The inbox draws no agent's composer, so nothing here opens Settings.
+    // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,
     onStarted: () => undefined,
   });
-  const inbox = usePlanInbox({
+  const live = usePlanInbox({
     planId,
     shown: plans.shown,
     waiting: plans.inbox.some((each) => each.planId === planId),
@@ -161,69 +128,85 @@ function InboxPlanItems({
   });
   // Note that the models come from the open plan's agents where this plan's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? plans.agents.models };
-  return (
-    <section className="inbox-view-items" aria-label={plan.name}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{plan.name}</h1>
-        </div>
-        <div className="desktop-toolbar-actions">
-          <button type="button" className="toolbar-button" onClick={() => plans.onShowPlan(planId)}>
-            <ExternalLinkIcon />
-            Open plan
-          </button>
-        </div>
-      </header>
-      <section className="desktop-inbox" aria-label="Inbox items">
-        <InboxBoard
-          control={inbox}
-          agents={named}
-          onOpenAgent={(agentId) => plans.onShowAgent(planId, agentId)}
-          openLink={openLink}
-          code={{
-            repository: plan.repository,
-            readFile: (window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window }),
-            onOpenFile: (ref, commit) => plans.onShowFile(planId, ref, commit),
-          }}
-        />
-      </section>
-    </section>
-  );
-}
-
-/** The window's Inbox, in the plan's place: the plans holding items, and the chosen one's items. */
-export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Element {
-  const view = plans.inboxView;
-  useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
-  const rows = inboxRows(plans);
-  const asked = rows.find((row) => row.plan.id === view.planId);
-  // The plan chosen stays listed under Waiting as it is answered; with none chosen, the list's first stands in.
-  const listed = view.waitingOnly ? rows.filter((row) => row.waiting > 0 || row === asked) : rows;
-  const chosen = asked ?? listed[0];
-  // Note that the plan standing in is chosen outright, because one answered under
-  // Waiting would otherwise leave the list and hand its place to the next.
+  // The chosen plan's own held read stands in for the list's once it answered, so an answer shows at once.
+  const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
+  const entries: InboxPlanItems[] = holdings.flatMap((holding) => {
+    const plan = plans.plans.find((each) => each.id === holding.planId);
+    if (plan === undefined) return [];
+    const items =
+      live.read && holding.planId === planId ? liveItems : read.items.get(holding.planId);
+    return [{ plan, items: items ?? [] }];
+  });
+  const list = inboxList(entries, {
+    grouping: choices.grouping,
+    waitingOnly: choices.waitingOnly,
+    chosen: view.chosen?.itemId,
+  });
+  const chosen = listedItems(list).find(({ item }) => item.id === view.chosen?.itemId);
+  // Note that a chosen item whose plan is not read yet keeps its place, because it may be listed once the read lands.
+  const chosenRead = planId !== undefined && (read.items.has(planId) || live.read);
+  const standIn =
+    chosen === undefined && (view.chosen === undefined || chosenRead)
+      ? firstChoice(list)
+      : undefined;
   const { onChoose } = view;
-  const standIn = chosen !== undefined && chosen !== asked ? chosen.plan.id : undefined;
+  const choose = useCallback(
+    ({ plan, item }: InboxListed) => onChoose({ planId: plan.id, itemId: item.id }),
+    [onChoose],
+  );
   useEffect(() => {
-    if (standIn !== undefined) onChoose(standIn);
-  }, [standIn, onChoose]);
+    if (standIn !== undefined) choose(standIn);
+  }, [standIn, choose]);
+  const reading = holdings.some((holding) => !read.items.has(holding.planId));
   return (
     <div className="inbox-view">
-      <InboxPlanList
-        plans={plans}
-        rows={listed}
-        chosen={chosen?.plan.id}
-        waitingOnly={view.waitingOnly}
-        onChoose={view.onChoose}
-        onWaitingOnly={view.onWaitingOnly}
+      <InboxList
+        view={list}
+        chosen={chosen?.item.id}
+        head={{ shown: plans.shown, choices, folds }}
+        note={
+          <ListNote
+            failed={read.failed}
+            reading={reading}
+            empty={listedItems(list).length === 0}
+            onRetry={read.onRetry}
+          />
+        }
+        onChoose={choose}
       />
       {chosen === undefined ? (
         <section className="inbox-view-items" aria-label="Inbox">
           <header className="desktop-toolbar" />
-          <EmptyState icon={<InboxIcon />}>{NOTHING_WAITING}</EmptyState>
+          {reading ? null : <EmptyState icon={<InboxIcon />}>{NOTHING_WAITING}</EmptyState>}
         </section>
       ) : (
-        <InboxPlanItems key={chosen.plan.id} plans={plans} plan={chosen.plan} />
+        <InboxPane
+          plan={chosen.plan}
+          item={chosen.item}
+          control={live}
+          agents={named}
+          doors={{
+            onOpenPlan: () => plans.onShowPlan(chosen.plan.id),
+            planCard: (
+              <PlanCard
+                plan={chosen.plan}
+                models={plans.agents.models ?? []}
+                pictures={plans.repositories.pictures}
+                now={now}
+                onOpenGitHub={plans.repositories.openGitHub}
+                onShowAgent={(agentId) => plans.onShowAgent(chosen.plan.id, agentId)}
+              />
+            ),
+            onOpenAgent: (agentId) => plans.onShowAgent(chosen.plan.id, agentId),
+            openLink,
+            code: {
+              repository: chosen.plan.repository,
+              readFile: (window) =>
+                act(ACT_KIND.PLANNING_FILE, { planId: chosen.plan.id, ...window }),
+              onOpenFile: (ref, commit) => plans.onShowFile(chosen.plan.id, ref, commit),
+            },
+          }}
+        />
       )}
     </div>
   );

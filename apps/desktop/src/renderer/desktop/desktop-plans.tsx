@@ -6,16 +6,19 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
-import { InboxBoard } from "../planning/inbox-board";
+import { InboxList } from "../planning/inbox-list";
+import { firstChoice, INBOX_GROUPING, inboxList, listedItems } from "../planning/inbox-model";
+import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
+import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { SkillFiles } from "../planning/skill-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
-import { usePlanInbox } from "../planning/use-plan-inbox";
+import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
@@ -24,6 +27,7 @@ import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
+import { PlanCard } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
@@ -112,6 +116,88 @@ function CopyChord({ copy }: { copy: PlansControl["copy"] }): null {
 function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   useAppCommand(APP_COMMAND.NEW_TAB, onNewTab);
   return null;
+}
+
+/**
+ * The plan's own Inbox tab: its items newest first in the window's Inbox's
+ * list, with neither head nor groups since they are one plan's, and the
+ * chosen item read beside them in the same pane, on the plan's own held
+ * read. With nothing chosen, the first item that waits stands chosen, else
+ * the newest. The pane's plan crumb chooses the plan's tab and its agent
+ * crumb the agent's.
+ */
+function PlanInboxTab({
+  plans,
+  plan,
+  inbox,
+  onOpenPlan,
+  onOpenAgent,
+  openLink,
+  code,
+}: {
+  plans: PlansControl;
+  plan: PlansControl["plans"][number];
+  inbox: PlanInboxControl;
+  onOpenPlan: () => void;
+  onOpenAgent: (agentId: string) => void;
+  openLink: (url: string) => void;
+  code: InboxCodeDoors;
+}): React.JSX.Element {
+  const now = useMinute();
+  const [asked, setAsked] = useState<string | undefined>(undefined);
+  const items = [...inbox.board.open, ...inbox.board.settled];
+  const list = inboxList([{ plan, items }], {
+    grouping: INBOX_GROUPING.NEWEST,
+    waitingOnly: false,
+    chosen: asked,
+  });
+  const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
+  return (
+    <section className="inbox-view" role="tabpanel" aria-label="Inbox">
+      <InboxList
+        view={list}
+        chosen={chosen?.item.id}
+        head={undefined}
+        note={
+          inbox.reading ? (
+            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+          ) : inbox.failed && items.length === 0 ? (
+            <div className="sidebar-note flex items-center gap-2" role="alert">
+              <span>The inbox could not be read.</span>
+              <RetryButton onRetry={inbox.onRetry} />
+            </div>
+          ) : null
+        }
+        onChoose={({ item }) => setAsked(item.id)}
+      />
+      {chosen === undefined ? (
+        <section className="inbox-view-items" aria-label="Inbox" />
+      ) : (
+        <InboxPane
+          plan={plan}
+          item={chosen.item}
+          control={inbox}
+          agents={plans.agents}
+          doors={{
+            onOpenPlan,
+            planCard: (
+              <PlanCard
+                plan={plan}
+                models={plans.agents.models ?? []}
+                pictures={plans.repositories.pictures}
+                now={now}
+                onOpenGitHub={plans.repositories.openGitHub}
+                onShowAgent={onOpenAgent}
+              />
+            ),
+            onOpenAgent,
+            openLink,
+            code,
+          }}
+        />
+      )}
+    </section>
+  );
 }
 
 /**
@@ -360,20 +446,19 @@ function PlanDocument({
               />
             </section>
             {tab === MAIN_TAB.INBOX ? (
-              <section className="desktop-inbox" role="tabpanel" aria-label="Inbox">
-                <InboxBoard
-                  control={inbox}
-                  agents={agents}
-                  onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
-                  openLink={openLink}
-                  code={{
-                    repository: plan.repository,
-                    readFile: (window) =>
-                      act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
-                    onOpenFile: sidePanel.onOpenFile,
-                  }}
-                />
-              </section>
+              <PlanInboxTab
+                plans={plans}
+                plan={plans.plans.find((each) => each.id === plan.id) ?? plan}
+                inbox={inbox}
+                onOpenPlan={() => mainTabs.onChoose(MAIN_TAB.PLAN)}
+                onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
+                openLink={openLink}
+                code={{
+                  repository: plan.repository,
+                  readFile: (window) => act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
+                  onOpenFile: sidePanel.onOpenFile,
+                }}
+              />
             ) : null}
             {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
               <section

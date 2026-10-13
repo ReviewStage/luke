@@ -2,7 +2,6 @@ import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   ArchiveIcon,
   CopyIcon,
-  DocumentIcon,
   EllipsisIcon,
   ExternalIcon,
   PencilIcon,
@@ -137,21 +136,9 @@ function SidebarPlanMarks({
   );
 }
 
-/** How many of a plan's items wait on the developer, read as "n waiting", and nothing at none. */
-function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
-  if (count === 0) return null;
-  return (
-    <>
-      {count}
-      <span className="visually-hidden"> waiting</span>
-    </>
-  );
-}
-
 /**
  * One plan's actions in the groups a rule divides, offering only those that
- * apply to it now. A door whose press does not open the plan, the Inbox's
- * column, leads with Open plan. Copy formats the document drawn, so only the open plan
+ * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
  * changed from any plan and opened on GitHub where there is one; Permanently
  * delete is last and alone. An archived plan takes nothing until it is
@@ -162,7 +149,7 @@ function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
 function planActionGroups(
   plans: PlansControl,
   planId: string,
-  doors: { rename: () => void; askDelete: () => void; openPlan: (() => void) | undefined },
+  doors: { rename: () => void; askDelete: () => void },
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
@@ -185,11 +172,7 @@ function planActionGroups(
     icon: <ExternalIcon />,
     onSelect: () => plans.onOpenOnGitHub(planId),
   };
-  const openPlan = doors.openPlan;
   const groups: MenuAction[][] = [
-    openPlan === undefined
-      ? []
-      : [{ label: "Open plan", icon: <DocumentIcon />, onSelect: openPlan }],
     [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
     [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
@@ -233,7 +216,7 @@ function usePlanMenu(
   plans: PlansControl,
   planId: string,
   name: string,
-  doors: { rename: () => void; drawn: boolean; openPlan: (() => void) | undefined },
+  doors: { rename: () => void; drawn: boolean },
 ) {
   const plan = planOf(plans, planId);
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
@@ -248,7 +231,6 @@ function usePlanMenu(
         groups={planActionGroups(plans, planId, {
           rename: doors.rename,
           askDelete: deletion.ask,
-          openPlan: doors.openPlan,
         })}
         onClose={close}
       />
@@ -286,7 +268,6 @@ export function PlanActions({
   const actions = usePlanMenu(plans, plan.id, plan.name, {
     rename: onRename,
     drawn: button,
-    openPlan: undefined,
   });
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
@@ -334,10 +315,6 @@ export function PlanActions({
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
  *
- * The window's Inbox lists its plans on this same row, so they look and
- * answer as the sidebar's do. There a press only chooses the plan, so its
- * menu leads with Open plan, and the row's end counts the items waiting on
- * the developer in the time's place, nothing at none.
  */
 export function SidebarPlan({
   plans,
@@ -346,25 +323,21 @@ export function SidebarPlan({
   unread,
   now,
   onOpen,
-  inbox,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
-  /** Whether the plan was saved since the developer last looked at it on this Mac; in the Inbox, whether an item of it waits. */
+  /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
   /** The time the row's last update is counted back from. */
   now: number;
   onOpen: () => void;
-  /** The Inbox's row: how many of the plan's items wait, drawn in the time's place, and what opens the plan itself. */
-  inbox?: { waiting: number; onOpenPlan: () => void };
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
   const actions = usePlanMenu(plans, plan.id, plan.name, {
     rename: rename.begin,
     drawn: true,
-    openPlan: inbox?.onOpenPlan,
   });
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
@@ -426,16 +399,10 @@ export function SidebarPlan({
           >
             <span className="sidebar-plan-line">
               <span className="sidebar-plan-name">{plan.name}</span>
-              {unread && inbox === undefined ? (
-                <span className="visually-hidden">(unread)</span>
-              ) : null}
+              {unread ? <span className="visually-hidden">(unread)</span> : null}
               <span className="sidebar-plan-time">
                 <PlanStatusMark plan={plan} />
-                {inbox === undefined ? (
-                  sinceText(plan.updatedAt, now)
-                ) : (
-                  <WaitingCount count={inbox.waiting} />
-                )}
+                {sinceText(plan.updatedAt, now)}
               </span>
             </span>
           </button>
@@ -445,8 +412,7 @@ export function SidebarPlan({
         <SidebarPlanMarks
           plans={plans}
           plan={plan}
-          // The Inbox's chosen row is not the open plan, whose page holds ⇧⌘A, so it names no chord.
-          current={current && inbox === undefined}
+          current={current}
           disabled={actions.deletion.busy}
           onContextMenu={showMenu}
         />
