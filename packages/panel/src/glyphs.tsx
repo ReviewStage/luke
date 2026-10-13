@@ -581,6 +581,20 @@ export function CallIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A camera: the call's video, and the press that turns it off. Its paths are
+ * Tabler Icons' `video` (https://tabler.io/icons, MIT licence, copyright (c)
+ * 2020-2026 Paweł Kuna), drawn in our stroke.
+ */
+export function VideoIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z" />
+      <path d="M3 8a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" />
+    </Glyph>
+  );
+}
+
 /** Points into a submenu beside a menu row, in the chevron's own stroke. */
 export function ChevronRightIcon(): React.JSX.Element {
   return (
