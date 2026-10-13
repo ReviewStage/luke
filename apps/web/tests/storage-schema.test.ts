@@ -72,6 +72,7 @@ const DECLARED_TABLES = [
   "conversations",
   "devices",
   "events",
+  "github_installation",
   "hosted_usage",
   "inbox_item",
   "introduction_usage",

@@ -9,8 +9,8 @@
  * preview as its own base URL is what makes the deployment honest about where
  * it is.
  *
- * That leaves the round trip through Google and GitHub, which answer only the
- * one redirect URI each has registered, and no provider can register a
+ * That leaves the round trip through GitHub, which answers only the
+ * one redirect URI the App has registered, and it cannot register a
  * hostname that does not exist until a branch is pushed. Better Auth's OAuth
  * proxy is the documented way through: the preview sends the provider the
  * production callback, production exchanges the code and hands the profile
@@ -62,8 +62,6 @@ export const GITHUB_APP_ENVIRONMENT = {
 /** The variables the auth service's own secrets are read from; a blank value is absent. */
 export const AUTH_SECRET_ENVIRONMENT = {
   SESSION_SECRET: "BETTER_AUTH_SECRET",
-  GOOGLE_CLIENT_ID: "GOOGLE_CLIENT_ID",
-  GOOGLE_CLIENT_SECRET: "GOOGLE_CLIENT_SECRET",
   GITHUB_CLIENT_ID: GITHUB_APP_ENVIRONMENT.CLIENT_ID,
   GITHUB_CLIENT_SECRET: GITHUB_APP_ENVIRONMENT.CLIENT_SECRET,
 } as const;
@@ -109,7 +107,6 @@ export interface SocialClient {
 export interface AuthSecrets {
   /** The secret that signs this deployment's sessions; absent, Better Auth refuses to sign any, and `auth.ts` says so as it loads. */
   sessionSecret: Redacted.Redacted | undefined;
-  google: SocialClient;
   /** The Luke GitHub App's client, since a GitHub sign-in is that App's user authorization. */
   github: SocialClient;
 }
@@ -154,11 +151,6 @@ function deploymentOrigin(host: string | undefined): string | undefined {
 export function authSecrets(variables: Record<string, string | undefined>): AuthSecrets {
   return {
     sessionSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.SESSION_SECRET]),
-    google: socialClient(
-      variables,
-      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID,
-      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET,
-    ),
     github: socialClient(
       variables,
       AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID,

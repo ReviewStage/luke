@@ -23,6 +23,7 @@ import type {
   UpdateControl,
 } from "./controls";
 import { FeedbackSection } from "./feedback-section";
+import { MembersSection, type WorkspaceSettingsControl } from "./members-section";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { PlanTemplateSection } from "./plan-template-page";
@@ -58,6 +59,8 @@ export interface SettingsPanelProps {
   /** Opens the dialog that writes a note of this kind to the people who make Luke. */
   onFeedback: (kind: FeedbackKind) => void;
   shortcuts: ShortcutControl;
+  /** The workspace the sidebar lists, its members, and the install, drawn while an account is signed in. */
+  workspace?: WorkspaceSettingsControl;
 }
 
 /**
@@ -98,6 +101,7 @@ export function SettingsPanel({
   settings,
   onFeedback,
   shortcuts,
+  workspace,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
   // Why the front page's Voice row wears its mark, or nothing while voice is
@@ -155,6 +159,13 @@ export function SettingsPanel({
             />
           ))}
         </section>
+      ) : null}
+
+      {/* Under the index, so the sidebar's Members… lands in sight of it. */}
+      {view === SETTINGS_VIEW.ROOT &&
+      workspace !== undefined &&
+      account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+        <MembersSection control={workspace} />
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE && panelView ? (

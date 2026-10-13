@@ -3,6 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { Cause, DateTime, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { member, organization } from "../../server/db/auth-schema";
+import { githubInstallation } from "../../server/db/github-installation-schema";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "../../server/db/github-installation-vocabulary";
 import { db } from "../../server/db/query";
 import { createPlan, type NewPlan } from "../../server/hosted/plan-store";
 import type { WorkspaceSeams } from "../../server/hosted/workspace-seams";
@@ -16,7 +21,7 @@ import type { WorkspaceSeams } from "../../server/hosted/workspace-seams";
  * owns, made the first time it is asked for. The rows are written straight
  * over the plugin's tables, as the plugin would leave them, since a test
  * stands no Better Auth, and `fakeWorkspaceSeams` is the plugin's
- * server-only create over the same tables; a test of the plugin's own write
+ * server-only create and add over the same tables; a test of the plugin's own write
  * is `workspace-store.test.ts`.
  */
 
@@ -58,10 +63,33 @@ export const openWorkspace = (ownerId: string) =>
     return id;
   });
 
+/** The installation a test workspace stands for: GitHub's ids for it and its account, and the account's login. */
+export interface TestInstallation {
+  readonly installationId: number;
+  readonly accountId: number;
+  readonly accountLogin: string;
+}
+
+/** A new workspace the account owns that stands for the installation, active, as a sync leaves one; answers its id. */
+export const openInstallationWorkspace = (ownerId: string, installation: TestInstallation) =>
+  Effect.gen(function* () {
+    const id = yield* openWorkspace(ownerId);
+    const now = yield* DateTime.nowAsDate;
+    yield* db.insert(githubInstallation).values({
+      organizationId: id,
+      ...installation,
+      accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+      status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  });
+
 /**
  * The plugin's server-only create, over the test's own database: the
  * organization, then its owner, refusing a slug that is taken as the plugin
- * does.
+ * does; and its server-only add, a member row.
  */
 export const fakeWorkspaceSeams = Effect.gen(function* () {
   const client = yield* SqlClient.SqlClient;
@@ -91,6 +119,13 @@ export const fakeWorkspaceSeams = Effect.gen(function* () {
       }).pipe(
         Effect.catchTag("SqlError", (failure) =>
           Effect.fail(new Cause.UnknownError(failure, "Failed to create organization")),
+        ),
+        Effect.provideService(SqlClient.SqlClient, client),
+      ),
+    addMember: (join) =>
+      joinWorkspace(join.organizationId, join.userId).pipe(
+        Effect.catchTag("SqlError", (failure) =>
+          Effect.fail(new Cause.UnknownError(failure, "Failed to add member")),
         ),
         Effect.provideService(SqlClient.SqlClient, client),
       ),

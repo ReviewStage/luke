@@ -207,7 +207,7 @@ test("the relay reads the callback only from state encrypted with the proxy key"
 test("a preview's sign-in returns to the desktop's authorize request, unsigned and without the login prompt", () => {
   const signedQuery =
     "response_type=code&client_id=luke-desktop&redirect_uri=http%3A%2F%2F127.0.0.1%3A54698%2Fcallback" +
-    "&scope=openid+profile&state=google.abc&code_challenge=xyz&code_challenge_method=S256&prompt=login" +
+    "&scope=openid+profile&state=github.abc&code_challenge=xyz&code_challenge_method=S256&prompt=login" +
     "&exp=1789770969&ba_iat=1789770369176&ba_param=ba_iat&ba_param=client_id&sig=zjn6%3D";
 
   const path = resumeAuthorizeURL("/api/auth/", signedQuery);
@@ -221,7 +221,7 @@ test("a preview's sign-in returns to the desktop's authorize request, unsigned a
     client_id: "luke-desktop",
     redirect_uri: "http://127.0.0.1:54698/callback",
     scope: "openid profile",
-    state: "google.abc",
+    state: "github.abc",
     code_challenge: "xyz",
     code_challenge_method: "S256",
   });
@@ -261,8 +261,7 @@ test("the GitHub sign-in's client is the Luke GitHub App's, read from the App's 
     clientSecret: "fixture-app-client-secret",
   });
   assert.equal(socialClientConfigured(secrets.github), true);
-  // The Google client and the session secret are untouched by the GitHub client.
-  assert.deepEqual(revealed(secrets.google), { clientId: "", clientSecret: undefined });
+  // The session secret is untouched by the GitHub client.
   assert.equal(secrets.sessionSecret, undefined);
 });
 

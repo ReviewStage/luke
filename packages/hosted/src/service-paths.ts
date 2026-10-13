@@ -61,7 +61,8 @@ export const HOSTED_SERVICE_PATH = {
    * The repositories the signed-in account reaches through the Luke GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
-   * `github-repositories-wire.ts` declares the answer.
+   * `github-repositories-wire.ts` declares the answer, and the
+   * `GITHUB_REPOSITORIES_QUERY` that names a workspace to list for.
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
   /**
@@ -77,6 +78,26 @@ export const HOSTED_SERVICE_PATH = {
    * names.
    */
   GITHUB_INSTALLED: "/api/github/installed",
+  /**
+   * The workspaces the account is a member of, its personal one first and
+   * the rest by name, and the ones of a GitHub App installation it may join
+   * (GET); a read makes the personal one and one per installation the
+   * account's GitHub reaches that has none yet. `workspace-wire.ts`
+   * declares the answer.
+   */
+  WORKSPACES: "/api/workspaces",
+  /**
+   * Joins the workspace of a GitHub App installation the account's GitHub
+   * still reaches (POST); joining one the account is in answers it as it is.
+   * `workspace-wire.ts` declares both bodies.
+   */
+  WORKSPACES_JOIN: "/api/workspaces/join",
+  /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
+  WORKSPACES_MEMBERS: "/api/workspaces/members",
+  /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */
+  WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  /** The account leaves a workspace it does not own (POST). */
+  WORKSPACES_LEAVE: "/api/workspaces/leave",
 } as const;
 
 /**

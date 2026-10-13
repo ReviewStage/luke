@@ -7,6 +7,7 @@ import {
   type PlanningEditAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import type { AvailableWorkspace, Workspace } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -15,6 +16,7 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
+import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import {
   DIALOG_TONE,
   type DialogConfirm,
@@ -134,10 +136,24 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
-  /** The plans the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
+  /** The plans of the chosen workspace the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
   plans: PlanningView["plans"];
-  /** The archived plans, newest archived first, which the sidebar keeps under Archived. */
+  /** The chosen workspace's archived plans, newest archived first, which the sidebar keeps under Archived. */
   archived: PlanningView["plans"];
+  /** The workspaces the account is a member of, its personal one first; none before the first read lands. */
+  workspaces: readonly Workspace[];
+  /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
+  workspace: Workspace | undefined;
+  /** Lists another of the account's workspaces, and starts the next new plan in it. */
+  onChooseWorkspace: (workspaceId: string) => void;
+  /** The workspaces of GitHub App installations the account reaches and may join; none before the first read lands. */
+  available: readonly AvailableWorkspace[];
+  /** Joins an installation's workspace and lists it, or says in a toast why it could not. */
+  onJoinWorkspace: (installationId: number) => void;
+  /** Lists the personal workspace again, once the one listed is left. */
+  onLeftWorkspace: () => void;
+  /** Opens the Luke GitHub App's installation page in the browser, read as the repository chip reads it. */
+  onInstallApp: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -416,7 +432,15 @@ export function usePlansTab(input: {
     [viewed, accountSignedIn],
   );
   const planning = markedView(renamedView(viewed, renames), marks);
-  const sidebar = sidebarPlans(planning.plans);
+  // The sidebar, and the palette reading it, list the chosen workspace's
+  // plans alone; with none listed yet, every plan stands as it did before.
+  const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
+  const chosen = workspace.chosen;
+  const sidebar = sidebarPlans(
+    chosen === undefined
+      ? planning.plans
+      : planning.plans.filter((plan) => plan.workspaceId === chosen.id),
+  );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
   const region = documentRegion(planning);
@@ -839,14 +863,39 @@ export function usePlansTab(input: {
     ...input.unseenAgents.map((agent) => ({ agent })),
   ];
 
-  // A fixture's repositories are read from nowhere, as its plans are.
+  // A fixture's repositories are read from nowhere, as its plans are. The
+  // chip lists the repositories of the workspace its plan is in: the open
+  // plan's, else the one New plan starts in.
+  const repositoriesOf =
+    region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : chosen?.id;
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
     fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
-      : act(ACT_KIND.PLANNING_REPOSITORIES).catch(() => ({
+      : act(
+          ACT_KIND.PLANNING_REPOSITORIES,
+          repositoriesOf === undefined ? {} : { workspaceId: repositoriesOf },
+        ).catch(() => ({
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // The installation page is the one the repository chip offers, read with
+  // the account's repositories; a read that answers none opens nothing.
+  const installApp = () => {
+    readRepositories().then((answer) => {
+      if ("repositories" in answer) openGitHub(answer.repositories.installationUrl);
+    });
+  };
+  // A fixture's workspaces are joined nowhere. A join lists the workspace it
+  // answers, which main's view then holds too; a refusal says why in a toast,
+  // since the menu that asked has closed.
+  const joinWorkspace = (installationId: number) => {
+    if (fixture !== undefined) return;
+    act(ACT_KIND.WORKSPACE_JOIN, { installationId }).then(
+      (joined) => workspace.choose(joined.id),
+      (refused: Error) =>
+        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    );
+  };
 
   // A fixture's plans are given no repository, as they are read from nowhere.
   const setRepository = (
@@ -926,12 +975,15 @@ export function usePlansTab(input: {
   });
 
   // A started plan becomes the host's open one, which turns the page to it.
-  // A start opens its plan's call at once, except over a call standing about
-  // another plan, which main leaves for this question to end or keep.
+  // It starts in the chosen workspace; with none listed the service starts
+  // it in the account's personal one. A start opens its plan's call at once,
+  // except over a call standing about another plan, which main leaves for
+  // this question to end or keep.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
       ...(repository === null ? undefined : { repository }),
+      ...(chosen === undefined ? undefined : { workspaceId: chosen.id }),
     }).then(
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
@@ -989,6 +1041,16 @@ export function usePlansTab(input: {
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
+    workspaces: viewed.workspaces,
+    workspace: chosen,
+    onChooseWorkspace: workspace.choose,
+    available: viewed.available,
+    onJoinWorkspace: joinWorkspace,
+    onLeftWorkspace: () => {
+      const personal = viewed.workspaces.find((each) => each.personal);
+      if (personal !== undefined) workspace.choose(personal.id);
+    },
+    onInstallApp: installApp,
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,

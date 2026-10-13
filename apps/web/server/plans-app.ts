@@ -28,6 +28,7 @@ import {
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { readBoard, writeScene } from "./hosted/board-store.js";
+import { installationOfWorkspace } from "./hosted/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -104,7 +105,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * plan never names a repository its owner could not reach through the App at
  * the moment it was named: an account that must sign in with GitHub again, and
  * a repository the App reaches no installation of for the account, are each
- * refused by name, with nothing written.
+ * refused by name, with nothing written. A plan in the workspace of a GitHub
+ * App installation may name only a repository of that installation; a
+ * personal workspace's plan may name any the account reaches.
  *
  * A plan starts in the workspace the request names, which the account must be
  * a member of, or in the account's personal workspace where it names none;
@@ -226,11 +229,16 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The repository as the row keeps it: null where none was named, or the
  * full name as GitHub spells it once the App confirms the account reaches
- * it. The refusal names which it was: the account's token, or the
- * repository.
+ * it. A plan in the workspace of an installation may name only a
+ * repository reached through that installation, compared by GitHub's id
+ * rather than a login a rename moves; one of another installation is
+ * refused as one not reached, since the workspace does not reach it. The
+ * workspace is read only where a repository is named. The refusal names
+ * which it was: the account's token, or the repository.
  */
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
+  workspace: Effect.Effect<string, HostedRefusal, SqlClient.SqlClient>,
   repository: string | null | undefined,
 ): Effect.fn.Return<
   string | null,
@@ -238,10 +246,27 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   GitHubApp | HttpClient.HttpClient | SqlClient.SqlClient
 > {
   if (repository === undefined || repository === null) return null;
+  const organizationId = yield* workspace;
+  const installation = yield* hostedStoreOrUnavailable(installationOfWorkspace(organizationId));
   const app = yield* GitHubApp;
-  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, repository));
+  const reached = yield* githubUserReadOrRefusal(
+    app.userRepositoryInstallation(userId, repository),
+  );
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  return reached.value.fullName;
+  if (Option.isSome(installation) && installation.value !== reached.value.installationId) {
+    return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  }
+  return reached.value.repository.fullName;
+});
+
+/** The workspace the account's plan belongs to, or not found for a plan it does not own. */
+const planWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  planId: string,
+): Effect.fn.Return<string, HostedRefusal, SqlClient.SqlClient> {
+  const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
+  if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return opened.value.plan.workspaceId;
 });
 
 /**
@@ -305,7 +330,11 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const started = readEither(planCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
-  const repository = yield* reachableRepository(userId, started.success.repository);
+  const repository = yield* reachableRepository(
+    userId,
+    Effect.succeed(organizationId),
+    started.success.repository,
+  );
   const plan = yield* hostedStoreOrUnavailable(
     createPlan(userId, { organizationId, name: started.success.name, repository }),
   );
@@ -326,7 +355,9 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(update)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const changes = update.success;
   const repository =
-    "repository" in changes ? yield* reachableRepository(userId, changes.repository) : undefined;
+    "repository" in changes
+      ? yield* reachableRepository(userId, planWorkspace(userId, planId), changes.repository)
+      : undefined;
   const plan = yield* hostedStoreOrArchived(
     updatePlan(userId, planId, {
       ...("name" in changes ? { name: changes.name } : undefined),

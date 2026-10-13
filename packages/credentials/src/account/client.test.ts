@@ -167,9 +167,9 @@ it.effect("an identity with no subject claim still signs in, without an id", () 
       httpClient: fakeHttpClientLayer(async () => json({ email: "developer@example.com" })),
     });
 
-    assert.deepEqual(yield* client.userInfo("access", ACCOUNT_PROVIDER.GOOGLE), {
+    assert.deepEqual(yield* client.userInfo("access", ACCOUNT_PROVIDER.GITHUB), {
       email: "developer@example.com",
-      provider: ACCOUNT_PROVIDER.GOOGLE,
+      provider: ACCOUNT_PROVIDER.GITHUB,
     });
   }),
 );
@@ -185,28 +185,23 @@ it.effect("userinfo keeps a picture only from the hosts the renderer's policy pi
         ),
       });
 
-    const google = yield* clientFor("https://lh3.googleusercontent.com/a/portrait").userInfo(
-      "access",
-      ACCOUNT_PROVIDER.GOOGLE,
-    );
-    assert.equal(google.pictureUrl, "https://lh3.googleusercontent.com/a/portrait");
-
     const github = yield* clientFor("https://avatars.githubusercontent.com/u/1?v=4").userInfo(
       "access",
       ACCOUNT_PROVIDER.GITHUB,
     );
     assert.equal(github.pictureUrl, "https://avatars.githubusercontent.com/u/1?v=4");
 
-    // Anywhere else — another host, a scheme downgrade, a suffix imposter, or
-    // no URL at all — the identity simply travels without a picture.
+    // Anywhere else — another host, Google's from before sign-in was GitHub's
+    // alone, a scheme downgrade, a suffix imposter, or no URL at all — the
+    // identity simply travels without a picture.
     for (const refused of [
       "https://example.com/avatar.png",
-      "http://lh3.googleusercontent.com/a/portrait",
-      "https://evilgoogleusercontent.com/a/portrait",
+      "https://lh3.googleusercontent.com/a/portrait",
+      "http://avatars.githubusercontent.com/u/1?v=4",
       "https://avatars.githubusercontent.com.evil.example/u/1",
       "not a url",
     ]) {
-      const identity = yield* clientFor(refused).userInfo("access", ACCOUNT_PROVIDER.GOOGLE);
+      const identity = yield* clientFor(refused).userInfo("access", ACCOUNT_PROVIDER.GITHUB);
       assert.equal(identity.pictureUrl, undefined, refused);
     }
   }),
@@ -312,7 +307,7 @@ it.effect("invalid token and identity responses are refused", () =>
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(async () => json({ provider: "unknown" })),
     });
-    const identity = yield* Effect.flip(identityClient.userInfo("access", ACCOUNT_PROVIDER.GOOGLE));
+    const identity = yield* Effect.flip(identityClient.userInfo("access", ACCOUNT_PROVIDER.GITHUB));
     assert.match(identity.message, /invalid identity/);
   }),
 );

@@ -1,13 +1,16 @@
-import { and, asc, eq, exists, type SQL, type SQLWrapper } from "drizzle-orm";
+import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/hosted/workspace-wire";
+import { and, asc, eq, exists, isNull, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import { member, organization, user } from "../db/auth-schema.js";
+import { githubInstallation } from "../db/github-installation-schema.js";
+import { GITHUB_INSTALLATION_STATUS } from "../db/github-installation-vocabulary.js";
 import { personalWorkspace } from "../db/personal-workspace-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import type { StoreFailure } from "./store-failure.js";
-import type { WorkspaceSeams } from "./workspace-seams.js";
+import type { WorkspaceCreation, WorkspaceSeams } from "./workspace-seams.js";
 
 /**
  * workspace-store.ts -- the workspaces an account is a member of, and the one that is its own.
@@ -36,12 +39,15 @@ const PERSONAL_SLUG_PREFIX = "personal-";
 /** The metadata the plugin stores on a personal workspace, as JSON text; only the server writes it. */
 const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
 
-/** One workspace as its members see it: the account's own one is marked personal. */
+/** One workspace as its members see it: the account's own one is marked personal, and each carries the account's role in it. */
 export interface Workspace {
   readonly id: string;
   readonly name: string;
   readonly personal: boolean;
+  readonly role: WorkspaceRole;
 }
+
+const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
 /** What a workspace read answers: an effect over the ambient client. */
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
@@ -57,6 +63,8 @@ const WorkspaceRowSchema = Schema.Struct({
   name: Schema.String,
   /** The account's own id where this workspace is its personal one, else null. */
   personalOf: Schema.NullOr(Schema.String),
+  /** The plugin's role text, which may list several roles comma-separated. */
+  role: Schema.String,
 });
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
@@ -104,7 +112,7 @@ const insertPersonalWorkspace = SqlSchema.void({
  * or the column of a row the statement reads, such as a plan's own
  * `organization_id`, so a statement gates on membership in its own where clause.
  */
-function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
+export function memberOfWorkspace(userId: string, organizationId: string | SQLWrapper): SQL {
   return exists(
     db
       .select({ one: member.id })
@@ -132,6 +140,7 @@ const findWorkspaces = SqlSchema.findAll({
         id: organization.id,
         name: organization.name,
         personalOf: personalWorkspace.userId,
+        role: member.role,
       })
       .from(member)
       .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -142,35 +151,48 @@ const findWorkspaces = SqlSchema.findAll({
           eq(personalWorkspace.userId, userId),
         ),
       )
-      .where(eq(member.userId, userId))
+      .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
+      .where(
+        and(
+          eq(member.userId, userId),
+          // Note that a workspace of no installation is shown, and one of an installation only while it is active.
+          or(
+            isNull(githubInstallation.status),
+            eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.ACTIVE),
+          ),
+        ),
+      )
       .orderBy(asc(organization.name), asc(organization.id)),
 });
 
+/** The highest role the plugin's role text names, read as a member where it names none Luke knows. */
+export function roleOf(text: string): WorkspaceRole {
+  const named = text.split(",").map((part) => part.trim());
+  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
+}
+
 /**
- * The workspace the plugin holds under the account's personal slug: the one
- * this call just made, or, where the plugin refused because the slug was
- * taken, the one a racing ensure made first. Nothing under the slug means
- * the plugin's refusal was something else, and it is answered as it was.
+ * The workspace the plugin holds under the slug asked for: the one this call
+ * just made, with the account as its owner, or, where the plugin refused
+ * because the slug was taken, the one a racing call made first. Nothing
+ * under the slug means the plugin's refusal was something else, and it is
+ * answered as it was.
  */
-function createPersonalOrganization(
-  userId: string,
-  name: string,
+export function createOrAdoptOrganization(
+  creation: WorkspaceCreation,
   seams: WorkspaceSeams,
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
-  const slug = `${PERSONAL_SLUG_PREFIX}${userId}`;
-  return seams
-    .createOrganization({ name, slug, userId, metadata: PERSONAL_WORKSPACE_METADATA })
-    .pipe(
-      Effect.map((created) => created.id),
-      Effect.catch((refusal) =>
-        Effect.flatMap(findOrganizationBySlug(slug), (standing) =>
-          Option.match(standing, {
-            onNone: () => Effect.fail(refusal),
-            onSome: (row) => Effect.succeed(row.organizationId),
-          }),
-        ),
+  return seams.createOrganization(creation).pipe(
+    Effect.map((created) => created.id),
+    Effect.catch((refusal) =>
+      Effect.flatMap(findOrganizationBySlug(creation.slug), (standing) =>
+        Option.match(standing, {
+          onNone: () => Effect.fail(refusal),
+          onSome: (row) => Effect.succeed(row.organizationId),
+        }),
       ),
-    );
+    ),
+  );
 }
 
 /** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
@@ -208,7 +230,15 @@ export function ensurePersonalWorkspace(
     if (Option.isSome(standing)) return standing;
     const account = yield* findAccountName(userId);
     if (Option.isNone(account)) return Option.none();
-    const organizationId = yield* createPersonalOrganization(userId, account.value.name, seams);
+    const organizationId = yield* createOrAdoptOrganization(
+      {
+        name: account.value.name,
+        slug: `${PERSONAL_SLUG_PREFIX}${userId}`,
+        userId,
+        metadata: PERSONAL_WORKSPACE_METADATA,
+      },
+      seams,
+    );
     const now = yield* DateTime.nowAsDate;
     yield* insertPersonalWorkspace({ userId, organizationId, now });
     return yield* personalWorkspaceOf(userId);
@@ -223,13 +253,18 @@ export function isWorkspaceMember(
   return Effect.map(findMemberWorkspace({ userId, organizationId }), Option.isSome);
 }
 
-/** Every workspace the account is a member of, its personal one first and the rest by name. */
+/**
+ * Every workspace the account is a member of and may see, its personal one
+ * first and the rest by name: a workspace of a GitHub App installation
+ * suspended or removed is left out.
+ */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {
   return Effect.map(findWorkspaces(userId), (rows) => {
     const workspaces = rows.map((row) => ({
       id: row.id,
       name: row.name,
       personal: row.personalOf !== null,
+      role: roleOf(row.role),
     }));
     return [
       ...workspaces.filter((workspace) => workspace.personal),

@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 11 October 2026
+Last updated: 12 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -241,11 +241,10 @@ beyond the saved plan and its history, said aloud, or shown anywhere but the
 plan itself, and
 OpenAI keeps the request and its reply under its own retention policy.
 
-**Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. Signing in with GitHub is your
-authorization of the Luke GitHub App: the token GitHub gives us reaches only
-the repositories where you have installed the App and that you can already
-see, with the App's permissions (reading a repository's details, reading and
+**Your account.** Luke signs you in with GitHub alone, which gives us your
+name and email address. Signing in is your authorization of the Luke GitHub
+App: the token GitHub gives us reaches only the repositories where you have
+installed the App and that you can already see, with the App's permissions (reading a repository's details, reading and
 writing its contents and pull requests, and reading your email addresses),
 and it reaches none until you install the App. We keep that token and the
 refresh token that renews it sealed under a server-only secret, read them
@@ -277,7 +276,18 @@ counts — on an admin page of our site that only an account we have marked as a
 administrator can open; nothing you type, say, or run in a session appears on
 it. Every account also has a personal workspace on our service, a record
 named with your name and holding you as its owner; it goes when you delete
-your account. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
+your account. When your GitHub account reaches an installation of the Luke
+GitHub App that has no workspace yet, the service makes one for it, named for
+the GitHub account it is installed on and holding you as its owner, and keeps
+beside it GitHub's ids for the installation and that account, its login,
+whether it is a user or an organization, and whether the installation is
+active, suspended, or removed. An installation another Luke account already
+has a workspace for is offered to you to join and never joined for you;
+before you join one, the service asks GitHub, on your own GitHub
+authorization, whether you still reach that installation. Every member of a
+workspace other than a personal one sees every other member's name, email
+address, and role in it, and an owner or an administrator of it can remove
+a member. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result; and the turn's model, token counts, and the ids of OpenAI's
@@ -508,16 +518,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   session, and starts again the next time you open it or sign in. Sentry
   reporting continues after deletion, and prior anonymous crash reports cannot
   be identified as yours and targeted through account deletion.
-  Deleting does not affect your Google or GitHub account, and anything stored
+  Deleting does not affect your GitHub account, and anything stored
   only on your Mac stays there until you remove it.
-
-## Google user data
-
-Luke's use of information received from Google APIs adheres to the
-[Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
-including the Limited Use requirements. We use what Google returns when you
-sign in with it, your name and email address, only to identify your account.
-It is not transferred, sold, or used for advertising.
 
 ## Contact
 

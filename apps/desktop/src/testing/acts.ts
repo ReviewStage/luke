@@ -9,7 +9,7 @@ import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
     kind: ACT_KIND.ACCOUNT_BEGIN_SIGN_IN,
-    payload: { provider: "google" },
+    payload: { provider: "github" },
   },
   [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: { kind: ACT_KIND.ACCOUNT_CANCEL_SIGN_IN },
   [ACT_KIND.ACCOUNT_SIGN_OUT]: { kind: ACT_KIND.ACCOUNT_SIGN_OUT },
@@ -84,7 +84,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_ARCHIVE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: true },
   },
-  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
+  [ACT_KIND.PLANNING_REPOSITORIES]: {
+    kind: ACT_KIND.PLANNING_REPOSITORIES,
+    payload: { workspaceId: "workspace-acme" },
+  },
   [ACT_KIND.PLANNING_SET_REPOSITORY]: {
     kind: ACT_KIND.PLANNING_SET_REPOSITORY,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", repository: "acme/relay" },
@@ -101,6 +104,22 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { url: "https://github.com/acme/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.WORKSPACE_JOIN]: {
+    kind: ACT_KIND.WORKSPACE_JOIN,
+    payload: { installationId: 4_200_017 },
+  },
+  [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
+    kind: ACT_KIND.WORKSPACE_MEMBERS_READ,
+    payload: { workspaceId: "workspace-acme" },
+  },
+  [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: {
+    kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+    payload: { workspaceId: "workspace-acme", userId: "user-grace" },
+  },
+  [ACT_KIND.WORKSPACE_LEAVE]: {
+    kind: ACT_KIND.WORKSPACE_LEAVE,
+    payload: { workspaceId: "workspace-acme" },
+  },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     kind: ACT_KIND.PLANNING_BOARD_SAVE,
     payload: {

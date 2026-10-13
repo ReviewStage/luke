@@ -1,23 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { betterAuth } from "better-auth";
-import { organization as organizationPlugin } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Option } from "effect";
-import { authDatabaseAdapter } from "../server/auth-database";
-import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../server/auth-policy";
-import * as authSchema from "../server/db/auth-schema";
 import { member, organization, user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { type WorkspaceSeams, workspaceSeams } from "../server/hosted/workspace-seams";
+import type { WorkspaceSeams } from "../server/hosted/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
 } from "../server/hosted/workspace-store";
-import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
+import { testSqlClient } from "./support/sql-client";
+import { openWorkspacePlugin } from "./support/workspace-plugin";
 import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/workspaces";
 
 /**
@@ -72,7 +67,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
         assert.deepEqual(second, first);
         assert.deepEqual(yield* personalWorkspaceOf(userId), first);
         assert.deepEqual(yield* listWorkspaces(userId), [
-          { id: first.value, name: "Ada Lovelace", personal: true },
+          { id: first.value, name: "Ada Lovelace", personal: true, role: WORKSPACE_ROLE.OWNER },
         ]);
       }),
   );
@@ -92,7 +87,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
 
       assert.deepEqual(ensured, Option.some(raced.id));
       assert.deepEqual(yield* listWorkspaces(userId), [
-        { id: raced.id, name: "Grace Hopper", personal: true },
+        { id: raced.id, name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
       ]);
     }),
   );
@@ -111,14 +106,19 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
         const acme = yield* openSharedWorkspace(seams, "Acme", teammate, [owner]);
 
         assert.deepEqual(yield* listWorkspaces(owner), [
-          { id: ownerPersonal.value, name: "Owner", personal: true },
-          { id: acme, name: "Acme", personal: false },
-          { id: zeta, name: "Zeta", personal: false },
+          { id: ownerPersonal.value, name: "Owner", personal: true, role: WORKSPACE_ROLE.OWNER },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.OWNER },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
-          { id: teammatePersonal.value, name: "Teammate", personal: true },
-          { id: acme, name: "Acme", personal: false },
-          { id: zeta, name: "Zeta", personal: false },
+          {
+            id: teammatePersonal.value,
+            name: "Teammate",
+            personal: true,
+            role: WORKSPACE_ROLE.OWNER,
+          },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.OWNER },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.MEMBER },
         ]);
       }),
   );
@@ -134,28 +134,13 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
   );
 });
 
-/** Better Auth with the organization plugin over a migrated PGlite of its own, which the store reads through the same database. */
-const openPluginDatabase = Effect.gen(function* () {
-  const client = yield* Effect.acquireRelease(Effect.promise(openMigratedPglite), (opened) =>
-    Effect.promise(() => opened.close()),
-  );
-  const plugin = betterAuth({
-    database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
-    baseURL: "http://127.0.0.1",
-    secret: "workspace-store-test-secret-with-enough-length",
-    disabledPaths: [...DISABLED_AUTH_PATHS],
-    plugins: [organizationPlugin(ORGANIZATION_OPTIONS)],
-  });
-  return { seams: workspaceSeams(plugin.api), database: sqlClientOverPglite(client) };
-});
-
 const PERSONAL_COLUMNS = { slug: organization.slug, metadata: organization.metadata };
 
 it.effect(
   "the plugin makes the personal workspace the account owns, and refuses a second the store adopts",
   () =>
     Effect.gen(function* () {
-      const { seams, database } = yield* openPluginDatabase;
+      const { seams, database } = yield* openWorkspacePlugin;
       yield* Effect.gen(function* () {
         const ada = yield* openUser("Ada Lovelace");
         const grace = yield* openUser("Grace Hopper");
@@ -186,7 +171,7 @@ it.effect(
           [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
         );
         assert.deepEqual(yield* listWorkspaces(grace), [
-          { id: raced.id, name: "Grace Hopper", personal: true },
+          { id: raced.id, name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
         ]);
       }).pipe(Effect.provide(database));
     }),

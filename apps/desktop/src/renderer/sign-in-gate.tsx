@@ -6,8 +6,8 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { WingFace } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
-import { useEffect, useId, useState } from "react";
-import { GitHubMark, GoogleMark } from "./account-marks";
+import { useEffect, useState } from "react";
+import { GitHubMark } from "./account-marks";
 import { SpinnerRing } from "./spinner";
 
 /**
@@ -60,78 +60,18 @@ export function useSignInFaceCycle(still: boolean) {
 }
 
 /**
- * A provider's button, which says so while it is the sign-in being waited on.
- * The one marked last used wears the chip beside its label, drawn over the
- * button's trailing edge rather than inside it, so the button is still named
- * by its label alone and the chip describes it.
- */
-function ProviderButton({
-  provider,
-  name,
-  mark,
-  primary,
-  lastUsed,
-  waiting,
-  disabled,
-  onBegin,
-}: {
-  provider: AccountProvider;
-  name: string;
-  mark: React.ReactNode;
-  /** The filled one of the two. */
-  primary: boolean;
-  /** The way in this Mac took last. */
-  lastUsed: boolean;
-  waiting: boolean;
-  disabled: boolean;
-  onBegin: (provider: AccountProvider) => void;
-}): React.JSX.Element {
-  const chip = useId();
-  return (
-    <div className="sign-in-provider-slot">
-      <button
-        type="button"
-        className="sign-in-provider"
-        data-provider={provider}
-        data-primary={String(primary)}
-        data-waiting={String(waiting)}
-        disabled={disabled}
-        aria-describedby={lastUsed ? chip : undefined}
-        onClick={() => onBegin(provider)}
-      >
-        {waiting ? (
-          <span className="account-mark">
-            <SpinnerRing />
-          </span>
-        ) : (
-          mark
-        )}
-        {waiting ? "Waiting for browser…" : `Continue with ${name}`}
-      </button>
-      {lastUsed ? (
-        <span id={chip} className="sign-in-last-used">
-          Last used
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * The sign-in, alone in the window: Luke introducing himself over the two ways
- * in. A press sends the browser to the provider and the gate waits in place —
- * the pressed button says so, the other stands disabled, and Cancel takes the
- * wait back — because the browser holds the actual work and there is nothing
- * else here to do meanwhile. The way in this Mac took last is the filled one
- * and says so; with none kept, Google is. The two never trade places, so the
- * hand that knows where GitHub is still finds it there.
+ * The sign-in, alone in the window: Luke introducing himself over the one way
+ * in, GitHub, since a workspace is a GitHub App installation and every account
+ * needs a GitHub identity to reach one. A press sends the browser to GitHub
+ * and the gate waits in place — the button says so and Cancel takes the wait
+ * back — because the browser holds the actual work and there is nothing else
+ * here to do meanwhile.
  */
 export function SignInGate({
   account,
   face,
   waiting,
   failure,
-  lastUsed,
   onBegin,
   onCancel,
 }: {
@@ -142,15 +82,12 @@ export function SignInGate({
   waiting?: AccountProvider;
   /** Why the last attempt ended without landing, from the flow's owner. */
   failure?: string;
-  /** The provider this Mac last signed in with; absent while none is kept. */
-  lastUsed?: AccountProvider;
   /** Sends the browser to the provider; the gate then waits on it. */
   onBegin: (provider: AccountProvider) => void;
   onCancel: () => void;
 }): React.JSX.Element {
-  // A sign-in begun from no press of this gate still holds both buttons.
+  // A sign-in begun from no press of this gate still holds the button.
   const busy = waiting !== undefined || account.status === ACCOUNT_STATUS.SIGNING_IN;
-  const primary = lastUsed ?? ACCOUNT_PROVIDER.GOOGLE;
   return (
     <section className="sign-in-gate" aria-labelledby="sign-in-title" aria-busy={busy}>
       <span className="sign-in-face" aria-hidden="true">
@@ -159,28 +96,24 @@ export function SignInGate({
       <h1 id="sign-in-title">Welcome to Luke</h1>
       <p className="sign-in-lede">Talk a feature through and Luke writes the plan.</p>
       <div className="sign-in-actions">
-        <ProviderButton
-          provider={ACCOUNT_PROVIDER.GOOGLE}
-          name="Google"
-          mark={<GoogleMark />}
-          primary={primary === ACCOUNT_PROVIDER.GOOGLE}
-          lastUsed={lastUsed === ACCOUNT_PROVIDER.GOOGLE}
-          waiting={waiting === ACCOUNT_PROVIDER.GOOGLE}
+        <button
+          type="button"
+          className="sign-in-provider"
+          data-waiting={String(waiting !== undefined)}
           disabled={busy}
-          onBegin={onBegin}
-        />
-        <ProviderButton
-          provider={ACCOUNT_PROVIDER.GITHUB}
-          name="GitHub"
-          mark={<GitHubMark />}
-          primary={primary === ACCOUNT_PROVIDER.GITHUB}
-          lastUsed={lastUsed === ACCOUNT_PROVIDER.GITHUB}
-          waiting={waiting === ACCOUNT_PROVIDER.GITHUB}
-          disabled={busy}
-          onBegin={onBegin}
-        />
+          onClick={() => onBegin(ACCOUNT_PROVIDER.GITHUB)}
+        >
+          {waiting ? (
+            <span className="account-mark">
+              <SpinnerRing />
+            </span>
+          ) : (
+            <GitHubMark />
+          )}
+          {waiting ? "Waiting for browser…" : "Continue with GitHub"}
+        </button>
       </div>
-      {/* The line under the buttons is held open whether or not it says
+      {/* The line under the button is held open whether or not it says
           anything, so beginning a wait does not move the column. */}
       <div className="sign-in-note">
         {waiting ? (

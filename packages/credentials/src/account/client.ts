@@ -43,8 +43,8 @@ export interface AccountIdentity {
 
 /**
  * The only hosts an avatar may be loaded from, matching the renderer's image
- * policy exactly: Google serves profile photos from `googleusercontent.com`
- * and GitHub from `avatars.githubusercontent.com`. A picture anywhere else is
+ * policy exactly: GitHub serves profile photos from
+ * `avatars.githubusercontent.com`. A picture anywhere else is
  * dropped rather than handed to a renderer whose CSP would refuse it — and the
  * set is fixed by this build, like every address the renderer is given.
  */
@@ -58,8 +58,7 @@ function accountPictureUrl(value: UnparsedWireValue): string | undefined {
   }
   if (url.protocol !== "https:") return undefined;
   const host = url.hostname;
-  const googleHosted = host === "googleusercontent.com" || host.endsWith(".googleusercontent.com");
-  return googleHosted || host === "avatars.githubusercontent.com" ? url.toString() : undefined;
+  return host === "avatars.githubusercontent.com" ? url.toString() : undefined;
 }
 
 interface AccountClientOptions {

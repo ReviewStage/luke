@@ -22,6 +22,7 @@ export {
   githubInstallStatusFromWire,
 } from "./github-install-wire.js";
 export {
+  GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
   githubRepositoriesAnswerSchema,
@@ -121,3 +122,8 @@ export {
   type TurnEventKind,
   type TurnSlowStep,
 } from "./turn-events-wire.js";
+export {
+  HostedWorkspaceClient,
+  type HostedWorkspaceClientOptions,
+  type WorkspaceCallResult,
+} from "./workspace-client.js";
