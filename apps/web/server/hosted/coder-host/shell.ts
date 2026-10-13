@@ -23,7 +23,7 @@ import { COMMAND_DESCRIPTION } from "../command-description.js";
  */
 
 /** eve's `bash` input as the model is offered it, with the description beside the command. */
-export const SHELL_INPUT = Schema.Struct({
+const SHELL_INPUT = Schema.Struct({
   command: describeWire(Schema.String, "The shell command to execute."),
   description: COMMAND_DESCRIPTION,
 });

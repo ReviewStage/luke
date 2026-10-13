@@ -10,7 +10,7 @@ import type { LiveSideband, SocketClose } from "../live-socket.js";
  */
 
 /** How long a graceful close waits for `session.closed` before finalization is reported incomplete. */
-export const SIDEBAND_CLOSE_TIMEOUT_MS = 15_000;
+const SIDEBAND_CLOSE_TIMEOUT_MS = 15_000;
 
 export const SIDEBAND_CLOSE_OUTCOME = {
   /** `session.closed` arrived; its usage is final. */

@@ -232,7 +232,7 @@ function hasTopLevelRoutesBesideServices(source: string): boolean {
  * generator refuses the shape by name, ahead of the schema, so the refusal
  * says where the routes belong rather than which key was unknown.
  */
-export class TopLevelRoutesBesideServicesError extends Error {
+class TopLevelRoutesBesideServicesError extends Error {
   override readonly name = "TopLevelRoutesBesideServicesError";
   constructor() {
     super(

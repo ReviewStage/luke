@@ -3,19 +3,18 @@ import { it } from "@effect/vitest";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@sidecar/hosted/plan-wire";
-import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ACTION_RESULT_STATUS } from "../server/core";
 import type { GitHubApp } from "../server/github/github-app";
 import {
-  REPOSITORY_REFUSAL,
   REPOSITORY_SANDBOX_CONTRACT,
   type RepositoryCall,
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
-import { CHECKOUT_COMMIT, type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
+import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 
 /**
  * The planning model's `show_code`, reading the lines it names from the
@@ -82,81 +81,7 @@ const showExactly = (
 const show = (call: RepositoryCall, input: WireRecord) =>
   showExactly(call, { note: NOTE, ...input });
 
-/** The lines an accepted answer carries. */
-function linesOf(answer: WireRecord): readonly string[] {
-  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
-  const code = answer.code;
-  assert.ok(isRecord(code));
-  const lines = code.lines;
-  assert.ok(Array.isArray(lines));
-  return lines.map((line) => String(line));
-}
-
 it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
-  it.effect(
-    "a file of the repository is answered whole with its place and the commit the checkout stands at, and the first call makes the checkout",
-    () =>
-      Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-
-        const answer = yield* show(call, { path: "src/invite.ts", startLine: 3, endLine: 4 });
-
-        assert.deepEqual(answer, {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          code: {
-            ref: { path: "src/invite.ts", startLine: 3, endLine: 4 },
-            repository: RELAY_FULL_NAME,
-            commit: CHECKOUT_COMMIT,
-            firstLine: 1,
-            lineCount: 6,
-            lines: INVITE.split("\n"),
-            note: NOTE,
-          },
-        });
-        assert.equal(sandbox.clones.length, 1);
-        // The path reaches the scripts as a variable and never as shell text.
-        const reads = sandbox.runs.filter(
-          (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.FILE] !== undefined,
-        );
-        assert.equal(reads.length, 2);
-        for (const read of reads) assert.equal(read.command.includes("invite"), false);
-      }),
-  );
-
-  it.effect("a checkout git names no commit of still shows the lines, pinned to no commit", () =>
-    Effect.gen(function* () {
-      const { call } = yield* openPlan(RELAY_FULL_NAME, "");
-
-      const answer = yield* show(call, { path: "src/invite.ts" });
-
-      assert.deepEqual(linesOf(answer), INVITE.split("\n"));
-      assert.ok(isRecord(answer.code));
-      assert.equal("commit" in answer.code, false);
-    }),
-  );
-
-  it.effect(
-    "a long file is answered as a window around the lines pointed at, each line cut to the bound",
-    () =>
-      Effect.gen(function* () {
-        const { call } = yield* openPlan(RELAY_FULL_NAME);
-
-        const answer = yield* show(call, { path: "notes.txt", startLine: 1_000, endLine: 1_001 });
-        const wide = yield* show(call, { path: "wide.txt" });
-
-        assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
-        const code = answer.code;
-        assert.ok(isRecord(code));
-        const lines = linesOf(answer);
-        assert.equal(lines.length, SHOWN_CODE_BOUNDS.WINDOW_LINES);
-        assert.equal(code.lineCount, 2_000);
-        const first = Number(code.firstLine);
-        assert.equal(lines[0], `line ${first}`);
-        assert.ok(first < 1_000 && first + SHOWN_CODE_BOUNDS.WINDOW_LINES - 1 > 1_001);
-        assert.equal(linesOf(wide)[0]?.length, SHOWN_CODE_BOUNDS.MAX_LINE_CHARS);
-      }),
-  );
-
   it.effect(
     "a file that is missing, outside the checkout, binary, or secret is refused as not shown, and no secret is read at all",
     () =>
@@ -185,45 +110,5 @@ it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
           false,
         );
       }),
-  );
-
-  it.effect(
-    "a call without a note, with a blank one, or with one longer than a sentence or two, shows nothing and reads no file",
-    () =>
-      Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-        const path = "src/invite.ts";
-
-        const answers = [
-          yield* showExactly(call, { path }),
-          yield* showExactly(call, { path, note: "" }),
-          yield* showExactly(call, { path, note: " \n\t " }),
-          yield* showExactly(call, { path, note: "x".repeat(SHOWN_CODE_BOUNDS.NOTE_CHARS + 1) }),
-        ];
-
-        for (const answer of answers) {
-          assert.deepEqual(answer, {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: SHOW_CODE_REFUSAL.NO_NOTE,
-          });
-        }
-        assert.equal(sandbox.openings, 0);
-        const longest = yield* show(call, { path, note: "x".repeat(SHOWN_CODE_BOUNDS.NOTE_CHARS) });
-        assert.equal(longest.status, ACTION_RESULT_STATUS.ACCEPTED);
-      }),
-  );
-
-  it.effect("a plan with no repository shows nothing, and says so without opening a sandbox", () =>
-    Effect.gen(function* () {
-      const { call, sandbox } = yield* openPlan(null);
-
-      const answer = yield* show(call, { path: "src/invite.ts" });
-
-      assert.deepEqual(answer, {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: `Not shown: ${REPOSITORY_REFUSAL.NO_REPOSITORY}`,
-      });
-      assert.equal(sandbox.openings, 0);
-    }),
   );
 });

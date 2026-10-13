@@ -45,6 +45,7 @@ import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
+import { type CountNoun, FoldedCount, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
@@ -86,7 +87,6 @@ export function useSidebarEdge(
  * back to the default width.
  */
 export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
   return <div className="sidebar-resize" {...edge} />;
 }
 
@@ -258,21 +258,15 @@ function PinnedSection({
   const drawn = folded ? rows.filter(shown) : rows;
   return (
     <nav className="sidebar-group" aria-label="Pinned">
-      <div className="sidebar-repository-header">
-        <button
-          type="button"
-          className="sidebar-repository-toggle sidebar-pinned-row"
-          aria-expanded={!folded}
-          onClick={folds.togglePinned}
-        >
-          <span className="sidebar-repository-glyph">
-            <PinIcon />
-            <ChevronRightIcon />
-          </span>
-          <span className="sidebar-repository-name">Pinned</span>
-          {folded ? <FoldedCount count={rows.length} noun={PIN_NOUN} /> : null}
-        </button>
-      </div>
+      <SidebarGroupHeader
+        glyph={<PinIcon />}
+        name="Pinned"
+        folded={folded}
+        count={rows.length}
+        noun={PIN_NOUN}
+        className="sidebar-pinned-row"
+        onToggle={folds.togglePinned}
+      />
       {drawn.length === 0 ? null : (
         <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} />
       )}
@@ -311,38 +305,11 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
   return [[pin, archive], [github]];
 }
 
-/** What a folded group's count is read as, one and many. */
-interface CountNoun {
-  readonly one: string;
-  readonly many: string;
-}
-
-const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
-
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
 /** The Inbox row counts the items waiting on the developer, as the Inbox's rows do. */
 const WAITING_NOUN: CountNoun = { one: "item waiting", many: "items waiting" };
-
-/**
- * A folded group's count of what it holds, shown after its name while the
- * header is hovered or reached from the keyboard, and read as "n plans".
- */
-function FoldedCount({
-  count,
-  noun = PLAN_NOUN,
-}: {
-  count: number;
-  noun?: CountNoun;
-}): React.JSX.Element {
-  return (
-    <span className="sidebar-repository-count">
-      {count}
-      <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
-    </span>
-  );
-}
 
 /**
  * One repository's plans under a header in the headings' voice, which folds
@@ -485,21 +452,14 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
-      <div className="sidebar-repository-header">
-        <button
-          type="button"
-          className="sidebar-repository-toggle sidebar-archived-row"
-          aria-expanded={unfolded}
-          onClick={() => setUnfolded((was) => !was)}
-        >
-          <span className="sidebar-repository-glyph">
-            <ArchiveIcon />
-            <ChevronRightIcon />
-          </span>
-          <span className="sidebar-repository-name">Archived</span>
-          {unfolded ? null : <FoldedCount count={archived.length} />}
-        </button>
-      </div>
+      <SidebarGroupHeader
+        glyph={<ArchiveIcon />}
+        name="Archived"
+        folded={!unfolded}
+        count={archived.length}
+        className="sidebar-archived-row"
+        onToggle={() => setUnfolded((was) => !was)}
+      />
       {unfolded ? <PlanRows rows={archived} context={context} /> : null}
     </div>
   );

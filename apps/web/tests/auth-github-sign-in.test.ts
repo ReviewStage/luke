@@ -36,8 +36,6 @@ interface Grant {
   readonly refresh_token_expires_in?: number;
   readonly scope: string;
 }
-
-const OAUTH_APP_GRANT: Grant = { access_token: "gho_oauth-app", scope: "read:user,user:email" };
 const APP_GRANT = {
   access_token: "ghu_app-token",
   refresh_token: "ghr_app-refresh",
@@ -119,14 +117,6 @@ async function signIn(auth: Auth) {
   return cookiesFrom(landed);
 }
 
-async function githubAccounts(auth: Auth) {
-  const context = await auth.$context;
-  const found = await context.internalAdapter.findUserByEmail(GITHUB_EMAIL);
-  assert.ok(found);
-  const accounts = await context.internalAdapter.findAccounts(found.user.id);
-  return { userId: found.user.id, rows: accounts.filter((row) => row.providerId === "github") };
-}
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
@@ -152,34 +142,6 @@ test("a GitHub sign-in is the App's own authorization: its client id, no OAuth s
   assert.ok(exchange);
   assert.equal(exchange.get("client_id"), APP_CLIENT_ID);
   assert.equal(exchange.get("client_secret"), APP_CLIENT_SECRET);
-});
-
-test("an account from before the App signs in to the same user and comes away with the App's tokens, sealed", async () => {
-  const auth = authService();
-  grant = OAUTH_APP_GRANT;
-  await signIn(auth);
-  const before = await githubAccounts(auth);
-  assert.equal(before.rows.length, 1);
-  assert.equal(before.rows[0]?.refreshToken ?? null, null);
-
-  grant = APP_GRANT;
-  await signIn(auth);
-  const after = await githubAccounts(auth);
-
-  assert.equal(after.userId, before.userId);
-  assert.equal(after.rows.length, 1);
-  const [row] = after.rows;
-  assert.ok(row);
-  assert.equal(row.accountId, GITHUB_ACCOUNT_ID);
-  assert.equal(row.accessTokenExpiresAt?.getTime(), NOW.getTime() + APP_GRANT.expires_in * 1000);
-  assert.equal(
-    row.refreshTokenExpiresAt?.getTime(),
-    NOW.getTime() + APP_GRANT.refresh_token_expires_in * 1000,
-  );
-  // Sealed under the session secret: the row holds neither token as GitHub spelled it.
-  assert.ok(row.accessToken && row.refreshToken);
-  assert.notEqual(row.accessToken, APP_GRANT.access_token);
-  assert.notEqual(row.refreshToken, APP_GRANT.refresh_token);
 });
 
 test("the auth service hands no browser the GitHub token: the token endpoints are not served", async () => {

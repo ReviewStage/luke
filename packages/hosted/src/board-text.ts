@@ -18,7 +18,7 @@ import type { Board, BoardElement } from "./board-wire.js";
  * are not in the scene.
  */
 
-export const BOARD_TEXT_MAX_CHARS = 8_000;
+const BOARD_TEXT_MAX_CHARS = 8_000;
 
 const SHAPES: ReadonlySet<string> = new Set([
   BOARD_ELEMENT_TYPE.RECTANGLE,

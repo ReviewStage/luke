@@ -26,7 +26,7 @@ import { type CallCardModel, callCard } from "./call-card-model";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
-export function returnLabel(planName: string): string {
+function returnLabel(planName: string): string {
   return `Open ${planName}`;
 }
 
@@ -84,7 +84,7 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
  * There is no ×: End call is the way to put a call away, and a live call
  * nobody can see is what the card is for.
  */
-export function CallCard({
+function CallCard({
   card,
   speakerMuted,
   controls,

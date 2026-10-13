@@ -104,7 +104,7 @@ import {
 /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
 const FOLLOW = Duration.minutes(10);
 
-export const LIVE_BRAIN_FOLLOW_BOUNDS = {
+const LIVE_BRAIN_FOLLOW_BOUNDS = {
   /** How often the record is read again while an ask's turn runs: the measured step boundary hosted is about 300 ms. */
   POLL: Duration.millis(250),
   FOLLOW,
@@ -129,7 +129,7 @@ type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Durat
  * gone, eve could not be reached, or the store could not open the account's
  * first main.
  */
-export const HOSTED_ASK_REFUSAL_NOTE = {
+const HOSTED_ASK_REFUSAL_NOTE = {
   [ASK_REFUSAL.NOT_FOUND]:
     "I couldn't find the conversation for that ask, so I'm not going to answer it here.",
   [ASK_REFUSAL.UPSTREAM]:
@@ -206,7 +206,7 @@ interface FollowTold {
   workers: ReadonlyMap<string, string>;
   /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
   seeking: boolean;
-  /** The spoken lines the turn has taken as its ask so far, read again on every look, since a later ask folded into the turn brings lines of its own. */
+  /** The spoken lines of the asks that opened the turn, read again on every look, since a line may be taken into the turn after the look that first found it. */
   asked: readonly SpokenAskRow[];
 }
 

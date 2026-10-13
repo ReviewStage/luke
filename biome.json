@@ -13,11 +13,8 @@
       "!!**/.agents",
       "!.claude/settings.json",
       "!apps/web/fixtures",
-      "!packages/gateway/fixtures",
       "!packages/hosted/fixtures",
-      "!packages/live/fixtures",
-      "!packages/session/fixtures",
-      "!tools/trace-export/fixtures"
+      "!packages/session/fixtures"
     ]
   },
   "formatter": {

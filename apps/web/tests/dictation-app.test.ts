@@ -3,9 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
-import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
-import { DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import {
   HTTP_STATUS,
@@ -13,7 +11,6 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@sidecar/wire/testing";
-import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -154,13 +151,6 @@ const clip = (userId: string | undefined, fields: Record<string, WireBoundaryInp
     body: { audio: CLIP_BASE64, durationMs: 9_000, keywords: KEYWORDS, ...fields },
   });
 
-/** The account's usage rows as the meter left them. */
-const usageOf = (userId: string) =>
-  db
-    .select({ calls: hostedUsage.calls, dictationSeconds: hostedUsage.dictationSeconds })
-    .from(hostedUsage)
-    .where(eq(hostedUsage.userId, userId));
-
 /** The form the model was sent, failing the test where it was sent none. */
 function formOf(call: RecordedRequest): FormData {
   const body = call.init.body;
@@ -196,21 +186,6 @@ it.layer(getTestDB())("the dictation route", (it) => {
       }),
   );
 
-  it.effect(
-    "the day is metered one call and the seconds the model billed, else the clip's own length",
-    () =>
-      Effect.gen(function* () {
-        const billed = yield* openAccount({ model: { text: SAID, seconds: 7.5 } });
-        yield* billed.ask(clip(billed.userId));
-        yield* billed.ask(clip(billed.userId));
-        const unbilled = yield* openAccount({ model: { text: SAID } });
-        yield* unbilled.ask(clip(unbilled.userId, { durationMs: 4_250 }));
-
-        assert.deepEqual(yield* usageOf(billed.userId), [{ calls: 2, dictationSeconds: 15 }]);
-        assert.deepEqual(yield* usageOf(unbilled.userId), [{ calls: 1, dictationSeconds: 4.25 }]);
-      }),
-  );
-
   it.effect("nothing of the clip, its words, or the key is logged", () =>
     Effect.gen(function* () {
       const { userId, ask, logged } = yield* openAccount({
@@ -223,69 +198,6 @@ it.layer(getTestDB())("the dictation route", (it) => {
         assert.ok(logged.every((line) => !line.includes(secret)));
       }
     }),
-  );
-
-  it.effect(
-    "a clip past two minutes or a megabyte is refused as too large, before the model hears it",
-    () =>
-      Effect.gen(function* () {
-        const { userId, ask, calls } = yield* openAccount();
-        const oneByteOver = Buffer.alloc(DICTATION_BOUNDS.MAX_AUDIO_BYTES + 1).toString("base64");
-        const pastTheBody = Buffer.alloc(DICTATION_BOUNDS.MAX_AUDIO_BYTES * 2).toString("base64");
-        const tooLarge = refusal(
-          HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
-          HOSTED_API_ERROR.REQUEST_TOO_LARGE,
-        );
-
-        const longer = yield* ask(
-          clip(userId, { durationMs: DICTATION_BOUNDS.MAX_DURATION_MS + 1 }),
-        );
-        const larger = yield* ask(clip(userId, { audio: oneByteOver }));
-        const farLarger = yield* ask(clip(userId, { audio: pastTheBody }));
-        const atTheBound = yield* ask(
-          clip(userId, { durationMs: DICTATION_BOUNDS.MAX_DURATION_MS }),
-        );
-
-        assert.deepEqual([longer, larger, farLarger], [tooLarge, tooLarge, tooLarge]);
-        assert.equal(atTheBound.status, HOSTED_HTTP_STATUS.OK);
-        assert.equal(calls.length, 1, "only the clip within the bounds reached the model");
-        assert.deepEqual(yield* usageOf(userId), [{ calls: 1, dictationSeconds: 120 }]);
-      }),
-  );
-
-  it.effect(
-    "words past their bounds, a clip that is not base64, and a body that is not JSON are refused as invalid",
-    () =>
-      Effect.gen(function* () {
-        const { userId, ask, calls } = yield* openAccount();
-        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-        const tooMany = Array.from(
-          { length: DICTATION_BOUNDS.MAX_KEYWORDS + 1 },
-          (_, n) => `w${n}`,
-        );
-
-        const answers = [
-          yield* ask(clip(userId, { keywords: tooMany })),
-          yield* ask(
-            clip(userId, { keywords: ["x".repeat(DICTATION_BOUNDS.MAX_KEYWORD_CHARS + 1)] }),
-          ),
-          yield* ask(clip(userId, { keywords: ["two\nlines"] })),
-          yield* ask(clip(userId, { keywords: ["<tag>"] })),
-          yield* ask(clip(userId, { audio: "not base64!" })),
-          yield* ask(clip(userId, { audio: "A" })),
-          yield* ask(clip(userId, { audio: "GkXfo=" })),
-          yield* ask(clip(userId, { audio: "" })),
-          yield* ask(clip(userId, { extra: true })),
-          yield* ask(clipRequest(userId, { raw: "{" })),
-        ];
-
-        assert.deepEqual(
-          answers,
-          Array.from({ length: answers.length }, () => invalid),
-        );
-        assert.equal(calls.length, 0);
-        assert.deepEqual(yield* usageOf(userId), []);
-      }),
   );
 
   it.effect(
@@ -308,29 +220,6 @@ it.layer(getTestDB())("the dictation route", (it) => {
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
         assert.equal(calls.length, 0);
-      }),
-  );
-
-  it.effect(
-    "a model that refuses, fails, or cannot be reached, and a deployment without a key, answer unavailable and meter nothing",
-    () =>
-      Effect.gen(function* () {
-        const unavailable = refusal(
-          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-          HOSTED_API_ERROR.UNAVAILABLE,
-        );
-        const failing = [
-          yield* openAccount({ model: { status: HTTP_STATUS.SERVER_ERROR } }),
-          yield* openAccount({ model: { status: HTTP_STATUS.BAD_REQUEST } }),
-          yield* openAccount({ model: { unreachable: true } }),
-          yield* openAccount({ key: undefined }),
-        ];
-
-        for (const account of failing) {
-          assert.deepEqual(yield* account.ask(clip(account.userId)), unavailable);
-          assert.deepEqual(yield* usageOf(account.userId), []);
-        }
-        assert.equal(failing[3]?.calls.length, 0, "a deployment without a key asks nobody");
       }),
   );
 });

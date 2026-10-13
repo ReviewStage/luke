@@ -9,8 +9,7 @@ function isNodeTestLiteral(node: ESTree.Node | undefined): boolean {
 
 /**
  * Every TypeScript test in the repository runs on vitest; `node:test` is
- * retired. The `.mjs` harness under `test:harness` is the one holdout, and it
- * is exempt by extension alone, never by path.
+ * retired. An `.mjs` file is exempt by extension alone, never by path.
  */
 export const noNodeTestRule = defineRule({
   meta: {

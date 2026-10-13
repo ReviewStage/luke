@@ -1009,10 +1009,10 @@ body,
   color: var(--text-primary);
 }
 
-/* A release on its way in, a pill between the account and the gear. Waiting
-   on its restart it is tinted the working blue, as is the download offered
-   once installing it failed: news, not urgency, so a wash rather than the
-   accent's fill. Downloading it is a quiet count, with nothing yet to press. */
+/* A release with something to press, a pill between the account and the
+   gear. Waiting on its restart it is tinted the working blue: news, not
+   urgency, so a wash rather than the accent's fill. Once installing it
+   failed, the download it offers instead wears the failure's red. */
 .sidebar-update {
   display: inline-flex;
   flex: none;
@@ -1034,14 +1034,16 @@ body,
   background: color-mix(in srgb, var(--state-working) 22%, transparent);
 }
 
-.sidebar-update-progress,
-.sidebar-update-progress:hover {
-  background: none;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+.sidebar-update[data-failed="true"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-text);
 }
 
-.sidebar-update-progress svg {
+.sidebar-update[data-failed="true"]:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.sidebar-update svg {
   width: 13px;
   height: 13px;
 }
@@ -1144,6 +1146,7 @@ body,
 .icon-button,
 .primary-button,
 .danger-button,
+.settings-segment,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
 .sidebar-search,
@@ -1287,6 +1290,29 @@ body,
   gap: var(--space-4);
   margin-left: var(--space-4);
   font-weight: 600;
+}
+
+/* A failure's line (`failure-note.tsx`): its words, then the press that
+   mends it inside a hairline, since it is the act the line is there for,
+   with Cancel or Retry quiet beside it. The press keeps the words' size and
+   goes onto the next line, whole, where the line has no room for it. */
+.failure-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+}
+
+.failure-note-remedy {
+  height: 24px;
+  padding: 0 var(--space-8);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.failure-note-remedy :is(svg, .spinner-ring) {
+  width: 13px;
+  height: 13px;
 }
 
 .retry-label svg {
@@ -2457,6 +2483,67 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+/* The board's two sections, Waiting and Settled, each under the sidebar's
+   own group header (`sidebar-group-header.tsx`), a section's gap apart. */
+.inbox-section + .inbox-section {
+  margin-top: var(--section-gap);
+}
+
+/* A card's head is a summary row inside the card's edge, its hover wash
+   inset from the card's corners as a row's is from the column's. */
+.inbox-card-head {
+  width: calc(100% - 2 * var(--space-4));
+  margin: var(--space-4) var(--space-4) 0;
+}
+
+/* A settled item: its row and, beside it, the chevron that unfolds the
+   note and context under it, lit as one row while either is hovered. */
+.inbox-settled {
+  --sidebar-plan-mark: 22px;
+}
+
+.inbox-settled-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+  border-radius: var(--control-radius);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-settled-line:hover {
+  background: var(--raised);
+}
+
+.inbox-settled-line > .plan-summary-row:hover {
+  background: none;
+}
+
+.inbox-settled-more {
+  width: var(--sidebar-plan-mark);
+  flex: none;
+}
+
+.inbox-settled-more .settings-chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--duration-hover) ease;
+}
+
+.inbox-settled-more[aria-expanded="true"] .settings-chevron {
+  transform: rotate(90deg);
+}
+
+/* What unfolds starts where the row's words do, past its glyph. */
+.inbox-settled-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-4) var(--row-inset) var(--space-8)
+    calc(var(--row-inset) + var(--control-glyph) + var(--glyph-gap));
+  font-size: 13px;
 }
 
 .inbox-view-items {

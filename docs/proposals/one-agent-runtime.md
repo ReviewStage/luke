@@ -413,7 +413,7 @@ As built (2026-10-13):
 | 7b | One host core (admission, session claim, a worker's child). The rest of each host is its role's own, so the hosts stay two over the core | #2405 |
 | 8 | One sandbox lifecycle | #2403 |
 | 9a | One tool-name vocabulary | #2397 |
-| 9b, 9c | One transcript wire, then deleting the old wire | after the release |
+| 9b, 9c | One transcript wire, then deleting the old wire | #2411, #2419 |
 | 10 | Coders rotate and seed | deferred with the one-root goal: a live coder session is only retired by a deletion, and a new session would lose its sandbox's uncommitted work |
 | Decision 4 | Brain skills | #2375 |
 

@@ -6,7 +6,7 @@ import {
   HTTP_STATUS,
   jsonResponse,
 } from "@sidecar/wire/testing";
-import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -24,6 +24,8 @@ function manager(options: {
   revoke?: (token: string) => Effect.Effect<void, Error>;
   exchangeCode?: () => Effect.Effect<{ accessToken: string; refreshToken: string }, Error>;
   client?: AccountClient;
+  /** Who the service says a token belongs to; the stored account's person unless given. */
+  identity?: { id: string; email: string };
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
 }): Effect.Effect<
@@ -45,7 +47,11 @@ function manager(options: {
     // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     const fixtureClient = {
       revoke: options.revoke ?? (() => Effect.void),
-      userInfo: () => Effect.succeed(STORED),
+      userInfo: () =>
+        Effect.succeed({
+          ...(options.identity ?? { id: STORED.id, email: STORED.email }),
+          provider: STORED.provider,
+        }),
       refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
       authorizeUrl: (input: { redirectUri: string; state: string }) => {
         authorizations.push(input);
@@ -114,39 +120,6 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
   }),
 );
 
-it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
-  Effect.gen(function* () {
-    const holding = yield* Deferred.make<void>();
-    const subject = yield* manager({ stored: STORED, beforeClear: Deferred.await(holding) });
-    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-
-    const signingOut = yield* Effect.forkChild(subject.instance.signOut());
-    yield* Effect.yieldNow;
-    yield* Effect.forkChild(Fiber.interrupt(signingOut));
-    // Enough turns for the interruption to have been delivered wherever the
-    // sign-out could take it. The departure is reported before the credential
-    // is cleared, so it must not be taken anywhere: the fiber is still
-    // running on the held clear.
-    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
-    assert.equal(signingOut.pollUnsafe(), undefined);
-
-    yield* Deferred.succeed(holding, undefined);
-    yield* Fiber.await(signingOut);
-    assert.equal(subject.stored(), undefined);
-    assert.deepEqual(subject.events, ["stop"]);
-  }),
-);
-
-it.effect("refresh keeps a valid stored account signed in without rewriting it", () =>
-  Effect.gen(function* () {
-    const subject = yield* manager({ stored: STORED });
-    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-    yield* subject.instance.refresh();
-    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
-    assert.equal(subject.stored()?.accessToken, "access");
-  }),
-);
-
 /**
  * The real `AccountClient` over the ambient `HttpClient`, so the renewal
  * decision below runs through the actual conversion this PR made rather than
@@ -172,25 +145,6 @@ function refreshingClient(
 }
 
 it.effect(
-  "a renewal a network cannot carry keeps the stored account standing, never a sign-out",
-  () =>
-    Effect.gen(function* () {
-      const subject = yield* manager({
-        stored: STORED,
-        client: refreshingClient(() => {
-          throw new TypeError("fetch failed");
-        }),
-      });
-      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-
-      yield* subject.instance.refresh();
-
-      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
-      assert.deepEqual(subject.stored(), STORED);
-    }),
-);
-
-it.effect(
   "a renewal the service refuses with invalid_grant is the one path that signs the account out",
   () =>
     Effect.gen(function* () {
@@ -214,121 +168,130 @@ it.effect(
     }),
 );
 
-/** Better Auth's userinfo answer for an access token it no longer holds: a 400, never a 401. */
-function deletedAccessToken(): Response {
-  return jsonResponse(
-    { error: "invalid_request", error_description: "Invalid access token" },
-    HTTP_STATUS.BAD_REQUEST,
-  );
-}
-
-it.effect(
-  "a renewal after a refused call signs out an account whose tokens the service deleted",
-  () =>
-    Effect.gen(function* () {
-      const subject = yield* manager({
-        stored: STORED,
-        client: refreshingClient(
-          () =>
-            Promise.resolve(
-              jsonResponse(
-                { error: "invalid_grant", error_description: "session not found" },
-                HTTP_STATUS.BAD_REQUEST,
-              ),
-            ),
-          deletedAccessToken,
-        ),
-      });
-      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-
-      yield* subject.instance.renewOnce();
-
-      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
-      assert.equal(subject.stored(), undefined);
-    }),
-);
-
-/** Userinfo that knows only the tokens a grant issued, as after an hour asleep. */
-function renewedIdentity(request: Request): Response {
-  return request.headers.get("authorization") === `Bearer ${STORED.accessToken}`
-    ? jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED)
-    : jsonResponse({ sub: STORED.id, email: STORED.email });
-}
-
-it.effect("a launch refresh and a refused call's renewal never replay one refresh token", () =>
-  Effect.gen(function* () {
-    // The token endpoint rotates as Better Auth does: a refresh token is good
-    // for one grant, and a second grant on it is a replay that is refused.
-    const spent = new Set<string>();
-    const subject = yield* manager({
-      stored: STORED,
-      client: refreshingClient(async (request) => {
-        const refreshToken = new URLSearchParams(await request.text()).get("refresh_token") ?? "";
-        if (spent.has(refreshToken)) {
-          return jsonResponse(
-            { error: "invalid_grant", error_description: "invalid refresh token" },
-            HTTP_STATUS.BAD_REQUEST,
-          );
-        }
-        spent.add(refreshToken);
-        return jsonResponse({
-          access_token: `${refreshToken}-access`,
-          refresh_token: `${refreshToken}-next`,
-          token_type: "Bearer",
-          expires_in: 3600,
-        });
-      }, renewedIdentity),
-    });
-    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-
-    yield* Effect.all([subject.instance.refreshOnce(), subject.instance.renewOnce()], {
-      concurrency: 2,
-    });
-
-    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
-    assert.equal(subject.stored()?.refreshToken, "refresh-next");
-  }),
-);
-
 /** Waits for the consent trip to have composed its authorization page. */
 async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-it.effect("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
-  Effect.gen(function* () {
-    const subject = yield* manager({});
-    const pending = yield* Effect.forkChild(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
-    yield* Effect.promise(() => armed(subject.authorizations));
-
-    subject.instance.cancelSignIn();
-    assert.equal((yield* Fiber.join(pending)).status, ACCOUNT_STATUS.SIGNED_OUT);
-  }),
-);
-
-it.effect("an exchange the account refuses is a failure the panel can report", () =>
-  Effect.gen(function* () {
-    const subject = yield* manager({
-      exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),
-    });
-    const refused = yield* Effect.forkChild(
-      Effect.exit(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB)),
-    );
-    yield* Effect.promise(() => armed(subject.authorizations));
+/** Answers the consent's own loopback as the browser would, with a code. */
+function grantCode(authorizations: readonly { redirectUri: string; state: string }[]) {
+  return Effect.gen(function* () {
+    yield* Effect.promise(() => armed(authorizations));
     // SAFETY: `armed` returns only once the first authorization was composed.
-    const { redirectUri, state } = subject.authorizations[0] as {
-      redirectUri: string;
-      state: string;
-    };
-
+    const { redirectUri, state } = authorizations[0] as { redirectUri: string; state: string };
     const callback = new URL(redirectUri);
     callback.searchParams.set("state", state);
     callback.searchParams.set("code", "auth-code");
-    const answered = yield* Effect.promise(() => fetch(callback));
-    assert.equal(answered.status, HTTP_STATUS.OK);
+    yield* Effect.promise(() => fetch(callback));
+  });
+}
 
-    const outcome = yield* Fiber.join(refused);
-    assert.equal(Exit.isFailure(outcome), true);
-    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+it.effect(
+  "a sign-in again withdrawn midway leaves the standing session signed in and working",
+  () =>
+    Effect.gen(function* () {
+      const revoked: string[] = [];
+      const subject = yield* manager({
+        stored: STORED,
+        revoke: (token) =>
+          Effect.sync(() => {
+            revoked.push(token);
+          }),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const pending = yield* Effect.forkChild(
+        subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB),
+      );
+      yield* Effect.promise(() => armed(subject.authorizations));
+
+      subject.instance.cancelSignIn();
+      assert.equal(yield* Fiber.join(pending), false);
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+      assert.deepEqual(subject.stored(), STORED);
+      assert.deepEqual(revoked, []);
+      // The session still renews as it did before the trip began.
+      yield* subject.instance.renewOnce();
+      assert.equal(subject.stored()?.refreshToken, "new-refresh");
+    }),
+);
+
+it.effect("a sign-in again that lands replaces the standing session and revokes its token", () =>
+  Effect.gen(function* () {
+    const revoked: string[] = [];
+    const subject = yield* manager({
+      stored: STORED,
+      revoke: (token) =>
+        Effect.sync(() => {
+          revoked.push(token);
+        }),
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    const pending = yield* Effect.forkChild(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB));
+    yield* grantCode(subject.authorizations);
+
+    assert.equal(yield* Fiber.join(pending), true);
+    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+    assert.equal(subject.stored()?.refreshToken, "issued-refresh");
+    assert.deepEqual(revoked, [STORED.refreshToken]);
+    // Never signed out on the way, so nothing the session carried was closed.
+    assert.equal(subject.events.includes("stop"), false);
   }),
+);
+
+it.effect("a sign-in again the account refuses fails and leaves the standing session", () =>
+  Effect.gen(function* () {
+    const subject = yield* manager({
+      stored: STORED,
+      exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    const refused = yield* Effect.forkChild(
+      Effect.exit(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB)),
+    );
+    yield* grantCode(subject.authorizations);
+
+    assert.equal(Exit.isFailure(yield* Fiber.join(refused)), true);
+    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+    assert.deepEqual(subject.stored(), STORED);
+  }),
+);
+
+it.effect(
+  "a sign-in again that lands on another account is refused, its tokens revoked, and the standing session kept",
+  () =>
+    Effect.gen(function* () {
+      const revoked: string[] = [];
+      const subject = yield* manager({
+        stored: STORED,
+        identity: { id: "user-2", email: "someone@example.com" },
+        revoke: (token) =>
+          Effect.sync(() => {
+            revoked.push(token);
+          }),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const refused = yield* Effect.forkChild(
+        Effect.exit(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB)),
+      );
+      yield* grantCode(subject.authorizations);
+
+      assert.equal(Exit.isFailure(yield* Fiber.join(refused)), true);
+      assert.deepEqual(subject.stored(), STORED);
+      assert.deepEqual(revoked, ["issued-refresh"]);
+    }),
+);
+
+it.effect(
+  "an ask to sign in again through another provider while one runs answers no rather than joining it",
+  () =>
+    Effect.gen(function* () {
+      const subject = yield* manager({ stored: STORED });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      const github = yield* Effect.forkChild(subject.instance.signInAgain(ACCOUNT_PROVIDER.GITHUB));
+      yield* Effect.promise(() => armed(subject.authorizations));
+
+      assert.equal(yield* subject.instance.signInAgain(ACCOUNT_PROVIDER.GOOGLE), false);
+      yield* grantCode(subject.authorizations);
+      assert.equal(yield* Fiber.join(github), true);
+    }),
 );

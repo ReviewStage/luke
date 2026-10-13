@@ -177,6 +177,8 @@ export interface HostOperator {
   resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
   beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
+  /** The sign-in taken again over the session that stands: whether a new session landed. */
+  signInAgain(provider: AccountProvider): Effect.Effect<boolean>;
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
@@ -482,6 +484,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
         client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
       ),
+    signInAgain: (provider) =>
+      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, { provider }), (answer) => {
+        const signedIn = record(answer)?.signedIn;
+        return isWireBoolean(signedIn)
+          ? Effect.succeed(signedIn)
+          : unanswered(GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN, answer);
+      }),
     cancelSignIn: () => fire(client.call(GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN)),
     signOut: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),

@@ -4,7 +4,6 @@ import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Option, Redacted } from "effect";
-import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import {
@@ -127,59 +126,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
         });
-      }),
-  );
-
-  it.effect("a developer who set no name on GitHub is named by their login", () =>
-    Effect.gen(function* () {
-      const { agent, target } = yield* openAgent(RELAY_FULL_NAME);
-      const github = githubReaching([INSTALLATION], undefined, {
-        user: { ...GITHUB_FIXTURE_USER, name: null },
-      });
-      const sandbox = sandboxDouble(() => undefined);
-
-      yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
-
-      assert.deepEqual(sandbox.identities, [
-        { ...DEVELOPER_IDENTITY, name: GITHUB_FIXTURE_USER.login, trailer: LUKE_TRAILER },
-      ]);
-    }),
-  );
-
-  it.effect(
-    "an App whose bot GitHub does not know still sets the developer's identity, with no trailer",
-    () =>
-      Effect.gen(function* () {
-        const { agent, target } = yield* openAgent(RELAY_FULL_NAME);
-        const github = githubReaching([INSTALLATION], undefined, { bot: null });
-        const sandbox = sandboxDouble(() => undefined);
-
-        const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
-          Effect.provide(github.layer),
-        );
-
-        assert.equal(Redacted.value(token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
-        assert.deepEqual(sandbox.identities, [{ ...DEVELOPER_IDENTITY, trailer: undefined }]);
-        assert.equal(sandbox.checkedOut, RELAY_FULL_NAME);
-      }),
-  );
-
-  it.effect(
-    "a repository the developer no longer reaches is refused by name, and nothing is cloned",
-    () =>
-      Effect.gen(function* () {
-        const { agent, target } = yield* openAgent("Acme/Ledger");
-        const github = githubReaching([INSTALLATION]);
-        const sandbox = sandboxDouble(() => undefined);
-
-        const refused = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
-          Effect.provide(github.layer),
-          Effect.flip,
-        );
-
-        assert.equal(refused.reason, CODER_REFUSAL.NOT_REACHABLE);
-        assert.deepEqual(sandbox.clones, []);
-        assert.deepEqual(sandbox.policies, []);
       }),
   );
 

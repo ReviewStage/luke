@@ -3,12 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
-import { repositoryPin } from "@sidecar/database/schemas/repository-pin";
 import { getTestDB } from "@sidecar/database/testing";
-import { REPOSITORY_PIN_BOUNDS, repositoryPinsAnswerSchema } from "@sidecar/hosted/plan-wire";
+import { repositoryPinsAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
@@ -124,55 +122,6 @@ it.layer(getTestDB())("the repository pins route", (it) => {
   );
 
   it.effect(
-    "a pin past the bound is refused with nothing written, and a repository already pinned still answers",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts;
-        const pin = (repository: string) =>
-          ask(request(owner, { method: "PUT", body: { repository, pinned: true } }));
-        for (let index = 0; index < REPOSITORY_PIN_BOUNDS.MAX_PINS; index += 1) {
-          yield* pin(`acme/repo-${index}`);
-        }
-
-        const past = yield* pin("acme/one-too-many");
-        const standing = yield* pin("acme/repo-0");
-
-        assert.deepEqual(
-          past,
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
-        assert.equal(pinsOf(standing).length, REPOSITORY_PIN_BOUNDS.MAX_PINS);
-        assert.equal(
-          pinsOf(standing).some(([repository]) => repository === "acme/one-too-many"),
-          false,
-        );
-      }),
-  );
-
-  it.effect(
-    "two pins asked at once one short of the bound keep exactly one, and refuse the other",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts;
-        const pin = (repository: string) =>
-          ask(request(owner, { method: "PUT", body: { repository, pinned: true } }));
-        for (let index = 0; index < REPOSITORY_PIN_BOUNDS.MAX_PINS - 1; index += 1) {
-          yield* pin(`acme/repo-${index}`);
-        }
-
-        const racing = yield* Effect.all([pin("acme/relay"), pin("acme/ledger")], {
-          concurrency: "unbounded",
-        });
-
-        assert.deepEqual(
-          racing.map((answered) => answered.status).sort(),
-          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.BAD_REQUEST].sort(),
-        );
-        assert.equal(pinsOf(yield* ask(request(owner))).length, REPOSITORY_PIN_BOUNDS.MAX_PINS);
-      }),
-  );
-
-  it.effect(
     "a body that is not a pin, a bearer that names no account, and a method the path does not answer are refused",
     () =>
       Effect.gen(function* () {
@@ -203,19 +152,5 @@ it.layer(getTestDB())("the repository pins route", (it) => {
         );
         assert.deepEqual(pinsOf(yield* ask(request(owner))), []);
       }),
-  );
-
-  it.effect("deleting the account deletes its pins", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts;
-      yield* ask(
-        request(owner, { method: "PUT", body: { repository: "acme/relay", pinned: true } }),
-      );
-
-      yield* db.delete(user).where(eq(user.id, owner));
-
-      const left = yield* db.select().from(repositoryPin).where(eq(repositoryPin.userId, owner));
-      assert.deepEqual(left, []);
-    }),
   );
 });

@@ -2,8 +2,8 @@ import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
-import { TranscriptIcon } from "@sidecar/panel";
-import { isRecord, MESSAGE_ROLE } from "@sidecar/wire";
+import { CallIcon } from "@sidecar/panel";
+import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
 import type { UIMessage } from "ai";
 import { AudioLinesIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -17,10 +17,9 @@ import {
 import { EmptyState } from "../empty-state";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
-import { AgentMessage, type DelegationDoors, PLANNING_LEAD } from "./agent-tab";
+import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallEnded } from "./call-card";
 import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
-import { AGENT_PART } from "./coding-agent-model";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {
@@ -31,7 +30,7 @@ import {
   type TranscriptCallRow,
   type TranscriptRegion,
 } from "./transcript-model";
-import { type WorkTurnRow, workFailed, workRowsOf } from "./work-model";
+import { type WorkTurnRow, workerJobs, workFailed, workRowsOf } from "./work-model";
 import { WorkingLine } from "./working-time";
 
 /**
@@ -47,8 +46,10 @@ import { WorkingLine } from "./working-time";
  * rows of their own, and how long it worked under it, its card on hover; a
  * turn still working ends on the shimmering working line, and one that
  * ended without answering on a quiet line saying it stopped or failed. A spoken turn's
- * words are left out of its rows, because Luke said them, and his saying
- * them is the line after the work; what the voice and the brain hand each
+ * words stay inside its fold with how long it worked, because Luke said
+ * them, and his saying them is the line after the work, so a finished
+ * spoken turn is one quiet line under its ask, and one that only spoke
+ * draws nothing; what the voice and the brain hand each
  * other is never drawn. Each call begins at a divider saying when it
  * started, the standing one marked live, and one that ended closes on how
  * long it ran, its card on hover. The list keeps to its newest line while it
@@ -104,12 +105,9 @@ function spokenMessage(lines: readonly UIMessage[]): CodingAgentMessage {
   };
 }
 
-/** A spoken turn's message without its words, which Luke said aloud and the line after it holds. */
-function unsaid(message: CodingAgentMessage): CodingAgentMessage {
-  return {
-    ...message,
-    parts: message.parts.filter((part) => !isRecord(part) || part.type !== AGENT_PART.TEXT),
-  };
+/** Whether a turn's message holds work to draw: a call, which a spoken turn's words and reasoning fold under; a turn of words alone has none. */
+function hasWork(message: CodingAgentMessage): boolean {
+  return message.parts.some((part) => isRecord(part) && isWireString(part.toolCallId));
 }
 
 /**
@@ -167,7 +165,7 @@ interface WorkDoors {
   readonly revealed: string | undefined;
 }
 
-/** One turn's work as one of Luke's messages, its words left out where he said them, ending on the working line while it moves and on how it ended where it did not answer. */
+/** One turn's work as one of Luke's messages, its words folded with its work where he said them, ending on the working line while it moves and on how it ended where it did not answer. */
 function TurnWork({
   turn,
   spoken,
@@ -177,11 +175,12 @@ function TurnWork({
   spoken: boolean;
   doors: WorkDoors;
 }): React.JSX.Element | null {
-  const message = spoken ? unsaid(turn.message) : turn.message;
+  const { message } = turn;
   const ended = turn.moving || turn.state !== PLAN_WORK_STATE.FAILED ? undefined : turn.record;
   const mark = turn.key === doors.revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null;
   // A turn that only answered in words Luke said aloud has nothing left to draw but where a version's Open lands.
-  if (message.parts.length === 0 && !turn.moving && ended === undefined) return mark;
+  const drawn = spoken ? hasWork(message) : message.parts.length > 0;
+  if (!drawn && !turn.moving && ended === undefined) return mark;
   return (
     <>
       {mark}
@@ -189,9 +188,10 @@ function TurnWork({
       <AgentMessage
         message={message}
         plan={false}
-        lead={PLANNING_LEAD}
+        lead={AGENT_LEAD}
         moving={turn.moving}
         delegation={doors.delegation}
+        said={spoken}
       />
       {turn.moving ? <WorkingLine startedAt={doors.counting ? turn.startedAt : undefined} /> : null}
       {ended === undefined ? null : (
@@ -221,7 +221,7 @@ function CallEntries({
         key={first.id}
         message={spokenMessage(run)}
         plan={false}
-        lead={PLANNING_LEAD}
+        lead={AGENT_LEAD}
         moving={false}
         delegation={undefined}
       />,
@@ -423,6 +423,8 @@ export function PlanCall({
       starts: shown ? workerStarts(rows) : undefined,
       onOpen: (callId) => onOpenSubagent(callId),
       onOpenAgent,
+      // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
+      jobs: workerJobs(turns),
     },
     counting: shown,
     revealed: at === undefined ? undefined : turnAt(rows, at),
@@ -467,7 +469,7 @@ export function PlanCall({
           <RetryButton onRetry={onRetry} />
         </ConversationEmptyState>
       ) : (
-        <EmptyState icon={<TranscriptIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
+        <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       )}
     </section>
   );

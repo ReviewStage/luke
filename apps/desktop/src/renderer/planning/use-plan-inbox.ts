@@ -109,7 +109,7 @@ interface KeptDraft {
 }
 
 /** What a card says when its answer was not taken, by what had become of the item. */
-export const INBOX_NOT_TAKEN_NOTE = {
+const INBOX_NOT_TAKEN_NOTE = {
   /** The agent changed the item before the answer landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
   /** The item was answered first, from another window or Mac. */
@@ -281,7 +281,7 @@ export function usePlanInbox(input: {
             return next;
           });
           if ("failure" in answer) {
-            note(item.id, messageFailureNote(answer.failure));
+            note(item.id, messageFailureNote(answer.failure).text);
             return;
           }
           // An answer landing after the window moved to another plan is that plan's no longer.

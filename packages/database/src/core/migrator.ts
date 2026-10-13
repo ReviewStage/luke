@@ -35,7 +35,7 @@ const JournalEntry = Schema.Struct({
 
 const Journal = Schema.Struct({ entries: Schema.Array(JournalEntry) });
 
-export type JournalEntry = Schema.Schema.Type<typeof JournalEntry>;
+type JournalEntry = Schema.Schema.Type<typeof JournalEntry>;
 
 const decodeJournal = Schema.decodeUnknownEffect(Schema.fromJsonString(Journal));
 
@@ -56,7 +56,7 @@ function migrationId(entry: JournalEntry): number {
 }
 
 /** The generated folder journal: the order and the instants Drizzle stamped. */
-export const webMigrationJournal: (
+const webMigrationJournal: (
   folder?: string,
 ) => Effect.Effect<ReadonlyArray<JournalEntry>, Migrator.MigrationError, FileSystem | Path> =
   /* @__PURE__ */ Effect.fn("web/webMigrationJournal")(function* (

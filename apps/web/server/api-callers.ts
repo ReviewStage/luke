@@ -23,7 +23,7 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
  */
 
 /** Where the clients live, relative to the repository root; `packages` stands for every package's `src`. */
-export const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
+const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
 const PACKAGES_ROOT = "packages";
 const PACKAGE_SOURCE_DIRECTORY = "src";
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist"]);
@@ -73,7 +73,7 @@ export const RESOLUTION = {
 } as const;
 type Resolution = (typeof RESOLUTION)[keyof typeof RESOLUTION];
 
-export const REFUSAL = {
+const REFUSAL = {
   /** Neither the table nor an alias serves the path. */
   NO_ROUTE: "no-route",
   /** A template interpolates something that is not a whole path segment, so the path it builds cannot be read. */
@@ -277,7 +277,7 @@ export async function callerDirectories(repoRoot: string): Promise<readonly stri
   return directories;
 }
 
-export interface Scan {
+interface Scan {
   readonly filesScanned: number;
   readonly sites: readonly ScannedSite[];
 }
@@ -287,7 +287,7 @@ function repositoryPath(repoRoot: string, file: string): string {
 }
 
 /** Every `/api/` path spelled in the source files under the given repository-relative directories. */
-export async function scanCallers(repoRoot: string, directories: readonly string[]): Promise<Scan> {
+async function scanCallers(repoRoot: string, directories: readonly string[]): Promise<Scan> {
   const files = (
     await Promise.all(directories.map((directory) => sourceFilesUnder(join(repoRoot, directory))))
   ).flat();
@@ -388,7 +388,7 @@ interface EvaluatedModule {
  * that composes another (`${brainTurnPath(id)}/cancel` spells no `/api/`), so
  * the module is imported and asked.
  */
-export async function evaluatePathsModule(
+async function evaluatePathsModule(
   repoRoot: string,
   moduleFile: string = PATHS_MODULE,
 ): Promise<EvaluatedModule> {
@@ -474,7 +474,7 @@ const byToken = (a: readonly [string, unknown], b: readonly [string, unknown]) =
  * of one path gathered under it. An unreadable builder is refused before any
  * matching, since the path it builds is not known.
  */
-export function resolveCallers(
+function resolveCallers(
   sites: readonly ScannedSite[],
   rewrites: readonly Rewrite[],
   aliases: readonly string[],
@@ -511,7 +511,7 @@ export function resolveCallers(
 }
 
 /** The extensionless paths the Build Output serves beside the rewrites: the standalone functions' and the hand-written one's. */
-export async function buildOutputAliases(web: string): Promise<readonly string[]> {
+async function buildOutputAliases(web: string): Promise<readonly string[]> {
   const standalone = (await webFunctions(web)).filter((definition) => !definition.dispatches);
   return [
     ...standalone.map((definition) => `/${functionAliasPath(functionPublicPath(definition))}`),

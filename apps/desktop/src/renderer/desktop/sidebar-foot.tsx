@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
+import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import {
   LifeBuoyIcon,
@@ -19,7 +19,7 @@ import { PersonAvatar } from "../person-avatar";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
-import { updateInSidebar, updateRow } from "../update-row";
+import { updateInSidebar } from "../update-row";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
 
 /**
@@ -51,44 +51,42 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 }
 
 /**
- * A newer release on its way in, between the account and the gear: a quiet
- * count while it downloads, then Update, the restart that installs it, which
- * is the very act Settings' Restart to update runs; or, once installing it
- * failed, the download from the releases page that Settings offers in its
- * place, its hint saying what went wrong. It draws nothing in any other
- * state, so the row carries no control with nothing to do, and it is the one
- * place outside Settings that says a release waits.
+ * A newer release with something to press, between the account and the
+ * gear: Restart, the very act Settings' Restart to update runs, once the
+ * release is downloaded; or, once installing it failed, the download from
+ * the releases page that Settings offers in its place, in the failure's red,
+ * its hint saying what went wrong. One word each, so the account's name
+ * keeps its room. It draws nothing in any other state, so the row carries no
+ * control with nothing to do.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
   if (!updateInSidebar(update)) return null;
-  switch (update.status) {
-    case UPDATE_STATUS.READY:
-      return (
-        <Tooltip label={`Luke ${update.latestVersion} is ready. Restart to update.`}>
-          <button type="button" className="sidebar-update" onClick={updates.onInstall}>
-            Update
-          </button>
-        </Tooltip>
-      );
-    case UPDATE_STATUS.DOWNLOADING:
-      return (
-        <Tooltip label={updateRow(update).detail}>
-          <span className="sidebar-update sidebar-update-progress" role="status">
-            <UpdateIcon />
-            {update.progress ? `${Math.round(update.progress.percent)}%` : null}
-          </span>
-        </Tooltip>
-      );
-    default:
-      return (
-        <Tooltip label={updateRow(update).detail}>
-          <button type="button" className="sidebar-update" onClick={updates.onOpenLatest}>
-            Download
-          </button>
-        </Tooltip>
-      );
+  if (update.status === UPDATE_STATUS.READY) {
+    return (
+      <Tooltip label={`Restart to update to ${update.latestVersion}`}>
+        <button type="button" className="sidebar-update" onClick={updates.onInstall}>
+          <UpdateIcon />
+          Restart
+        </button>
+      </Tooltip>
+    );
   }
+  // The sidebar carries a failure only once a release was named.
+  if (update.status !== UPDATE_STATUS.ERROR || update.latestVersion === undefined) return null;
+  return (
+    <Tooltip label={`Couldn't install ${update.latestVersion}. Download it from GitHub.`}>
+      <button
+        type="button"
+        className="sidebar-update"
+        data-failed="true"
+        onClick={updates.onOpenLatest}
+      >
+        Download
+        <ExternalIcon />
+      </button>
+    </Tooltip>
+  );
 }
 
 /** Who the menu is about, over its items: the account's name, and its email muted under it. */
@@ -134,12 +132,12 @@ function accountMenuGroups(
     [
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
-        label: "Send feedback…",
+        label: "Send feedback",
         icon: <MessageSquareIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
-        label: "Suggest a feature…",
+        label: "Suggest a feature",
         icon: <LightbulbIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
       },

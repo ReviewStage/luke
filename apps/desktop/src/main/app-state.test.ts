@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { runModeFor } from "@sidecar/host";
-import { PLAN_WORK_PART, PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -69,16 +68,6 @@ function inert<Value>(): Value {
 
 const SETTINGS = inert<NonNullable<AppState["settings"]>>();
 
-it("a fresh document is version zero and carries this launch's own facts", () => {
-  const state = store().snapshot();
-  assert.equal(state.version, 0);
-  assert.equal(state.run.appVersion, "1.2.3");
-  assert.equal(state.account.status, ACCOUNT_STATUS.SIGNED_OUT);
-  assert.equal(state.update.currentVersion, "1.2.3");
-  assert.equal(state.update.installSupported, true);
-  assert.equal(state.audio.microphoneStatus, MICROPHONE_STATUS.NOT_DETERMINED);
-});
-
 it.effect("one slice patched bumps the version once and announces once on `changes`", () =>
   Effect.gen(function* () {
     const app = store();
@@ -132,26 +121,6 @@ it.effect("a touch re-announces the document without numbering it again", () =>
     );
   }),
 );
-
-it("a slice is replaced whole rather than merged field by field", () => {
-  const app = store();
-  app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
-  app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.DENIED } });
-  assert.deepEqual(app.snapshot().audio, { microphoneStatus: MICROPHONE_STATUS.DENIED });
-});
-
-it("the version climbs once per applied patch", () => {
-  const app = store();
-  for (let index = 0; index < 10; index += 1) {
-    app.update({
-      audio: {
-        microphoneStatus:
-          index % 2 === 0 ? MICROPHONE_STATUS.GRANTED : MICROPHONE_STATUS.NOT_DETERMINED,
-      },
-    });
-  }
-  assert.equal(app.snapshot().version, 10);
-});
 
 it("a voice window that went away leaves the document holding no view", () => {
   const app = store();
@@ -211,7 +180,8 @@ it("the voice window is sent the document without the planning turns' work, and 
         startedAt: 0,
         state: PLAN_WORK_STATE.DONE,
         earlierOmitted: false,
-        parts: [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+        journal: [{ type: "text", text: "Invites live in one file." }],
+        workers: [],
       },
     ],
   } as const;

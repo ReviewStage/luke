@@ -49,7 +49,7 @@ export type SkillsRead = { readonly skills: readonly SkillOption[] } | { readonl
 export type SkillSource = () => Promise<SkillsRead>;
 
 /** What the list says where it has no row to offer. */
-export const SKILL_MENU_NOTE = {
+const SKILL_MENU_NOTE = {
   READING: "Reading skills…",
   NONE: "No skills in this repository",
   NONE_HINT: "Add one at .agents/skills/<name>/SKILL.md",

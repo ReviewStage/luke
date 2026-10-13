@@ -10,7 +10,7 @@ import {
 } from "./live-session-source.js";
 import type { OpenSocket } from "./live-socket.js";
 
-export interface VoiceSettings {
+interface VoiceSettings {
   get<Field extends AppSettingField>(
     field: Field,
   ): Effect.Effect<AppSettingValue<Field>, PlatformError>;

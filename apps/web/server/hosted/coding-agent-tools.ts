@@ -75,7 +75,7 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * repository's own text and whatever the agent's shell printed.
  */
 
-export const CODING_AGENT_TOOL_BOUNDS = {
+const CODING_AGENT_TOOL_BOUNDS = {
   /** The newest turns a progress read walks, the one under way included. */
   TAIL_TURNS: 3,
   /** The most entries a progress read answers, the newest last. */

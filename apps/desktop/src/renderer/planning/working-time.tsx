@@ -59,18 +59,13 @@ export function workingTime(elapsedMs: number): string {
 }
 
 /** What a finished turn's last line says: how long it worked, and the day and time it ended in the developer's own locale and zone, the day as a call's header says it from `now`. */
-export function workedForText(
-  startedAt: number,
-  endedAt: number,
-  now: number,
-  locale?: string,
-): string {
+function workedForText(startedAt: number, endedAt: number, now: number, locale?: string): string {
   const ended = callHeading(endedAt, now, locale);
   return `${WORKED_WORDS}${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 
 /** The time now, and again each second: what a count is read against. */
-export const workingClock: Stream.Stream<number> = Stream.fromEffectSchedule(
+const workingClock: Stream.Stream<number> = Stream.fromEffectSchedule(
   Clock.currentTimeMillis,
   Schedule.spaced(WORKING_TICK),
 );
@@ -119,7 +114,6 @@ export function WorkedFor({
   endedAt,
   record = {},
   models = [],
-  harnessed = true,
 }: {
   startedAt: number;
   endedAt: number;
@@ -127,23 +121,13 @@ export function WorkedFor({
   record?: TurnRecord | undefined;
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models?: readonly CatalogModel[] | undefined;
-  /** Whether the turn ran in a harness, as an agent's and a subagent's do; Luke's own turns on the Call tab ran in none. */
-  harnessed?: boolean;
 }): ReactNode {
   const now = useMinute();
   const text = workedForText(startedAt, endedAt, now);
   return (
     <Tooltip
       label={text}
-      card={
-        <TurnCard
-          startedAt={startedAt}
-          endedAt={endedAt}
-          record={record}
-          models={models}
-          harnessed={harnessed}
-        />
-      }
+      card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
     >
       <p className={cn(STATUS_LINE_CLASS, "mt-2 mb-0 w-fit tabular-nums")} data-worked="">
         <span data-worked-length="">

@@ -255,6 +255,17 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         const snapshot = yield* Effect.orDie(session.beginSignIn(provider));
         return { account: carried(snapshot) };
       }),
+    [GATEWAY_METHOD.ACCOUNT_SIGN_IN_AGAIN]: (params) =>
+      Effect.gen(function* () {
+        const provider = params.provider;
+        if (!isAccountProvider(provider))
+          return yield* invalid("provider is not one this build knows");
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+        });
+        // Whether a session landed, and nothing of it: the account follows on its own event.
+        return { signedIn: yield* Effect.orDie(session.signInAgain(provider)) };
+      }),
     [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
       Effect.sync(() => {
         settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {

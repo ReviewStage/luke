@@ -34,17 +34,17 @@ import {
 
 export const SCRIPTED_PLANNING_REPLY = "Who should be able to do that?";
 /** What a developer's words start with when they ask the scripted planner to research the rest. */
-export const SCRIPTED_LOOK_UP = "Look up: ";
-export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
-export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
+const SCRIPTED_LOOK_UP = "Look up: ";
+const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
+const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
 /** What a developer's words start with when they ask the scripted planner to hand the rest to the worker. */
 export const SCRIPTED_DELEGATE = "Research: ";
 const SCRIPTED_DELEGATED_REPLY = "The worker is on it.";
 /** What a developer's words start with when they ask the scripted planner to draw the rest as one box. */
-export const SCRIPTED_DRAW = "Draw: ";
+const SCRIPTED_DRAW = "Draw: ";
 /** The id the scripted planner gives the box it draws. */
-export const SCRIPTED_DRAWN_ID = "sketch";
-export const SCRIPTED_DRAWN_REPLY = "It's on the board.";
+const SCRIPTED_DRAWN_ID = "sketch";
+const SCRIPTED_DRAWN_REPLY = "It's on the board.";
 /** What a developer's words start with when they ask the scripted planner to run the rest in the repository. */
 export const SCRIPTED_READ = "Read: ";
 /** The reply to a command that ran: its stdout follows. */

@@ -65,8 +65,7 @@ const DESKTOP_WINDOW = {
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
-  // is desktop.css's `--desktop-ground` for that appearance, which
-  // design/check-design-contract.mjs holds them to.
+  // is desktop.css's `--desktop-ground` for that appearance.
   BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
 } as const;
 

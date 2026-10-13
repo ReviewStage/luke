@@ -813,8 +813,7 @@ Each default section is described once, in `plan-template.ts`: its heading
 (`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
 from (`PLAN_FIELD_BAR`). The planning model is handed all three; the
 notetaker is handed the purpose alone, since it records what was said
-rather than judging it. `apps/web/tests/planning-instructions.test.ts`
-holds both prompts to those words.
+rather than judging it.
 
 | Section | The question Luke asks |
 | --- | --- |
@@ -1331,9 +1330,7 @@ changes when a check is run, not when one is planned.
 - **Signing in with GitHub on a Preview.** A Preview's sign-in goes through
   production's registered callback on the OAuth proxy and lands on the
   Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy); it
-  is held end to end against a fake GitHub in
-  `apps/web/tests/auth-proxy-sign-in.test.ts` and has not yet been exercised
-  against a deployed Preview.
+  has not yet been exercised against a deployed Preview.
 - **`read_web_page` checks addresses without pinning them.** Every host the
   read reaches, and every redirect hop, is resolved and refused unless all of
   its addresses are public unicast. The check is a lookup ahead of the

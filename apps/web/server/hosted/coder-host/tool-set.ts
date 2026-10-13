@@ -55,14 +55,6 @@ export const CODER_TOOL = {
 } as const;
 
 /**
- * The tools a worker is offered, authored one file each under
- * `coder/subagents/worker/tools/`: the coding worker's in the registry.
- * The shell is among them, told to change nothing; what holds it to that
- * is the worker's instructions.
- */
-export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.CODER_WORKER);
-
-/**
  * eve's provider-run web reads, which coding agents ran before they had the
  * hosted pair: no agent is offered them now, but a transcript written then
  * names them, and reads back under the same set.
@@ -81,7 +73,7 @@ export const RETIRED_CODER_TOOL = {
  * worker opened is stopped at the end of the first turn in which the agent
  * runs a sandbox tool of its own, which a turn that edits always does.
  */
-export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
+const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BASH,
   CODER_TOOL.READ_FILE,
   CODER_TOOL.WRITE_FILE,
@@ -129,7 +121,7 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  * \`delegate\` is (\`coder/tools/delegate.ts\`): eve runs them, so they are no
  * tool of Luke's, but a turn that waits on its worker or stops one names them.
  */
-export const CODER_TASK_TOOL = {
+const CODER_TASK_TOOL = {
   TASK_WAIT: "task_wait",
   TASK_CANCEL: "task_cancel",
 } as const;

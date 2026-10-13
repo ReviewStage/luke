@@ -1,5 +1,6 @@
 import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
+import type { Failure } from "../failure-remedy";
 import { AgentComposer } from "./agent-composer";
 import { ArchivedComposerNote } from "./archived-plan";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -21,8 +22,9 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * the draft's, held by its owner, as are the files, so they wait while the
  * tab is away. A
  * send that did not start it
- * leaves the words in the box with why under it and Retry, which asks again
- * under the draft's own key. Closing the tab lets the draft go, and since
+ * leaves the words in the box with why under it and what mends it: Retry,
+ * which asks again under the draft's own key, or the GitHub sign-in a
+ * refusal needs, after which it asks again by itself. Closing the tab lets the draft go, and since
  * nothing was started, nothing is left behind. While the plan is archived,
  * nothing starts on it, so the box gives way to the note that offers
  * Unarchive, and the words written wait in the draft until it is back.
@@ -43,7 +45,7 @@ export function DraftAgentTab({
   control: CodingAgentsControl;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
-  const [note, setNote] = useState<string | undefined>(undefined);
+  const [note, setNote] = useState<Failure | undefined>(undefined);
   // The account's default as read, which the chip names until the developer makes a choice of their own.
   const [fallback, setFallback] = useState<AgentDraft["choice"]>(undefined);
   // Note that the control is read through a ref, because the panel hands a

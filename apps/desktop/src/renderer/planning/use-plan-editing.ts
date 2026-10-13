@@ -161,7 +161,6 @@ export function usePlanEditing(
   // words not yet saved are sent through the door of the plan they were
   // typed in. Note that the cleanup is what sends them, because it still
   // holds that plan's door and runs before the document can go.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the plan changing is what closes it.
   useEffect(() => {
     opening.current += 1;
     setEditor(undefined);

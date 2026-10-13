@@ -114,7 +114,7 @@ export function repositoryOwnerPictureUrl(repository: string): string {
 }
 
 /** What the new-plan form says when the service answered no plan. */
-export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
+const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
 /** What a call that named a repository says when the service refused it, by its reason. */
 const REPOSITORY_FAILURE_NOTES = {
@@ -531,7 +531,7 @@ export interface MicrophoneButton {
 }
 
 /** What the microphone button says on an archived plan, which no call is about. */
-export const ARCHIVED_CALL_LABEL = "Unarchive the plan to talk about it";
+const ARCHIVED_CALL_LABEL = "Unarchive the plan to talk about it";
 
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
 const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([

@@ -1,5 +1,0 @@
-{
-  "status": 403,
-  "contentType": "application/json",
-  "body": "{\"error\":\"github-sign-in-required\"}"
-}

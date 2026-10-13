@@ -24,7 +24,6 @@ export {
   finishedSentencesOf,
   replySentences,
   SLOW_STEP_KIND,
-  STEP_START_PART,
   TOOL_CALL_SETTLEMENT,
   type ToolCallSettlement,
   toolCallSettlementOf,

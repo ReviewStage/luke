@@ -39,7 +39,7 @@ import { cn } from "./utils";
 const FOLLOW_SLACK_PX = 1;
 
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
-export function followsNewest(list: {
+function followsNewest(list: {
   scrollTop: number;
   scrollHeight: number;
   clientHeight: number;

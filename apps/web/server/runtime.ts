@@ -90,7 +90,7 @@ type WebServicesError = Layer.Error<typeof webServices>;
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
 /** The one runtime a web function runs an effect on. */
-export function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> {
+function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> {
   standing ??= ManagedRuntime.make(webServices);
   return standing;
 }

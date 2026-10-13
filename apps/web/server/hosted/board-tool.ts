@@ -40,7 +40,7 @@ export const DRAW_ON_BOARD_STATUS = {
 } as const;
 
 /** Why a call drew nothing, in words the model can act on. */
-export const DRAW_ON_BOARD_REFUSAL = {
+const DRAW_ON_BOARD_REFUSAL = {
   UNREADABLE:
     "Not drawn: `elements` must be the whole diagram, each element in the tool's schema, every " +
     "id used once. The board is unchanged.",

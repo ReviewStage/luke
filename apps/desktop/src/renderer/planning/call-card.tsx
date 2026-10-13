@@ -1,11 +1,11 @@
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@sidecar/live";
 import type { ReactNode } from "react";
+import { cn } from "../ai-elements/utils";
 import { Tooltip } from "../tooltip";
-import { ModelLabel } from "./model-label";
 import { spanText, useMinute } from "./plan-time";
-import { TranscriptNote } from "./transcript-blocks";
 import { type CallRecord, callHeading } from "./transcript-model";
-import { WORKED_SEPARATOR, workingTime } from "./working-time";
+import { TurnModel } from "./turn-card";
+import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
  * call-card.tsx -- the quiet line a call that ended closes with on the Call tab, and the card it hangs: how long the call ran and when it ended, then what it ran on, when, how it ended, and what it metered.
@@ -13,9 +13,11 @@ import { WORKED_SEPARATOR, workingTime } from "./working-time";
  * A call closes the way a finished turn does (`working-time.tsx`'s
  * WorkedFor): one line saying it ended, how long it ran, and the day and
  * time it ended, worded as a call's header words it: "Call ended · 12m 34s
- * · Today, 3:04 PM". The whole line hangs the call's card while the pointer
+ * · Today, 3:04 PM", set at the column's start in the type and colour a
+ * turn's line is. The whole line hangs the call's card while the pointer
  * rests on it, drawn as the turn's card is (`turn-card.tsx`): the voice
- * model at its head, and at the head's right how the call ended where it
+ * model at its head wearing its provider's mark as a turn's model does,
+ * and at the head's right how the call ended where it
  * did not simply hang up; under it, when it began and ended, in full; and
  * under a hairline, the seconds the Live API metered it for, where they
  * differ from the time it ran, marked estimated where the call's close
@@ -64,11 +66,7 @@ function CallCard({
     <div className="turn-card" data-call-card="">
       {model === undefined && endingWord === undefined ? null : (
         <div className="turn-card-head">
-          {model === undefined ? null : (
-            <span className="turn-card-model">
-              <ModelLabel choice={{ model, effort: NO_EFFORT }} models={[]} />
-            </span>
-          )}
+          {model === undefined ? null : <TurnModel model={model} effort={NO_EFFORT} models={[]} />}
           {endingWord === undefined ? null : (
             <span className="turn-card-ending" data-ending={ending}>
               {endingWord}
@@ -111,7 +109,7 @@ export function CallEnded({
   const now = useMinute();
   const endedAt = record?.endedAt;
   if (record === undefined || endedAt === undefined) {
-    return <TranscriptNote className="text-center">{line}</TranscriptNote>;
+    return <p className={STATUS_LINE_CLASS}>{line}</p>;
   }
   const length = workingTime(endedAt - startedAt);
   const ended = callHeading(endedAt, now);
@@ -120,7 +118,7 @@ export function CallEnded({
       label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
       card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
     >
-      <TranscriptNote className="mx-auto w-fit tabular-nums select-text" data-call-ended="">
+      <p className={cn(STATUS_LINE_CLASS, "w-fit tabular-nums")} data-call-ended="">
         <span data-call-length="">
           {line}
           {WORKED_SEPARATOR}
@@ -128,7 +126,7 @@ export function CallEnded({
         </span>
         {WORKED_SEPARATOR}
         <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
-      </TranscriptNote>
+      </p>
     </Tooltip>
   );
 }

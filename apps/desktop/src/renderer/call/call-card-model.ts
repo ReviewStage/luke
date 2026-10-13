@@ -13,7 +13,7 @@ import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 import { type CallStatus, standingCallStatus } from "../planning/planning-model";
 
 /** The plan's name where the document has none to give, which a plan just started can briefly be. */
-export const CALL_CARD_UNNAMED = "Planning call";
+const CALL_CARD_UNNAMED = "Planning call";
 
 export interface CallCardModel {
   readonly planName: string;

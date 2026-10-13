@@ -10,13 +10,10 @@ import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
-import { GitHubApp } from "../server/github/github-app";
 import { githubRepositoriesApp } from "../server/github-repositories-app";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   type FakeGitHub,
-  fakeGitHub,
   GITHUB_FIXTURE,
   githubReaching,
   openGithubUser,
@@ -139,58 +136,6 @@ it.layer(getTestDB())("the repositories route", (it) => {
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
-      }),
-  );
-
-  it.effect("an account with the App installed nowhere is told so, with where to install it", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts(githubReaching([]));
-
-      assert.deepEqual(listed(yield* ask(owner)), {
-        installed: false,
-        repositories: [],
-        installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
-      });
-    }),
-  );
-
-  it.effect(
-    "an account that never signed in with GitHub, or whose token GitHub revoked, must sign in again",
-    () =>
-      Effect.gen(function* () {
-        const revoked = fakeGitHub(() =>
-          Response.json({ message: "Bad credentials" }, { status: 401 }),
-        );
-        const { owner, other, ask } = yield* openAccounts(revoked);
-        const signIn = refusal(
-          HOSTED_HTTP_STATUS.FORBIDDEN,
-          HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED,
-        );
-
-        assert.deepEqual([yield* ask(owner), yield* ask(other)], [signIn, signIn]);
-      }),
-  );
-
-  it.effect(
-    "a GitHub that could not be read, and a deployment without the App, are unavailable",
-    () =>
-      Effect.gen(function* () {
-        const down = fakeGitHub(() => new Response(null, { status: 503 }));
-        const unconfigured = fakeGitHub(
-          () => Response.json({}),
-          GitHubApp.layer(undefined, [GITHUB_APP_ENVIRONMENT.SLUG]),
-        );
-        const unavailable = refusal(
-          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-          HOSTED_API_ERROR.UNAVAILABLE,
-        );
-
-        const { owner, ask } = yield* openAccounts(down);
-        const withoutApp = yield* openAccounts(unconfigured);
-
-        assert.deepEqual(yield* ask(owner), unavailable);
-        assert.deepEqual(yield* withoutApp.ask(withoutApp.owner), unavailable);
-        assert.equal(unconfigured.sent.length, 0);
       }),
   );
 

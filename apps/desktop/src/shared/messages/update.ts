@@ -6,7 +6,8 @@
  * once, so there is no standing "available" state: the news arrives as
  * `DOWNLOADING`. `UPDATED` is transient — the first launch after an install
  * confirms what just happened.
- * `ERROR` must be drawn as the way back to the browser, never as a dead end.
+ * `ERROR` must never be drawn as a dead end: a failed install offers the
+ * browser, and a failed check offers to check again.
  */
 export const UPDATE_STATUS = {
   IDLE: "idle",
@@ -18,6 +19,28 @@ export const UPDATE_STATUS = {
 } as const;
 
 export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
+
+/**
+ * The commit a build was cut from, stamped by `scripts/build.mjs` from the
+ * checkout it ran in: the short SHA, whether the tree held uncommitted
+ * changes, and the branch when one was checked out (a tag's detached head
+ * has none). A build made where git could not answer carries no commit.
+ */
+export interface BuildCommit {
+  sha: string;
+  dirty: boolean;
+  branch?: string;
+}
+
+/**
+ * What the running build is, beside where the updater stands: a packaged
+ * release or a development build run from source, and the commit it was cut
+ * from, so the update row can name a build no release version describes.
+ */
+export interface RunningBuild {
+  packaged: boolean;
+  commit?: BuildCommit;
+}
 
 /** How far along a download is, as electron-updater reports it. */
 export interface UpdateProgress {
@@ -43,6 +66,12 @@ export type UpdateSnapshot =
       installSupported: boolean;
       /** True only after a check positively answered "nothing newer". */
       upToDate: boolean;
+      /**
+       * True only after a check the developer asked for could not reach the
+       * feed. A timed check's network failure stays silent, but an asked one
+       * that answered nothing must not read as one never asked.
+       */
+      unreachable?: boolean;
     }
   | {
       status: typeof UPDATE_STATUS.CHECKING;

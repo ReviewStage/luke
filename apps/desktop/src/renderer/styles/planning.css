@@ -2116,25 +2116,25 @@ button.attached-file-face:hover img {
   white-space: nowrap;
 }
 
-/* The foot: the note on its own line, and Settings one quiet press away. */
-.agent-servers-foot {
+/* The title's row: the title, and Settings one quiet gear away at its end,
+   a small square that keeps the row no taller than the title alone. */
+.agent-servers-head {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding-bottom: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  padding-bottom: 0;
 }
 
 .agent-servers-settings {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2) var(--row-inset);
-  border-radius: var(--menu-row-radius);
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  margin-right: calc(var(--space-4) - var(--row-inset));
 }
 
-.agent-servers-settings:hover {
-  color: var(--text-primary);
+.agent-servers-settings svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* The context ring beside the MCP button: the window's one icon button

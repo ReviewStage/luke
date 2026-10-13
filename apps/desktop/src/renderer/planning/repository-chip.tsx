@@ -18,7 +18,7 @@ import { repositoryFailureNote } from "./planning-model";
  * GitHub mark and the pick it is waiting on. In the open plan's toolbar it stands in the actions row,
  * reading `Choose repository` while the plan has none; once the plan names
  * one, the sidebar's row says which and the toolbar draws no chip, and the
- * menu alone is left, opened by the plan menu's Change repository… and
+ * menu alone is left, opened by the plan menu's Change repository and
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the Luke GitHub App reaches, the repositories the account's
  * plans were about lately first and the rest as GitHub last saw them
@@ -132,7 +132,7 @@ export function RepositoryChip(props: {
     return () => window.removeEventListener("focus", read);
   }, [read]);
 
-  // Each ask from elsewhere, such as the plan menu's Change repository…, opens the menu.
+  // Each ask from elsewhere, such as the plan menu's Change repository, opens the menu.
   useEffect(() => {
     if (openRequest === undefined || openRequest === 0) return;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;

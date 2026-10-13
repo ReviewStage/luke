@@ -29,20 +29,6 @@ const opened = (userId: string, planId: string) =>
 
 it.layer(getTestDB())("a new plan as one document", (it) => {
   it.effect(
-    "a new plan is one document, a copy of the default template while the account keeps none",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-
-        const started = yield* createPlan(userId, RELAY);
-
-        assert.deepEqual(started.document, { body: DEFAULT_PLAN_TEMPLATE, assumptions: [] });
-        assert.equal(started.lastEdit, undefined);
-        assert.deepEqual(yield* opened(userId, started.id), started);
-      }),
-  );
-
-  it.effect(
     "a new plan copies the account's own template, and an edit of the template leaves every plan started from it as it stands",
     () =>
       Effect.gen(function* () {

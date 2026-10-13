@@ -52,26 +52,8 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * Where everything here posts. The processor's own address rather than Luke's
  * origin: nothing forwards on the user's behalf any more, so the processor
  * sees the address a request arrives from.
- *
- * Exported so the connect policy in `index.html` can be asserted against it.
- * The host and the policy are separate literals in separate files, and a
- * recording the policy refuses to send is indistinguishable from one that was
- * never started — which is exactly how this went unnoticed once already.
  */
-export const POSTHOG_HOST = "https://us.i.posthog.com";
-
-/**
- * The library's other host, which it derives from `POSTHOG_HOST`'s region
- * rather than taking as configuration: captured events go to the ingestion
- * host above, and the remote configuration saying whether recording is on
- * comes from this one.
- *
- * Named in the policy even though `preloadRemoteConfig` means nothing here
- * asks for it today. The preload rests on an undocumented global, and a
- * library that stopped reading it would fall through to fetching this — which
- * this entry lets succeed rather than fail the same silent way it did before.
- */
-export const POSTHOG_ASSETS_HOST = "https://us-assets.i.posthog.com";
+const POSTHOG_HOST = "https://us.i.posthog.com";
 
 /**
  * What this window says its address is, in place of the one it has.
@@ -225,7 +207,7 @@ declare global {
  *
  * The library splits its traffic by kind: what it captures goes to the
  * ingestion host, and the configuration deciding whether to record at all
- * comes from `POSTHOG_ASSETS_HOST`, which it derives from the region rather
+ * comes from its assets host, which it derives from the region rather
  * than taking as configuration. A renderer policy naming only the first
  * refuses that read, and the refusal is silent — recording is gated on a
  * property only that response writes, so a blocked config reads exactly like
@@ -298,7 +280,7 @@ export function applySessionReplay(bootstrap: SessionReplayBootstrap): void {
  * can be asserted on its own: this decides whether the one thing Luke sends
  * that no vocabulary bounds happens at all.
  */
-export function sessionReplayWanted(bootstrap: SessionReplayBootstrap): boolean {
+function sessionReplayWanted(bootstrap: SessionReplayBootstrap): boolean {
   return bootstrap.permitted;
 }
 

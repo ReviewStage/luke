@@ -18,14 +18,7 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/w
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
-import {
-  CALL_KIND,
-  type CallKind,
-  commandDescription,
-  isCommandKind,
-  pageName,
-  type SaidCall,
-} from "./turn-rows";
+import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -67,7 +60,7 @@ const ANSI_SEQUENCE = new RegExp(
 );
 
 /** The words with every terminal escape taken out. */
-export function stripAnsi(text: string): string {
+function stripAnsi(text: string): string {
   return text.replace(ANSI_SEQUENCE, "");
 }
 
@@ -75,7 +68,7 @@ export function stripAnsi(text: string): string {
 const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
 
 /** The files a patch touches, in the order its headers name them. */
-export function patchPaths(patchText: string): readonly string[] {
+function patchPaths(patchText: string): readonly string[] {
   return patchText.split("\n").flatMap((line) => {
     const match = PATCH_FILE_HEADER.exec(line.trimEnd());
     return match?.[1] === undefined ? [] : [match[1]];
@@ -457,36 +450,6 @@ function knownToolView(
   }
 }
 
-/** A value as its block draws it: words as they are, anything else as its JSON. */
-function valueBlock(value: WireValue): ToolBlock {
-  return isWireString(value) ? textBlock(value) : jsonBlock(value);
-}
-
-/**
- * A call its wire already read, drawn as the wire said it: its kind, its
- * subject and the words it was said to be for, a command's input behind its
- * prompt and anything else as it came, and its answer as it came.
- */
-function saidToolView(
-  said: SaidCall,
-  input: WireValue | undefined,
-  output: WireValue | undefined,
-): ToolCallView {
-  const command = isCommandKind(said.kind) ? stringAt(input, "command") : undefined;
-  return {
-    kind: said.kind,
-    subject: said.subject ?? "",
-    ...(said.description === undefined ? undefined : { description: said.description }),
-    input:
-      command !== undefined
-        ? { kind: TOOL_BLOCK.COMMAND, text: command }
-        : input === undefined
-          ? textBlock("")
-          : valueBlock(input),
-    output: output === undefined ? undefined : valueBlock(output),
-  };
-}
-
 /** A repository command's answer as the planning model's tool journals it: the command's own output, or why it ran nothing, in the words the service said it, which say it was not run. */
 function repositoryOutput(output: WireValue): ToolBlock {
   const reason = stringAt(output, "reason");
@@ -518,6 +481,15 @@ function namedCall(
   };
 }
 
+/** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
+export type WorkerJobs = ReadonlyMap<string, string>;
+
+/** What a stop names: the job of the worker it stopped where it is known, and the task's id otherwise. */
+function stoppedTask(input: WireValue | undefined, jobs: WorkerJobs | undefined): string {
+  const task = stringAt(input, "taskId");
+  return (task === undefined ? undefined : jobs?.get(task)) ?? task ?? "";
+}
+
 /**
  * A call of one of the planning model's own tools, or one eve gives a
  * planning session, drawn from its part as a coding agent's call is: its
@@ -528,6 +500,7 @@ function planningToolView(
   tool: string,
   input: WireValue | undefined,
   output: WireValue | undefined,
+  jobs: WorkerJobs | undefined,
 ): ToolCallView | undefined {
   switch (tool) {
     case AGENT_TOOL.RUN_IN_REPOSITORY: {
@@ -567,23 +540,25 @@ function planningToolView(
     case EVE_TOOL.TASK_WAIT:
       return namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined);
     case EVE_TOOL.TASK_CANCEL:
-      return namedCall(CALL_KIND.WORKER_CANCEL, input, output, "taskId");
+      return {
+        ...namedCall(CALL_KIND.WORKER_CANCEL, input, output, undefined),
+        subject: stoppedTask(input, jobs),
+      };
     default:
       return undefined;
   }
 }
 
-/** How one tool call is drawn: its row and its body, from what its wire said of it, or else the part's input and output. */
+/** How one tool call is drawn: its row and its body, from the part's input and output, a stop naming the worker it stopped by its job where `jobs` knows it. */
 export function toolCallView(input: {
   readonly tool: string;
   readonly input: WireValue | undefined;
   readonly output: WireValue | undefined;
-  readonly said?: SaidCall | undefined;
+  readonly jobs?: WorkerJobs | undefined;
 }): ToolCallView {
-  if (input.said !== undefined) return saidToolView(input.said, input.input, input.output);
   return (
     knownToolView(input.tool, input.input, input.output) ??
-    planningToolView(input.tool, input.input, input.output) ?? {
+    planningToolView(input.tool, input.input, input.output, input.jobs) ?? {
       kind: CALL_KIND.OTHER,
       subject: input.tool,
       input: input.input === undefined ? textBlock("") : jsonBlock(input.input),
@@ -619,7 +594,6 @@ export function delegationView(
   part: {
     readonly input: WireValue | undefined;
     readonly output: WireValue | undefined;
-    readonly said?: SaidCall | undefined;
   },
   own: ModelChoice | undefined,
 ): DelegationView {
@@ -637,7 +611,6 @@ export function delegationView(
     task:
       stringAt(part.input, DELEGATION_FIELD.TASK) ??
       stringAt(part.input, DELEGATION_FIELD.MESSAGE) ??
-      part.said?.subject ??
       "",
     choice: model !== undefined && effort !== undefined ? { model, effort } : undefined,
     result: stringAt(part.output, DELEGATION_FIELD.RESULT),

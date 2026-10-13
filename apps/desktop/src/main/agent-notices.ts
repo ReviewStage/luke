@@ -269,7 +269,7 @@ function samePublished(
  * agent's pull request hands one in. Nothing for a status that is not a
  * turn's end, or for a Stop.
  */
-export function noticeText(input: {
+function noticeText(input: {
   planName: string | undefined;
   model: string;
   title: string | null;

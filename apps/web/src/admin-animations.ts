@@ -38,7 +38,7 @@ export const ANIMATION_SWATCH = {
 } as const satisfies Record<AnimationVariant, string>;
 
 /** What a motion draws beyond the resting smile and eyes, worded for the page. */
-export function animationExtraParts(motion: FaceMotion): readonly string[] {
+function animationExtraParts(motion: FaceMotion): readonly string[] {
   const parts = FACE_MOTION_PARTS[motion];
   const labels: string[] = [];
   if (parts.brows) labels.push("brows");

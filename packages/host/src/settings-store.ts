@@ -351,7 +351,7 @@ function defaultPersistedSettings(): PersistedSettings {
 }
 
 /** A stored file this build cannot read as settings; `reason` is the legacy message. */
-export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
+class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
   readonly reason: string;
 }> {
   override get message(): string {
@@ -382,7 +382,7 @@ function refusalReason(source: string, error: Schema.SchemaError): string {
  * still folds that refusal into `defaultPersistedSettings()`, so the
  * fallback is a caller's decision and not this function's.
  */
-export function parsePersistedSettingsEither(
+function parsePersistedSettingsEither(
   source: string,
 ): Result.Result<PersistedSettings, SettingsParseRefusal> {
   return decodePersistedSettingsFile(source).pipe(

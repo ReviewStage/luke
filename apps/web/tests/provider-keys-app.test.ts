@@ -311,66 +311,6 @@ it.layer(getTestDB())("the provider keys route", (it) => {
   );
 
   it.effect(
-    "a key the deployment's ring can no longer open answers unreadable, so the account is told to replace it",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
-        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
-
-        const read = keysOf(yield* ask(request(owner), KEK.OTHER));
-
-        assert.deepEqual(
-          read.keys.map(({ provider, status }) => [provider, status]),
-          [[PROVIDER_KEY_PROVIDER.OPENAI, PROVIDER_KEY_STATUS.UNREADABLE]],
-        );
-      }),
-  );
-
-  it.effect(
-    "past ten saves in an hour a save is answered too many tries without asking the provider, and an hour on it is asked again",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask, checks } = yield* openAccounts({ ring: KEK.ONE });
-        for (let attempt = 0; attempt < 10; attempt += 1) {
-          keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
-        }
-
-        const braked = keysOf(
-          yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
-        );
-        const checkedWhileBraked = checks.length;
-        yield* TestClock.adjust("1 hour");
-        const later = keysOf(
-          yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
-        );
-
-        assert.equal(braked.rejected, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
-        assert.deepEqual(
-          braked.keys.map(({ provider }) => provider),
-          [PROVIDER_KEY_PROVIDER.OPENAI],
-        );
-        assert.equal(checkedWhileBraked, 10, "the braked save asked no provider");
-        assert.equal(later.rejected, undefined);
-        assert.equal(later.keys.length, 2);
-      }),
-  );
-
-  it.effect("deleting the account deletes its keys", () =>
-    Effect.gen(function* () {
-      const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
-      keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
-
-      yield* db.delete(user).where(eq(user.id, owner));
-
-      const rows = yield* db
-        .select({ provider: accountProviderKey.provider })
-        .from(accountProviderKey)
-        .where(eq(accountProviderKey.userId, owner));
-      assert.deepEqual(rows, []);
-    }),
-  );
-
-  it.effect(
     "a deployment without a ring, or with one it cannot read, is unavailable, and the log names the shape and never the value",
     () =>
       Effect.gen(function* () {

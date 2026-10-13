@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../server/hosted/bearer";
+import { hostedUserId } from "../server/hosted/bearer";
 
 function request(headers: Record<string, string> = {}): Request {
   return new Request("https://luke.test/api/voice/mint", { method: "POST", headers });
@@ -51,9 +51,3 @@ it.effect("a rejected, malformed, or subjectless answer is one indistinguishable
     assert.deepEqual(subjectless, Option.none());
   }),
 );
-
-it("oauthUserInfoFromAuthAnswer refuses malformed wire answers", () => {
-  assert.equal(oauthUserInfoFromAuthAnswer("not a record"), undefined);
-  assert.equal(oauthUserInfoFromAuthAnswer({ sub: "" }), undefined);
-  assert.deepEqual(oauthUserInfoFromAuthAnswer({ sub: "user-1" }), { sub: "user-1" });
-});

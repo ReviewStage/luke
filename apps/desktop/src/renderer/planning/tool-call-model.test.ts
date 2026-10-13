@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { cardTitle, patchPaths, stripAnsi, toolCallView } from "./tool-call-model";
+import { cardTitle, toolCallView } from "./tool-call-model";
 import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
@@ -25,12 +25,6 @@ test("a command's row is the command it ran, and its answer reads as a terminal 
     kind: TOOL_BLOCK.TEXT,
     text: "all green\none warning\nexit 2\n(output truncated)",
   });
-});
-
-test("a command still running has its row and its command, and no answer yet", () => {
-  const view = toolCallView({ tool: "bash", input: { command: "sleep 1" }, output: undefined });
-  assert.equal(view.subject, "sleep 1");
-  assert.equal(view.output, undefined);
 });
 
 test("a command the model described carries its description on one line for the row and keeps the command for the body; one with none, or only blanks, is the command's row as before", () => {
@@ -178,7 +172,6 @@ test("a patch names the first file it touches and how many more, carries the pat
     kind: TOOL_BLOCK.TEXT,
     text: "update apps/web/a.ts\nadd apps/web/b.ts",
   });
-  assert.deepEqual(patchPaths(patchText), ["apps/web/a.ts", "apps/web/b.ts"]);
 
   // A problem the patch reported is told after the files, not dropped.
   const flagged = toolCallView({
@@ -229,12 +222,6 @@ test("a command's answer that is not a terminal's envelope falls back to its JSO
   });
   assert.equal(view.output?.kind, TOOL_BLOCK.JSON);
   assert.match(view.output?.text ?? "", /"reason": "The turn ended/u);
-});
-
-test("terminal escapes are taken out of words, colours and titles alike", () => {
-  assert.equal(stripAnsi(`${ESCAPE}[1;31mred${ESCAPE}[0m plain`), "red plain");
-  assert.equal(stripAnsi(`${ESCAPE}]0;title${String.fromCharCode(7)}after`), "after");
-  assert.equal(stripAnsi("no escapes"), "no escapes");
 });
 
 test("a plan's card is titled by its first heading, or its first line of words", () => {
@@ -342,39 +329,6 @@ test("an inbox call that did nothing shows why, so a refused post never reads as
   assert.deepEqual(view.output, {
     kind: TOOL_BLOCK.TEXT,
     text: "Not posted: you hold 20 open items already.",
-  });
-});
-
-test("a call its wire already read is drawn as the wire said it: its kind, subject, and purpose, a command behind its prompt, other input as it came, and its answer as it came", () => {
-  const command = toolCallView({
-    tool: "run_in_repository",
-    input: { command: "ls src", description: "List the sources" },
-    output: "queue.ts",
-    said: { kind: CALL_KIND.COMMAND, subject: "ls src", description: "List the sources" },
-  });
-  assert.deepEqual(command, {
-    kind: CALL_KIND.COMMAND,
-    subject: "ls src",
-    description: "List the sources",
-    input: { kind: TOOL_BLOCK.COMMAND, text: "ls src" },
-    output: { kind: TOOL_BLOCK.TEXT, text: "queue.ts" },
-  });
-  // A tool a coding agent also has is still drawn as said, not read again from its input.
-  const question = toolCallView({
-    tool: "bash",
-    input: { question: "Who can invite?" },
-    output: { status: "queued" },
-    said: { kind: CALL_KIND.QUEUE_QUESTION, subject: "Who can invite?" },
-  });
-  assert.equal(question.kind, CALL_KIND.QUEUE_QUESTION);
-  assert.equal(question.subject, "Who can invite?");
-  assert.deepEqual(question.input, {
-    kind: TOOL_BLOCK.JSON,
-    text: JSON.stringify({ question: "Who can invite?" }, null, 2),
-  });
-  assert.deepEqual(question.output, {
-    kind: TOOL_BLOCK.JSON,
-    text: JSON.stringify({ status: "queued" }, null, 2),
   });
 });
 

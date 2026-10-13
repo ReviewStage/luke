@@ -9,19 +9,16 @@ import { SettingsGroup } from "./settings-group";
 
 /**
  * The row's one act, in the bordered face every Settings row's act wears:
- * fetch the release, restart into it, reach its page in the browser, or
- * check for one. The accent is kept for a form's Save alone.
+ * restart into the release, reach its page in the browser, check for one,
+ * or check again — or none at all, while a download runs or for a
+ * development build no release is newer than. The accent is kept for a
+ * form's Save alone.
  */
-function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
+function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element | null {
   switch (action) {
+    case UPDATE_ROW_ACTION.NONE:
     case UPDATE_ROW_ACTION.DOWNLOADING:
-      return (
-        <button type="button" className="toolbar-button bordered-button" disabled>
-          <BusyLabel busy label="Downloading the update">
-            Download
-          </BusyLabel>
-        </button>
-      );
+      return null;
     case UPDATE_ROW_ACTION.RESTART:
       return (
         <button
@@ -40,6 +37,17 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
           onClick={control.onOpenLatest}
         >
           Download
+          <ExternalIcon />
+        </button>
+      );
+    case UPDATE_ROW_ACTION.RETRY:
+      return (
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={() => void control.onCheck()}
+        >
+          Try again
         </button>
       );
     default:
@@ -64,24 +72,29 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
  */
 export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();
-  const row = updateRow(control.update);
+  const row = updateRow(control.update, control.build);
   return (
     <SettingsGroup title="Updates">
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
         <span className="settings-copy">
           <span className="settings-name">
-            <strong>Version {control.update.currentVersion}</strong>
+            <strong>{row.title}</strong>
             {row.current ? <CheckIcon /> : null}
           </span>
           {/* Note that a failure mounts an element of its own, an alert, so
               it is announced as it lands; every other detail is read with
               the row rather than spoken over whatever the reader is on. */}
           {row.failed ? (
-            <small key="failed" role="alert">
+            <small key="failed" className="error-message" role="alert">
               {row.detail}
             </small>
           ) : (
             <small>{row.detail}</small>
+          )}
+          {row.progress === undefined ? null : (
+            <span className="update-progress" aria-hidden="true">
+              <span style={{ width: `${row.progress}%` }} />
+            </span>
           )}
         </span>
         {updateButton(row.action, control)}

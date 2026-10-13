@@ -90,8 +90,7 @@ export function VoiceSection({
             </span>
             <span className="settings-actions">
               {microphoneRow.offerSystemSettings ? (
-                /* The ellipsis is the promise that it opens somewhere else. */
-                <Tooltip label="System Settings…">
+                <Tooltip label="System Settings">
                   <button
                     type="button"
                     className="icon-button"

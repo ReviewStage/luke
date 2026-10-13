@@ -9,7 +9,6 @@ import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
 import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
 import {
-  type OpenPlan,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
@@ -17,18 +16,6 @@ import {
 import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
-
-/** An open plan that has used every fixed tab, so its panel draws them all. */
-export function usedPlan(id: string): OpenPlan {
-  return {
-    id,
-    holds: {
-      [SIDE_PANEL_TAB.BOARD]: true,
-      [SIDE_PANEL_TAB.CODE]: true,
-      [SIDE_PANEL_TAB.CALL]: true,
-    },
-  };
-}
 
 /** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {
@@ -39,7 +26,7 @@ export const UNPINNED_SUMMARY: SummaryPin = {
 };
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
-export function versionHistoryControl(
+function versionHistoryControl(
   overrides: Partial<VersionHistoryControl> = {},
 ): VersionHistoryControl {
   return {
@@ -93,6 +80,7 @@ export function codingAgentsControl(
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onOpenIntegrations: ignore,
+    onOpenApiKeys: ignore,
     onRename: () => Promise.resolve(false),
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     // An agent read again stands as the control's list has it.
@@ -164,6 +152,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       files: [],
       changes: [],
       pages: [],
+      strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
@@ -174,6 +163,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onShow: ignore,
       onClose: ignore,
       onMove: ignore,
+      onReopen: ignore,
       onPin: ignore,
       onUnpin: ignore,
       onRenamePins: ignore,
@@ -228,6 +218,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
+    onReopenClosedTab: undefined,
     chosenPin: undefined,
     repositories: {
       recent: [],

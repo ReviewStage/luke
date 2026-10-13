@@ -71,7 +71,6 @@ import {
   type CallKind,
   callLine,
   callPlace,
-  groupSummary,
   isCommandKind,
   TURN_ROW,
   type TurnRow,
@@ -629,53 +628,68 @@ function TurnFold({
   );
 }
 
-/** One row of a turn: a block drawn by its tab, a run of calls, or a folded lead. */
+/** One row of a turn: a block drawn by its tab, a run of calls, or a folded lead, with what trails the turn inside it where it is a fold. */
 function TurnRowView<B>({
   row,
+  trailer,
   children,
 }: {
   row: TurnRow<B>;
+  trailer: ReactNode;
   children: (block: B) => ReactNode;
 }): ReactNode {
   switch (row.kind) {
     case TURN_ROW.BLOCK:
-      return children(row.block);
+      return (
+        <>
+          {children(row.block)}
+          {trailer}
+        </>
+      );
     case TURN_ROW.GROUP:
       return (
-        <TurnFold
-          icon={<WrenchIcon />}
-          summary={groupSummary(row.blocks.length)}
-          running={row.running}
-          open={row.open}
-        >
+        <TurnFold icon={<WrenchIcon />} summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
+          {trailer}
         </TurnFold>
       );
     case TURN_ROW.FOLDED:
       return (
         <TurnFold icon={<ListIcon />} summary={row.summary} running={false}>
-          <TranscriptRows rows={row.rows}>{children}</TranscriptRows>
+          <TranscriptRows rows={row.rows} trailer={trailer}>
+            {children}
+          </TranscriptRows>
         </TurnFold>
       );
   }
 }
 
-/** A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of calls and a folded lead drawn here. */
+/**
+ * A turn's rows (`turn-rows.ts`): each block drawn by its tab, a run of
+ * calls and a folded lead drawn here. What trails the turn, as a spoken
+ * turn's "Worked for" line does, is drawn inside its last row where that
+ * row is a fold, so a folded turn keeps to its one line, and after it
+ * otherwise.
+ */
 export function TranscriptRows<B>({
   rows,
+  trailer,
   children,
 }: {
   rows: readonly TurnRow<B>[];
+  /** What follows the rows, drawn inside the last fold where the rows end on one; nothing where the tab draws it itself. */
+  trailer?: ReactNode;
   /** How the tab draws one of its own blocks. */
   children: (block: B) => ReactNode;
 }): ReactNode {
   // Note that a group is keyed by whether it opens, because the fold reads `defaultOpen` once, and a group that stops being the turn's latest work has to fold.
-  return rows.map((row) => (
+  return rows.map((row, index) => (
     <TurnRowView
       key={row.kind === TURN_ROW.GROUP ? `${row.key}-${String(row.open)}` : row.key}
       row={row}
+      trailer={index === rows.length - 1 ? trailer : null}
     >
       {children}
     </TurnRowView>

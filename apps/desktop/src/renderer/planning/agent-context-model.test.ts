@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@sidecar/hosted/coding-agent-wire";
 import { test } from "vitest";
 import {
-  CONTEXT_LEVEL,
   contextFullLine,
   contextHint,
   contextLevel,
@@ -53,11 +52,11 @@ test("the ring says the share of the window the last step read, and the popover 
 });
 
 test("the ring has room short of a tenth of the window below eve's compaction, turns amber from there, and red at the compaction and past it", () => {
-  assert.equal(contextLevel(reading(799_999)), CONTEXT_LEVEL.ROOM);
-  assert.equal(contextLevel(reading(800_000)), CONTEXT_LEVEL.NEAR);
-  assert.equal(contextLevel(reading(899_999)), CONTEXT_LEVEL.NEAR);
-  assert.equal(contextLevel(reading(900_000)), CONTEXT_LEVEL.OVER);
-  assert.equal(contextLevel(reading(1_200_000)), CONTEXT_LEVEL.OVER);
+  assert.equal(contextLevel(reading(799_999)), "room");
+  assert.equal(contextLevel(reading(800_000)), "near");
+  assert.equal(contextLevel(reading(899_999)), "near");
+  assert.equal(contextLevel(reading(900_000)), "over");
+  assert.equal(contextLevel(reading(1_200_000)), "over");
 });
 
 test("the popover divides the read into the instructions, the tools, the plan, and the conversation left over, every count an estimate marked with ~", () => {

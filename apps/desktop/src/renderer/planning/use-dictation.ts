@@ -59,7 +59,7 @@ const RECORDING_TYPE = `${DICTATION_AUDIO_TYPE};codecs=opus`;
 const RECORDER_SLICE_MS = 1_000;
 
 /** The length a recording stops itself at: a second short of the bound, so the clip lands inside it. */
-export const DICTATION_AUTO_STOP = Duration.millis(DICTATION_BOUNDS.MAX_DURATION_MS - 1_000);
+const DICTATION_AUTO_STOP = Duration.millis(DICTATION_BOUNDS.MAX_DURATION_MS - 1_000);
 
 /** The analyser's window: enough samples for a steady level at a frame's rate. */
 const ANALYSER_FFT_SIZE = 1_024;
@@ -165,7 +165,6 @@ export function useDictation(input: {
   };
 
   // A box that goes away takes its recording with it, unsent.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the teardown reads the recording through refs.
   useEffect(() => drop, []);
 
   const settle = (note: string | undefined) => {
@@ -288,7 +287,6 @@ export function useDictation(input: {
   };
 
   // The deadline passing is a press of ✓.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the deadline passing is what asks; finish reads the recording through a ref.
   useEffect(() => {
     if (deadlinePassed) finish();
   }, [deadlinePassed]);

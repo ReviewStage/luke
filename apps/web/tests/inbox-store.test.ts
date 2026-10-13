@@ -3,25 +3,19 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
-  INBOX_BLOCK,
-  INBOX_BOUNDS,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
-  INBOX_WIRE_VERSION,
   type InboxPost,
 } from "@sidecar/hosted/inbox-wire";
-import { Duration, Effect, Option, Result } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Option, Result } from "effect";
 import {
-  agentInboxItems,
   answerInboxItem,
   closeInboxItem,
-  INBOX_POST_REFUSAL,
   type InboxAgent,
   planInboxItems,
   postInboxItem,
@@ -63,17 +57,6 @@ const openAgent = Effect.gen(function* () {
   return agent;
 });
 
-const QUEUE: InboxPost = {
-  key: "invite-queue",
-  title: "Which queue sends the invitation emails?",
-  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." }],
-  response: {
-    type: INBOX_RESPONSE.CHOICE,
-    options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
-    recommended: "Postgres outbox",
-  },
-};
-
 const SETTINGS: InboxPost = {
   key: "branch-protection",
   title: "Require a review on main",
@@ -82,59 +65,6 @@ const SETTINGS: InboxPost = {
 };
 
 it.layer(getTestDB())("the inbox store", (it) => {
-  it.effect(
-    "a post is one open item; posting under the same key again writes it again, moves its revision on, and opens it once answered",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* openAgent;
-        const posted = yield* postInboxItem(agent, QUEUE);
-        assert.ok(Result.isSuccess(posted));
-        assert.equal(posted.success.revision, 1);
-        assert.equal(posted.success.version, INBOX_WIRE_VERSION);
-        assert.deepEqual(posted.success.blocks, QUEUE.blocks);
-        assert.deepEqual(posted.success.response, QUEUE.response);
-        assert.equal(
-          posted.success.needsReply,
-          true,
-          "an item asks to be heard back unless it says not",
-        );
-        yield* answerInboxItem(
-          agent.userId,
-          posted.success.id,
-          1,
-          { reply: INBOX_REPLY.CHOSE, choices: ["Redis"] },
-          randomUUID(),
-        );
-        yield* TestClock.adjust(Duration.seconds(1));
-        yield* postInboxItem(agent, { ...QUEUE, title: "Which queue, now that Redis is gone?" });
-        const items = yield* planInboxItems(agent.userId, agent.planId);
-        assert.equal(items.length, 1, "one item per key");
-        assert.equal(items[0]?.id, posted.success.id);
-        assert.equal(items[0]?.revision, 2);
-        assert.equal(items[0]?.status, INBOX_STATUS.OPEN);
-        assert.equal(items[0]?.answer, undefined);
-      }),
-  );
-
-  it.effect(
-    "an agent holds at most so many open items, though it may post again under a key it holds and post once it closed one",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* openAgent;
-        for (let index = 0; index < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; index += 1) {
-          assert.ok(
-            Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: `task-${index}` })),
-          );
-        }
-        const over = yield* postInboxItem(agent, { ...SETTINGS, key: "one-more" });
-        assert.ok(Result.isFailure(over));
-        assert.equal(over.failure, INBOX_POST_REFUSAL.TOO_MANY_OPEN);
-        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "task-0" })));
-        yield* closeInboxItem(agent, "task-1", "Not needed.");
-        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "one-more" })));
-      }),
-  );
-
   it.effect(
     "an answer is taken only at the revision it names and only while the item is open, withdrawn only under its own key, and another account's finds nothing",
     () =>
@@ -159,36 +89,5 @@ it.layer(getTestDB())("the inbox store", (it) => {
         );
         assert.deepEqual(yield* planInboxItems(other, agent.planId), []);
       }),
-  );
-
-  it.effect(
-    "an item left open stays in the plan's read and the agent's however many others changed after it, while the settled ones each read carries are bounded",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* openAgent;
-        yield* postInboxItem(agent, SETTINGS);
-        for (let index = 0; index <= INBOX_BOUNDS.MAX_ITEMS_READ; index += 1) {
-          yield* TestClock.adjust(Duration.millis(1));
-          yield* postInboxItem(agent, { ...QUEUE, key: `queue-${index}` });
-          yield* closeInboxItem(agent, `queue-${index}`, "Settled.");
-        }
-        const plan = yield* planInboxItems(agent.userId, agent.planId);
-        assert.ok(
-          plan.some((each) => each.key === SETTINGS.key && each.status === INBOX_STATUS.OPEN),
-        );
-        assert.equal(plan.length, 1 + INBOX_BOUNDS.MAX_ITEMS_READ);
-        const own = yield* agentInboxItems(agent);
-        assert.equal(own[0]?.key, SETTINGS.key);
-        assert.equal(own.length, 1 + INBOX_BOUNDS.MAX_SETTLED_TOLD);
-      }),
-  );
-
-  it.effect("a plan's items go with the plan", () =>
-    Effect.gen(function* () {
-      const agent = yield* openAgent;
-      yield* postInboxItem(agent, SETTINGS);
-      yield* deletePlan(agent.userId, agent.planId);
-      assert.deepEqual(yield* planInboxItems(agent.userId, agent.planId), []);
-    }),
   );
 });

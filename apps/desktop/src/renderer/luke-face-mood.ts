@@ -1,6 +1,5 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import type { VoiceSpeakers } from "#shared/messages/voice-view";
 
 /**
  * Everything Luke reacts to: who is being heard on the call. A face that knew
@@ -9,18 +8,6 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
-}
-
-/**
- * What the face should read from a conversation: the two speakers as the
- * voice window reports them. His mouth follows Luke's own track alone, since
- * the session is full duplex and the developer's voice under his answer says
- * nothing about whether he is talking; the microphone is the developer's,
- * and the face reads it as being listened to whether or not Luke is
- * answering over it.
- */
-export function speechFaceInputs(speakers: VoiceSpeakers): FaceContext {
-  return { speaking: speakers.lukeSpeaking, microphoneLive: speakers.listening };
 }
 
 /**
@@ -33,7 +20,7 @@ export function speechFaceInputs(speakers: VoiceSpeakers): FaceContext {
  * spends its moments on gestures instead: a face that never stops moving is
  * one you stop reading.
  */
-export function restingMotion(context: FaceContext): FaceMotion | undefined {
+function restingMotion(context: FaceContext): FaceMotion | undefined {
   if (context.speaking) return FACE_MOTION.TALKING;
   if (context.microphoneLive) return FACE_MOTION.LISTENING;
   return undefined;
@@ -57,7 +44,7 @@ interface WeightedAside {
  * half-minute apart is what a calm face does, and forbidding a repeat would
  * force something louder into every second moment.
  */
-export const IDLE_ASIDES: readonly WeightedAside[] = [
+const IDLE_ASIDES: readonly WeightedAside[] = [
   { motion: FACE_MOTION.IDLE, weight: 44 },
   { motion: FACE_MOTION.WINK, weight: 10 },
   { motion: FACE_MOTION.BOOP, weight: 8 },
@@ -76,7 +63,7 @@ export const IDLE_ASIDES: readonly WeightedAside[] = [
  * here may carry meaning — a hand crosses the window whenever it likes, and a
  * face that played a meaning on a passing hand would be lying.
  */
-export const HOVER_ASIDES: readonly WeightedAside[] = [
+const HOVER_ASIDES: readonly WeightedAside[] = [
   { motion: FACE_MOTION.FLYOFF, weight: 46 },
   { motion: FACE_MOTION.REFRESH, weight: 16 },
   { motion: FACE_MOTION.HIDING, weight: 12 },
@@ -90,7 +77,7 @@ export const HOVER_ASIDES: readonly WeightedAside[] = [
  * rather than drawn here so that what the face does with a moment is decided by
  * something a test can hold still.
  */
-export function chooseAside(pool: readonly WeightedAside[], roll: number): FaceMotion {
+function chooseAside(pool: readonly WeightedAside[], roll: number): FaceMotion {
   const total = pool.reduce((sum, aside) => sum + aside.weight, 0);
   let spent = roll * total;
   for (const aside of pool) {

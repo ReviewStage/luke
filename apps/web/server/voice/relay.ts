@@ -89,10 +89,10 @@ export type OpeningSettled =
   | { outcome: typeof OPENING_OUTCOME.UNACKNOWLEDGED };
 
 /** The reason a device socket is closed with when OpenAI's side ended before `session.closed`. */
-export const UPSTREAM_CLOSED_REASON = "upstream-closed";
+const UPSTREAM_CLOSED_REASON = "upstream-closed";
 
 /** The reason a device socket is closed with when it sent a frame the service does not admit. */
-export const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
+const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
 
 export interface RelayOptions<R = never> {
   device: VoiceSocket;

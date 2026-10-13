@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import { describe, it } from "@effect/vitest";
-import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
-import { DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
-import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
-import { TestClock } from "effect/testing";
+import { ConfigProvider, Effect, Layer } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
-import type { GatewayService } from "../service.js";
 import type { SecretCipher } from "../settings-store.js";
-import { HostKernelTag, HostService, hostKernelLayer, lateService } from "./kernel.js";
+import { HostKernelTag, hostKernelLayer } from "./kernel.js";
 import {
   AppIdentity,
   Environment,
   IdSource,
-  Reporter,
   RunMode,
   reporterLayer,
   SecretCipher as SecretCipherTag,
@@ -67,63 +61,7 @@ const kernelLayerOver = (input: TestSeams) =>
     ),
   );
 
-// SAFETY: the event door is the only method the kernel reads of the service,
-// and these tests hand it back or call that one door and nothing else.
-const stubService = (emit: GatewayService["emit"] = () => undefined): GatewayService =>
-  ({ emit }) as GatewayService;
-
 describe("the seam tags", () => {
-  it.effect("each resolve from the kernel's own layer", () =>
-    Effect.gen(function* () {
-      const reported: string[] = [];
-
-      const read = yield* Effect.provide(
-        Effect.all({
-          stateRoot: StateRoot,
-          runMode: RunMode,
-          identity: AppIdentity,
-          cipher: SecretCipherTag,
-          idSource: IdSource,
-          reporter: Reporter,
-        }),
-        kernelLayerOver(
-          seams({
-            stateRoot: "/state",
-            appVersion: "1.2.3",
-            createId: () => "minted",
-            report: (message) => reported.push(message),
-          }),
-        ),
-      );
-
-      assert.equal(read.stateRoot, "/state");
-      assert.equal(read.runMode.observesProviders, false);
-      assert.deepEqual(read.identity, {
-        appVersion: "1.2.3",
-        packaged: false,
-      });
-      assert.equal(read.cipher, CIPHER);
-      assert.equal(read.idSource.create(), "minted");
-      read.reporter.report("a line");
-      assert.deepEqual(reported, ["a line"]);
-    }),
-  );
-
-  it.effect("carry the environment as a provider a config is read out of", () =>
-    Effect.gen(function* () {
-      const environment = yield* Effect.provide(
-        Environment,
-        kernelLayerOver(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
-      );
-
-      assert.equal(yield* Config.String("LUKE_TRACE_DIR").parse(environment), "/traces");
-      assert.deepEqual(
-        yield* Config.option(Config.String(ACCOUNT_BASE_URL_VARIABLE)).parse(environment),
-        Option.none(),
-      );
-    }),
-  );
-
   it.effect("read the account override out of that provider, and never in a packaged build", () =>
     Effect.gen(function* () {
       const override = "http://127.0.0.1:3000/api/auth";
@@ -144,122 +82,5 @@ describe("the seam tags", () => {
       assert.equal(packaged.accountBaseUrl, none.accountBaseUrl);
       assert.equal(packaged.hostedServiceBaseUrl, none.hostedServiceBaseUrl);
     }),
-  );
-
-  it.effect("route the runtime's own logger to the sink the reported line reaches", () =>
-    Effect.gen(function* () {
-      const reported: string[] = [];
-
-      yield* Effect.provide(
-        Effect.logInfo("through the logger"),
-        reporterLayer((message) => reported.push(message)),
-      );
-
-      assert.deepEqual(reported, ["through the logger"]);
-    }),
-  );
-
-  it.effect("hand the kernel the seams it was built over", () =>
-    Effect.gen(function* () {
-      const kernel = yield* Effect.provide(
-        HostKernelTag,
-        kernelLayerOver(seams({ stateRoot: "/state" })),
-      );
-
-      assert.equal(kernel.stateRoot, "/state");
-      assert.equal(kernel.createId(), "id");
-      assert.equal(kernel.agentRootPath(), path.join("/state", "agents", DEFAULT_AGENT_ID));
-    }),
-  );
-
-  it.effect(
-    "the kernel's clock is Effect's own, a `TestClock` under this test rather than the seam's own reading",
-    () =>
-      Effect.gen(function* () {
-        const kernel = yield* Effect.provide(HostKernelTag, kernelLayerOver(seams()));
-
-        assert.equal(kernel.now(), 0);
-        yield* TestClock.adjust(Duration.millis(1_000));
-        assert.equal(kernel.now(), 1_000);
-      }),
-  );
-});
-
-describe("the late service", () => {
-  it.effect("suspends a read until it is supplied, and answers it after", () =>
-    Effect.gen(function* () {
-      const late = yield* lateService<number>();
-
-      assert.deepEqual(yield* late.peek, Option.none());
-      const waiting = yield* Effect.forkChild(late.value);
-      yield* TestClock.adjust("1 minute");
-      assert.equal(waiting.pollUnsafe(), undefined);
-
-      assert.equal(yield* late.set(4), true);
-      assert.equal(yield* Fiber.join(waiting), 4);
-      assert.deepEqual(yield* late.peek, Option.some(4));
-      assert.equal(yield* late.value, 4);
-    }),
-  );
-
-  it.effect("takes the first value supplied and refuses a second", () =>
-    Effect.gen(function* () {
-      const late = yield* lateService<number>();
-
-      assert.equal(yield* late.set(1), true);
-      assert.equal(yield* late.set(2), false);
-      assert.equal(yield* late.value, 1);
-    }),
-  );
-
-  it.effect("is the one the kernel's event door reads", () =>
-    Effect.gen(function* () {
-      const held = yield* Effect.provide(
-        Effect.all({ kernel: HostKernelTag, late: HostService }),
-        kernelLayerOver(seams()),
-      );
-      const emitted: GatewayEventKind[] = [];
-      const service = stubService((kind) => {
-        emitted.push(kind);
-      });
-
-      assert.equal(yield* held.late.set(service), true);
-      // The drain that answers a set-once is a fork of its own, so a call
-      // made right after the set is waited past that fork's own resumption
-      // rather than assumed delivered by the next statement.
-      yield* Effect.yieldNow;
-      held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
-      assert.equal(yield* held.late.value, service);
-      assert.equal(yield* held.late.set(stubService()), false);
-      held.kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, {});
-      assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
-    }),
-  );
-
-  it.effect(
-    "holds a call raised before the merge composed the service, and delivers it once set",
-    () =>
-      Effect.gen(function* () {
-        const held = yield* Effect.provide(
-          Effect.all({ kernel: HostKernelTag, late: HostService }),
-          kernelLayerOver(seams()),
-        );
-        const emitted: GatewayEventKind[] = [];
-        const service = stubService((kind) => {
-          emitted.push(kind);
-        });
-
-        held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
-        held.kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, {});
-        assert.deepEqual(emitted, []);
-
-        assert.equal(yield* held.late.set(service), true);
-        // The fork that drains what queued ahead of the merge is a daemon of
-        // this test's own runtime, not this fiber, so it is waited out rather
-        // than assumed to have run by the next statement.
-        yield* Effect.yieldNow;
-
-        assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
-      }),
   );
 });

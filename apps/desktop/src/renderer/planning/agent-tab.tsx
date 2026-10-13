@@ -26,6 +26,8 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
+import { FailureNote } from "../failure-note";
+import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
@@ -48,6 +50,7 @@ import {
   delegates,
   dockedTodos,
   endLine,
+  endLineReason,
   messageWords,
   newestTodos,
   providerOf,
@@ -69,6 +72,7 @@ import {
   todosSummary,
   todosView,
   toolCallView,
+  type WorkerJobs,
 } from "./tool-call-model";
 import {
   TranscriptNote,
@@ -152,12 +156,10 @@ interface TranscriptLead {
   startingLine: string;
   /** Whether runs of calls fold under one line; a worker's session is read for its detail, so its do not. */
   grouped: boolean;
-  /** Whether a finished turn's line wears the mark of the harness its model ran in; Luke's own turns run in none. */
-  harnessed: boolean;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting. */
-const AGENT_LEAD: TranscriptLead = {
+/** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
+export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: (
     <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
@@ -166,7 +168,6 @@ const AGENT_LEAD: TranscriptLead = {
   ),
   startingLine: "The agent is starting. Its transcript appears here.",
   grouped: true,
-  harnessed: true,
 };
 
 /** A worker's transcript: the task it was handed, and the worker starting. */
@@ -175,13 +176,6 @@ export const WORKER_LEAD: TranscriptLead = {
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting. Its transcript appears here.",
   grouped: false,
-  harnessed: true,
-};
-
-/** The planning model's turns, which open on no card and run in no harness of a coding agent's. */
-export const PLANNING_LEAD: TranscriptLead = {
-  ...AGENT_LEAD,
-  harnessed: false,
 };
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -196,15 +190,19 @@ export interface DelegationDoors {
   onOpenAgent?: ((agentId: string) => void) | undefined;
   /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
   standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
+  /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
+  jobs?: WorkerJobs | undefined;
 }
 
-/** One tool call: its row, and its input and answer under it once opened. */
+/** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it. */
 function ToolCallView({
   part,
+  jobs,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  jobs?: WorkerJobs | undefined;
 }): ReactNode {
-  const view = toolCallView(part);
+  const view = toolCallView({ ...part, jobs });
   return (
     <TranscriptTool
       data-call-id={part.callId}
@@ -219,17 +217,25 @@ function ToolCallView({
   );
 }
 
+/** The workers their own session says still run. */
+function runningStandings(
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
+): readonly CodingAgentSubagentStanding[] {
+  return [...(standings?.values() ?? [])].filter(
+    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
+  );
+}
+
 /** When each running worker began: the newest turn's waits, and every worker its own session says still runs. */
 function workerStarts(
   waits: ReadonlyMap<string, number>,
   standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
 ): ReadonlyMap<string, number> {
-  const running = [...standings.values()].filter(
-    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
-  );
   return new Map([
     ...waits,
-    ...running.map((standing) => [standing.callId, standing.startedAt] as const),
+    ...runningStandings(standings).map(
+      (standing) => [standing.callId, standing.startedAt] as const,
+    ),
   ]);
 }
 
@@ -393,7 +399,7 @@ function AgentPartView({
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
       ) : (
-        <ToolCallView part={part} />
+        <ToolCallView part={part} jobs={delegation?.jobs} />
       );
     }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
@@ -441,6 +447,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
+  said = false,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -452,6 +459,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
+  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
+  said?: boolean;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
@@ -471,23 +480,33 @@ export function AgentMessage({
     );
   }
   const { startedAt, finishedAt } = message;
+  const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
+  const workedFor =
+    moving || startedAt === undefined || finishedAt === undefined ? null : (
+      <WorkedFor
+        startedAt={startedAt}
+        endedAt={finishedAt}
+        record={message}
+        models={delegation?.models}
+      />
+    );
+  // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
+        <TranscriptRows
+          rows={agentRows(message, moving, lead.grouped, {
+            newestTodos: todos.kept,
+            workers,
+            said,
+          })}
+          trailer={said ? workedFor : undefined}
+        >
           {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
         </TranscriptRows>
       </MessageContent>
-      {moving || startedAt === undefined || finishedAt === undefined ? null : (
-        <WorkedFor
-          startedAt={startedAt}
-          endedAt={finishedAt}
-          record={message}
-          models={delegation?.models}
-          harnessed={lead.harnessed}
-        />
-      )}
-      {words === "" ? null : <CopyMessageAction words={words} />}
+      {said ? null : workedFor}
+      {words === "" || said ? null : <CopyMessageAction words={words} />}
     </Message>
   );
 }
@@ -549,6 +568,8 @@ export function AgentTranscriptView({
   sessionStarting = false,
   startedAt,
   ended,
+  endReason = FAILURE_REASON.OTHER,
+  onOpenApiKeys,
   onRetry,
   footer,
   overComposer = false,
@@ -572,6 +593,10 @@ export function AgentTranscriptView({
   startedAt?: number | undefined;
   /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
   ended?: string | undefined;
+  /** What mends the turn the end line tells of (`endLineReason`): an API key looked at, or nothing the line offers. */
+  endReason?: FailureReason;
+  /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
+  onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
@@ -621,11 +646,17 @@ export function AgentTranscriptView({
               words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting)]}
             />
           ) : null}
-          {ended !== undefined ? (
+          {ended === undefined ? null : endReason === FAILURE_REASON.API_KEY ? (
+            <FailureNote
+              failure={{ reason: FAILURE_REASON.API_KEY, text: ended }}
+              className="agent-end-line"
+              onRemedy={onOpenApiKeys}
+            />
+          ) : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
             </p>
-          ) : null}
+          )}
           {footer}
           {failed ? (
             <div className="agent-note agent-failure" role="alert">
@@ -664,7 +695,7 @@ export function AgentTranscriptView({
  * the plan is archived, the note that offers Unarchive in its place, with
  * the Stop of a turn still running.
  */
-export function AgentTabView({
+function AgentTabView({
   agent,
   models,
   readModels,
@@ -680,6 +711,7 @@ export function AgentTabView({
   onUnarchive,
   onOpenSubagent,
   openGitHub,
+  onOpenApiKeys,
   keywords,
   skills,
 }: {
@@ -703,6 +735,8 @@ export function AgentTabView({
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
+  /** Turns to Settings › Coding agents, which a turn failed on a refused key offers. */
+  onOpenApiKeys?: (() => void) | undefined;
   /** The words a dictation into the box is likely to say. */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
@@ -728,6 +762,8 @@ export function AgentTabView({
         sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
+        endReason={endLineReason(transcript.failure)}
+        onOpenApiKeys={onOpenApiKeys}
         onRetry={transcript.onRetry}
         footer={
           showsPublishedRow(agent.status, published) ? (
@@ -853,6 +889,7 @@ export function AgentTab({
       onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
+      onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}
       skills={control.readSkills}
     />

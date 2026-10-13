@@ -10,7 +10,7 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 
 export const DOCUMENT_NAME = "Teammate invitations";
 
-export const DOCUMENT_TEXT = [
+const DOCUMENT_TEXT = [
   "# Context",
   "Only an admin can add a member today.",
   "## Goal",

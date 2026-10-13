@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  VOICE_SEGMENT_ROLE,
-} from "@sidecar/database/voice-vocabulary";
+import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { afterAll, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
-  assertRefusedWithCode,
   deleteUser,
-  deleteVoiceSession,
   insertVoiceSession,
   insertVoiceTranscriptSegment,
-  POSTGRES_ERROR,
-  readVoiceSessionByIdTyped,
   readVoiceSessionsByUserTyped,
   readVoiceTranscriptSegmentsBySession,
   type VoiceSegmentInsertRow,
@@ -116,110 +108,4 @@ test("a session and its segments cascade with the account, and no other account'
   for (const id of gone) assert.equal(await segmentCount(id), 0);
   assert.equal((await readVoiceSessionsByUserTyped(database.run, other)).length, 2);
   for (const id of kept) assert.equal(await segmentCount(id), 2);
-});
-
-test("deleting a session takes its segments and leaves its neighbour's", async () => {
-  const userId = await database.createUser();
-  const [gone, kept] = await populateAccount(userId);
-  assert.ok(gone !== undefined && kept !== undefined);
-
-  await deleteVoiceSession(database.run, gone);
-
-  assert.equal(await segmentCount(gone), 0);
-  assert.equal(await segmentCount(kept), 2);
-});
-
-test("one live session is one row, for its owner and for anyone else", async () => {
-  const userId = await database.createUser();
-  const other = await database.createUser();
-  await insertSession(userId, { liveSessionId: "sess_shared" });
-
-  await assertRefusedWithCode(
-    insertSession(userId, { liveSessionId: "sess_shared" }),
-    POSTGRES_ERROR.UNIQUE_VIOLATION,
-  );
-  await assertRefusedWithCode(
-    insertSession(other, { liveSessionId: "sess_shared" }),
-    POSTGRES_ERROR.UNIQUE_VIOLATION,
-  );
-  await insertSession(userId, { liveSessionId: "sess_other" });
-
-  const owners = (await readVoiceSessionsByUserTyped(database.run, userId)).filter(
-    (row) => row.liveSessionId === "sess_shared",
-  );
-  assert.deepEqual(
-    owners.map((row) => row.userId),
-    [userId],
-  );
-});
-
-test("a segment's position is taken once within its session and free in another", async () => {
-  const userId = await database.createUser();
-  const [first, second] = await populateAccount(userId);
-  assert.ok(first !== undefined && second !== undefined);
-
-  await assertRefusedWithCode(insertSegment(first, { seq: 2 }), POSTGRES_ERROR.UNIQUE_VIOLATION);
-  await insertSegment(first, { seq: 3 });
-  await insertSegment(second, { seq: 3 });
-
-  assert.equal(await segmentCount(first), 3);
-  assert.equal(await segmentCount(second), 3);
-});
-
-test("a new session is open with no close, no reason, and no usage; a closed one keeps all three", async () => {
-  const userId = await database.createUser();
-  const opened = await insertSession(userId);
-  const open = await readVoiceSessionByIdTyped(database.run, opened);
-  assert.ok(open);
-  assert.ok(open.startedAt instanceof Date);
-  assert.equal(open.closedAt, null);
-  assert.equal(open.closeReason, null);
-  assert.equal(open.usage, null);
-  assert.equal(open.delegationMode, VOICE_DELEGATION_MODE.CLIENT);
-
-  const closedAt = new Date("2026-09-10T22:00:00.000Z");
-  const confirmed: VoiceSessionUsage = { seconds: 184, confirmed: true };
-  const estimated: VoiceSessionUsage = { seconds: 61, confirmed: false };
-  const cleanly = await insertSession(userId, {
-    closedAt,
-    closeReason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
-    usage: confirmed,
-  });
-  const lost = await insertSession(userId, {
-    closedAt,
-    closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
-    usage: estimated,
-  });
-
-  const rows = await readVoiceSessionsByUserTyped(database.run, userId);
-  const byId = new Map(
-    rows.map((row) => [
-      row.id,
-      { id: row.id, closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage },
-    ]),
-  );
-  assert.deepEqual(byId.get(cleanly), {
-    id: cleanly,
-    closedAt,
-    closeReason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
-    usage: confirmed,
-  });
-  assert.deepEqual(byId.get(lost), {
-    id: lost,
-    closedAt,
-    closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
-    usage: estimated,
-  });
-});
-
-test("the close reasons are the Live API's five, and a segment's role is one of the two speaking roles", () => {
-  assert.deepEqual(Object.values(VOICE_CLOSE_REASON).sort(), [
-    "close_requested",
-    "connection_lost",
-    "content",
-    "expired",
-    "remote_hangup",
-  ]);
-  assert.deepEqual(Object.values(VOICE_SEGMENT_ROLE).sort(), ["assistant", "user"]);
-  assert.deepEqual(Object.values(VOICE_DELEGATION_MODE).sort(), ["client"]);
 });

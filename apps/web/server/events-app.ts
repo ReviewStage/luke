@@ -36,7 +36,7 @@ const findPerson = SqlSchema.findOneOption({
 });
 
 /** Reads the signed-in user's own name and email, for the events endpoint's PostHog person fields. */
-export function readPerson(
+function readPerson(
   userId: string,
 ): Effect.Effect<PosthogPerson | undefined, EventsAppFailure, SqlClient.SqlClient> {
   return Effect.map(findPerson(userId), Option.getOrUndefined);

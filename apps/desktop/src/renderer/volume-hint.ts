@@ -25,7 +25,7 @@ const SILENT_OUTPUT_VOLUME = 0.01;
  * twice; a mute taken up fresh after this long is a new moment, and the next
  * unheard reply earns the hint again.
  */
-export const VOLUME_HINT_REARM_MS = 15 * 60_000;
+const VOLUME_HINT_REARM_MS = 15 * 60_000;
 
 /** A "Got it", remembered against the stretch of silence it was given in. */
 export interface VolumeHintDismissal {

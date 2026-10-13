@@ -1,5 +1,0 @@
-{
-  "status": 409,
-  "contentType": "application/json",
-  "body": "{\"error\":\"plan-archived\"}"
-}

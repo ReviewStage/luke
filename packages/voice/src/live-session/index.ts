@@ -27,5 +27,4 @@ export {
   type LiveSessionStatus,
   type LiveSessionTrace,
   ROW_WRITE_DEBOUNCE_MS,
-  STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";

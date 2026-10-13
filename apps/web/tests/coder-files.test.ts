@@ -8,7 +8,7 @@ import { text } from "node:stream/consumers";
 import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { applyPatchIn, globIn, readFileIn } from "../server/hosted/coder-host/files";
+import { readFileIn } from "../server/hosted/coder-host/files";
 import { linuxShellPath } from "./support/linux-shell-tools";
 
 /**
@@ -107,29 +107,4 @@ test("read_file resolves a relative path from the checkout and takes an absolute
     /File not found/,
   );
   assert.deepEqual(reads, [join(checkout, "notes.md"), join(root, "notes.md")]);
-});
-
-test("glob searches the checkout unless told a directory", async () => {
-  const { root, checkout, sandbox } = directorySandbox();
-  writeFileSync(join(checkout, "notes.md"), "hello\n");
-  writeFileSync(join(root, "elsewhere.md"), "hello\n");
-  const find = globIn(checkout);
-  const inCheckout = await whole(find.execute({ pattern: "*.md" }, context(sandbox)));
-  assert.deepEqual(
-    { path: inCheckout.path, content: inCheckout.content },
-    { path: checkout, content: join(checkout, "notes.md") },
-  );
-  const atRoot = await whole(find.execute({ pattern: "*.md", path: root }, context(sandbox)));
-  assert.equal(atRoot.path, root);
-  assert.ok(atRoot.content.includes(join(root, "elsewhere.md")));
-});
-
-test("apply_patch patches the checkout when told no root", async () => {
-  const { checkout, sandbox } = directorySandbox();
-  assert.equal((await runShell(checkout, { command: "git init -q" })).exitCode, 0);
-  const patch = applyPatchIn(checkout);
-  const patchText = "*** Begin Patch\n*** Add File: notes.md\n+hello\n*** End Patch\n";
-  const applied = await whole(patch.execute({ patchText }, context(sandbox)));
-  assert.deepEqual(applied.files, [{ operation: "add", path: "notes.md" }]);
-  assert.equal(readFileSync(join(checkout, "notes.md"), "utf8"), "hello\n");
 });

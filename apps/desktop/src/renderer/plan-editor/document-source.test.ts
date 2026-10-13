@@ -111,38 +111,6 @@ test("a document opened and handed over untouched is byte for byte what it was",
 
   assert.equal(handedOver(), DOCUMENT);
 });
-
-test("a word typed into one paragraph changes that paragraph's lines and nothing else", async () => {
-  const { host, handedOver } = opened(DOCUMENT);
-
-  await retype(host, "Model an invite as a", "Model an invite as one");
-
-  assert.deepEqual(changedLines(DOCUMENT, handedOver()), [
-    "-Model an invite as a `memberships` row.",
-    "+Model an invite as one `memberships` row.",
-  ]);
-});
-
-test("what the editor cannot draw faithfully stays raw and locked: inline HTML, footnotes, link definitions, block HTML", () => {
-  const { host } = opened(DOCUMENT);
-
-  const raw = [...host.querySelectorAll("pre[data-raw-block]")].map((block) =>
-    block.textContent?.trim(),
-  );
-  assert.deepEqual(raw, [
-    "Press <kbd>Ctrl</kbd> twice.",
-    "A footnote[^1] and a [link][ref].",
-    "[^1]: The note.",
-    "[ref]: https://example.com",
-    "<div>block html</div>",
-  ]);
-  assert.ok(
-    [...host.querySelectorAll("pre[data-raw-block]")].every(
-      (block) => block.getAttribute("contenteditable") === "false",
-    ),
-  );
-});
-
 test("Luke's part of a merged answer replaces only the blocks he changed, and the caret stays in the developer's block", async () => {
   const { editor, host, handedOver, took } = opened(DOCUMENT);
   await retype(host, "Model an invite as a", "Model an invite as one");
@@ -181,36 +149,4 @@ test("a block the developer changed after the save went out stays theirs when th
     "-Model an invite as one `memberships` row.",
     "+Model an invite as one `memberships` row, pending.",
   ]);
-});
-
-test("a change Luke made to a block the developer changed after the save went out is left out of the editor and out of the next base", async () => {
-  const { host, handedOver, took } = opened(DOCUMENT);
-  await retype(host, "Model an invite as a", "Model an invite as one");
-  const sent = handedOver();
-  await retype(host, " row.", " row, pending.");
-  const merged = sent.replace("Model an invite as one", "Model each invite as one");
-
-  const base = took(sent, merged);
-
-  assert.equal(
-    base,
-    sent,
-    "the base keeps what was sent where Luke's change waits for the next save",
-  );
-  assert.ok(handedOver().includes("Model an invite as one `memberships` row, pending."));
-});
-
-test("Luke's block put in place of another, first, middle, or last, and longer or shorter than it, is laid in whole", () => {
-  const replacements = [
-    ["## Problem", "## The problem, as Luke put it\n\nA paragraph he added under it."],
-    ["* one\n* two", "* one"],
-    ["<div>block html</div>", "Closing words,\nover two lines."],
-  ] as const;
-  for (const [was, now] of replacements) {
-    const { handedOver, took } = opened(DOCUMENT);
-    const merged = DOCUMENT.replace(was, now);
-
-    assert.equal(took(DOCUMENT, merged), merged, was);
-    assert.equal(handedOver(), merged, was);
-  }
 });

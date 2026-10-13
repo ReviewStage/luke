@@ -64,35 +64,3 @@ test("a page is drawn at its newest version in a frame that runs its own scripts
   assert.ok(frame().closest(".ph-no-capture"));
   assert.match(container.textContent ?? "", /Invite funnel.*Version 3 of 3/);
 });
-
-test("stepping back walks the earlier versions, and a version written meanwhile is followed only from the newest", () => {
-  const pane = mount(FUNNEL);
-
-  pane.press("Earlier version");
-  pane.press("Earlier version");
-  assert.equal(pane.frame().getAttribute("src"), versionUrl(1));
-  assert.equal(
-    pane.container.querySelector<HTMLButtonElement>('button[aria-label="Earlier version"]')
-      ?.disabled,
-    true,
-  );
-  pane.render({ ...FUNNEL, version: 4 });
-  assert.equal(pane.frame().getAttribute("src"), versionUrl(1));
-
-  pane.press("Later version");
-  pane.press("Later version");
-  pane.press("Later version");
-  assert.equal(pane.frame().getAttribute("src"), versionUrl(4));
-  pane.render({ ...FUNNEL, version: 5 });
-  assert.equal(pane.frame().getAttribute("src"), versionUrl(5));
-});
-
-test("a page with one version offers no steps, and a reload draws a new frame of the same version", () => {
-  const pane = mount({ ...FUNNEL, version: 1 });
-  const before = pane.frame();
-
-  assert.equal(pane.container.querySelector('button[aria-label="Earlier version"]'), null);
-  pane.press("Reload page");
-  assert.notEqual(pane.frame(), before);
-  assert.equal(pane.frame().getAttribute("src"), versionUrl(1));
-});

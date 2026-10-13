@@ -2,6 +2,8 @@ import path from "node:path";
 import { type RunMode, runModeFor } from "@sidecar/host";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import type { UpdateMenu } from "./app-menu";
+import { buildCommit } from "./build-commit";
 import type { DesktopConfig } from "./services/desktop-config";
 
 /**
@@ -27,6 +29,7 @@ export interface BootstrapDependencies {
   report: (message: string) => void;
   openExternal: (url: string) => Promise<void>;
   quit: () => void;
+  showMenuBar: (update?: UpdateMenu) => void;
   /**
    * The crash reporter, begun here rather than inside a service: Electron
    * spawns its GPU process during bootstrap, and the reporter has to stand
@@ -72,6 +75,8 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
   dependencies.initializeCrashReporting(runMode);
 
+  const commit = buildCommit();
+
   // The account service's one development override stops at packaging.
   const accountBaseUrl =
     (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ??
@@ -81,6 +86,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     stateRoot,
     runMode,
     appVersion: app.getVersion(),
+    ...(commit ? { commit } : undefined),
     packaged: app.isPackaged,
     environment,
     platform: process.platform,
@@ -95,5 +101,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     report: dependencies.report,
     openExternal: dependencies.openExternal,
     quit: dependencies.quit,
+    showMenuBar: dependencies.showMenuBar,
   };
 }

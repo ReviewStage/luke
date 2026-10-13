@@ -107,7 +107,7 @@ const UPGRADE_REQUIRED = 426;
  * something other than a conversation. Its account is spent per session and
  * answers for what it sends.
  */
-export const SOCKET_BYTE_BUDGET = 8 * 1024 * 1024;
+const SOCKET_BYTE_BUDGET = 8 * 1024 * 1024;
 
 /**
  * What the service tells a call to say first, once it starts: the planning

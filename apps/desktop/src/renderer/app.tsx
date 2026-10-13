@@ -222,6 +222,10 @@ export function App(): React.JSX.Element {
       changeTab(PANEL_TAB.SETTINGS);
       setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
     },
+    onOpenApiKeys: () => {
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(SETTINGS_VIEW.CODING_AGENTS);
+    },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
   // Read through a ref, because the tab hands a new closure each render and
@@ -411,6 +415,10 @@ export function App(): React.JSX.Element {
   };
   const updates: UpdateControl = {
     update: fixtureUpdate(state.run, state.update),
+    build: {
+      packaged: state.run.packaged,
+      ...(state.run.commit ? { commit: state.run.commit } : undefined),
+    },
     // Answered rather than fire-and-forget so the row that asked redraws from
     // the same snapshot the broadcast carries to every other window.
     onCheck: async () => {

@@ -33,17 +33,10 @@ import {
 } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { todosView } from "./tool-call-model";
-import {
-  CALL_KIND,
-  type CallKind,
-  ROW_PART,
-  type RowReading,
-  type SaidCall,
-  type TurnRow,
-  turnRows,
-} from "./turn-rows";
+import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -136,6 +129,13 @@ export function endLine(
     case CODING_AGENT_STATUS.COMPLETED:
       return undefined;
   }
+}
+
+/** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
+export function endLineReason(failure: CodingAgentFailure | undefined): FailureReason {
+  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY
+    ? FAILURE_REASON.API_KEY
+    : FAILURE_REASON.OTHER;
 }
 
 /** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
@@ -250,8 +250,20 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** What a Start that did not start says beside the button. */
-export function startFailureNote(failure: CodingAgentCallFailure): string {
+/** What a Start that did not start says beside the button, and what mends it. */
+export function startFailureNote(failure: CodingAgentCallFailure): Failure {
+  return callFailure(failure, startFailureWords(failure));
+}
+
+/** A refused call's words with what mends them: a sign-in through GitHub where that is why, else trying again. */
+function callFailure(failure: CodingAgentCallFailure, text: string): Failure {
+  return failure === CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED
+    ? { reason: FAILURE_REASON.GITHUB_SIGN_IN, text }
+    : { reason: FAILURE_REASON.OTHER, text };
+}
+
+/** What a Start that did not start says, by why. */
+function startFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
       return START_NEEDS_REPOSITORY;
@@ -272,8 +284,13 @@ export function startFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, beside Retry. */
-export function messageFailureNote(failure: CodingAgentCallFailure): string {
+/** What a message that did not reach the agent says under the composer, and what mends it. */
+export function messageFailureNote(failure: CodingAgentCallFailure): Failure {
+  return callFailure(failure, messageFailureWords(failure));
+}
+
+/** What a message that did not reach the agent says, by why. */
+function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
@@ -399,7 +416,7 @@ function familyRank(modelId: string): number {
  * release date, so the version in the id stands for one; models of one
  * version keep the catalog's own order between them.
  */
-export function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
+function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
   return models
     .map((model, index) => ({
       model,
@@ -743,8 +760,6 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
-const CALL_KINDS: ReadonlySet<string> = new Set(Object.values(CALL_KIND));
-
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
@@ -758,8 +773,6 @@ export type AgentPart =
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
-      /** The call as its wire already read it, where it did (`SaidCall`). */
-      readonly said: SaidCall | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER };
@@ -769,20 +782,6 @@ function toolState(value: WireValue | undefined): ToolState {
   return isWireString(value) && TOOL_STATES.has(value)
     ? (value as ToolState)
     : TOOL_STATE.INPUT_AVAILABLE;
-}
-
-/** What a part says its wire read its call as, or nothing where it says nothing this build reads. */
-function saidOf(value: WireValue | undefined): SaidCall | undefined {
-  if (!isRecord(value) || !isWireString(value.kind) || !CALL_KINDS.has(value.kind)) {
-    return undefined;
-  }
-  // SAFETY: membership in the set built from CALL_KIND's values is what the union names.
-  const kind = value.kind as CallKind;
-  return {
-    kind,
-    ...(isWireString(value.subject) ? { subject: value.subject } : undefined),
-    ...(isWireString(value.description) ? { description: value.description } : undefined),
-  };
 }
 
 /**
@@ -808,7 +807,6 @@ function agentPart(part: WireValue): AgentPart {
       input: part.input,
       output: part.output,
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
-      said: saidOf(part.said),
     };
   }
   return { kind: AGENT_PART.OTHER };
@@ -833,11 +831,7 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
 
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return (
-    part.tool === CODING_AGENT_DELEGATE_TOOL ||
-    part.tool === EVE_TOOL.WORKER ||
-    part.said?.kind === CALL_KIND.WORKER
-  );
+  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
 }
 
 /** Whether a part is a delegation to a worker (`delegates`). */
@@ -853,10 +847,9 @@ export function isDelegation(
  * refused, which answers no agent.
  */
 export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL) return undefined;
-  const starts =
-    part.said?.kind === CALL_KIND.START_AGENT || part.tool === AGENT_TOOL.START_CODING_AGENT;
-  if (!starts) return undefined;
+  if (part.kind !== AGENT_PART.TOOL || part.tool !== AGENT_TOOL.START_CODING_AGENT) {
+    return undefined;
+  }
   const agent = isRecord(part.output) ? part.output.agent : undefined;
   return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
 }
@@ -919,6 +912,19 @@ const AGENT_READING: RowReading<AgentPart> = {
     (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
 };
 
+/** No subagent's session saying it runs. */
+const NO_WORKERS: ReadonlySet<string> = new Set();
+
+/** What a tab knows of a turn beyond its message, which its rows read. */
+interface AgentTurnPlace {
+  /** The call whose to-do list stays out of a finished turn's fold. */
+  readonly newestTodos?: string | undefined;
+  /** The calls whose subagent its own session says still runs, since a call may settle the moment its worker is under way. */
+  readonly workers?: ReadonlySet<string>;
+  /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
+  readonly said?: boolean;
+}
+
 /** The parts of a message a row is drawn from: every part but a step boundary and a kind this build does not draw. */
 function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
   return agentParts(message).filter(
@@ -941,11 +947,13 @@ export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
   grouped = true,
-  newestTodos: string | undefined = undefined,
+  { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
+    running: (part) =>
+      AGENT_READING.running(part) || (part.kind === AGENT_PART.TOOL && workers.has(part.callId)),
     kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
   };
   return turnRows(parts, reading, {
@@ -953,11 +961,12 @@ export function agentRows(
     moving,
     done: grouped && !moving,
     grouped,
+    said,
   });
 }
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */
-export const WORKING_PHASE = {
+const WORKING_PHASE = {
   /** Its session has not opened the turn that will answer the newest line. */
   STARTING: "starting",
   /** The turn is open and its model has drawn nothing yet. */

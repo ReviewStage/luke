@@ -75,7 +75,7 @@ export interface AdminTrend {
 }
 
 /** The provider ids the dashboard names; every other linked provider pools into `other`. */
-export const SIGN_IN_PROVIDER_ID = {
+const SIGN_IN_PROVIDER_ID = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
@@ -183,7 +183,7 @@ export interface AdminIntegration {
  * the environment decides it. The label is the maintainer-facing name; the key
  * is stable for anything that keys off the row.
  */
-export const ADMIN_INTEGRATION = {
+const ADMIN_INTEGRATION = {
   ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
   ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
   HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },

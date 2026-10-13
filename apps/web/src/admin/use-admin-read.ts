@@ -56,7 +56,7 @@ export interface AdminReadHandle<T> {
 }
 
 /** The detail every failed read that is not the endpoint's own carries. */
-export const ADMIN_READ_ERROR = {
+const ADMIN_READ_ERROR = {
   UNAVAILABLE: "The service did not answer. It may be briefly unavailable — try again shortly.",
   PROTECTED:
     "The request was redirected before it reached the dashboard. A preview deployment behind Vercel Deployment Protection intercepts the API call; disable protection for this deployment, or use a production URL.",
@@ -66,7 +66,7 @@ export const ADMIN_READ_ERROR = {
  * One settled response as a state, the hook's whole non-React half, so the
  * state machine is testable without a DOM.
  */
-export async function adminReadFromResponse<T>(
+async function adminReadFromResponse<T>(
   response: Response,
   reader: AdminReader<T>,
   question: string,
@@ -114,7 +114,7 @@ export function adminReadFailure(state: AdminRead<unknown>, endpointDetail: stri
  * because stale data must not stand in front of a withdrawn session, a
  * refused role, or an account that no longer exists.
  */
-export function settleRead<State extends { status: string }>(
+function settleRead<State extends { status: string }>(
   current: State,
   next: State,
   asked: string,
@@ -273,7 +273,7 @@ export type AdminWriter = (id: string, value: boolean, signal: AbortSignal) => P
  * aborted chain finishes its request in silence: nothing is drawn after the
  * screen that owned it is gone.
  */
-export class AdminWriteChain {
+class AdminWriteChain {
   private readonly intents = new Map<string, boolean>();
   private readonly writing = new Set<string>();
 

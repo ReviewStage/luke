@@ -16,10 +16,8 @@
     ".": {
       "entry": [
         "scripts/fixtures/discarded-effect/*.ts",
-        "design/check-design-contract.mjs",
         "design/generate-brand-assets.mjs",
-        "design/generate-surface-shared.mjs",
-        "tools/oxlint/anti-slop/fixtures/*.ts"
+        "design/generate-surface-shared.mjs"
       ],
       "project": ["scripts/**", "design/**", "tools/**"]
     },

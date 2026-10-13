@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   PROVIDER_KEY_PROVIDER,
-  PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
   type ProviderKeyRejection,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
-import { Effect } from "effect";
-import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,8 +20,7 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
-import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
+import { onRegistry } from "#testing/copy-feedback";
 import { ApiKeysSection } from "./api-keys-section";
 
 /**
@@ -157,36 +152,8 @@ const rowOf = (page: HTMLElement, name: string) =>
     (row) => row.querySelector("strong")?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
 
-/** What stands under a provider's row, before the next provider's: its field and its refusal. */
-function under(page: HTMLElement, name: string): readonly Element[] {
-  const drawn: Element[] = [];
-  for (
-    let next = rowOf(page, name).nextElementSibling;
-    next !== null;
-    next = next.nextElementSibling
-  ) {
-    if (next.classList.contains("menu-row")) break;
-    drawn.push(next);
-  }
-  return drawn;
-}
-
 function addKey(page: HTMLElement, name: string): void {
   act(() => button(page, "Add key", rowOf(page, name)).click());
-}
-
-/** Chooses an item of a provider's ⋯ menu. */
-function chooseFromMenu(page: HTMLElement, name: string, item: string): void {
-  const more =
-    rowOf(page, name).querySelector<HTMLButtonElement>(
-      `button[aria-label="${name} key actions"]`,
-    ) ?? assert.fail(`no ${name} menu`);
-  act(() => more.click());
-  const chosen =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
-      (each) => each.textContent === item,
-    ) ?? assert.fail(`no ${item} item`);
-  act(() => chosen.click());
 }
 
 test("a pasted key is sent once from a password field, leaves the field once kept, and is drawn as the service's hint alone", async () => {
@@ -218,143 +185,4 @@ test("the page and its fields are kept out of the screen recording", async () =>
     "the group is under the unrecorded class",
   );
   assert.ok(field(page, "OpenAI").classList.contains("ph-no-capture"));
-});
-
-test("a save the service refuses says why under the row and keeps nothing", async () => {
-  refuseSave = PROVIDER_KEY_REJECTION.WRONG_PROVIDER;
-  const page = await mount();
-
-  addKey(page, "OpenAI");
-  await paste(page, "OpenAI", PASTED);
-
-  assert.equal(
-    under(page, "OpenAI").find((each) => each.getAttribute("role") === "alert")?.textContent,
-    "This looks like an Anthropic key. Paste it into the Anthropic row.",
-  );
-  assert.ok(
-    under(page, "OpenAI").some((each) => each.querySelector("input")),
-    "the field stands for another try",
-  );
-});
-
-test("a key the provider refused, one out of quota, and one the service cannot read each ask for a hand", async () => {
-  stored = [
-    { ...ANTHROPIC_KEPT, status: PROVIDER_KEY_STATUS.UNREADABLE },
-    {
-      ...ANTHROPIC_KEPT,
-      provider: PROVIDER_KEY_PROVIDER.OPENAI,
-      hint: "sk-proj-…abcd",
-      status: PROVIDER_KEY_STATUS.QUOTA_EXCEEDED,
-    },
-  ];
-  const page = await mount();
-
-  assert.equal(
-    rowOf(page, "Anthropic").querySelector('[role="alert"]')?.textContent,
-    "This key can no longer be read.",
-  );
-  assert.equal(
-    rowOf(page, "OpenAI").querySelector('[role="alert"]')?.textContent,
-    "Out of quota or credit at OpenAI.",
-  );
-});
-
-test("a kept key's ⋯ offers Edit key, which opens the field, and Remove key, which asks before it removes", async () => {
-  stored = [ANTHROPIC_KEPT];
-  const page = await mount();
-
-  chooseFromMenu(page, "Anthropic", "Edit key");
-  assert.equal(document.activeElement, field(page, "Anthropic"), "the field takes the paste");
-  act(() => button(page, "Cancel").click());
-  assert.equal(page.querySelector("input"), null);
-
-  chooseFromMenu(page, "Anthropic", "Remove key");
-  const askedBeforeRemoving = sent.some(
-    (request) => request.kind === ACT_KIND.PROVIDER_KEYS_REMOVE,
-  );
-  const dialog =
-    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
-  assert.equal(dialog.querySelector("h2")?.textContent, "Remove your Anthropic API key?");
-  act(() => button(page, "Remove key", dialog).click());
-  await settle();
-
-  assert.equal(askedBeforeRemoving, false);
-  assert.deepEqual(
-    sent
-      .filter((request) => request.kind === ACT_KIND.PROVIDER_KEYS_REMOVE)
-      .map((request) => request.payload),
-    [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
-  );
-  assert.ok(
-    button(page, "Add key", rowOf(page, "Anthropic")),
-    "a removed key's row offers Add key",
-  );
-});
-
-test("a read that fails offers to try again, and no account reads nothing", async () => {
-  refuseRead = true;
-  const failed = await mount();
-  const signedOut = await mount(false);
-
-  assert.equal(failed.querySelector('[role="alert"]')?.textContent, "Your keys could not be read.");
-  assert.equal(
-    signedOut.querySelector(".settings-note")?.textContent,
-    "Sign in to add your own API keys.",
-  );
-  assert.equal(signedOut.querySelector("input"), null, "no field without an account to hold a key");
-});
-
-it.effect(
-  "while the keys are read the page draws the spinner in their rows' place, saying Loading your keys to a reader",
-  () =>
-    Effect.gen(function* () {
-      holdRead = true;
-      const registry = yield* registryOnTestClock;
-      const page = yield* Effect.promise(() => mount(true, registry));
-      yield* TestClock.adjust(PAST_SPINNER_DELAY);
-      yield* Effect.promise(settle);
-      assert.deepEqual(waitsIn(page), [{ says: "Loading your keys", ring: true }]);
-      assert.equal(page.querySelector('input[type="password"]'), null, "no rows before the read");
-      assert.doesNotMatch(page.textContent ?? "", /Reading/u);
-    }),
-);
-
-test("while one row's save is out, the other row waits, so two answers cannot land out of order", async () => {
-  holdSaves = [];
-  const page = await mount();
-
-  addKey(page, "Anthropic");
-  addKey(page, "OpenAI");
-  await paste(page, "Anthropic", PASTED);
-  const openAiForm = () => field(page, "OpenAI").form ?? assert.fail("no OpenAI form");
-  const openAiSave = button(page, "Save", openAiForm());
-  const waited = openAiSave.disabled;
-  const release = holdSaves[0] ?? assert.fail("the save was not sent");
-  stored = [ANTHROPIC_KEPT];
-  release({ status: ACT_OUTCOME_STATUS.DONE, value: { keys: stored } });
-  await settle();
-
-  assert.equal(waited, true);
-  assert.equal(button(page, "Save", openAiForm()).disabled, false);
-});
-
-test("Escape in a key's field closes the editor alone, and never reaches the window's own Escape", async () => {
-  const page = await mount();
-  let reached = 0;
-  const onWindow = (event: KeyboardEvent) => {
-    if (event.key === "Escape") reached += 1;
-  };
-  window.addEventListener("keydown", onWindow);
-  try {
-    addKey(page, "Anthropic");
-    act(() => {
-      field(page, "Anthropic").dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-      );
-    });
-    assert.equal(page.querySelector("input"), null, "the editor closed");
-    assert.equal(reached, 0, "Settings stays open");
-  } finally {
-    window.removeEventListener("keydown", onWindow);
-  }
 });

@@ -6,12 +6,12 @@ import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-
  * may run, so the voice function carries the platform's longest generally
  * available duration.
  */
-export const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
+const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
 const API_PREFIX = "/api/";
 
 /** The route key of a client path: `server/routes/<key>.ts` answers `/api/<key>`. */
-export function routeKeyOf(path: string): string {
+function routeKeyOf(path: string): string {
   return path.slice(API_PREFIX.length);
 }
 
@@ -82,22 +82,4 @@ export function functionDefinitions(routeKeys: readonly string[]): readonly Func
     })),
   ];
   return definitions.sort((left, right) => left.file.localeCompare(right.file));
-}
-
-/**
- * The routes that may run longer than the platform's default, by the path the
- * client calls: the groups above read back as one map, for the bounds tests
- * that hold a route's timing budget under its function's duration.
- */
-export const FUNCTION_MAX_DURATION_SECONDS: ReadonlyMap<string, number> = functionDurations();
-
-function functionDurations(): ReadonlyMap<string, number> {
-  const durations = new Map<string, number>();
-  for (const definition of functionDefinitions([])) {
-    if (definition.maxDuration === undefined) continue;
-    for (const route of definition.routes) {
-      durations.set(`${API_PREFIX}${route}`, definition.maxDuration);
-    }
-  }
-  return durations;
 }

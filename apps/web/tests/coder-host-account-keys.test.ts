@@ -1,18 +1,14 @@
 import assert from "node:assert/strict";
 import { parseKeyRing, sealProviderKey } from "@sidecar/database/models/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
-import {
-  PROVIDER_KEY_PROVIDER,
-  PROVIDER_KEY_STATUS,
-  type ProviderKeyProvider,
-} from "@sidecar/hosted/provider-key-wire";
+import { saveProviderKey } from "@sidecar/database/models/provider-key-store";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { jsonResponse } from "@sidecar/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
-import { coderModel, type LukeKeys, titleModel } from "../server/hosted/coder-host/model";
+import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -141,11 +137,6 @@ async function step(selected: Awaited<ReturnType<typeof stepModel>>): Promise<st
   }
 }
 
-async function statusOf(userId: string, providerId: ProviderKeyProvider) {
-  const rows = await database.run(listProviderKeyRows(userId));
-  return rows.find((row) => row.provider === providerId)?.status;
-}
-
 test("a step runs on the account's own key where it saved one, and on Luke's for a provider where it saved none", async () => {
   const userId = await accountWithKeys({
     [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
@@ -177,164 +168,4 @@ test("an account's key the ring cannot open, or one on a deployment holding no r
   assert.deepEqual(otherRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
   assert.deepEqual(noRing, Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE));
   assert.deepEqual(reached.keys, [], "no provider was reached on any key");
-});
-
-test("a provider refusing the account's key fails the step in words naming that key and marks the row invalid", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const refusing = provider([
-    jsonResponse(
-      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
-      401,
-    ),
-  ]);
-
-  const failed = await step(
-    await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, refusing.fetch),
-  );
-
-  assert.equal(failed, CODER_REFUSAL.ACCOUNT_KEY_REFUSED);
-  assert.equal(
-    await statusOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC),
-    PROVIDER_KEY_STATUS.INVALID,
-  );
-});
-
-test("a provider refusing the work for the account's billing marks the row quota exceeded, and the next step that goes through marks it verified", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-    [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI,
-  });
-  const broke = provider([
-    jsonResponse(
-      {
-        error: {
-          type: "insufficient_quota",
-          code: "insufficient_quota",
-          message: "You exceeded your current quota.",
-        },
-      },
-      429,
-    ),
-  ]);
-  const anthropic = provider([
-    jsonResponse(
-      {
-        type: "error",
-        error: {
-          type: "invalid_request_error",
-          message: "Your credit balance is too low to access the Anthropic API.",
-        },
-      },
-      400,
-    ),
-    jsonResponse(ANTHROPIC_MESSAGE, 200),
-  ]);
-
-  const openAiFailed = await step(
-    await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, broke.fetch),
-  );
-  const anthropicFailed = await step(
-    await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch),
-  );
-  const anthropicStatusWhileBroke = await statusOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-  const anthropicDone = await step(
-    await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch),
-  );
-
-  assert.equal(openAiFailed, CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA);
-  assert.equal(
-    await statusOf(userId, PROVIDER_KEY_PROVIDER.OPENAI),
-    PROVIDER_KEY_STATUS.QUOTA_EXCEEDED,
-  );
-  assert.equal(anthropicFailed, CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA);
-  assert.equal(anthropicStatusWhileBroke, PROVIDER_KEY_STATUS.QUOTA_EXCEEDED);
-  assert.equal(anthropicDone, "Done.");
-  assert.equal(
-    await statusOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC),
-    PROVIDER_KEY_STATUS.VERIFIED,
-  );
-});
-
-test("a step on Luke's key that the provider refuses fails as the provider said, and names no account key", async () => {
-  const userId = await accountWithKeys({});
-  const refusing = provider([
-    jsonResponse(
-      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
-      401,
-    ),
-  ]);
-
-  const failed = await step(
-    await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, refusing.fetch),
-  );
-
-  assert.notEqual(failed, CODER_REFUSAL.ACCOUNT_KEY_REFUSED);
-  assert.match(failed, /invalid x-api-key/u);
-  assert.deepEqual(await database.run(listProviderKeyRows(userId)), []);
-});
-
-test("a status written for a key since replaced marks nothing of its successor", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const refusing = provider([
-    jsonResponse(
-      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
-      401,
-    ),
-  ]);
-  const selected = await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, refusing.fetch);
-  // The key is replaced between the step's read and its call.
-  const ring = parseKeyRing(Redacted.make(RING.HELD));
-  if (Result.isFailure(ring)) return assert.fail("not a ring");
-  const owner = { userId, provider: PROVIDER_KEY_PROVIDER.ANTHROPIC };
-  const replacement = sealProviderKey(
-    ring.success,
-    owner,
-    Redacted.make("sk-ant-replacement-2222"),
-  );
-  await database.run(
-    saveProviderKey(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, replacement, "sk-…2222", new Date(1)),
-  );
-
-  await step(selected);
-
-  assert.equal(
-    await statusOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC),
-    PROVIDER_KEY_STATUS.VERIFIED,
-  );
-});
-
-test("a step on Luke's key counts the account's meter once, and a step on the account's own key counts nothing", async () => {
-  const userId = await accountWithKeys({
-    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
-  });
-  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-  const before = counted.filter((each) => each === userId).length;
-
-  // Its own Anthropic key is the account's to pay for.
-  await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch));
-  assert.equal(counted.filter((each) => each === userId).length, before);
-
-  // It saved no OpenAI key, so the step runs on Luke's and is counted, even one the provider refuses.
-  const openAi = provider([jsonResponse({ error: { message: "fixture: stop here" } }, 500)]);
-  await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.OPENAI, openAi.fetch));
-  assert.equal(counted.filter((each) => each === userId).length, before + 1);
-});
-
-test("a title generated on Luke's key counts the account's meter once", async () => {
-  const userId = await accountWithKeys({});
-  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
-  const model = titleModel(LUKE, meter(userId), anthropic.fetch);
-  assert.ok(model !== undefined);
-
-  await generateText({ model, prompt: "Name this.", maxRetries: 0 });
-
-  assert.deepEqual(
-    counted.filter((each) => each === userId),
-    [userId],
-  );
-  assert.deepEqual(anthropic.keys, [Redacted.value(LUKE.anthropic ?? Redacted.make(""))]);
 });

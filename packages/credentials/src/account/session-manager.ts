@@ -21,6 +21,9 @@ import {
 } from "./client.js";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "./snapshot.js";
 
+/** Why a sign-in again that landed on another account is refused. */
+const OTHER_ACCOUNT = "That sign-in is a different Luke account.";
+
 /** The path the hosted authorize route sends the code back to. */
 const CALLBACK_PATH = "/callback";
 
@@ -132,6 +135,9 @@ export class AccountSessionManager {
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
   #signInRunning: Fiber.Fiber<AccountSnapshot, SignInFailed> | undefined;
+  #againRunning:
+    | { readonly provider: AccountProvider; readonly fiber: Fiber.Fiber<boolean, SignInFailed> }
+    | undefined;
   #cancelSignIn: (() => void) | undefined;
 
   private constructor(
@@ -303,17 +309,77 @@ export class AccountSessionManager {
         const generation = ++this.#generation;
         yield* this.#publishChange();
         const consent = this.#consent(provider, generation);
-        this.#cancelSignIn = () => consent.cancel();
-        const fiber = yield* Effect.forkDetach(this.#trip(consent, generation));
+        const cancel = () => consent.cancel();
+        this.#cancelSignIn = cancel;
+        const fiber = yield* Effect.forkDetach(this.#trip(consent, generation, cancel));
         this.#signInRunning = fiber;
         return yield* restore(Fiber.join(fiber));
       }),
     );
   }
 
+  /**
+   * The trip taken again over a session that stands, for a grant only a new
+   * sign-in renews: GitHub's, which the service reads repositories with. The
+   * standing session is kept until the new one lands, so a withdrawn or failed
+   * trip leaves the developer signed in as before, and a trip that lands on
+   * another account is refused, its tokens revoked, rather than swapping the
+   * person under the window. Answers whether a new session landed through the
+   * provider asked for, so an ask for another provider while one runs
+   * answers no rather than joining it; over no session it is the ordinary
+   * sign-in.
+   */
+  signInAgain(provider: AccountProvider): Effect.Effect<boolean, SignInFailed> {
+    // The same one uninterruptible decide-fork-store as `beginSignIn`'s.
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.gen({ self: this }, function* () {
+        if (this.#account.status !== ACCOUNT_STATUS.SIGNED_IN) {
+          const account = yield* restore(this.beginSignIn(provider));
+          return account.status === ACCOUNT_STATUS.SIGNED_IN;
+        }
+        const running = this.#againRunning;
+        if (running !== undefined) {
+          if (running.provider !== provider) return false;
+          return yield* restore(Fiber.join(running.fiber));
+        }
+        const consent = this.#consent(provider, this.#generation, { again: true });
+        const cancel = () => consent.cancel();
+        this.#cancelSignIn = cancel;
+        const fiber = yield* Effect.forkDetach(this.#tripAgain(consent, cancel));
+        this.#againRunning = { provider, fiber };
+        return yield* restore(Fiber.join(fiber));
+      }),
+    );
+  }
+
+  #tripAgain(
+    consent: LoopbackConsent<AccountSnapshot>,
+    cancel: () => void,
+  ): Effect.Effect<boolean, SignInFailed> {
+    return Effect.gen(function* () {
+      const outcome = yield* Effect.scoped(consent.signInEffect());
+      if (!("reason" in outcome)) return true;
+      if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return false;
+      return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#dropCancel(cancel);
+          this.#againRunning = undefined;
+        }),
+      ),
+    );
+  }
+
+  /** Lets a trip's cancel go, unless a later trip's now stands in its place. */
+  #dropCancel(cancel: () => void): void {
+    if (this.#cancelSignIn === cancel) this.#cancelSignIn = undefined;
+  }
+
   #trip(
     consent: LoopbackConsent<AccountSnapshot>,
     generation: number,
+    cancel: () => void,
   ): Effect.Effect<AccountSnapshot, SignInFailed> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
@@ -330,14 +396,18 @@ export class AccountSessionManager {
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
-          this.#cancelSignIn = undefined;
+          this.#dropCancel(cancel);
           this.#signInRunning = undefined;
         }),
       ),
     );
   }
 
-  #consent(provider: AccountProvider, generation: number): LoopbackConsent<AccountSnapshot> {
+  #consent(
+    provider: AccountProvider,
+    generation: number,
+    options: { again: boolean } = { again: false },
+  ): LoopbackConsent<AccountSnapshot> {
     return loopbackConsent<AccountSnapshot>({
       callbackPath: CALLBACK_PATH,
       // The hosted authorize route reads which provider was chosen back off
@@ -355,7 +425,7 @@ export class AccountSessionManager {
           state,
           codeChallenge,
         }),
-      exchange: (input) => this.#exchange(provider, generation, input),
+      exchange: (input) => this.#exchange(provider, generation, input, options),
       openExternal: (url) => this.#options.openExternal(url),
     });
   }
@@ -370,6 +440,7 @@ export class AccountSessionManager {
     provider: AccountProvider,
     generation: number,
     input: LoopbackExchange,
+    options: { again: boolean },
   ): Effect.Effect<LoopbackConsentOutcome<AccountSnapshot>> {
     return withIssuedAccountTokens({
       issue: this.#options.client.exchangeCode({
@@ -380,11 +451,25 @@ export class AccountSessionManager {
       use: (tokens) =>
         Effect.gen({ self: this }, function* () {
           const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
-          if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
+          const replaced = options.again ? yield* this.#options.store.readAccount() : undefined;
+          if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCancelled());
+          if (replaced !== undefined && !sameAccount(replaced, identity)) {
+            return yield* Effect.fail(new SignInFailed({ message: OTHER_ACCOUNT }));
+          }
+          // Note that a sign-in again takes the generation from the session it
+          // replaces, so a refresh of the old one still out stores nothing over it.
+          const current = options.again ? ++this.#generation : generation;
+          if (!(yield* this.#storeCurrent(current, { ...tokens, ...identity }))) {
             return yield* Effect.fail(new SignInCancelled());
           }
+          if (replaced?.refreshToken) {
+            yield* reportingFailure(
+              this.#options.client.revoke(replaced.refreshToken),
+              "Replaced account token revocation failed",
+            );
+          }
           yield* this.#options.startCapabilities;
-          if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCancelled());
+          if (!this.#isCurrent(current)) return yield* Effect.fail(new SignInCancelled());
           return this.#account;
         }),
       revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
@@ -420,6 +505,13 @@ export class AccountSessionManager {
       accessToken,
     });
   }
+}
+
+/** Whether an identity is the stored account's person: by the service's id where both carry one, else by email. */
+function sameAccount(stored: StoredAccount, identity: AccountIdentity): boolean {
+  return stored.id !== undefined && identity.id !== undefined
+    ? stored.id === identity.id
+    : stored.email === identity.email;
 }
 
 function sameIdentity(stored: StoredAccount, identity: AccountIdentity): boolean {

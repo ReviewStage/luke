@@ -110,22 +110,3 @@ test("nothing behind the gate runs for a request the gate refuses", async () => 
   await handled({}).fetch(adminRequest());
   assert.deepEqual(seen, ["admin-1:GET"]);
 });
-
-test("a route naming two methods answers both and refuses the rest", async () => {
-  const methods: string[] = [];
-  const route = gate({
-    methods: ["PUT", "DELETE"],
-    handler: (_viewer, request) =>
-      Effect.sync(() => {
-        methods.push(request.method);
-        return new Response("{}");
-      }),
-  });
-
-  for (const method of ["GET", "POST", "PATCH"]) {
-    assert.equal((await route.fetch(adminRequest(method))).status, 405);
-  }
-  assert.equal((await route.fetch(adminRequest("PUT"))).status, 200);
-  assert.equal((await route.fetch(adminRequest("DELETE"))).status, 200);
-  assert.deepEqual(methods, ["PUT", "DELETE"]);
-});

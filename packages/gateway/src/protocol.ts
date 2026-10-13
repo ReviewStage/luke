@@ -125,6 +125,8 @@ export const GATEWAY_METHOD = {
   ACCOUNT_SNAPSHOT: "account.snapshot",
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  /** The sign-in taken again over the session that stands, answering whether a new one landed. */
+  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
   VOICE_DIAGNOSTICS: "voice.diagnostics",

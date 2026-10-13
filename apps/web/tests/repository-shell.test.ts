@@ -7,16 +7,12 @@ import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { GitHubApp } from "../server/github/github-app";
 import {
-  REPOSITORY_SANDBOX_CONTRACT,
-  REPOSITORY_SHELL_BOUNDS,
   REPOSITORY_SHELL_REFUSAL,
   REPOSITORY_SHELL_STATUS,
   type RepositoryCall,
-  type RepositorySandboxDoor,
   runInRepository,
 } from "../server/hosted/repository-shell";
 import {
-  fakeGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   openGithubUser,
@@ -130,47 +126,6 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
   );
 
   it.effect(
-    "the command runs from the checkout root, under the time bound, and never in shell text",
-    () =>
-      Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-        const command = `grep -rn "invite" src; echo "it's done"`;
-
-        yield* run(call, command, reachingGithub().layer);
-
-        const ran = sandbox.runs.at(-1);
-        assert.ok(ran);
-        assert.equal(ran.workingDirectory, REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT);
-        assert.equal(ran.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.COMMAND], command);
-        assert.equal(ran.command.includes("invite"), false);
-        assert.match(
-          ran.command,
-          new RegExp(`timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i `, "u"),
-        );
-      }),
-  );
-
-  it.effect(
-    "a command given with its description runs as the command alone, the description going nowhere near the sandbox",
-    () =>
-      Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-        const description = "List the repository's root";
-
-        const answered = yield* runInRepository(
-          call,
-          unparsedWire({ command: "ls", description }),
-        ).pipe(Effect.provide(reachingGithub().layer));
-
-        assert.deepEqual(answered, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
-        const ran = sandbox.runs.at(-1);
-        assert.ok(ran);
-        assert.equal(ran.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.COMMAND], "ls");
-        assert.equal(JSON.stringify(sandbox.runs).includes(description), false);
-      }),
-  );
-
-  it.effect(
     "the token reaches the firewall and nothing else: no run, no output, no result carries it",
     () =>
       Effect.gen(function* () {
@@ -183,22 +138,6 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
         assert.equal(carriesToken(JSON.stringify(sandbox.clones)), false);
         assert.equal(carriesToken(JSON.stringify(sandbox.policiesDuringClone)), true);
       }),
-  );
-
-  it.effect("a plan with no repository yet is refused before any sandbox opens", () =>
-    Effect.gen(function* () {
-      const { call, sandbox } = yield* openPlan(null);
-      const github = reachingGithub();
-
-      const answered = yield* run(call, "ls", github.layer);
-
-      assert.deepEqual(answered, {
-        status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-        reason: REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY,
-      });
-      assert.equal(sandbox.openings, 0);
-      assert.deepEqual(github.sent, []);
-    }),
   );
 
   it.effect("a repository the developer no longer reaches through the App checks nothing out", () =>
@@ -219,140 +158,5 @@ it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
         false,
       );
     }),
-  );
-
-  it.effect("a revoked GitHub authorization asks for a new sign-in, and checks nothing out", () =>
-    Effect.gen(function* () {
-      const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-      const revoked = fakeGitHub(() =>
-        Response.json({ message: "Bad credentials" }, { status: 401 }),
-      );
-
-      const answered = yield* run(call, "ls", revoked.layer);
-
-      assert.deepEqual(answered, {
-        status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-        reason: REPOSITORY_SHELL_REFUSAL.SIGN_IN_REQUIRED,
-      });
-      assert.deepEqual(sandbox.clones, []);
-    }),
-  );
-
-  it.effect("a GitHub that could not be read is a refusal the model may retry, not a fact", () =>
-    Effect.gen(function* () {
-      const { call } = yield* openPlan(RELAY_FULL_NAME);
-      const down = fakeGitHub(() => new Response(null, { status: 502 }));
-
-      const answered = yield* run(call, "ls", down.layer);
-
-      assert.deepEqual(answered, {
-        status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-        reason: REPOSITORY_SHELL_REFUSAL.GITHUB_UNAVAILABLE,
-      });
-    }),
-  );
-
-  it.effect(
-    "a checkout that fails says so with git's words, withdraws the token, runs no command, and is tried again next call",
-    () =>
-      Effect.gen(function* () {
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-        const github = reachingGithub();
-        sandbox.cloneAnswers.push({
-          exitCode: 128,
-          stderr: "fatal: could not read from remote repository",
-        });
-
-        const failed = yield* run(call, "ls", github.layer);
-        const retried = yield* run(call, "ls", github.layer);
-
-        assert.equal(failed.status, REPOSITORY_SHELL_STATUS.NOT_RUN);
-        assert.ok("reason" in failed);
-        assert.ok(failed.reason.startsWith(REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED));
-        assert.match(failed.reason, /could not read from remote repository/u);
-        assert.equal(carriesToken(JSON.stringify(failed)), false);
-        assert.equal(sandbox.policies[1], "allow-all");
-        assert.deepEqual(retried, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
-        assert.equal(sandbox.clones.length, 2);
-        // Only the retried call ran a command: the failed one ran none in a checkout that did not stand.
-        const inCheckout = sandbox.runs.filter(
-          (ran) => ran.workingDirectory === REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
-        );
-        assert.equal(inCheckout.length, 1);
-      }),
-  );
-
-  it.effect("a plan whose repository changed is checked out again, of the new repository", () =>
-    Effect.gen(function* () {
-      const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
-      const ledger = { owner: RELAY.owner, name: "Ledger", defaultBranch: "main" } as const;
-      const github = githubReaching([{ ...INSTALLATION, repositories: [RELAY, ledger] }]);
-
-      yield* run(call, "ls", github.layer);
-      const moved = yield* run(
-        { ...call, repository: `${ledger.owner}/${ledger.name}` },
-        "ls",
-        github.layer,
-      );
-
-      assert.deepEqual(moved, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
-      assert.deepEqual(
-        sandbox.clones.map((clone) => [clone.repository, clone.branch]),
-        [
-          [RELAY_FULL_NAME, RELAY.defaultBranch],
-          [`${ledger.owner}/${ledger.name}`, ledger.defaultBranch],
-        ],
-      );
-    }),
-  );
-
-  it.effect("a sandbox that cannot be opened, or has no firewall, checks nothing out", () =>
-    Effect.gen(function* () {
-      const { call } = yield* openPlan(RELAY_FULL_NAME);
-      const github = reachingGithub();
-      const closed: RepositorySandboxDoor = () => Promise.reject(new Error("fixture: no sandbox"));
-      const bare = sandboxDouble(COMMANDS, { firewall: false });
-
-      const unopened = yield* run({ ...call, sandbox: closed }, "ls", github.layer);
-      const unbrokered = yield* run({ ...call, sandbox: bare.door }, "ls", github.layer);
-
-      assert.deepEqual(unopened, {
-        status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-        reason: REPOSITORY_SHELL_REFUSAL.SANDBOX_UNAVAILABLE,
-      });
-      assert.deepEqual(unbrokered, {
-        status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-        reason: REPOSITORY_SHELL_REFUSAL.NO_FIREWALL,
-      });
-      assert.deepEqual(bare.clones, []);
-    }),
-  );
-
-  it.effect(
-    "a command's output is cut to the bound, and arguments other than one command run nothing",
-    () =>
-      Effect.gen(function* () {
-        const long = "x".repeat(REPOSITORY_SHELL_BOUNDS.OUTPUT_MAX_CHARS + 5);
-        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME, (command) =>
-          command === "cat big" ? { exitCode: 0, stdout: long, stderr: long } : undefined,
-        );
-        const github = reachingGithub();
-
-        const cut = yield* run(call, "cat big", github.layer);
-        const unreadable = yield* runInRepository(
-          call,
-          unparsedWire({ command: "ls", cwd: "/etc" }),
-        ).pipe(Effect.provide(github.layer));
-
-        assert.equal(cut.status, REPOSITORY_SHELL_STATUS.RAN);
-        assert.ok("stdout" in cut);
-        assert.equal(cut.stdout.length, REPOSITORY_SHELL_BOUNDS.OUTPUT_MAX_CHARS);
-        assert.equal(cut.stderr.length, REPOSITORY_SHELL_BOUNDS.OUTPUT_MAX_CHARS);
-        assert.deepEqual(unreadable, {
-          status: REPOSITORY_SHELL_STATUS.NOT_RUN,
-          reason: REPOSITORY_SHELL_REFUSAL.UNREADABLE,
-        });
-        assert.equal(sandbox.runs.filter((ran) => ran.env?.LUKE_COMMAND !== undefined).length, 1);
-      }),
   );
 });

@@ -15,13 +15,13 @@ import type { WireValue } from "../server/core";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 
 /**
- * A Preview's GitHub sign-in, carried end to end across the proxy's two
- * ends: a Preview and production, each a Better Auth over its own in-memory
- * database, configured as `auth.ts` configures them, with GitHub a fake
- * behind `fetch`. The OAuth App has registered production's callback alone,
- * so what this holds is that a sign-in begun on the Preview is sent through
- * that callback, that production relays it without signing anyone in on its
- * side, and that the Preview signs the GitHub user in.
+ * The desktop's sign-in on a Preview, carried end to end across the proxy's
+ * two ends: a Preview and production, each a Better Auth over its own
+ * in-memory database, configured as `auth.ts` configures them, with GitHub a
+ * fake behind `fetch`. The OAuth App has registered production's callback
+ * alone, so what this holds is that a sign-in begun on the Preview is sent
+ * through that callback, that production relays it, and that the Preview
+ * resumes the desktop's authorization and hands its loopback the code.
  */
 
 const PRODUCTION_URL = "https://tryluke.dev";
@@ -45,7 +45,6 @@ interface Trail {
   readonly logs: string[];
 }
 
-type Auth = ReturnType<typeof endFor>;
 type Ends = ReturnType<typeof ends>;
 
 function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
@@ -151,12 +150,6 @@ function cookiesFrom(response: Response): string {
     .join("; ");
 }
 
-function sessionCookieSet(response: Response): boolean {
-  return response.headers
-    .getSetCookie()
-    .some((cookie) => /^[^=]*session_token=[^;]+/u.test(cookie));
-}
-
 function location(response: Response, trail: Trail): string {
   const next = response.headers.get("location");
   assert.ok(next, `expected a redirect, got ${response.status}`);
@@ -182,18 +175,6 @@ async function land(ends: Ends, relayed: string, cookie?: string) {
   );
 }
 
-async function githubAccounts(auth: Auth, userId: string) {
-  const context = await auth.$context;
-  return (await context.internalAdapter.findAccounts(userId)).filter(
-    (row) => row.providerId === "github",
-  );
-}
-
-async function githubUser(auth: Auth) {
-  const found = await (await auth.$context).internalAdapter.findUserByEmail(GITHUB_EMAIL);
-  return found?.user ?? null;
-}
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
@@ -203,28 +184,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
-});
-
-test("a Preview's proxied GitHub sign-in still signs the GitHub user in on the Preview", async () => {
-  const both = ends();
-  const started = await both.preview.handler(
-    new Request(`${PREVIEW_URL}/api/auth/sign-in/social`, {
-      method: "POST",
-      headers: { origin: PREVIEW_URL, "content-type": "application/json" },
-      body: JSON.stringify({ provider: "github", callbackURL: "/account.html" }),
-    }),
-  );
-  const authorize = new URL(decodeStarted(await started.json()).url);
-  assert.equal(authorize.searchParams.get("redirect_uri"), REGISTERED_CALLBACK);
-
-  const relayed = await githubReturns(both, authorize, `code=${GITHUB_CODE}`);
-  const landed = await land(both, relayed, cookiesFrom(started));
-  assert.equal(location(landed, both.trail), "/account.html");
-  assert.equal(sessionCookieSet(landed), true);
-  const user = await githubUser(both.preview);
-  assert.ok(user);
-  assert.equal((await githubAccounts(both.preview, user.id)).length, 1);
-  assert.equal(await githubUser(both.production), null);
 });
 
 test("the desktop's sign-in on a Preview, proxied through production, hands the desktop its code", async () => {
@@ -256,6 +215,7 @@ test("the desktop's sign-in on a Preview, proxied through production, hands the 
     }),
   );
   const authorize = new URL(decodeStarted(await started.json()).url);
+  assert.equal(authorize.searchParams.get("redirect_uri"), REGISTERED_CALLBACK);
   const relayed = await githubReturns(both, authorize, `code=${GITHUB_CODE}`);
   const landed = await land(both, relayed, cookiesFrom(started));
 

@@ -139,7 +139,7 @@ const NOT_CONFIGURED = new IntegrationConnectFailure({
 });
 
 /** The connector of a provider this deployment names none for: nothing is ever asked. */
-export const UNCONFIGURED_CONNECTOR: ConnectorService = {
+const UNCONFIGURED_CONNECTOR: ConnectorService = {
   configured: false,
   authorize: () => Effect.fail(NOT_CONFIGURED),
   token: () => Effect.fail(NOT_CONFIGURED),
