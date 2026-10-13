@@ -7,7 +7,7 @@ import {
   CALL_VIDEO_BOUNDS,
   CALL_WINDOW_BOUNDS,
   CallWindowPresence,
-  callWindowRefit,
+  callWindowFrame,
 } from "./call-window-presence";
 
 const CALLING = { voiceStatus: LIVE_STATUS.LISTENING, callPlanId: "plan_1" } as const;
@@ -77,39 +77,32 @@ describe("the floating call window's presence", () => {
   });
 });
 
-describe("the call window's refit", () => {
+describe("the call window's frame", () => {
   const workArea = { x: 0, y: 25, width: 1440, height: 850 };
+  const card = (x: number, y: number) => ({
+    x,
+    y,
+    width: CALL_WINDOW_BOUNDS.WIDTH,
+    height: CALL_WINDOW_BOUNDS.HEIGHT,
+  });
 
-  it("grows the tile up from the card's bottom-left corner, and back down to it", () => {
-    const card = {
-      x: 8,
-      y: 775,
-      width: CALL_WINDOW_BOUNDS.WIDTH,
-      height: CALL_WINDOW_BOUNDS.HEIGHT,
-    };
-    const tile = callWindowRefit({ frame: card, video: true, workArea });
-    assert.deepEqual(tile, {
+  it("grows the tile up from the card's bottom-left corner", () => {
+    assert.deepEqual(callWindowFrame({ card: { x: 8, y: 775 }, video: true, workArea }), {
       x: 8,
       y: 775 + CALL_WINDOW_BOUNDS.HEIGHT - CALL_VIDEO_BOUNDS.HEIGHT,
       width: CALL_VIDEO_BOUNDS.WIDTH,
       height: CALL_VIDEO_BOUNDS.HEIGHT,
     });
-    assert.deepEqual(callWindowRefit({ frame: tile, video: false, workArea }), card);
   });
 
-  it("pulls a tile that would grow off the work area back onto it", () => {
-    const card = {
-      x: 1170,
-      y: 30,
-      width: CALL_WINDOW_BOUNDS.WIDTH,
-      height: CALL_WINDOW_BOUNDS.HEIGHT,
-    };
-    const tile = callWindowRefit({ frame: card, video: true, workArea });
-    assert.deepEqual(tile, {
+  it("pulls a tile that would grow off the work area back onto it, and puts the card back where it was", () => {
+    const place = { x: 1170, y: 30 };
+    assert.deepEqual(callWindowFrame({ card: place, video: true, workArea }), {
       x: 1440 - CALL_VIDEO_BOUNDS.WIDTH,
       y: 25,
       width: CALL_VIDEO_BOUNDS.WIDTH,
       height: CALL_VIDEO_BOUNDS.HEIGHT,
     });
+    assert.deepEqual(callWindowFrame({ card: place, video: false, workArea }), card(1170, 30));
   });
 });

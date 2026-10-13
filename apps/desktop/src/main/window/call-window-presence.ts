@@ -79,21 +79,27 @@ export function callWindowPosition(input: {
 }
 
 /**
- * The window's frame once it changes size: its bottom-left corner kept where
- * it stood, which is the corner the card is anchored to, and the whole frame
- * pulled back onto the work area it stands on where growing took it off.
+ * The window's frame for what it draws, from where the card stands: the card
+ * itself, or the video tile grown up from the card's bottom-left corner and
+ * pulled back onto the work area where growing took it off. The card's place
+ * is never moved by the tile, so the card comes back where it was.
  */
-export function callWindowRefit(input: {
-  frame: CallWindowArea;
+export function callWindowFrame(input: {
+  card: CallWindowPoint;
   video: boolean;
   workArea: CallWindowArea;
 }): CallWindowArea {
-  const { frame, video, workArea } = input;
-  const width = video ? CALL_VIDEO_BOUNDS.WIDTH : CALL_WINDOW_BOUNDS.WIDTH;
-  const height = video ? CALL_VIDEO_BOUNDS.HEIGHT : CALL_WINDOW_BOUNDS.HEIGHT;
+  const { card, video, workArea } = input;
+  if (!video)
+    return { ...card, width: CALL_WINDOW_BOUNDS.WIDTH, height: CALL_WINDOW_BOUNDS.HEIGHT };
+  const { WIDTH: width, HEIGHT: height } = CALL_VIDEO_BOUNDS;
   return {
-    x: clamp(frame.x, workArea.x, workArea.x + workArea.width - width),
-    y: clamp(frame.y + frame.height - height, workArea.y, workArea.y + workArea.height - height),
+    x: clamp(card.x, workArea.x, workArea.x + workArea.width - width),
+    y: clamp(
+      card.y + CALL_WINDOW_BOUNDS.HEIGHT - height,
+      workArea.y,
+      workArea.y + workArea.height - height,
+    ),
     width,
     height,
   };
