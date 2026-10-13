@@ -1,22 +1,22 @@
-import { CheckIcon, DownloadIcon, ExternalIcon } from "@sidecar/panel";
+import { CheckIcon, ExternalIcon } from "@sidecar/panel";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { BusyLabel } from "../spinner";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "../update-row";
 import type { UpdateControl } from "./controls";
+import { SettingsGroup } from "./settings-group";
 
 /**
- * The buttons with somewhere new to go — fetch the release, restart into it,
- * or reach its page in the browser — are filled with the accent, as the one
- * act the row exists for; checking stays a plain toolbar button, because
- * checking is maintenance.
+ * The row's one act, in the bordered face every Settings row's act wears:
+ * fetch the release, restart into it, reach its page in the browser, or
+ * check for one. The accent is kept for a form's Save alone.
  */
 function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
   switch (action) {
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return (
-        <button type="button" className="toolbar-button" disabled>
+        <button type="button" className="toolbar-button bordered-button" disabled>
           <BusyLabel busy label="Downloading the update">
             Download
           </BusyLabel>
@@ -24,13 +24,21 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
       );
     case UPDATE_ROW_ACTION.RESTART:
       return (
-        <button type="button" className="primary-button" onClick={control.onInstall}>
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={control.onInstall}
+        >
           Restart to update
         </button>
       );
     case UPDATE_ROW_ACTION.GET:
       return (
-        <button type="button" className="primary-button" onClick={control.onOpenLatest}>
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={control.onOpenLatest}
+        >
           Download
         </button>
       );
@@ -38,7 +46,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
       return (
         <button
           type="button"
-          className="toolbar-button"
+          className="toolbar-button bordered-button"
           disabled={action === UPDATE_ROW_ACTION.CHECKING}
           onClick={() => void control.onCheck()}
         >
@@ -58,11 +66,7 @@ export function UpdatesSection({ control }: { control: UpdateControl }): React.J
   const { tell } = useAct();
   const row = updateRow(control.update);
   return (
-    <section className="settings-section">
-      <h2>
-        <DownloadIcon />
-        Updates
-      </h2>
+    <SettingsGroup title="Updates">
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
         <span className="settings-copy">
           <span className="settings-name">
@@ -92,13 +96,13 @@ export function UpdatesSection({ control }: { control: UpdateControl }): React.J
         </span>
         <button
           type="button"
-          className="toolbar-button"
+          className="toolbar-button bordered-button"
           onClick={() => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
         >
           Open
           <ExternalIcon />
         </button>
       </div>
-    </section>
+    </SettingsGroup>
   );
 }

@@ -530,15 +530,8 @@
   gap: 7px;
 }
 
-/* The signed-in identity: the provider's picture of the person beside their
-   address, or our own glyph where no picture travelled. */
-.account-identity {
-  display: flex;
-  align-items: center;
-  flex-direction: row;
-  gap: 10px;
-}
-
+/* The signed-in identity's picture, leading its row as a provider's mark
+   leads one, or our own glyph where no picture travelled. */
 .account-avatar {
   width: 30px;
   height: 30px;
@@ -557,169 +550,6 @@
 .account-avatar-fallback .settings-icon {
   width: 14px;
   height: 14px;
-}
-
-.account-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* Signing out is destructive the way deleting a key is — getting back in costs
-   a trip through the browser — so it says so on hover rather than sitting in
-   red beside the identity it would end. Deleting the account is more so — the
-   service erases it and no sign-in brings it back — and wears the same warning
-   the same way. */
-.account-signout:hover:not(:disabled),
-.account-delete:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger-text);
-}
-
-/* Deleting a key is the one action in this panel that cannot be undone from inside
-   it: nothing here can hand a key back, so a trash pressed by mistake costs a
-   trip to the provider's own site. The trash asks instead of acting, and the
-   answer is given on the line the question was asked on.
- *
- * The line becomes a grid of two columns, its words and its controls, and
- * the confirm that replaces the controls spans both: its question takes the
- * place of the line's own words, which step aside while it is asked. Neither
- * layer is mounted or unmounted by the press, and only `transform`, `opacity`,
- * and `visibility` ever change hands. The question stands in the line's flow
- * while it is asked, so one that wraps grows the line rather than running
- * over the next; while it rests it stands out of the flow, so a line never
- * sizes itself to a question nobody asked. Whatever else the line holds, like
- * a refusal under it, takes a row of its own beneath. */
-.settings-row:has(> .credential-actions) {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.settings-row:has(> .credential-actions) > * {
-  grid-column: 1 / -1;
-}
-
-.settings-row:has(> .credential-actions) > .settings-copy {
-  grid-area: 1 / 1;
-}
-
-.credential-actions {
-  display: contents;
-}
-
-.credential-actions > .credential-controls {
-  grid-area: 1 / 2;
-  justify-self: end;
-}
-
-/* The layer that is leaving fades over `--duration-exit`, the way panel content
-   always leaves before the thing it belongs to moves. `visibility` waits out
-   that fade so it can be seen going, and switches immediately on the way in so
-   the arriving layer can take the focus the leaving one is about to lose. */
-.credential-actions > [data-drawn="false"] {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    visibility 0s linear var(--duration-exit);
-}
-
-.credential-actions > [data-drawn="true"] {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit),
-    visibility 0s linear;
-}
-
-/* The layer fades; what springs is what is inside it. Every control here rides
-   `--spring-fast` — the same bounce the tab thumb has, which is the profile
-   every small element in the app moves on, so a control trading places belongs
-   to the same object as everything around it. Each one collapses into, and
-   grows back out of, its own right edge: the group folds toward the corner the
-   trash sits in rather than shrinking about its middle.
- *
- * Matched through the layer rather than by class, because `.toolbar-button`
- * and `.danger-button` are written in desktop.css, later in the stylesheet,
- * and would otherwise win this declaration back at equal specificity. Their
- * transition declares only the hover's own, so this replaces it rather than
- * adding to it and has to carry those along. */
-.credential-actions > [data-drawn] > * {
-  transform-origin: 100% 50%;
-  transition:
-    transform var(--duration-fast) var(--spring-fast) var(--answer-delay, 0s),
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease,
-    filter var(--duration-hover) ease;
-}
-
-/* Standing down happens all at once: a group leaving in sequence reads as
-   hesitation, and the answer is already on its way in. */
-.credential-actions > [data-drawn="false"] > * {
-  transform: scale(0.82) translateX(10px);
-}
-
-/* Arriving does not. The answer that changes nothing lands first and the one
-   that cannot be taken back lands a beat later, on the same stagger the panel's
-   own rows fan open with — so the confirm unfolds rather than appearing, and
-   the eye reaches the safe answer first. */
-.credential-actions > [data-drawn="true"] > * {
-  --answer-delay: calc(var(--answer-index, 0) * var(--row-stagger));
-
-  transform: none;
-}
-
-/* The group is what names the question for the two controls inside it, the same
-   way the editor's group names the provider for its own Cancel and Save. None
-   of the user-agent frame is wanted, including the `min-inline-size` that would
-   stop it shrinking with the panel. It spans the whole line, the question at
-   the line's start and the answers where the controls were. */
-.credential-actions > .credential-confirm {
-  min-inline-size: 0;
-  justify-content: flex-end;
-  padding: 0;
-  border: 0;
-  margin: 0;
-  grid-area: 1 / 1 / 2 / 3;
-}
-
-.credential-actions > .credential-confirm[data-drawn="false"] {
-  position: absolute;
-  inset: 0;
-}
-
-/* The question reads in the line's own name type, breaking inside a long
-   address rather than running under the answers, and arrives on the layer's
-   fade alone: a line of words springing from its right edge would slide the
-   whole sentence rather than unfold two buttons. */
-.credential-actions > .credential-confirm > .credential-question {
-  min-width: 0;
-  flex: 1 1 auto;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-  transform: none;
-}
-
-/* While the question stands, the line's own words step aside for it on the
-   same fades the two layers trade on, so the two never read over each other. */
-.settings-row:has(> .credential-actions) > :not(.credential-actions) {
-  transition:
-    opacity var(--duration-quick) var(--motion-exit),
-    visibility 0s linear;
-}
-
-.settings-row:has(> .credential-actions > .credential-confirm[data-drawn="true"])
-  > :not(.credential-actions) {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    visibility 0s linear var(--duration-exit);
 }
 
 .link-icon {
@@ -763,12 +593,6 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 7px;
-}
-
-/* Held to the width of its longest word, so saying "Deleting…" does not widen
-   the group and slide the answer beside it along. */
-.credential-confirm .danger-button {
-  min-width: 96px;
 }
 
 .error-message {

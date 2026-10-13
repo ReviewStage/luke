@@ -165,7 +165,7 @@ function accountMenuGroups(
 
 /**
  * The foot's account button and the menu it raises. Log out asks first, in a
- * dialog over the window, as Settings' Sign out asks in its row: getting back
+ * dialog over the window, as Settings' Sign out does: getting back
  * in costs a whole trip through the browser.
  */
 function AccountMenu({
