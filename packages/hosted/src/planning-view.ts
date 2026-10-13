@@ -5,6 +5,7 @@ import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
 } from "./github-repositories-wire.js";
+import { pageVersionNumberSchema, planPageVersionAnswerSchema } from "./page-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -662,3 +663,20 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
+
+/** One version of one page of a plan, as the frame drawing it names it. */
+export const planningPageParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  pageId: EffectSchema.NonEmptyString,
+  version: pageVersionNumberSchema,
+});
+
+export type PlanningPageParams = typeof planningPageParamsSchema.Type;
+
+/** A page frame's read of one version, as the window's process hears it: the version with its HTML, or that the service did not answer. */
+export const planningPageAnswerSchema = EffectSchema.Union([
+  planPageVersionAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningPageAnswer = typeof planningPageAnswerSchema.Type;

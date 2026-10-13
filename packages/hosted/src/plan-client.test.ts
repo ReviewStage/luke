@@ -612,6 +612,37 @@ it.effect(
 );
 
 it.effect(
+  "reads one version of a page with its HTML, and nothing for a version the service does not hold",
+  () =>
+    Effect.gen(function* () {
+      const pageId = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
+      const page = {
+        id: pageId,
+        title: "Invite funnel",
+        version: 2,
+        at: 1_800_000_000_000,
+        html: "<p>v2</p>",
+      };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/pages/${pageId}/versions/2`]: { answer: () => ({ page }) },
+        [`GET /api/plans/${PLAN_ID}/pages/${pageId}/versions/3`]: {
+          answer: () => ({ error: "not-found" }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      assert.deepEqual(
+        yield* Effect.provide(client().readPageVersion(PLAN_ID, pageId, 2), api.layer),
+        page,
+      );
+      assert.equal(
+        yield* Effect.provide(client().readPageVersion(PLAN_ID, pageId, 3), api.layer),
+        undefined,
+      );
+    }),
+);
+
+it.effect(
   "an edit sends the text it was written from and the text written, exactly, and answers the plan as saved or the text as it stands; one past the bound is never sent",
   () =>
     Effect.gen(function* () {

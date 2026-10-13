@@ -19,6 +19,7 @@ import {
   type GitHubRepositoriesAnswer,
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
+import { type PageVersion, planPageVersionAnswerSchema } from "./page-wire.js";
 import {
   type PlanEditAnswer,
   type PlanEditRequest,
@@ -70,6 +71,7 @@ import {
   planBoardPath,
   planEditPath,
   planFilePath,
+  planPageVersionPath,
   planPath,
   planRestorePath,
   planRevisionPath,
@@ -389,6 +391,21 @@ export class HostedPlanClient {
         planRevisionAnswerSchema,
       ),
       (answer) => answer?.revision,
+    );
+  }
+
+  /** One version of one page of one plan, with its HTML; nothing where the service did not answer it, or holds no such version. */
+  readPageVersion(
+    planId: string,
+    pageId: string,
+    version: number,
+  ): Effect.Effect<PageVersion | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: planPageVersionPath(planId, pageId, version) },
+        planPageVersionAnswerSchema,
+      ),
+      (answer) => answer?.page,
     );
   }
 

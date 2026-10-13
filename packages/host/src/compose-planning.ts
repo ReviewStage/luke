@@ -23,6 +23,7 @@ import {
   type PlanningDocument,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningPageAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -37,6 +38,7 @@ import {
   planningBoardSaveParamsSchema,
   planningEditParamsSchema,
   planningFileParamsSchema,
+  planningPageParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
@@ -127,6 +129,7 @@ export type PlanningClient = Pick<
   | "readSkills"
   | "readRevisions"
   | "readRevision"
+  | "readPageVersion"
   | "restore"
   | "repositories"
   | "setRepository"
@@ -743,6 +746,24 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return carried<PlanningRevisionAnswer>(
           revision === undefined ? { failure: PLAN_CALL_FAILURE.UNANSWERED } : { revision },
+        );
+      }),
+    // A page's version is answered to the frame that asked and held nowhere,
+    // so its HTML never enters the view every window is told.
+    [GATEWAY_METHOD.PLANNING_PAGE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPageParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("reading a page names a plan, the page, and its version");
+        }
+        if (!gate()) return carried<PlanningPageAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        const { planId, pageId, version } = read.success;
+        const page = yield* Effect.provide(
+          client.readPageVersion(planId, pageId, version),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPageAnswer>(
+          page === undefined ? { failure: PLAN_CALL_FAILURE.UNANSWERED } : { page },
         );
       }),
     // The service answers the plan as restored, so the list's row and the

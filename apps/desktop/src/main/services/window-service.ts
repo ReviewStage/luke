@@ -18,6 +18,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
+import { PAGE_SCHEME } from "#shared/page-frame";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
@@ -26,6 +27,7 @@ import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
+import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
@@ -111,8 +113,8 @@ export interface WindowService extends DesktopService {
 /**
  * Everything this process draws or claims from the machine on the windows'
  * behalf: the panel, the hidden voice window, the call window, the keys, the Dock, the login
- * item, the media permissions, and the display and power changes the panel
- * answers.
+ * item, the media permissions, the scheme a plan's pages are drawn from, and
+ * the display and power changes the panel answers.
  * It is the one concern that opens a window, and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
@@ -437,6 +439,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
       if (!launchStanding()) return;
+      // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
+      session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
+        run(pageResponse(request.url, operator.host.planningPage)),
+      );
       panels.reconcile();
       raiseVoiceWindow();
       configurePermissions();
@@ -467,6 +473,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       pendingWaits.clear();
       await run(Scope.close(appearanceScope, Exit.void));
       hotkeys.release();
+      if (session.defaultSession.protocol.isProtocolHandled(PAGE_SCHEME)) {
+        session.defaultSession.protocol.unhandle(PAGE_SCHEME);
+      }
       voiceWindow.closeForGood();
       callWindow.closeForGood();
     },

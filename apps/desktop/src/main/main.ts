@@ -1,11 +1,12 @@
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
-import { app, Menu, shell } from "electron";
+import { app, Menu, protocol, shell } from "electron";
 import { appMenuTemplate } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { desktopQuit, QUIT_STAGE } from "./services/quit";
 import { initializeCrashReporting } from "./services/telemetry-service";
 import { reportToStderr, tolerateClosedStderr } from "./stderr-report";
+import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
 
 /**
  * The desktop client's entry: the process that draws. It owns the windows,
@@ -23,7 +24,9 @@ import { reportToStderr, tolerateClosedStderr } from "./stderr-report";
  * scope here is only what has to be settled before Electron derives anything
  * from it — the name, the paths, and the crash reporter over them — and the
  * single-instance lock, which the losing copy must lose having touched
- * nothing. Everything else is composed and then started, in `main`.
+ * nothing, and the scheme a plan's pages are served on, which Electron reads
+ * once before it is ready. Everything else is composed and then started, in
+ * `main`.
  */
 
 /**
@@ -47,6 +50,9 @@ const config = bootstrapDesktop({
   initializeCrashReporting,
 });
 tolerateClosedStderr();
+// A plan's pages are served on a scheme of their own, which Electron must be
+// told of before the app is ready (`window/page-protocol.ts`).
+protocol.registerSchemesAsPrivileged([PAGE_SCHEME_PRIVILEGES]);
 
 const quit = desktopQuit();
 
