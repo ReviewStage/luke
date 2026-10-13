@@ -95,6 +95,7 @@ import {
   planningEditParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
+  planningMessagesParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
@@ -225,6 +226,10 @@ export const ACT_KIND = {
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",
+  /** The Call tab scrolled back to its oldest turn: the open plan's page of conversation before it, read from the service; the view arrives on the document. */
+  PLANNING_CONVERSATION_EARLIER: "planning.conversationEarlier",
+  /** One page of a plan's conversation, or a planning worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
+  PLANNING_MESSAGES: "planning.messages",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
   /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
@@ -787,6 +792,16 @@ export const ACT = {
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",
   ),
+  [ACT_KIND.PLANNING_CONVERSATION_EARLIER]: press(
+    "Could not read that plan's earlier conversation on this system.",
+  ),
+  [ACT_KIND.PLANNING_MESSAGES]: {
+    payload: actSchema(planningMessagesParamsSchema),
+    result: wireResult<CodingAgentMessagesAnswerView>(
+      isReadable(codingAgentMessagesAnswerViewSchema),
+    ),
+    refusal: "Could not read that plan's conversation on this system.",
+  },
   [ACT_KIND.INTEGRATIONS_STATUS]: {
     payload: noPayload,
     result: wireResult<IntegrationStatusesView>(isReadable(integrationStatusesViewSchema)),

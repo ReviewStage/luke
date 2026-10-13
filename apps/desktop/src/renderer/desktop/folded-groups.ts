@@ -1,8 +1,9 @@
 import { Option, Schema } from "effect";
 import { useState } from "react";
+import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
 
 /**
- * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox board's Waiting kept the same way.
+ * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox's plan groups and how it lists its items kept the same way.
  *
  * A fold is this window's alone, as the sidebar's width is, so it is kept in
  * the renderer's own storage rather than on the account: a group folded on
@@ -12,22 +13,31 @@ import { useState } from "react";
  * later comes back folded as it was left. Pinned is kept under a key of
  * its own, since it is no repository. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
- * Inbox board's Waiting is kept on the same terms under a key of its own;
- * a fixture run draws no inbox, so it has no staged fold to keep apart.
+ * Inbox's plan groups are kept on the same terms, each by its plan's id,
+ * and so are its two view choices, Waiting and how it groups; a fixture
+ * run draws no inbox, so it has nothing staged to keep apart.
  */
 
 /** Where the folds are kept in the renderer's storage. */
 const STORAGE_KEY = {
   GROUPS: "luke.sidebarFoldedGroups",
   PINNED: "luke.sidebarPinnedFolded",
-  INBOX_WAITING: "luke.inboxWaitingFolded",
+  INBOX_PLANS: "luke.inboxFoldedPlans",
+  INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
+  INBOX_GROUPING: "luke.inboxGrouping",
 } as const;
 
 /** The folded groups, each by its repository, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
-/** Whether Pinned is folded. */
-const storedFolded = Schema.fromJsonString(Schema.Boolean);
+/** Whether Pinned is folded, or the Inbox lists only what waits. */
+const storedFlag = Schema.fromJsonString(Schema.Boolean);
+
+/** The Inbox's folded plans, by id. */
+const storedPlans = Schema.fromJsonString(Schema.Array(Schema.String));
+
+/** How the Inbox groups its items. */
+const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
 
 /** Every fold the sidebar keeps. */
 interface Folds {
@@ -60,14 +70,14 @@ function writeKept<A>(key: string, schema: Schema.Codec<A, string>, value: A): v
 function readFolds(): Folds {
   return {
     groups: readKept(STORAGE_KEY.GROUPS, storedFolds, OPEN.groups),
-    pinned: readKept(STORAGE_KEY.PINNED, storedFolded, OPEN.pinned),
+    pinned: readKept(STORAGE_KEY.PINNED, storedFlag, OPEN.pinned),
   };
 }
 
 /** Keeps every fold. */
 function writeFolds(folds: Folds): void {
   writeKept(STORAGE_KEY.GROUPS, storedFolds, folds.groups);
-  writeKept(STORAGE_KEY.PINNED, storedFolded, folds.pinned);
+  writeKept(STORAGE_KEY.PINNED, storedFlag, folds.pinned);
 }
 
 /** Whether each group is folded, and the presses that fold or unfold one. */
@@ -108,22 +118,53 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   };
 }
 
-/** Whether the Inbox board's Waiting is folded, and the press that folds or unfolds it. */
-export interface WaitingFold {
-  folded: boolean;
-  toggle: () => void;
+/** Which of the Inbox's plan groups are folded, and the press that folds or unfolds one. */
+export interface InboxPlanFolds {
+  folded: (planId: string) => boolean;
+  toggle: (planId: string) => void;
 }
 
-/** The Inbox board's Waiting, open until it is first folded, and kept as it is pressed. */
-export function useWaitingFold(): WaitingFold {
-  const [folded, setFolded] = useState(() =>
-    readKept(STORAGE_KEY.INBOX_WAITING, storedFolded, false),
+/** The Inbox's plan groups, each open until it is first folded, and kept as it is pressed. */
+export function useInboxPlanFolds(): InboxPlanFolds {
+  const [folded, setFolded] = useState(() => readKept(STORAGE_KEY.INBOX_PLANS, storedPlans, []));
+  return {
+    folded: (planId) => folded.includes(planId),
+    toggle: (planId) => {
+      const next = folded.includes(planId)
+        ? folded.filter((held) => held !== planId)
+        : [...folded, planId];
+      setFolded(next);
+      writeKept(STORAGE_KEY.INBOX_PLANS, storedPlans, next);
+    },
+  };
+}
+
+/** How the Inbox lists its items, and the presses that change it. */
+export interface InboxViewChoices {
+  waitingOnly: boolean;
+  grouping: InboxGrouping;
+  onWaitingOnly: (waitingOnly: boolean) => void;
+  onGrouping: (grouping: InboxGrouping) => void;
+}
+
+/** The Inbox's view choices, every item grouped by plan until first changed, and kept as each is pressed. */
+export function useInboxViewChoices(): InboxViewChoices {
+  const [waitingOnly, setWaitingOnly] = useState(() =>
+    readKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, false),
+  );
+  const [grouping, setGrouping] = useState<InboxGrouping>(() =>
+    readKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, INBOX_GROUPING.PLAN),
   );
   return {
-    folded,
-    toggle: () => {
-      setFolded(!folded);
-      writeKept(STORAGE_KEY.INBOX_WAITING, storedFolded, !folded);
+    waitingOnly,
+    grouping,
+    onWaitingOnly: (next) => {
+      setWaitingOnly(next);
+      writeKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, next);
+    },
+    onGrouping: (next) => {
+      setGrouping(next);
+      writeKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, next);
     },
   };
 }

@@ -19,6 +19,7 @@ import {
   type SettingsResetScope,
   type SettingsUpdateResult,
 } from "@sidecar/settings/wire";
+import type { WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -206,6 +207,27 @@ const SAMPLE_VALUE = {
  * is still the table's business.
  */
 const RESOLVED_FIELDS = new Set<AppSettingField>([APP_SETTING_SCHEMA.voice.field]);
+
+function persistedAccount(account: StoredAccount = TEST_ACCOUNT): WireRecord {
+  return {
+    tokenCipher: sealed(
+      JSON.stringify({ accessToken: account.accessToken, refreshToken: account.refreshToken }),
+    ),
+    email: account.email,
+    ...(account.name ? { name: account.name } : undefined),
+    provider: account.provider,
+  };
+}
+
+function sealed(plainText: string): string {
+  return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
+}
+
+/** The file system every store this suite opens reads and writes through. */
+
+async function writeSettingsFile(directory: string, contents: WireRecord): Promise<void> {
+  await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), JSON.stringify(contents), "utf8");
+}
 
 test("every setting starts at its default, survives a reopen, and can be cleared", async (t) => {
   for (const field of APP_SETTING_FIELDS) {

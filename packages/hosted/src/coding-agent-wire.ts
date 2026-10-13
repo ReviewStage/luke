@@ -58,6 +58,9 @@ export const CODING_AGENT_BOUNDS = {
   MAX_MESSAGE_CHARS: 16_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
+  /** The most spoken lines one planning turn names as its ask, and the most characters of one line's id, which the voice's ledger mints. */
+  MAX_ASKED_LINES: 20,
+  MAX_LINE_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
@@ -691,6 +694,42 @@ export type TurnRecord = typeof turnRecordSchema.Type;
  */
 export const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
+  /**
+   * The turn the message is the journal of, on a planning conversation's
+   * page, so the Call tab knows which of the developer's lines asked for it;
+   * absent on a coding agent's page, on any other row, and from a service
+   * older than it.
+   */
+  turnId: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The developer's spoken lines a planning turn took as its ask, by the
+   * ids the voice's ledger minted for them, in the order they were said, on
+   * the turn's journal; absent where none stands, on a coding agent's page,
+   * and from a service older than it.
+   */
+  asked: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
+    ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
+  ),
+  /**
+   * Where on its call each of those lines began: the voice session it was
+   * said on and the milliseconds into it, which a line heard on the call
+   * standing now is matched by; absent where `asked` is, for a line written
+   * before it was recorded, and from a service older than it.
+   */
+  askedAt: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        voiceSessionId: EffectSchema.String.check(
+          EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS),
+        ),
+        fromMs: EffectSchema.Finite,
+      }),
+    ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
+  ),
+  /** Whether older parts of a planning turn's journal than these were left out, which the turn says above its parts; absent where none were, on a coding agent's page, and from a service older than it. */
+  earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
@@ -814,6 +853,13 @@ export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Typ
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
+  /**
+   * The turn the page before the oldest message here is read before, on a
+   * planning conversation's page read from its newest turns or before one;
+   * absent where no older turn stands, on a coding agent's page, and from a
+   * service older than it.
+   */
+  earlier: EffectSchema.optionalKey(EffectSchema.String),
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
   /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
   runStartedAt: EffectSchema.optionalKey(countedNumber),
@@ -847,3 +893,24 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
 });
+
+export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
+
+/**
+ * A page of an agent's messages joined to the ones held: a message heard
+ * again replaces the one held under its id, in place, and a new one joins
+ * at the end, so a journal that grows in place is redrawn where it stands.
+ * The agent's tab and the host's read of a plan's conversation join pages
+ * the same way, so both draw one transcript from the same answers.
+ */
+export function applyMessagesPage(
+  held: readonly CodingAgentMessage[],
+  page: readonly CodingAgentMessage[],
+): readonly CodingAgentMessage[] {
+  if (page.length === 0) return held;
+  const heard = new Map(page.map((message) => [message.id, message]));
+  const joined = held.map((message) => heard.get(message.id) ?? message);
+  const known = new Set(held.map((message) => message.id));
+  const appended = page.filter((message) => !known.has(message.id));
+  return [...joined, ...appended];
+}

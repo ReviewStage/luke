@@ -47,6 +47,8 @@ const config = bootstrapDesktop({
   report: reportToStderr,
   openExternal: (url) => shell.openExternal(url),
   quit: () => app.quit(),
+  showMenuBar: (update) =>
+    Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name, update))),
   initializeCrashReporting,
 });
 tolerateClosedStderr();
@@ -95,7 +97,8 @@ async function main(): Promise<void> {
   // Dock tile and a place in Command-Tab, and these menus give its fields Copy
   // and Paste, its window Close, Minimize, and Quit, and its own commands
   // their shortcuts.
-  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name)));
+  // The update item joins once the updater has said where it stands.
+  config.showMenuBar();
 
   const runtime = ManagedRuntime.make(composeDesktop(config, quit));
   quit.closesThrough(() => Effect.runPromise(closeRuntime(runtime)));

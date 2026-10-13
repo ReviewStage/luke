@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Option, Redacted, Result } from "effect";
+import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -28,7 +27,6 @@ import {
   admitConversation,
   claimRuntimeSession,
   conversationReachableBy,
-  runtimeSessionOwner,
   runtimeSessionReachableBy,
   SESSION_STANDING,
 } from "../server/hosted/brain-host/conversation";

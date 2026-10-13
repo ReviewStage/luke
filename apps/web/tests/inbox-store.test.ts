@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
+  INBOX_BLOCK,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,

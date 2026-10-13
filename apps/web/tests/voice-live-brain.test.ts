@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
-import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId } from "@sidecar/database/models/ids";
-import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import type { PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -17,16 +16,19 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { arrival } from "@sidecar/voice/testing";
+import { isRecord } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Layer, Option, Redacted, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "../server/core";
 import { askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { ownedAuth } from "../server/hosted/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
@@ -52,9 +54,9 @@ import {
   hostedLiveBrain,
 } from "../server/voice/live-brain";
 import { stampedEveEvent } from "./support/eve-events";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
+import { FIRST_EVE_TURN, parkedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { deleteConversation, insertConversation } from "./support/store-rows";
+import { insertConversation } from "./support/store-rows";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -615,6 +617,198 @@ it.live(
       yield* Effect.promise(() => f.stop());
     }),
 );
+const parkedOnTask = Effect.fnUntraced(function* (target: ConversationTarget, f: ClockStand) {
+  const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
+  assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+  if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
+  const standing: RelayStanding = {
+    sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+    target,
+    turn: BRAIN_HOST_TURN.SPOKEN,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+  yield* Effect.promise(() => play(parkedTurn(FIRST_EVE_TURN, 0, NOW), standing));
+  yield* f.release;
+  yield* f.arrived(2);
+  assert.deepEqual(
+    f.events.map((event) =>
+      event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? event.sentence : event.kind,
+    ),
+    [LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, "The worker is on it."],
+  );
+  return { runId: accepted.runId, standing };
+});
+
+/**
+ * The brain on the test's own clock, under the production bounds: built on
+ * the test fiber rather than the store runtime, so every follow it forks
+ * keeps time on the `TestClock` and a bound of minutes is reached by
+ * adjusting it. The record is still the real store on PGlite, whose reads
+ * are promises, so looks are sequenced against the clock rather than
+ * waited out. The clock moves one poll at a time (`polls`): an adjust runs
+ * the one follow it wakes up to its first read before it answers, so
+ * `looks` says whether a look began, and the poll is waited out on the
+ * look's read of the journal, its last, after which what the look tells is
+ * told before the test resumes. The first look, which runs as the ask is
+ * accepted, is held at `release` so it finds the turn the test has played
+ * by then and every look reads the journal.
+ */
+const standOnTestClock = Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  accountId: string = target.userId,
+) {
+  const eve = fakeEve();
+  const reports: string[] = [];
+  const gate = yield* Deferred.make<void>();
+  let looks = 0;
+  let journals = 0;
+  const journalListeners = new Set<() => void>();
+  const store: HostedLiveBrainOptions["store"] = {
+    turns: {
+      named: (userId, turnIds) =>
+        Effect.suspend(() => {
+          looks += 1;
+          return Effect.andThen(Deferred.await(gate), database.store.turns.named(userId, turnIds));
+        }),
+    },
+    messages: {
+      ...database.store.messages,
+      byClientId: (userId, conversationId, tools, clientId) =>
+        database.store.messages.byClientId(userId, conversationId, tools, clientId).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              journals += 1;
+              for (const listener of [...journalListeners]) listener();
+            }),
+          ),
+        ),
+    },
+  };
+  const scope = yield* Scope.make();
+  // The client lives as long as the socket's scope: built around the brain alone, a
+  // Postgres pool would close as the brain stood, and every follow's read refused.
+  const sql = yield* Scope.provide(Layer.build(database.sql), scope);
+  const brain = yield* Scope.provide(
+    hostedLiveBrain({
+      accountId,
+      conversation: target,
+      asks: { asks: askEffects, eve },
+      store,
+      writer,
+      report: (message) => reports.push(message),
+      bounds: { POLL },
+    }),
+    scope,
+  ).pipe(Effect.provide(sql));
+  const journaled = (count: number) =>
+    arrival(
+      (notify) => {
+        journalListeners.add(notify);
+        return () => journalListeners.delete(notify);
+      },
+      () => journals >= count,
+      `${count} journal reads`,
+    );
+  const polls = (count: number) =>
+    Effect.gen(function* () {
+      for (let poll = 0; poll < count; poll += 1) {
+        const [began, read] = [looks, journals];
+        yield* TestClock.adjust(POLL);
+        assert.ok(looks > began, `no look began on poll ${poll + 1}: the follow has ended`);
+        yield* journaled(read + 1);
+      }
+    });
+  const stand: ClockStand = {
+    ...listening(brain),
+    eve,
+    brain,
+    reports,
+    polls,
+    looks: () => looks,
+    release: Deferred.succeed(gate, undefined),
+    stop: () => database.run(Scope.close(scope, Exit.void)),
+  };
+  return stand;
+});
+
+/** A turn parked on the worker's task, played up to the park and found by the follow: the words before the wait are told. */
+
+async function workerRan(target: ConversationTarget, callId: string): Promise<void> {
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, callId),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  await play(
+    [
+      stampedEveEvent({ type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: 0 } }, NOW),
+      stampedEveEvent(
+        {
+          type: "message.received",
+          data: { turnId: FIRST_EVE_TURN, sequence: 0, message: "Compare the queues." },
+        },
+        NOW,
+      ),
+      stampedEveEvent(
+        {
+          type: "step.started",
+          data: { turnId: FIRST_EVE_TURN, sequence: 0, stepIndex: 0, modelId: "m" },
+        },
+        NOW,
+      ),
+      stampedEveEvent(
+        {
+          type: "message.completed",
+          data: {
+            turnId: FIRST_EVE_TURN,
+            sequence: 0,
+            stepIndex: 0,
+            finishReason: "stop",
+            message: "Queue A lets an admin revoke.",
+          },
+        },
+        NOW,
+      ),
+    ],
+    {
+      sessionId: `wrun_${randomUUID()}`,
+      target: child,
+      turn: RELAY_TURN.CHILD,
+      model: "scripted-model",
+      state: memoryRelayState(),
+    },
+  );
+}
+
+/** The follow's word on a look past the plain bound, as the events and reports show it. */
+
+interface ClockStand extends Stand {
+  /** Moves the clock one poll at a time, `count` times, waiting out the one look each poll fires. */
+  readonly polls: (count: number) => Effect.Effect<void>;
+  /** How many looks have begun: counted as the look's first read is asked for, before the store answers it. */
+  readonly looks: () => number;
+  /** Lets the first look through: held until the test has played the turn, so every look finds it and reads its journal. */
+  readonly release: Effect.Effect<void>;
+}
+
+/**
+ * The brain on the test's own clock, under the production bounds: built on
+ * the test fiber rather than the store runtime, so every follow it forks
+ * keeps time on the `TestClock` and a bound of minutes is reached by
+ * adjusting it. The record is still the real store on PGlite, whose reads
+ * are promises, so looks are sequenced against the clock rather than
+ * waited out. The clock moves one poll at a time (`polls`): an adjust runs
+ * the one follow it wakes up to its first read before it answers, so
+ * `looks` says whether a look began, and the poll is waited out on the
+ * look's read of the journal, its last, after which what the look tells is
+ * told before the test resumes. The first look, which runs as the ask is
+ * accepted, is held at `release` so it finds the turn the test has played
+ * by then and every look reads the journal.
+ */
+
+const POLL = Duration.minutes(1);
+
 it.effect(
   "a member following a turn in the plan conversation a teammate opened is shown the worker's session and the model it ran on, read under the teammate who opened it",
   () =>
@@ -635,17 +829,16 @@ it.effect(
       const shown: PlanWorkTurn[] = [];
       f.brain.onWork((work) => shown.push(work));
       yield* parkedOnTask(target, f);
-      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
-      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
-      yield* Effect.promise(() => workerRan(target, worker.id));
+      const worker = shown.at(-1)?.workers[0];
+      assert.ok(worker !== undefined);
+      yield* Effect.promise(() => workerRan(target, worker.callId));
       yield* f.polls(2);
 
-      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
-      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
-      assert.deepEqual(drawn.session?.parts, [
-        { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
-      ]);
-      assert.equal(drawn.session?.model, "openai/scripted-model", "the model its turn ran on");
+      const drawn = shown.at(-1)?.workers[0];
+      assert.ok(drawn !== undefined);
+      const said = drawn.journal.at(-1);
+      assert.equal(isRecord(said) ? said.text : undefined, "Queue A lets an admin revoke.");
+      assert.equal(drawn.model, "openai/scripted-model", "the model its turn ran on");
       yield* Effect.promise(() => f.stop());
     }),
 );

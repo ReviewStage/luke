@@ -165,6 +165,12 @@ export class UpdateService {
   readonly #scope: Scope.Scope;
   #snapshot: UpdateSnapshot;
   #latestVersion: string | undefined;
+  /**
+   * Whether the run under way began with a check the developer asked for,
+   * which stands through the download that check began, so a network failure
+   * anywhere in it is said rather than silent.
+   */
+  #asked = false;
   #installing = false;
   #started = false;
   #stopped = false;
@@ -214,7 +220,7 @@ export class UpdateService {
         this.#installing = false;
         if (isNetworkErrorMessage(message)) {
           this.#report(`Update check could not reach the feed: ${message}`);
-          this.#move(this.#idle(false));
+          this.#move(this.#idle(false, this.#asked));
           return;
         }
         this.#report(`Update failed: ${message}`);
@@ -232,9 +238,10 @@ export class UpdateService {
    * Asks the manifest for the latest build once, resolving with the state the
    * answer moved to — `downloading` when a newer build was found, because the
    * fetch begins inside the check. Without an engine there is nothing to ask
-   * and the standing snapshot is the whole answer.
+   * and the standing snapshot is the whole answer. `asked` marks a check the
+   * developer pressed for, whose network failure is said rather than silent.
    */
-  async check(): Promise<UpdateSnapshot> {
+  async check({ asked = false }: { asked?: boolean } = {}): Promise<UpdateSnapshot> {
     const engine = this.#engine;
     if (!engine || this.#installing) return this.#snapshot;
     // A download in flight or in hand holds the row — here Luke is stricter
@@ -248,6 +255,11 @@ export class UpdateService {
     ) {
       return this.#snapshot;
     }
+    // Note that a new run forgets the release the last one named, so a
+    // check that fails is not mistaken for the install of a release it never
+    // found.
+    this.#asked = asked;
+    this.#latestVersion = undefined;
     this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) });
     try {
       await engine.checkForUpdates();
@@ -255,7 +267,7 @@ export class UpdateService {
       const message = error instanceof Error ? error.message : String(error);
       if (isNetworkErrorMessage(message)) {
         this.#report(`Update check could not reach the feed: ${message}`);
-        this.#move(this.#idle(false));
+        this.#move(this.#idle(false, this.#asked));
       } else {
         this.#report(`Update check failed: ${message}`);
         this.#move(this.#errorSnapshot());
@@ -348,8 +360,12 @@ export class UpdateService {
       : { ...base, latestVersion: this.#latestVersion };
   }
 
-  #idle(upToDate: boolean): UpdateSnapshot {
-    return { ...idleUpdateSnapshot(this.#currentVersion, this.#engine !== undefined), upToDate };
+  #idle(upToDate: boolean, unreachable = false): UpdateSnapshot {
+    const idle = {
+      ...idleUpdateSnapshot(this.#currentVersion, this.#engine !== undefined),
+      upToDate,
+    };
+    return unreachable ? { ...idle, unreachable } : idle;
   }
 
   #move(snapshot: UpdateSnapshot): void {

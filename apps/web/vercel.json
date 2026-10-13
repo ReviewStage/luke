@@ -37,6 +37,18 @@
           "dest": "/api/default.js?route=plans/work&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
+          "dest": "/api/default.js?route=plans/subagent-messages&id=$1&call=$2"
+        },
+        {
+          "src": "/api/plans/([^/]+)/messages",
+          "dest": "/api/default.js?route=plans/messages&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/code",
+          "dest": "/api/default.js?route=plans/code&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/file",
           "dest": "/api/default.js?route=plans/file&id=$1"
         },

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
@@ -11,18 +10,9 @@ import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../server/core";
-import {
-  closeInInbox,
-  INBOX_REFUSAL,
-  type PostingAgent,
-  postToInbox,
-  readOwnInbox,
-} from "../server/hosted/coder-host/inbox";
-import {
-  INBOX_IMAGE_REFUSAL,
-  type InboxSandboxDoor,
-} from "../server/hosted/coder-host/inbox-image";
-import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
+import { closeInInbox, type PostingAgent, postToInbox } from "../server/hosted/coder-host/inbox";
+import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image";
+import { answerInboxItem, planInboxItems } from "../server/hosted/inbox-store";
 import { startPlan } from "./support/workspaces";
 
 /**

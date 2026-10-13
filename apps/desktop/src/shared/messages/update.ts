@@ -6,7 +6,8 @@
  * once, so there is no standing "available" state: the news arrives as
  * `DOWNLOADING`. `UPDATED` is transient — the first launch after an install
  * confirms what just happened.
- * `ERROR` must be drawn as the way back to the browser, never as a dead end.
+ * `ERROR` must never be drawn as a dead end: a failed install offers the
+ * browser, and a failed check offers to check again.
  */
 export const UPDATE_STATUS = {
   IDLE: "idle",
@@ -65,6 +66,12 @@ export type UpdateSnapshot =
       installSupported: boolean;
       /** True only after a check positively answered "nothing newer". */
       upToDate: boolean;
+      /**
+       * True only after a check the developer asked for could not reach the
+       * feed. A timed check's network failure stays silent, but an asked one
+       * that answered nothing must not read as one never asked.
+       */
+      unreachable?: boolean;
     }
   | {
       status: typeof UPDATE_STATUS.CHECKING;

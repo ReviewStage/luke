@@ -126,6 +126,10 @@ export const hostAssemblyLayer: Layer.Layer<
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,
     });
+    const codingAgentClient = new HostedCodingAgentClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    });
     const planning = yield* composePlanning({
       kernel,
       account,
@@ -140,14 +144,12 @@ export const hostAssemblyLayer: Layer.Layer<
           }),
         },
       ),
+      conversations: codingAgentClient,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
-      client: new HostedCodingAgentClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
+      client: codingAgentClient,
     });
     const integrations = yield* composeIntegrations({
       kernel,

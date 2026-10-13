@@ -13,7 +13,7 @@ import {
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
-import { CHECKOUT_COMMIT, type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
+import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 import { startPlan } from "./support/workspaces";
 
 /**

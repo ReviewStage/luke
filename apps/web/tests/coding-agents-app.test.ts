@@ -2,27 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
-import {
-  readAccountPreferences,
-  writeAccountPreferences,
-} from "@sidecar/database/models/account-store";
-import { fillChildTitle } from "@sidecar/database/models/child-titles";
-import {
-  awaitingLinesOf,
-  createCodingAgent,
-  fillCodingAgentTitle,
-  listCodingAgents,
-  listPublishedCodingAgents,
-  readCodingAgent,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "@sidecar/database/models/coding-agent-store";
-import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
-import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
+import { readAccountPreferences } from "@sidecar/database/models/account-store";
+import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { sentLineId } from "@sidecar/database/models/ids";
+import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";

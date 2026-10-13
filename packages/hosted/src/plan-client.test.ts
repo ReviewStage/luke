@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi } from "@sidecar/wire/testing";
+import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_BOUNDS } from "./plan-wire.js";

@@ -11,12 +11,11 @@ import {
   listPublishedCodingAgents,
   type NewCodingAgent,
   readCodingAgent,
+  readCodingAgentOfConversation,
   recordCodingAgentPublished,
   renameCodingAgent,
   updateCodingAgentChoice,
-  updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
-import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -27,10 +26,8 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
-import { count, eq, sql } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
-import { TestClock } from "effect/testing";
+import { count, eq } from "drizzle-orm";
+import { Effect, Option } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -113,6 +110,12 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   deletions: 4,
   changedFiles: 3,
 };
+
+function found(answer: Option.Option<CodingAgentStarted>): CodingAgent {
+  const start = Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
+  assert.equal(start.created, false);
+  return start.agent;
+}
 
 it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   it.effect(

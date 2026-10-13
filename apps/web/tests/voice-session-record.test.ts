@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { deletePlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
@@ -81,6 +80,10 @@ const callWith = (
     }
     return voiceSessionId;
   });
+
+const PLAN = {
+  name: "Teammate invitations",
+} as const;
 
 it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) => {
   it.effect(

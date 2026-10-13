@@ -15,14 +15,22 @@ import {
 } from "@sidecar/hosted";
 import {
   BOARD_ELEMENT_TYPE,
-  DRAW_ON_BOARD_TOOL_NAME,
-  LOOK_AT_BOARD_TOOL_NAME,
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentMessagesAnswerView,
+} from "@sidecar/hosted/coding-agent-view";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentMessagesAnswer,
+  type CodingAgentStatus,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
-import type { PageVersion } from "@sidecar/hosted/page-wire";
+import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
+import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_ACTOR,
   type Plan,
@@ -35,6 +43,7 @@ import {
   type PlanTreeAnswer,
   type RepositoryPin,
 } from "@sidecar/hosted/plan-wire";
+import type { PlanShownCode } from "@sidecar/hosted/planning-view";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -50,10 +59,15 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@sidecar/hosted/workspace-wire";
-import { unparsedWire, type WireRecord } from "@sidecar/wire";
+import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Result } from "effect";
-import { composePlanning, type PlanningClient } from "./compose-planning.js";
+import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";
+import { TestClock } from "effect/testing";
+import {
+  composePlanning,
+  type PlanningClient,
+  type PlanningConversationClient,
+} from "./compose-planning.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 /** The text the edit tests' plan opens on. */
@@ -472,6 +486,95 @@ function fakeService(plans: Plan[]): FakeService {
   return service;
 }
 
+/** Which page of a plan's conversation a read asked for. */
+const CONVERSATION_READ = {
+  NEWEST: "newest",
+  AFTER: "after",
+  BEFORE: "before",
+} as const;
+
+type ConversationRead = (typeof CONVERSATION_READ)[keyof typeof CONVERSATION_READ];
+
+/** One read of a plan's conversation as the service heard it: the plan, which page, and the cursor or turn it named. */
+type ConversationAsk = readonly [planId: string, read: ConversationRead, from?: string];
+
+/**
+ * The service's side of each plan's conversation. A read from the newest
+ * turns or past a cursor waits for the page the test hands it, as the
+ * service holds a read open while a turn runs; a read before a turn is
+ * answered at once from the older pages.
+ */
+interface FakeConversations extends PlanningConversationClient {
+  /** Every read asked, in order. */
+  readonly asks: ConversationAsk[];
+  /** The next read asked, waited on until the composer asks it. */
+  readonly nextAsk: Effect.Effect<ConversationAsk>;
+  /** Hands the read standing on `planId`, or the next one, its answer. */
+  answer: (planId: string, answer: CodingAgentMessagesAnswerView) => Effect.Effect<void>;
+  /** The older pages, by the turn each is read before. */
+  older: Record<string, CodingAgentMessagesAnswer>;
+}
+
+function fakeConversations(): Effect.Effect<FakeConversations> {
+  return Effect.gen(function* () {
+    const asked = yield* Queue.unbounded<ConversationAsk>();
+    const pages = new Map<string, Queue.Queue<CodingAgentMessagesAnswerView>>();
+    for (const planId of [INVITES, BILLING]) {
+      pages.set(planId, yield* Queue.unbounded<CodingAgentMessagesAnswerView>());
+    }
+    const conversations: FakeConversations = {
+      asks: [],
+      nextAsk: Queue.take(asked),
+      older: {},
+      answer: (planId, answer) => {
+        const waiting = pages.get(planId);
+        assert.ok(waiting, `no conversation for ${planId}`);
+        return Effect.asVoid(Queue.offer(waiting, answer));
+      },
+      planMessages: (planId, page) =>
+        Effect.gen(function* () {
+          const ask: ConversationAsk =
+            page.before !== undefined
+              ? [planId, CONVERSATION_READ.BEFORE, page.before]
+              : page.after !== undefined
+                ? [planId, CONVERSATION_READ.AFTER, page.after]
+                : [planId, CONVERSATION_READ.NEWEST];
+          conversations.asks.push(ask);
+          yield* Queue.offer(asked, ask);
+          if (page.before !== undefined) {
+            return (
+              conversations.older[page.before] ?? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
+            );
+          }
+          const waiting = pages.get(planId);
+          return waiting === undefined ? yield* Effect.never : yield* Queue.take(waiting);
+        }),
+    };
+    return conversations;
+  });
+}
+
+/** One planning turn's journal as the service stores it, its words as one text part. */
+function journal(id: string, text: string): CodingAgentMessage {
+  return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
+}
+
+/** A page of a plan's conversation as the service answers it. */
+function conversationPage(
+  messages: readonly CodingAgentMessage[],
+  cursor: string,
+  status: CodingAgentStatus,
+  earlier?: string,
+): CodingAgentMessagesAnswer {
+  return {
+    messages,
+    cursor,
+    status,
+    title: null,
+    ...(earlier === undefined ? undefined : { earlier }),
+  };
+}
+
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 /** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
@@ -489,6 +592,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       seen: Deferred.Deferred<PlanningView>;
     }[] = [];
     const standing = options.call ?? { about: undefined };
+    const conversations = yield* fakeConversations();
     const planning = yield* composePlanning({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -505,6 +609,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
+      conversations,
       endPlanCall: (planId) =>
         Effect.gen(function* () {
           const about = standing.about?.planId;
@@ -526,7 +631,13 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return yield* Deferred.await(seen);
       });
-    return { planning, call, told, last, viewWhere };
+    /** Waits from now on for the first view `wanted` holds of, and answers the wait. */
+    const viewLands = (wanted: (view: PlanningView) => boolean) =>
+      Effect.map(Deferred.make<PlanningView>(), (seen) => {
+        waiters.push({ wanted, seen });
+        return Deferred.await(seen);
+      });
+    return { planning, call, told, last, viewWhere, viewLands, conversations };
   });
 }
 
@@ -1077,3 +1188,284 @@ function transcriptSaying(words: string): PlanTranscript {
     earlierOmitted: false,
   };
 }
+
+it.effect(
+  "opening a plan reads its conversation's newest page onto the view, and an idle one is not asked again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, viewLands, conversations } = yield* subject(service);
+      const newest = conversationPage(
+        [journal("turn-2", "Read the invite model.")],
+        "4:2",
+        CODING_AGENT_STATUS.COMPLETED,
+        "turn-1",
+      );
+
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
+      const landed = yield* viewLands((view) => view.conversation !== undefined);
+      yield* conversations.answer(INVITES, newest);
+      const view = yield* landed;
+      yield* TestClock.adjust(Duration.minutes(5));
+
+      assert.deepEqual(view.conversation, newest);
+      assert.deepEqual(conversations.asks, [[INVITES, CONVERSATION_READ.NEWEST]]);
+    }),
+);
+
+it.effect(
+  "a held read joins a journal rewritten in place where it stands and appends a new one, past each cursor",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, viewLands, conversations } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      const landed = yield* viewLands((view) => view.conversation?.cursor === "2:3");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage(
+          [journal("turn-1", "Read the invite model."), journal("turn-2", "Invites expire.")],
+          "2:3",
+          CODING_AGENT_STATUS.COMPLETED,
+        ),
+      );
+      const view = yield* landed;
+
+      assert.deepEqual(view.conversation?.messages, [
+        journal("turn-1", "Read the invite model."),
+        journal("turn-2", "Invites expire."),
+      ]);
+      assert.equal(view.conversation?.status, CODING_AGENT_STATUS.COMPLETED);
+    }),
+);
+
+it.effect(
+  "the earlier page lays older turns before the rest, and the held read goes on from its own cursor",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, viewLands, conversations } = yield* subject(service);
+      conversations.older["turn-1"] = conversationPage(
+        [journal("turn-0", "Opened the plan.")],
+        "9:9",
+        CODING_AGENT_STATUS.COMPLETED,
+      );
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage(
+          [journal("turn-1", "Reading")],
+          "1:1",
+          CODING_AGENT_STATUS.RUNNING,
+          "turn-1",
+        ),
+      );
+      yield* conversations.nextAsk;
+
+      yield* call(GATEWAY_METHOD.PLANNING_CONVERSATION_EARLIER);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.BEFORE, "turn-1"]);
+      const earlier = last()?.conversation;
+      const landed = yield* viewLands((view) => view.conversation?.cursor === "2:3");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage(
+          [journal("turn-2", "Invites expire.")],
+          "2:3",
+          CODING_AGENT_STATUS.RUNNING,
+        ),
+      );
+      const view = yield* landed;
+
+      assert.deepEqual(earlier, {
+        messages: [journal("turn-0", "Opened the plan."), journal("turn-1", "Reading")],
+        cursor: "1:1",
+        status: CODING_AGENT_STATUS.RUNNING,
+        title: null,
+      });
+      assert.deepEqual(conversations.asks.at(1), [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      assert.deepEqual(view.conversation?.messages, [
+        journal("turn-0", "Opened the plan."),
+        journal("turn-1", "Reading"),
+        journal("turn-2", "Invites expire."),
+      ]);
+    }),
+);
+
+it.effect("opening another plan stops the conversation read of the one left behind", () =>
+  Effect.gen(function* () {
+    const service = fakeService([
+      plan(INVITES, "Teammate invitations", "# Draft", 10),
+      plan(BILLING, "Billing export", "# Billing export", 20),
+    ]);
+    const { call, viewLands, conversations } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    yield* conversations.nextAsk;
+    yield* conversations.answer(
+      INVITES,
+      conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+    );
+    yield* conversations.nextAsk;
+
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+    assert.deepEqual(yield* conversations.nextAsk, [BILLING, CONVERSATION_READ.NEWEST]);
+    const billing = conversationPage(
+      [journal("turn-9", "Exports run nightly.")],
+      "3:1",
+      CODING_AGENT_STATUS.COMPLETED,
+    );
+    const landed = yield* viewLands((view) => view.conversation !== undefined);
+    yield* conversations.answer(BILLING, billing);
+    yield* landed;
+    yield* conversations.answer(
+      INVITES,
+      conversationPage([journal("turn-2", "Late.")], "2:2", CODING_AGENT_STATUS.RUNNING),
+    );
+    yield* TestClock.adjust(Duration.minutes(5));
+
+    assert.deepEqual(conversations.asks, [
+      [INVITES, CONVERSATION_READ.NEWEST],
+      [INVITES, CONVERSATION_READ.AFTER, "1:1"],
+      [BILLING, CONVERSATION_READ.NEWEST],
+    ]);
+  }),
+);
+
+it.effect(
+  "a conversation read the service did not answer is asked again after the backoff, and not before",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, viewLands, conversations } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(INVITES, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+
+      yield* TestClock.adjust(Duration.millis(999));
+      const beforeBackoff = conversations.asks.length;
+      yield* TestClock.adjust(Duration.millis(1));
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.NEWEST]);
+      const newest = conversationPage([], "0:0", CODING_AGENT_STATUS.COMPLETED);
+      const landed = yield* viewLands((view) => view.conversation !== undefined);
+      yield* conversations.answer(INVITES, newest);
+
+      assert.equal(beforeBackoff, 1);
+      assert.deepEqual((yield* landed).conversation, newest);
+    }),
+);
+
+it.effect(
+  "a word of the open plan's call wakes its parked conversation read from the cursor held",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning, viewLands, conversations } = yield* subject(service);
+      yield* planning.lifetime;
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      const parked = yield* viewLands((view) => view.conversation !== undefined);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* parked;
+
+      planning.showActivity({
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId: INVITES,
+        planner: {},
+        notes: false,
+      });
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      const landed = yield* viewLands((view) => view.conversation?.cursor === "2:2");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-2", "Reading")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+
+      assert.deepEqual((yield* landed).conversation?.messages, [
+        journal("turn-1", "Done."),
+        journal("turn-2", "Reading"),
+      ]);
+    }),
+);
+
+it.effect(
+  "a call's end wakes the open plan's parked conversation read, and wakes it again once the call's last writes have had time to land",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning, viewLands, conversations } = yield* subject(service);
+      yield* planning.lifetime;
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      const parked = yield* viewLands((view) => view.conversation !== undefined);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* parked;
+
+      planning.callEnded(INVITES);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+    }),
+);
+
+it.effect(
+  "a page's workers are joined to those held by the call that started each, the newest reading of each kept",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, viewLands, conversations } = yield* subject(service);
+      const worker = (callId: string, status: CodingAgentStatus) => ({
+        callId,
+        status,
+        model: "openai/gpt-5.5",
+        effort: "medium",
+        startedAt: 2_000,
+      });
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(INVITES, {
+        ...conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+        subagents: [worker("call-models", CODING_AGENT_STATUS.RUNNING)],
+        subagentTitles: [{ callId: "call-models", title: "Read the invite model" }],
+      });
+      yield* conversations.nextAsk;
+
+      const landed = yield* viewLands((view) => view.conversation?.cursor === "2:3");
+      yield* conversations.answer(INVITES, {
+        ...conversationPage([], "2:3", CODING_AGENT_STATUS.COMPLETED),
+        subagents: [
+          worker("call-models", CODING_AGENT_STATUS.COMPLETED),
+          worker("call-tests", CODING_AGENT_STATUS.COMPLETED),
+        ],
+        subagentTitles: [{ callId: "call-tests", title: "Check the invite tests" }],
+      });
+      const view = yield* landed;
+
+      assert.deepEqual(view.conversation?.subagents, [
+        worker("call-models", CODING_AGENT_STATUS.COMPLETED),
+        worker("call-tests", CODING_AGENT_STATUS.COMPLETED),
+      ]);
+      assert.deepEqual(view.conversation?.subagentTitles, [
+        { callId: "call-models", title: "Read the invite model" },
+        { callId: "call-tests", title: "Check the invite tests" },
+      ]);
+    }),
+);

@@ -16,7 +16,6 @@ import {
   agentLines,
   agentParts,
   agentWorkingPhase,
-  applyMessagesPage,
   checkoutCommand,
   choiceLabel,
   choiceModelId,
@@ -38,26 +37,6 @@ import {
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
-
-function message(id: string, text: string): CodingAgentMessage {
-  return { id, role: "assistant", parts: [{ type: "text", text }] };
-}
-
-test("a page joins the messages held: one heard again is replaced in place, a new one joins at the end", () => {
-  const held = [message("a", "first"), message("b", "second")];
-
-  const joined = applyMessagesPage(held, [message("a", "first, amended"), message("c", "third")]);
-
-  assert.deepEqual(
-    joined.map((each) => [each.id, each.parts]),
-    [
-      ["a", [{ type: "text", text: "first, amended" }]],
-      ["b", [{ type: "text", text: "second" }]],
-      ["c", [{ type: "text", text: "third" }]],
-    ],
-  );
-  assert.equal(applyMessagesPage(held, []), held);
-});
 
 test("the transcript is followed only while the tab shows and the agent may still write", () => {
   assert.equal(followsAgent({ shown: true, status: CODING_AGENT_STATUS.RUNNING }), true);

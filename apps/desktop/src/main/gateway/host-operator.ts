@@ -93,6 +93,7 @@ import {
   type PlanningFileAnswer,
   type PlanningFileParams,
   type PlanningGitHubPageAnswer,
+  type PlanningMessagesParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
   type PlanningPinParams,
@@ -228,6 +229,10 @@ export interface HostOperator {
   workspacesRefresh(): Effect.Effect<void>;
   /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
   planningWorkEarlier(): Effect.Effect<void>;
+  /** The Call tab scrolled back: the host reads the open plan's page of conversation before the oldest turn it holds, and the view takes it. */
+  planningConversationEarlier(): Effect.Effect<void>;
+  /** One page of a plan's conversation, or a planning worker's, held by the service while it runs; or why there is none. */
+  planningMessages(params: PlanningMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
   /** One plan made the active one, replacing whichever was; answers whether the host took it. */
   planningOpen(planId: string): Effect.Effect<boolean>;
@@ -607,6 +612,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     planningWorkEarlier: () => fire(client.call(GATEWAY_METHOD.PLANNING_WORK_EARLIER)),
+    planningConversationEarlier: () =>
+      fire(client.call(GATEWAY_METHOD.PLANNING_CONVERSATION_EARLIER)),
+    planningMessages: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_MESSAGES, {
+          planId: params.planId,
+          ...("after" in params ? { after: params.after } : undefined),
+          ...("before" in params ? { before: params.before } : undefined),
+          ...("callId" in params ? { callId: params.callId } : undefined),
+        }),
+        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
+      ),
     planningOpen: (planId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),

@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listJournals } from "@sidecar/database/models/message-reads";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import { TURN_ENDING, type TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  TURN_ENDING,
+  type TurnRecord,
+} from "@sidecar/hosted/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
@@ -16,12 +22,25 @@ import {
   type PlanWorkAnswer,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  TURN_ORIGIN,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option } from "effect";
+import { Effect, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { TURN_STATUS } from "../server/core";
+import {
+  ASK_ORIGIN,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_STATUS,
+} from "../server/core";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
@@ -32,13 +51,21 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { readPlanWork } from "../server/hosted/plan-work-store";
+import {
+  PLANNER_POLL,
+  type PlannerPage,
+  plannerPagePast,
+  plannerTitleAwaited,
+  plannerTurnsPage,
+  plannerWorkerSession,
+} from "../server/hosted/planner-transcript";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation } from "./support/store-rows";
+import { insertConversation, insertTurn } from "./support/store-rows";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -329,8 +356,11 @@ test("a plan's work reads the same for every member of its workspace, whichever 
   const member = await database.run(readPlanWork(teammate, target.planId, undefined));
   assert.ok(Option.isSome(member));
   assert.deepEqual(
-    member.value.turns.map((turn) => turn.parts.at(-1)),
-    [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+    member.value.turns.map((turn) => {
+      const last = turn.journal.at(-1);
+      return isRecord(last) ? last.text : undefined;
+    }),
+    ["Invites live in one file."],
   );
   assert.deepEqual(
     (member.value.code ?? []).map((each) => each.code),
@@ -506,4 +536,448 @@ test("a turn's journal leaves out what the Mac is not sent: a page's HTML, which
   assert.deepEqual(page.input, { title: "Invite funnel" });
   assert.equal(look.type, `tool-${LOOK_AT_BOARD_TOOL_NAME}`);
   assert.equal(look.output, undefined);
+});
+
+/** The store's id for the session of the call a spoken ask was said on. */
+const SPOKEN_CALL = "3f6a1c2e-8b4d-4e7f-9a1b-5c2d3e4f6a7b";
+
+/**
+ * A spoken ask on the plan's conversation, as the voice leaves it: the ask
+ * under its delegation's id, made at `at` on the call, dispatched into the
+ * standing's eve session, and the developer's lines the delegation was
+ * about, written and attached to it. Answers the delegation's id, which eve
+ * names the ask's delivery by.
+ */
+async function delegatedAsk(
+  target: ConversationTarget,
+  standing: RelayStanding,
+  lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
+  at: number,
+  revision: number,
+): Promise<string> {
+  const delegationId = `dl_${randomUUID()}`;
+  const record = askRecord();
+  const ask = await database.run(
+    record.record({
+      ...target,
+      clientId: delegationId,
+      origin: ASK_ORIGIN.SPOKEN,
+      createdAt: new Date(at),
+      voice: { sessionId: SPOKEN_CALL, revision },
+    }),
+  );
+  await database.run(
+    record.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: standing.sessionId, deliveryId: delegationId }),
+    ),
+  );
+  for (const [clientId, text, fromMs] of lines) {
+    await database.run(
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
+        clientId,
+        text,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: SPOKEN_CALL,
+          from_ms: fromMs,
+          to_ms: fromMs + 900,
+        },
+      }),
+    );
+  }
+  await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: lines.map(([rowId]) => rowId) }),
+  );
+  return delegationId;
+}
+
+test("the developer's first ask of a call, steered into the turn the call's explore ask opened, names its lines as the turn's ask, so the turn stands under them though it ends after the call; a follow-up steered in while the turn runs names none, made in the same instant included", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  // The call opens with the explore ask, keyed by the call's session and naming no line, and eve opens a turn for it at once.
+  const record = askRecord();
+  const explore = await database.run(
+    record.record({
+      ...target,
+      clientId: SPOKEN_CALL,
+      origin: ASK_ORIGIN.SPOKEN,
+      createdAt: new Date(NOW - 5_000),
+    }),
+  );
+  await database.run(
+    record.dispatchOnce(target, explore.id, () =>
+      Effect.succeed({
+        sessionId: standing.sessionId,
+        turnId: hostTurnId(standing.sessionId, FIRST_EVE_TURN),
+      }),
+    ),
+  );
+  const received = { turnId: FIRST_EVE_TURN, sequence: SEQUENCE, message: "q" };
+  await play(
+    [
+      stampedEveEvent({ type: "turn.started", data: received }, NOW - 4_000),
+      stampedEveEvent({ type: "message.received", data: received }, NOW - 4_000),
+    ],
+    standing,
+  );
+  // The developer's ask, said while the explore turn runs (the relay starts it at its own NOW), which eve steers into it.
+  const asked = await delegatedAsk(
+    target,
+    standing,
+    [["row-ask", "Look into how invites expire.", 7_400]],
+    NOW + 1_000,
+    1,
+  );
+  await play(
+    [stampedEveEvent({ type: "message.received", data: received }, NOW + 2_000, [asked])],
+    standing,
+  );
+  // While the turn waits on its subagent, the developer says more, and eve steers that in too. Note
+  // that it is made in the same instant as the ask, which the store's clock can do, so the voice's
+  // revision is what tells the follow-up from the ask.
+  const followUp = await delegatedAsk(
+    target,
+    standing,
+    [["row-follow", "And who can resend one?", 62_000]],
+    NOW + 1_000,
+    2,
+  );
+  await play(
+    [
+      stampedEveEvent({ type: "message.received", data: received }, NOW + 3_000, [asked, followUp]),
+      ...answeringStep(FIRST_EVE_TURN, 0, "Seven days, and the inviter."),
+    ],
+    standing,
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => [turn.asked, turn.askedAt]),
+    [[["row-ask"], [{ voiceSessionId: SPOKEN_CALL, fromMs: 7_400 }]]],
+  );
+});
+
+/** The turn and last words of each message a planner page carries, as the Call tab places and reads them. */
+function turnsOf(page: PlannerPage) {
+  return page.messages.map((message) => {
+    const last = message.parts.at(-1);
+    return [message.turnId, isRecord(last) ? last.text : undefined];
+  });
+}
+
+test("a plan's conversation reads on the agent tab's own wire: its newest turns' journals oldest first, each naming its turn and leaving a page's HTML out, and a reader past the cursor hears only a turn that moved, for the account that owns it alone", async () => {
+  const target = await planConversation();
+  const first = standingFor(target);
+  const second = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_PAGE_TOOL_NAME,
+          input: { title: "Invite funnel", html: "<!doctype html><p>secret-looking page body</p>" },
+          output: { status: "accepted", page: { id: "page-1", version: 1 } },
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "Here is the funnel."),
+    ],
+    first,
+  );
+  await askedAt(first, NOW - 60_000);
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Expiry is seven days.")],
+    second,
+  );
+  await askedAt(second, NOW);
+  const firstTurn = hostTurnId(first.sessionId, FIRST_EVE_TURN);
+  const secondTurn = hostTurnId(second.sessionId, FIRST_EVE_TURN);
+
+  const page = await database.run(plannerTurnsPage(target, undefined));
+  assert.deepEqual(turnsOf(page), [
+    [firstTurn, "Here is the funnel."],
+    [secondTurn, "Expiry is seven days."],
+  ]);
+  assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+  assert.equal(page.earlier, undefined);
+  assert.doesNotMatch(JSON.stringify(page.messages), /page body/u);
+
+  const third = standingFor(target);
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Admins may revoke.")],
+    third,
+  );
+  const past = await database.run(plannerPagePast(target, page.cursor));
+  assert.deepEqual(turnsOf(past), [
+    [hostTurnId(third.sessionId, FIRST_EVE_TURN), "Admins may revoke."],
+  ]);
+  const stranger = await database.createUser();
+  const theirs = await database.run(
+    plannerTurnsPage({ userId: stranger, conversationId: target.conversationId }, undefined),
+  );
+  assert.deepEqual(theirs.messages, []);
+});
+
+test("a plan at rest answers a reader with nothing new at once, and the page before its newest turns reads the older ones", async () => {
+  const target = await planConversation();
+  const standings = Array.from({ length: PLAN_WORK_BOUNDS.TURNS + 1 }, () => standingFor(target));
+  for (const [index, standing] of standings.entries()) {
+    await play(
+      [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, `Answer ${index}.`)],
+      standing,
+    );
+    await askedAt(standing, NOW + index * 1_000);
+  }
+
+  const newest = await database.run(plannerTurnsPage(target, undefined));
+  assert.equal(newest.messages.length, PLAN_WORK_BOUNDS.TURNS);
+  assert.deepEqual(turnsOf(newest).at(0)?.[1], "Answer 1.");
+  assert.ok(newest.earlier !== undefined);
+  const older = await database.run(plannerTurnsPage(target, newest.earlier));
+  assert.deepEqual(turnsOf(older), [
+    [hostTurnId(standings[0]?.sessionId ?? "", FIRST_EVE_TURN), "Answer 0."],
+  ]);
+  const quiet = await database.run(plannerPagePast(target, newest.cursor));
+  assert.deepEqual(quiet.messages, []);
+});
+
+test("a planner page says where each worker its turns delegated to stands, read from the worker's own session: running while it runs though its call answered at its receipt, and done once it answers", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task: "Compare the two queue libraries." },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "A worker is comparing them."),
+    ],
+    standing,
+  );
+  const callId = "call-0-0";
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, callId),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  const statusOf = (page: PlannerPage) =>
+    page.subagents?.map((worker) => [worker.callId, worker.status]);
+
+  const running = await database.run(plannerTurnsPage(target, undefined));
+  assert.deepEqual(statusOf(running), [[callId, CODING_AGENT_STATUS.RUNNING]]);
+  // The turn that started the worker has answered, but the planner still works while its worker does.
+  assert.equal(running.status, CODING_AGENT_STATUS.RUNNING);
+
+  await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
+  const answered = await database.run(plannerPagePast(target, running.cursor));
+  assert.deepEqual(statusOf(answered), [[callId, CODING_AGENT_STATUS.COMPLETED]]);
+});
+
+test("a reader past the cursor reads on through a run of the voice's rows longer than a page to the turn's journal behind it", async () => {
+  const target = await planConversation();
+  const first = standingFor(target);
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Invites live in one file.")],
+    first,
+  );
+  const { cursor } = await database.run(plannerTurnsPage(target, undefined));
+  for (let line = 0; line <= CODING_AGENT_BOUNDS.MESSAGES_PAGE; line += 1) {
+    await database.run(
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
+        clientId: `line-${line}`,
+        text: `Line ${line}`,
+        metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+      }),
+    );
+  }
+  const second = standingFor(target);
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Expiry is seven days.")],
+    second,
+  );
+
+  const past = await database.run(plannerPagePast(target, cursor));
+  assert.deepEqual(turnsOf(past), [
+    [hostTurnId(second.sessionId, FIRST_EVE_TURN), "Expiry is seven days."],
+  ]);
+});
+
+test("a planning call names the session of the worker it started, the one a later call sent more work to included, and no session for a call no delegation made", async () => {
+  const target = await planConversation();
+  const task = "delegate-7k2m9q";
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task: "Compare the two queue libraries." },
+          output: `Started task ${task}. Its result will arrive in a <task_result> message.`,
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "A worker is comparing them."),
+    ],
+    standingFor(target),
+  );
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 2, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task: "Also read their licenses.", taskId: task },
+          output: "Sent.",
+        },
+      ]),
+    ],
+    standingFor(target),
+  );
+
+  assert.equal(await database.run(plannerWorkerSession(target, "call-0-0")), "call-0-0");
+  assert.equal(await database.run(plannerWorkerSession(target, "call-2-0")), "call-0-0");
+  assert.equal(await database.run(plannerWorkerSession(target, "call-9-9")), undefined);
+});
+
+test("a held reader hears a worker end beside one still running at the next look, rather than at the hold's end", async () => {
+  const target = await planConversation();
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Two workers are on it.")],
+    standingFor(target),
+  );
+  const workerTurns: string[] = [];
+  for (const callId of ["call-a", "call-b"]) {
+    const child = childConversationId(target.conversationId, callId);
+    await database.run(openChildConversation(target, child, "worker"));
+    workerTurns.push(
+      await insertTurn(database.run, {
+        userId: target.userId,
+        conversationId: child,
+        origin: TURN_ORIGIN.CHILD,
+        status: TURN_STATUS.RUNNING,
+      }),
+    );
+  }
+  const { cursor } = await database.run(plannerTurnsPage(target, undefined));
+
+  const answered = await database.run(
+    Effect.gen(function* () {
+      const read = yield* Effect.forkChild(plannerPagePast(target, cursor));
+      yield* TestClock.adjust(PLANNER_POLL);
+      yield* db
+        .update(turns)
+        .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
+        .where(eq(turns.id, workerTurns[0] ?? ""));
+      yield* TestClock.adjust(PLANNER_POLL);
+      return yield* Fiber.join(read);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.deepEqual(answered.messages, []);
+});
+
+test("a planning worker's title is awaited while it is untitled and its turn settled inside the title's bound, and not once it is titled", async () => {
+  const target = await planConversation();
+  const child = childConversationId(target.conversationId, "call-0-0");
+  await database.run(openChildConversation(target, child, "worker"));
+  await insertTurn(database.run, {
+    userId: target.userId,
+    conversationId: child,
+    origin: TURN_ORIGIN.CHILD,
+    status: TURN_STATUS.SETTLED,
+    settledAt: new Date(),
+  });
+
+  assert.equal(await database.run(plannerTitleAwaited(target, child)), true);
+  await database.run(fillChildTitle(target, child, "Queue libraries"));
+  assert.equal(await database.run(plannerTitleAwaited(target, child)), false);
+});
+
+test("a page no journal moved says where a worker under a turn older than a page of them stands, so its end is heard", async () => {
+  const target = await planConversation();
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task: "Compare the two queue libraries." },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "A worker is comparing them."),
+    ],
+    standingFor(target),
+  );
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, "call-0-0"),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  // More turns follow than a page of them, so the worker's own turn is older than any page reads.
+  for (let index = 0; index <= PLAN_WORK_BOUNDS.TURNS; index += 1) {
+    await play(
+      [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, `Answer ${index}.`)],
+      standingFor(target),
+    );
+  }
+  const { cursor } = await database.run(plannerTurnsPage(target, undefined));
+  await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
+
+  const past = await database.run(plannerPagePast(target, cursor));
+  assert.deepEqual(past.messages, []);
+  assert.deepEqual(
+    past.subagents?.map((worker) => [worker.callId, worker.status]),
+    [["call-0-0", CODING_AGENT_STATUS.COMPLETED]],
+  );
+});
+
+test("a planner page's journal of a turn longer than the bound says its older parts were left out, and a short one says nothing", async () => {
+  const target = await planConversation();
+  const calls = Array.from({ length: PLAN_WORK_BOUNDS.PARTS + 1 }, () => ({
+    toolName: RUN_IN_REPOSITORY_TOOL.name,
+    input: { command: "ls" },
+    output: { status: REPOSITORY_SHELL_STATUS.RAN, exitCode: 0, stdout: "src", stderr: "" },
+  }));
+  await play(
+    [...opening(FIRST_EVE_TURN), ...callingStep(FIRST_EVE_TURN, 0, calls)],
+    standingFor(target),
+  );
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Short.")],
+    standingFor(target),
+  );
+
+  const page = await database.run(plannerTurnsPage(target, undefined));
+  assert.deepEqual(
+    page.messages.map((message) => message.earlierOmitted),
+    [true, undefined],
+  );
 });

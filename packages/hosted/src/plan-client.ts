@@ -67,7 +67,9 @@ import {
 import {
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
+  type PlanCodeAnswer,
   type PlanWorkAnswer,
+  planCodeAnswerSchema,
   planWorkAnswerSchema,
   type RepositoryCallFailure,
   type RepositoryListFailure,
@@ -75,6 +77,7 @@ import {
 import {
   HOSTED_SERVICE_PATH,
   planBoardPath,
+  planCodePath,
   planEditPath,
   planFilePath,
   planPagesPath,
@@ -336,6 +339,16 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planWorkPath(planId, before) },
       planWorkAnswerSchema,
+    );
+  }
+
+  /** Every code Luke showed on one plan, oldest first; nothing where the service did not answer it. */
+  readCode(
+    planId: string,
+  ): Effect.Effect<PlanCodeAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planCodePath(planId) },
+      planCodeAnswerSchema,
     );
   }
 

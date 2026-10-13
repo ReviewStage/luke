@@ -11,22 +11,28 @@ import {
   type InboxForm,
   type InboxFormValue,
   type InboxItem,
+  type InboxReadResponse,
   type InboxReply,
   type InboxReplyKind,
   inboxReplyRefusal,
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
-import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
+import type { PlanFileRequest, PlanSummary } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { isWireString } from "@sidecar/wire";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**
- * inbox-model.ts -- the plan's Inbox tab as pure decisions: which items wait on the developer and which are settled, what a card's answer is, and how a settled one reads.
+ * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
- * What waits stands first, the oldest posted first, since it has held its
- * agent longest; what is settled, answered or taken back by its agent,
- * follows, the latest changed first. Every item the plan's inbox holds is
+ * The list holds every item of every plan it is handed, the latest changed
+ * first, under its plan or in one run, and Waiting lists only what waits
+ * and the item chosen. A settled item keeps everything its agent offered,
+ * the developer's pick marked, and says who settled it and what they
+ * wrote. A plan's board, which counts what waits, holds what waits the
+ * oldest posted first, since it has held its agent longest, and what is
+ * settled, answered or taken back by its agent, the latest changed first.
+ * Every item the plan's inbox holds is
  * drawn, whether or not the window's list of agents has caught up with the
  * agent that posted it, since the service reads the inbox by plan and an
  * agent's items go with it. A card's answer is held to the same rule the
@@ -141,26 +147,100 @@ export function inboxReply(
   return inboxReplyRefusal(item, answer) === undefined ? answer : undefined;
 }
 
-/** What each answer's kind says on a settled card. */
-const REPLY_WORDS = {
-  [INBOX_REPLY.CHOSE]: "Chose",
-  [INBOX_REPLY.APPROVED]: "Approved",
-  [INBOX_REPLY.DECLINED]: "Declined",
-  [INBOX_REPLY.ANSWERED]: "Answered",
-  [INBOX_REPLY.DONE]: "Done",
-  [INBOX_REPLY.NOT_DONE]: "Not done",
-  [INBOX_REPLY.SUBMITTED]: "Filled in",
-  [INBOX_REPLY.ACKNOWLEDGED]: "Acknowledged",
-} as const satisfies Record<InboxReplyKind, string>;
+/** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
+export const INBOX_PRESSES = {
+  [INBOX_RESPONSE.APPROVAL]: {
+    back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
+    ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
+  },
+  [INBOX_RESPONSE.TASK]: {
+    back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
+    ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
+  },
+  [INBOX_RESPONSE.NONE]: {
+    back: undefined,
+    ahead: { reply: INBOX_REPLY.ACKNOWLEDGED, label: "Got it" },
+  },
+} as const;
 
-/** What a settled card says of what came of it: a lead in strong words, and the lines after it where there are any. */
-interface SettledWords {
-  readonly lead: string;
-  readonly note?: string;
+/** The presses that answer the response, or nothing where words, a pick, or a form answer it. */
+export function pressesOf(
+  response: InboxReadResponse,
+): (typeof INBOX_PRESSES)[keyof typeof INBOX_PRESSES] | undefined {
+  if (!knownResponse(response)) return undefined;
+  switch (response.type) {
+    case INBOX_RESPONSE.APPROVAL:
+    case INBOX_RESPONSE.TASK:
+    case INBOX_RESPONSE.NONE:
+      return INBOX_PRESSES[response.type];
+    default:
+      return undefined;
+  }
 }
 
-/** A settled card's lines: a form's values one per line, then the note. */
-function settledNote(answer: InboxReply): string | undefined {
+/** One thing the agent offered, as a settled item keeps it: its words, whether it was recommended, and whether the developer picked it. */
+export interface ProposedOption {
+  readonly label: string;
+  readonly detail?: string;
+  readonly recommended: boolean;
+  readonly picked: boolean;
+}
+
+/**
+ * What a settled item offered, the developer's pick marked: a choice's
+ * options, or the presses an approval, a task, or an item asking nothing
+ * was answered by; nothing for words or a form, whose answer is what was
+ * written. Note that an open item offers none here, because its options
+ * are its controls while it waits.
+ */
+export function proposedOptions(item: InboxItem): readonly ProposedOption[] {
+  if (item.status === INBOX_STATUS.OPEN || !knownResponse(item.response)) return [];
+  const { response, answer } = item;
+  if (response.type === INBOX_RESPONSE.CHOICE) {
+    const chosen = answer?.reply === INBOX_REPLY.CHOSE ? (answer.choices ?? []) : [];
+    return response.options.map((option) => ({
+      label: option.label,
+      ...(option.detail === undefined ? undefined : { detail: option.detail }),
+      recommended: response.recommended === option.label,
+      picked: chosen.includes(option.label),
+    }));
+  }
+  const presses = pressesOf(response);
+  if (presses === undefined) return [];
+  return [presses.back, presses.ahead].flatMap((press) =>
+    press === undefined
+      ? []
+      : [{ label: press.label, recommended: false, picked: answer?.reply === press.reply }],
+  );
+}
+
+/** Who settled an item: the developer, by answering it, or its agent, by taking it back. */
+export const SETTLED_BY = {
+  DEVELOPER: "developer",
+  AGENT: "agent",
+} as const;
+
+/** What each answer's kind says the developer did. */
+const REPLY_WORDS = {
+  [INBOX_REPLY.CHOSE]: "You chose",
+  [INBOX_REPLY.APPROVED]: "You approved",
+  [INBOX_REPLY.DECLINED]: "You declined",
+  [INBOX_REPLY.ANSWERED]: "You answered",
+  [INBOX_REPLY.DONE]: "You marked it done",
+  [INBOX_REPLY.NOT_DONE]: "You couldn't do it",
+  [INBOX_REPLY.SUBMITTED]: "You filled it in",
+  [INBOX_REPLY.ACKNOWLEDGED]: "You acknowledged it",
+} as const satisfies Record<InboxReplyKind, string>;
+
+/** How a settled item came to be settled: who settled it, what they did in a few words, and what they wrote. */
+export interface Settlement {
+  readonly by: (typeof SETTLED_BY)[keyof typeof SETTLED_BY];
+  readonly lead: string;
+  readonly words?: string;
+}
+
+/** What the developer wrote: a form's values one per line, then the note. */
+function answerWords(answer: InboxReply): string | undefined {
   const values = (answer.values ?? []).map(
     ({ label, value }) => `${label}: ${fieldValueWords(value)}`,
   );
@@ -168,22 +248,94 @@ function settledNote(answer: InboxReply): string | undefined {
   return lines.length === 0 ? undefined : lines.join("\n");
 }
 
-/** How a settled card says what came of it: the answer and its note, or why the agent took it back. */
-export function settledWords(item: InboxItem): SettledWords {
+/** How an item was settled, or nothing while it waits: the developer's answer and their words, or the agent taking it back and why. */
+export function settlementOf(item: InboxItem): Settlement | undefined {
+  if (item.status === INBOX_STATUS.OPEN) return undefined;
   if (item.status === INBOX_STATUS.CLOSED) {
     return {
-      lead: "Closed by the agent",
-      ...(item.closedReason === undefined ? undefined : { note: item.closedReason }),
+      by: SETTLED_BY.AGENT,
+      lead: "Withdrawn by the agent",
+      ...(item.closedReason === undefined ? undefined : { words: item.closedReason }),
     };
   }
   const answer = item.answer;
-  if (answer === undefined) return { lead: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
+  if (answer === undefined)
+    return { by: SETTLED_BY.DEVELOPER, lead: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
   const lead =
     answer.reply === INBOX_REPLY.CHOSE
       ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
       : REPLY_WORDS[answer.reply];
-  const note = settledNote(answer);
-  return { lead, ...(note === undefined ? undefined : { note }) };
+  const words = answerWords(answer);
+  return { by: SETTLED_BY.DEVELOPER, lead, ...(words === undefined ? undefined : { words }) };
+}
+
+/** How the window's Inbox lists its items: under each plan, or in one list. */
+export const INBOX_GROUPING = {
+  PLAN: "plan",
+  NEWEST: "newest",
+} as const;
+
+export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
+
+/** One plan and every item its inbox holds, as the list is handed them. */
+export interface InboxPlanItems {
+  readonly plan: PlanSummary;
+  readonly items: readonly InboxItem[];
+}
+
+/** One item the list draws, with the plan it belongs to. */
+export interface InboxListed {
+  readonly plan: PlanSummary;
+  readonly item: InboxItem;
+}
+
+/** The list as it is drawn: a group for each plan holding an item it shows, or every item in one run. */
+export type InboxListView =
+  | { readonly grouping: typeof INBOX_GROUPING.PLAN; readonly groups: readonly InboxPlanItems[] }
+  | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] };
+
+/** The latest change first. */
+function newestFirst(a: InboxItem, b: InboxItem): number {
+  return b.updatedAt - a.updatedAt;
+}
+
+/**
+ * The list from every plan's items: each item the latest changed first,
+ * under its plan or in one run, the plans in the order their latest item
+ * changed. Waiting lists only what waits on the developer, and the item
+ * chosen, so the item answered does not slip away from under them.
+ */
+export function inboxList(
+  plans: readonly InboxPlanItems[],
+  view: {
+    readonly grouping: InboxGrouping;
+    readonly waitingOnly: boolean;
+    readonly chosen: string | undefined;
+  },
+): InboxListView {
+  const shows = (item: InboxItem) =>
+    !view.waitingOnly || item.status === INBOX_STATUS.OPEN || item.id === view.chosen;
+  const groups = plans
+    .map(({ plan, items }) => ({ plan, items: items.filter(shows).toSorted(newestFirst) }))
+    .filter((group) => group.items.length > 0)
+    .toSorted((a, b) => (b.items[0]?.updatedAt ?? 0) - (a.items[0]?.updatedAt ?? 0));
+  if (view.grouping === INBOX_GROUPING.PLAN) return { grouping: INBOX_GROUPING.PLAN, groups };
+  const items = groups
+    .flatMap(({ plan, items }) => items.map((item) => ({ plan, item })))
+    .toSorted((a, b) => newestFirst(a.item, b.item));
+  return { grouping: INBOX_GROUPING.NEWEST, items };
+}
+
+/** Every item the list draws, in the order it draws them. */
+export function listedItems(view: InboxListView): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  return view.groups.flatMap(({ plan, items }) => items.map((item) => ({ plan, item })));
+}
+
+/** The item that stands chosen where none is: the first listed that waits, else the first listed. */
+export function firstChoice(view: InboxListView): InboxListed | undefined {
+  const listed = listedItems(view);
+  return listed.find(({ item }) => item.status === INBOX_STATUS.OPEN) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

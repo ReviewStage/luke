@@ -1,6 +1,12 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
-import { CODING_AGENT_BOUNDS, storedObjectSchema, turnRecordFields } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_BOUNDS,
+  codingAgentCallIdSchema,
+  codingAgentMessagesAnswerSchema,
+  storedObjectSchema,
+  turnRecordFields,
+} from "./coding-agent-wire.js";
 import { githubConnectionAnswerSchema } from "./github-connection-wire.js";
 import {
   githubRepositoriesAnswerSchema,
@@ -346,6 +352,13 @@ export const planWorkAnswerSchema = EffectSchema.Struct({
 
 export type PlanWorkAnswer = typeof planWorkAnswerSchema.Type;
 
+/** Every code Luke showed on one plan, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
+export const planCodeAnswerSchema = EffectSchema.Struct({
+  code: EffectSchema.Array(planShownCodeSchema),
+});
+
+export type PlanCodeAnswer = typeof planCodeAnswerSchema.Type;
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
@@ -391,6 +404,17 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The turn the active plan's next older page of work is read before; absent where none stands or before the first read. */
   workEarlier: EffectSchema.optionalKey(EffectSchema.String),
   /**
+   * The active plan's planning conversation as an agent's transcript is
+   * read: the newest page read when the plan opens, each page the held read
+   * hears since joined by message id, and each older page read as the Call
+   * tab scrolls back, before the rest. Its cursor is where the held read goes
+   * on from, its `earlier` the turn the next older page is read before, and
+   * its status and workers are the newest held page's. Absent before the
+   * first read lands, and cleared with the activity; a reader that does not
+   * know it draws `work` as before.
+   */
+  conversation: EffectSchema.optionalKey(codingAgentMessagesAnswerSchema),
+  /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the plan; absent with
    * none, and cleared with the activity. Their HTML is never held here: the
@@ -400,6 +424,21 @@ export const planningViewSchema = EffectSchema.Struct({
 });
 
 export type PlanningView = typeof planningViewSchema.Type;
+
+/**
+ * One page of a plan's planning conversation, as a window asks it: past a
+ * cursor, before a turn, or the newest where it names neither; or, naming
+ * the call that started one, a planning worker's transcript under the plan,
+ * past a cursor, as an agent's worker tab reads it.
+ */
+export const planningMessagesParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  after: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  before: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
+});
+
+export type PlanningMessagesParams = typeof planningMessagesParamsSchema.Type;
 
 /** The view before anything is asked: no plans read, none active. */
 export const IDLE_PLANNING_VIEW: PlanningView = {

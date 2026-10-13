@@ -465,6 +465,7 @@ export function titleMayLand(
  * ends the hold is read with that page, so a hold that ran out on an agent
  * that ended meanwhile still says so. The agent's own transcript names the
  * agent as `own`, whose context its pages carry; a worker's names none.
+ * A planning worker's looks again on the voice's own beat (`poll`).
  * An ended agent's empty page is held too while `titleAwaited` says a
  * title may still land, because a reader stops at that page and the
  * agent's own title, or a short worker's, lands after its turn ended; the
@@ -477,6 +478,7 @@ export function transcriptPast(
   agent: Pick<AgentStanding, "createdAt">,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
+  poll: Duration.Input = CODER.MESSAGES_POLL,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent.createdAt);
@@ -485,7 +487,7 @@ export function transcriptPast(
     return (yield* titleAwaited) ? Option.none() : Option.some(read);
   });
   return once.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
+    Effect.repeat({ schedule: Schedule.spaced(poll), until: Option.isSome }),
     Effect.timeoutOption(CODER.MESSAGES_HOLD),
     Effect.flatMap((held) => {
       const read = Option.flatten(held);

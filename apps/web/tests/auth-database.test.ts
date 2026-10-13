@@ -3,12 +3,12 @@ import { it } from "@effect/vitest";
 import * as authSchema from "@sidecar/database/schemas/auth";
 import { getTestDB, openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
 import { betterAuth } from "better-auth";
-import { symmetricEncrypt } from "better-auth/crypto";
-import { jwt, organization } from "better-auth/plugins";
+import { organization } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
+import { authDatabaseAdapter } from "../server/auth-database";
 import {
   ACCOUNT_TOKEN_STORAGE,
   DISABLED_AUTH_PATHS,

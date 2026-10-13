@@ -14,7 +14,7 @@ import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage } from "./support/store-rows";
+import { insertMessage } from "./support/store-rows";
 import { startPlan } from "./support/workspaces";
 
 /**

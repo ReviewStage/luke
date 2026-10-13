@@ -49,6 +49,9 @@ export function hostedTools(
                   defineTool({
                     description: declared.description,
                     inputSchema: declared.inputSchema,
+                    ...(declared.endsTurn === undefined
+                      ? undefined
+                      : { endsTurn: declared.endsTurn }),
                     // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
                     toModelOutput: (output) =>
                       lookModelOutput(unparsedWire(output as WireBoundaryInput)),

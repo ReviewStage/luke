@@ -7,8 +7,9 @@ import {
   listRevisions,
   PLAN_REVISION,
   type PlanWriter,
+  readRevision,
 } from "@sidecar/database/models/plan-revisions";
-import { deletePlan, readPlan, savePlanText } from "@sidecar/database/models/plan-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -22,7 +23,6 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { added } from "./support/plan-contents";
-import { INVITATIONS_TEXT, recordDocumentRevision } from "./support/plan-documents";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**

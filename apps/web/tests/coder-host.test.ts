@@ -6,14 +6,9 @@ import {
   createCodingAgent,
   latestTurnsOf,
 } from "@sidecar/database/models/coding-agent-store";
-import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
-import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
-import {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  storeWriter,
-} from "@sidecar/database/models/writer";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
@@ -47,9 +42,6 @@ import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalo
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
-import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
-import { titleModelAnswering } from "./support/title-model";
 import { startPlan } from "./support/workspaces";
 
 /**

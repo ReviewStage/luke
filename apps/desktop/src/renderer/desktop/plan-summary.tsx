@@ -392,7 +392,7 @@ function withCards(
     if (row.section === ADD_SECTION.SUBAGENTS) {
       const worker = workers.find((each) => each.call.id === row.id);
       const untitled = worker?.session?.title === undefined;
-      const read = () => workerCardReading(worker);
+      const read = () => workerCardReading(worker, held);
       const card = (
         <AgentTabCard name={row.label} untitled={untitled} models={models} read={read} />
       );
@@ -423,7 +423,7 @@ function summarySections(
   held: HeldTranscripts,
 ): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
-  const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
+  const workers = planWorkers(workRowsOf(work.conversation, work.callLive));
   const files = shownFiles(plans.shownCode ?? []);
   const changes = changesOffers(agents);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;

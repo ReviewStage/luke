@@ -279,6 +279,10 @@ export function composeDesktop(
         engine: updateEngine,
         beforeRestart: quit.teardown,
         state,
+        showSettings: () => {
+          windows.panels.focusExpanded();
+          windows.showSettings();
+        },
       });
 
       // The one edge no service could take as a constructor argument, because

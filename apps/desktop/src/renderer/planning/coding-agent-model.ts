@@ -43,8 +43,7 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
  * what its tab's glyph says of where it stands, what line ends a transcript whose turn failed
- * or was stopped, whether its transcript is still followed, how
- * a page of its messages joins the ones held, how a stored message's parts
+ * or was stopped, whether its transcript is still followed, how a stored message's parts
  * are read for drawing, which of its rows wait above the composer rather
  * than in the transcript, what its working line says it is doing, when a
  * line the developer sent has been read back, what a Start or a message
@@ -694,23 +693,6 @@ const EFFORT_LABEL: ReadonlyMap<string, string> = new Map([["xhigh", "Extra high
 /** The catalog's effort names are lowercase words; a menu and a segment read them in sentence case. */
 export function effortLabel(effort: string): string {
   return EFFORT_LABEL.get(effort) ?? `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
-}
-
-/**
- * A page of an agent's messages joined to the ones held: a message heard
- * again replaces the one held under its id, in place, and a new one joins
- * at the end, so a journal that grows in place is redrawn where it stands.
- */
-export function applyMessagesPage(
-  held: readonly CodingAgentMessage[],
-  page: readonly CodingAgentMessage[],
-): readonly CodingAgentMessage[] {
-  if (page.length === 0) return held;
-  const heard = new Map(page.map((message) => [message.id, message]));
-  const joined = held.map((message) => heard.get(message.id) ?? message);
-  const known = new Set(held.map((message) => message.id));
-  const appended = page.filter((message) => !known.has(message.id));
-  return [...joined, ...appended];
 }
 
 /** The agents with one agent as the service just answered it, in its place. */

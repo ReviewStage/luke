@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
-import { deletePlan, openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
+import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";

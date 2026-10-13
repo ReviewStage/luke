@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";

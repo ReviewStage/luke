@@ -31,6 +31,7 @@ test("the account override is read in a development run and never in a packaged 
     report: () => undefined,
     openExternal: async () => undefined,
     quit: () => undefined,
+    showMenuBar: () => undefined,
     initializeCrashReporting: () => undefined,
   });
   assert.equal(development.hostedServiceBaseUrl, "https://example.invalid");
@@ -42,6 +43,7 @@ test("the account override is read in a development run and never in a packaged 
     report: () => undefined,
     openExternal: async () => undefined,
     quit: () => undefined,
+    showMenuBar: () => undefined,
     initializeCrashReporting: () => undefined,
   });
   assert.equal(packaged.hostedServiceBaseUrl, "https://tryluke.dev");

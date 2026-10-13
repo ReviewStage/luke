@@ -3,12 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
-import {
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-  updatePlan,
-} from "@sidecar/database/models/plan-store";
+import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
@@ -56,7 +51,10 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
-import { readMessagesByConversationTyped } from "./support/store-rows";
+import {
+  readMessagesByConversationTyped,
+  readVoiceSessionsByUserTyped,
+} from "./support/store-rows";
 import {
   connect,
   fakeAccounts,
@@ -417,6 +415,13 @@ async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSes
     () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
   );
 }
+
+async function sessionRowOf(userId: string, sessionId: string) {
+  const rows = await readVoiceSessionsByUserTyped(database.run, userId);
+  return rows.find((row) => row.liveSessionId === sessionId);
+}
+
+/** The session hangs up from the desktop's side and answers the relay's close, as `hangUp` does for any connection. */
 
 it.effect(
   "with the exchange offered it stands before the desktop is answered, seeds nothing a second time, reads the developer's words off the piped sideband, answers through eve, and appends the reply upstream while the desktop still receives every server frame",

@@ -3,13 +3,9 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { listPages, readPageVersion, writePage } from "@sidecar/database/models/plan-pages";
-import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { PAGE_BOUNDS } from "@sidecar/hosted/page-wire";
-import { eq } from "drizzle-orm";
-import { Duration, Effect, Exit, Option } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Option } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -39,6 +35,8 @@ const openPlan = Effect.gen(function* () {
 /** A write the test expects to land, as the page it left. */
 const written = (userId: string, planId: string, write: Parameters<typeof writePage>[2]) =>
   Effect.map(writePage(userId, planId, write), Option.getOrThrow);
+
+const CHART_AGAIN = { title: "Invite funnel, by week", html: "<!doctype html><p>v2</p>" } as const;
 
 it.layer(getTestDB())("a plan's pages", (it) => {
   it.effect("another account's plan lists, reads, and takes no page", () =>

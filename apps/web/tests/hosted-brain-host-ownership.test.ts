@@ -3,7 +3,7 @@ import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { generateText } from "ai";
-import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -33,12 +33,7 @@ import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  insertConversation,
-  readConversationById,
-  readTurnsByConversation,
-  setConversationDeletedAt,
-} from "./support/store-rows";
+import { insertConversation, setConversationDeletedAt } from "./support/store-rows";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**

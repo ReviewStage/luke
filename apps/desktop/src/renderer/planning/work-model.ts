@@ -1,23 +1,16 @@
-import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import {
+  CODING_AGENT_STATUS,
   type CodingAgentMessage,
+  type CodingAgentMessagesAnswer,
+  type CodingAgentStatus,
+  type CodingAgentSubagentStanding,
   TURN_ENDING,
   type TurnRecord,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import {
-  PLAN_WORK_STATE,
-  type PlanWorkState,
-  type PlanWorkTurn,
-  type PlanWorkWorker,
-} from "@sidecar/hosted/planning-view";
-import {
-  isRecord,
-  isWireString,
-  MESSAGE_ROLE,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+import { PLAN_WORK_STATE, type PlanWorkState } from "@sidecar/hosted/planning-view";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "./turn-rows";
@@ -25,17 +18,18 @@ import { CALL_KIND, CALL_WORDS, type CallKind } from "./turn-rows";
 /**
  * work-model.ts -- the open plan's Call tab as an agent's transcript reads: each planning turn one of Luke's messages, in the agent tab's own parts.
  *
- * The service sends each planning turn's journal as the AI SDK stored it,
- * every string cut to the wire's bound, and beside it the workers the turn
- * started. Each turn is turned here into the message a coding agent's turn
- * is (`CodingAgentMessage`), its parts the journal's own, so the Call tab
- * draws it with the agent tab's own component (`agent-tab.tsx`), each call
- * read by its tool's name as an agent's is. A worker is a delegation's
- * part, which the agent tab draws as a subagent's row; it stands where the
- * worker's own session does, and the pair that session ran on is the
- * part's answer, as a coding agent's delegation answers it. A stop names
- * the subagent it stopped by that subagent's job (`workerJobs`), wherever
- * among the turns its start stands.
+ * The plan's planning conversation is read as a coding agent's transcript
+ * is (`planning.conversation`): each planning turn's journal one message, its
+ * parts as the AI SDK stored them, every string cut to the wire's bound,
+ * naming its turn and the spoken lines that asked for it, and beside the
+ * messages where each of the planner's workers stands, read from its own
+ * session. Each journal is drawn with the agent tab's own component
+ * (`agent-tab.tsx`), each call read by its tool's name as an agent's is. A
+ * worker is a delegation's part, which the agent tab draws as a subagent's
+ * row; it stands where the worker's own session does, and the pair that
+ * session ran on is the part's answer, as a coding agent's delegation
+ * answers it. A stop names the subagent it stopped by that subagent's job
+ * (`workerJobs`), wherever among the turns its start stands.
  */
 
 /** A worker's call: its kind, its subject apart, its state, and whether it still moves. */
@@ -49,10 +43,8 @@ export interface WorkCallRow {
   running: boolean;
 }
 
-/** A subagent's session as its tab draws it: one message of its, whether older parts were left out, when its newest task began and ended, its title, and what that task ran on and spent, as far as the service said. */
+/** A subagent's session as the plan's pages say it: its title, when its newest task began, and the pair it ran on, as far as the service said. Its transcript is its own tab's read. */
 interface WorkSessionRow {
-  earlierOmitted: boolean;
-  message: CodingAgentMessage;
   title?: string;
   startedAt?: number;
   endedAt?: number;
@@ -84,6 +76,9 @@ export interface WorkTurnRow {
   record: TurnRecord;
   /** The subagents the turn started, in the order it started them. */
   workers: readonly WorkWorkerBlock[];
+  /** The spoken lines the turn took as its ask, by the ids the voice's ledger minted, and where on its call each began. */
+  asked: readonly string[];
+  askedAt: NonNullable<CodingAgentMessage["askedAt"]>;
 }
 
 /** What a subagent is named by, on its line, its task card, and its tab: its job, the first line of its task as plain words, or what was asked of it where no job was said. */
@@ -124,17 +119,27 @@ export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
   return { model: record.model, effort: record.effort ?? UNRECORDED_EFFORT };
 }
 
+/** The open plan's planning conversation as the window holds it; none before the first read lands. */
+export type PlanConversation = CodingAgentMessagesAnswer | undefined;
+
 /**
- * The subagents the open plan's work holds, by the call that started each;
- * none where the plan has had no turn or its work is unread. A subagent's
- * tab is held to them, as an agent's is to the plan's agents.
+ * The subagents the open plan's work holds, by the call that started each,
+ * in the order started; none where the plan has had no turn or its work is
+ * unread. A subagent's tab is held to them, as an agent's is to the plan's
+ * agents.
  */
-export function workerCallIds(turns: readonly PlanWorkTurn[] | undefined): readonly string[] {
-  return (turns ?? []).flatMap((turn) => turn.workers.map((worker) => worker.callId));
+export function workerCallIds(rows: readonly WorkTurnRow[]): readonly string[] {
+  return rows.flatMap((row) => row.workers.map((worker) => worker.call.id));
 }
 
 /** How the AI SDK spells a tool part's type: the tool's name behind this prefix. */
 const TOOL_PART_TYPE_PREFIX = "tool-";
+
+/** The tool parts a delegation to the worker is stored as, under every name one was made under. */
+const DELEGATION_PART_TYPES: ReadonlySet<string> = new Set([
+  `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.DELEGATE}`,
+  `${TOOL_PART_TYPE_PREFIX}${EVE_TOOL.WORKER}`,
+]);
 
 /** The tool states of a call that has not answered, in the AI SDK's words. */
 const UNANSWERED: ReadonlySet<string> = new Set([
@@ -148,10 +153,10 @@ const UNANSWERED: ReadonlySet<string> = new Set([
  * as one lands and the agent's tab appears as it does after a Start; none
  * where the plan has had no turn or its work is unread.
  */
-export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined): readonly string[] {
+export function startedAgentCallIds(conversation: PlanConversation): readonly string[] {
   const start = `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.START_CODING_AGENT}`;
-  return (turns ?? []).flatMap((turn) =>
-    turn.journal.flatMap((part) =>
+  return (conversation?.messages ?? []).flatMap((message) =>
+    message.parts.flatMap((part) =>
       isRecord(part) &&
       part.type === start &&
       isWireString(part.toolCallId) &&
@@ -171,26 +176,6 @@ function toolStateOf(call: WorkCallRow): ToolState {
     : TOOL_STATE.OUTPUT_AVAILABLE;
 }
 
-/** The turn's or the session's end and record as a message carries them: an end only once it ended. */
-function messageOf(input: {
-  id: string;
-  parts: readonly WireValue[];
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  record: TurnRecord;
-}): CodingAgentMessage {
-  const { id, parts, startedAt, endedAt, record } = input;
-  return {
-    id,
-    role: MESSAGE_ROLE.ASSISTANT,
-    // SAFETY: every part is the wire's stored part or one built from it, a JSON object either way.
-    parts: parts as CodingAgentMessage["parts"],
-    ...(startedAt === undefined ? undefined : { startedAt }),
-    ...(endedAt === undefined ? undefined : { finishedAt: endedAt }),
-    ...record,
-  };
-}
-
 /**
  * A journal's parts as the turn draws them: as the AI SDK stored them while
  * the turn moves, and once it stopped moving with no call still turning,
@@ -206,23 +191,89 @@ function settledJournal(journal: readonly WireValue[], moving: boolean): readonl
   );
 }
 
-/** A worker's call row: its job as its subject, and where the worker stands as its own session reads, moving only while the call stands. */
-function workerCall(worker: PlanWorkWorker, callLive: boolean): WorkCallRow {
+/** Where a worker stands on the plan's work, by where its own session's page says it does. */
+const WORK_STATE_OF_STATUS = {
+  [CODING_AGENT_STATUS.STARTING]: PLAN_WORK_STATE.RUNNING,
+  [CODING_AGENT_STATUS.RUNNING]: PLAN_WORK_STATE.RUNNING,
+  [CODING_AGENT_STATUS.COMPLETED]: PLAN_WORK_STATE.DONE,
+  [CODING_AGENT_STATUS.FAILED]: PLAN_WORK_STATE.FAILED,
+  [CODING_AGENT_STATUS.CANCELLED]: PLAN_WORK_STATE.DONE,
+} as const satisfies Record<CodingAgentStatus, PlanWorkState>;
+
+/** A delegation's part's input as a field of words, where it carries one. */
+function inputText(part: WireRecord, field: string): string | undefined {
+  const { input } = part;
+  if (!isRecord(input)) return undefined;
+  const value = input[field];
+  return isWireString(value) ? value : undefined;
+}
+
+/** How eve's receipt names the task a delegation started. */
+const STARTED_TASK = /^Started task (\S+)\./u;
+
+/** The task a delegation started, read off eve's receipt; nothing for one that sent a task more work, or before it answered. */
+function startedTaskOf(part: WireRecord): string | undefined {
+  if (inputText(part, "taskId") !== undefined || !isWireString(part.output)) return undefined;
+  return STARTED_TASK.exec(part.output)?.[1];
+}
+
+/**
+ * A delegation's worker as its turn's journal holds it, where its own
+ * session's page says it stands; one the pages say nothing of yet stands as
+ * its call does, running while the turn moves.
+ */
+function workerOfPart(
+  part: WireRecord & { readonly toolCallId: string },
+  standing: CodingAgentSubagentStanding | undefined,
+  title: string | undefined,
+  moving: boolean,
+  callLive: boolean,
+): WorkWorkerBlock {
+  const task = inputText(part, "task") ?? inputText(part, "message") ?? "";
+  const failed = part.state === TOOL_STATE.OUTPUT_ERROR;
+  const state =
+    standing !== undefined
+      ? WORK_STATE_OF_STATUS[standing.status]
+      : failed
+        ? PLAN_WORK_STATE.FAILED
+        : moving
+          ? PLAN_WORK_STATE.RUNNING
+          : PLAN_WORK_STATE.DONE;
+  // A failed session is recorded as failed, as its own transcript ends, rather than as one that stopped.
+  const ended =
+    standing?.status === CODING_AGENT_STATUS.FAILED ? { ending: TURN_ENDING.FAILED } : {};
+  const record: TurnRecord =
+    standing === undefined || standing.model === ""
+      ? ended
+      : {
+          model: standing.model,
+          ...(standing.effort === "" ? undefined : { effort: standing.effort }),
+          ...ended,
+        };
   return {
-    id: worker.callId,
-    kind: CALL_KIND.WORKER,
-    subject: worker.task,
-    state: worker.state,
-    running: callLive && worker.state === PLAN_WORK_STATE.RUNNING,
+    call: {
+      id: part.toolCallId,
+      kind: CALL_KIND.WORKER,
+      subject: task,
+      state,
+      running: callLive && state === PLAN_WORK_STATE.RUNNING,
+    },
+    task,
+    session: {
+      ...(title === undefined ? undefined : { title }),
+      ...(standing === undefined ? undefined : { startedAt: standing.startedAt }),
+      record,
+    },
   };
 }
 
-/** The task a call sent more work to, as its input names it; nothing for a call that started one. */
-function sentTask(journal: readonly WireValue[], callId: string): string | undefined {
-  const call = journal.find((part) => isRecord(part) && part.toolCallId === callId);
-  const input = isRecord(call) ? call.input : undefined;
-  return isRecord(input) && isWireString(input.taskId) ? input.taskId : undefined;
-}
+/** The call a job is read off, which only its subject tells apart. */
+const JOB_CALL: WorkCallRow = {
+  id: "",
+  kind: CALL_KIND.WORKER,
+  state: PLAN_WORK_STATE.DONE,
+  running: false,
+};
 
 /**
  * The job of each subagent the turns started, by eve's id for its task, so
@@ -231,48 +282,19 @@ function sentTask(journal: readonly WireValue[], callId: string): string | undef
  * the task more work, whose message is no job of the subagent's, so a task
  * whose start is on a page not read names none.
  */
-export function workerJobs(
-  turns: readonly PlanWorkTurn[] | undefined,
-): ReadonlyMap<string, string> {
+export function workerJobs(conversation: PlanConversation): ReadonlyMap<string, string> {
   const jobs = new Map<string, string>();
-  for (const turn of turns ?? []) {
-    for (const worker of turn.workers) {
-      if (worker.taskId === undefined || sentTask(turn.journal, worker.callId) !== undefined) {
+  for (const message of conversation?.messages ?? []) {
+    for (const part of message.parts) {
+      if (!isRecord(part) || !isWireString(part.type) || !DELEGATION_PART_TYPES.has(part.type)) {
         continue;
       }
-      jobs.set(worker.taskId, workerJob(workerCall(worker, false)));
+      const task = startedTaskOf(part);
+      const words = inputText(part, "task") ?? inputText(part, "message") ?? "";
+      if (task !== undefined) jobs.set(task, workerJob({ ...JOB_CALL, subject: words }));
     }
   }
   return jobs;
-}
-
-/**
- * A worker as the wire sends it beside the call that started it: its job,
- * where it stands as its own session reads, and that session as a journal.
- * Note that it moves while the call stands whether or not its turn still
- * does, because a worker in the background outlives the turn that started it.
- */
-function workerOfWire(worker: PlanWorkWorker, callLive: boolean): WorkWorkerBlock {
-  const call = workerCall(worker, callLive);
-  const record = recordOf(worker);
-  return {
-    call,
-    task: worker.task,
-    session: {
-      earlierOmitted: worker.earlierOmitted,
-      message: messageOf({
-        id: worker.callId,
-        parts: settledJournal(worker.journal, call.running),
-        startedAt: worker.startedAt,
-        endedAt: call.running ? undefined : worker.endedAt,
-        record,
-      }),
-      ...(worker.startedAt === undefined ? undefined : { startedAt: worker.startedAt }),
-      ...(worker.endedAt === undefined ? undefined : { endedAt: worker.endedAt }),
-      ...(worker.title === undefined ? undefined : { title: worker.title }),
-      record,
-    },
-  };
 }
 
 /**
@@ -294,52 +316,85 @@ function workerCallPart(part: WireRecord, worker: WorkWorkerBlock): WireValue {
   };
 }
 
-/** A turn's journal as its message carries it, each worker's call standing where that worker does. */
-function journalParts(
-  journal: readonly WireValue[],
-  workers: readonly WorkWorkerBlock[],
-  moving: boolean,
-): readonly WireValue[] {
-  const byCall = new Map(workers.map((worker) => [worker.call.id, worker]));
-  return settledJournal(journal, moving).map((part) => {
-    if (!isRecord(part) || !isWireString(part.toolCallId)) return part;
-    const worker = byCall.get(part.toolCallId);
-    return worker === undefined ? part : workerCallPart(part, worker);
+/** A turn's state as its journal says it: running until it closed, ended without answering where its record says how it ended (stopped, failed, or past its bound), and done otherwise. */
+function turnStateOf(message: CodingAgentMessage): PlanWorkState {
+  if (message.ending !== undefined) return PLAN_WORK_STATE.FAILED;
+  return message.finishedAt === undefined ? PLAN_WORK_STATE.RUNNING : PLAN_WORK_STATE.DONE;
+}
+
+/** One turn's journal as the tab draws it: its parts, each worker's call standing where that worker does, and the workers beside it. */
+function rowOf(
+  message: CodingAgentMessage & { readonly turnId: string },
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
+  titles: ReadonlyMap<string, string>,
+  callLive: boolean,
+): WorkTurnRow {
+  const state = turnStateOf(message);
+  const moving = callLive && state === PLAN_WORK_STATE.RUNNING;
+  const left = state === PLAN_WORK_STATE.RUNNING && !moving;
+  const workers: WorkWorkerBlock[] = [];
+  const parts = settledJournal(message.parts, moving).map((part) => {
+    if (!isRecord(part) || !isWireString(part.toolCallId) || !isWireString(part.type)) return part;
+    if (!DELEGATION_PART_TYPES.has(part.type)) return part;
+    const { toolCallId } = part;
+    const standing = standings.get(toolCallId);
+    const worker = workerOfPart(
+      { ...part, toolCallId },
+      standing,
+      titles.get(toolCallId),
+      moving,
+      callLive,
+    );
+    workers.push(worker);
+    return workerCallPart(part, worker);
   });
+  const record = recordOf(message);
+  return {
+    key: message.turnId,
+    startedAt: message.startedAt ?? 0,
+    ...(message.finishedAt === undefined ? undefined : { endedAt: message.finishedAt }),
+    state: left ? PLAN_WORK_STATE.FAILED : state,
+    moving,
+    earlierOmitted: message.earlierOmitted ?? false,
+    message: {
+      id: message.id,
+      role: message.role,
+      // SAFETY: every part is the wire's stored part or one built from it, a JSON object either way.
+      parts: parts as CodingAgentMessage["parts"],
+      ...(message.startedAt === undefined ? undefined : { startedAt: message.startedAt }),
+      ...(state === PLAN_WORK_STATE.RUNNING || message.finishedAt === undefined
+        ? undefined
+        : { finishedAt: message.finishedAt }),
+      ...record,
+    },
+    record,
+    workers,
+    asked: message.asked ?? [],
+    askedAt: message.askedAt ?? [],
+  };
 }
 
 /**
  * The open plan's turns as the tab draws them, oldest first, each one of
  * Luke's messages. A turn moves only while the call it ran on stands: a
  * call that ended leaves its last turn as it was last told, with nothing on
- * it still turning, and drawn as stopped.
+ * it still turning, and drawn as stopped. A worker moves while the call
+ * stands whether or not its turn still does, because a worker in the
+ * background outlives the turn that started it.
  */
 export function workRowsOf(
-  turns: readonly PlanWorkTurn[] | undefined,
+  conversation: PlanConversation,
   callLive: boolean,
 ): readonly WorkTurnRow[] {
-  return (turns ?? []).map((turn) => {
-    const moving = callLive && turn.state === PLAN_WORK_STATE.RUNNING;
-    const left = turn.state === PLAN_WORK_STATE.RUNNING && !moving;
-    const workers = turn.workers.map((worker) => workerOfWire(worker, callLive));
-    const record = recordOf(turn);
-    return {
-      key: turn.turnId,
-      startedAt: turn.startedAt,
-      ...(turn.endedAt === undefined ? undefined : { endedAt: turn.endedAt }),
-      state: left ? PLAN_WORK_STATE.FAILED : turn.state,
-      moving,
-      earlierOmitted: turn.earlierOmitted,
-      message: messageOf({
-        id: turn.turnId,
-        parts: journalParts(turn.journal, workers, moving),
-        startedAt: turn.startedAt,
-        endedAt: turn.state === PLAN_WORK_STATE.RUNNING ? undefined : turn.endedAt,
-        record,
-      }),
-      record,
-      workers,
-    };
+  const standings = new Map(
+    (conversation?.subagents ?? []).map((standing) => [standing.callId, standing]),
+  );
+  const titles = new Map(
+    (conversation?.subagentTitles ?? []).map((each) => [each.callId, each.title]),
+  );
+  return (conversation?.messages ?? []).flatMap((message) => {
+    const { turnId } = message;
+    return turnId === undefined ? [] : [rowOf({ ...message, turnId }, standings, titles, callLive)];
   });
 }
 

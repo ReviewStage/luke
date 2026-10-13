@@ -19,17 +19,7 @@ import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import {
-  Deferred,
-  Duration,
-  Effect,
-  Fiber,
-  Option,
-  PartitionedSemaphore,
-  Result,
-  Schema,
-} from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ASK_REFUSAL,

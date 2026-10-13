@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { createElement } from "react";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { onRegistry } from "#testing/copy-feedback";
+import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import "../file-tree/index";
@@ -80,4 +85,55 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
     ],
   );
   assert.match(call.textContent ?? "", /Live/u);
+});
+
+test("a plan's Inbox tab whose read holds nothing says nothing is waiting under the Inbox's glyph, rather than standing blank", async () => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopPlans, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          captions: undefined,
+          plans: plansControl({
+            page: PLANS_PAGE.DOCUMENT,
+            activePlanId: PLAN.id,
+            region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+            mainTabs: {
+              ...plansControl().mainTabs,
+              tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
+              tab: MAIN_TAB.INBOX,
+            },
+            agents: codingAgentsControl({
+              agentIds: [agentId],
+              readInbox: ({ after }) =>
+                after === INBOX_CURSOR_START
+                  ? Promise.resolve({ items: [], cursor: "1" })
+                  : new Promise(() => undefined),
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const tab = container.querySelector('section.inbox-view[aria-label="Inbox"]');
+  assert.ok(tab, "the plan's Inbox tab");
+  assert.match(tab.textContent ?? "", /Nothing is waiting on you\./u);
+  act(() => root.unmount());
+  container.remove();
 });
