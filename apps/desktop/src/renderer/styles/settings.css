@@ -642,15 +642,6 @@
     visibility 0s linear var(--duration-exit);
 }
 
-.settings-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 620;
-}
-
 .link-icon {
   width: 9px;
   height: 9px;

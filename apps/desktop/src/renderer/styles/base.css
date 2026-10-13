@@ -58,7 +58,6 @@
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */
   --hairline-strong: rgba(255, 255, 255, 0.12);
-  --edge-strong: rgba(255, 255, 255, 0.35);
   /* A document's running text, a step under the primary ink so a page of it
      does not glare. */
   --text-body: rgba(255, 255, 255, 0.86);
@@ -192,7 +191,6 @@
     --pressed: rgba(0, 0, 0, 0.11);
     --hairline: rgba(0, 0, 0, 0.08);
     --hairline-strong: rgba(0, 0, 0, 0.1);
-    --edge-strong: rgba(0, 0, 0, 0.4);
     --text-body: rgba(0, 0, 0, 0.8);
     --ink: #000;
     --scrollbar: rgba(0, 0, 0, 0.2);

@@ -8,7 +8,6 @@ import {
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
 import { CheckIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -322,10 +321,7 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
   );
 
   return (
-    <section
-      className={`settings-section settings-plain ${NO_CAPTURE}`}
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
+    <section className={`settings-section settings-plain ${NO_CAPTURE}`}>
       {!signedIn ? (
         <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : keys !== undefined ? (

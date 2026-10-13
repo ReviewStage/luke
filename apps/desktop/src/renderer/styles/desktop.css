@@ -2652,7 +2652,7 @@ body:has(.app-stage[data-capture="true"])
 
 .settings-page-scroll
   .settings
-  :is(.toolbar-button, .icon-button, .primary-button, .danger-button, .voice-select) {
+  :is(.toolbar-button, .icon-button, .primary-button, .danger-button) {
   zoom: calc(1 / var(--settings-zoom));
 }
 
@@ -3588,10 +3588,6 @@ body:has(.app-stage[data-capture="true"])
 
 .side-panel-content .code-pane [role="log"] {
   padding-inline: max(var(--space-16), var(--code-reading-room));
-}
-
-.side-panel-content .history-tab {
-  padding-inline: max(var(--column-inset), var(--reading-room));
 }
 
 /* The board fills the tab edge to edge: the panel is its frame, so its own
