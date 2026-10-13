@@ -1,6 +1,6 @@
 {
-  "id": "9f3541e3-746f-4732-9516-b8f3fc32c560",
-  "prevId": "248fad6f-ecb1-4899-ab38-50fbc1550a95",
+  "id": "09a2446e-74ab-4944-bb2b-5cfd5a66a2b4",
+  "prevId": "f9e170a2-039e-49f1-bd36-f324f5a09b2c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2751,6 +2751,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -2830,6 +2836,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "plan_organization_created": {
+          "name": "plan_organization_created",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2838,6 +2865,15 @@
           "tableFrom": "plan",
           "tableTo": "user",
           "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "plan_organization_id_organization_id_fk": {
+          "name": "plan_organization_id_organization_id_fk",
+          "tableFrom": "plan",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
