@@ -301,6 +301,7 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // On is the default, so Off is the choice that has to survive a reopen.
   agentNotifications: false,
+  macCommands: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
