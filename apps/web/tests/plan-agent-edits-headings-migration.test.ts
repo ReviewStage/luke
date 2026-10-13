@@ -10,6 +10,7 @@ import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_FIELD_HEADING, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { openWorkspace } from "./support/workspaces";
 
 /**
  * plan-agent-edits-headings-migration.test.ts -- the migration that names every journaled agent note by its heading.
@@ -90,9 +91,10 @@ const insertPlan = (userId: string, edits: readonly unknown[]) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const planId = randomUUID();
+    const organizationId = yield* openWorkspace(userId);
     yield* sql`
-      insert into plan (id, user_id, name, document, agent_edits)
-      values (${planId}, ${userId}, ${"Teammate invitations"}, '',
+      insert into plan (id, user_id, organization_id, name, document, agent_edits)
+      values (${planId}, ${userId}, ${organizationId}, ${"Teammate invitations"}, '',
         ${JSON.stringify(edits)}::jsonb)
     `;
     return planId;
