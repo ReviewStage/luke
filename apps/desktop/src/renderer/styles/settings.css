@@ -731,18 +731,3 @@
   color: var(--text-tertiary);
   font-size: 12px;
 }
-
-/* A row's ⋯ (`menu-row.tsx`) keeps its room while hidden, so the row never
-   shifts as it shows: drawn while the row is hovered, holds the keyboard, or
-   has its menu open, the way a sidebar plan's is. */
-.menu-row .menu-row-more {
-  opacity: 0;
-  transition:
-    opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.menu-row:is(:hover, :focus-within, [data-menu-open="true"]) .menu-row-more {
-  opacity: 1;
-}
