@@ -881,7 +881,7 @@ vercel link
 vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect create mcp.sentry.dev --name sentry   # Sentry
-vercel connect create slack --name slack             # Slack: Vercel's managed Slack app
+vercel connect create slack --name slack             # Slack: Vercel's managed Slack app; then its user scopes, below
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
@@ -898,6 +898,34 @@ short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
 runs every agent without that provider, and Settings shows its row as
 unavailable. Every token request is billed by Connect and rate-limited per
 team.
+
+**Slack's user scopes.** `vercel connect create slack` makes a Slack bot app
+with bot scopes and no user scopes, but Luke asks Connect for the
+developer's own grant (`subject: { type: "user" }`, no scopes, so Connect's
+default of the app's configured user scopes), and Slack's MCP server serves
+user tokens alone. A Connect with no user scopes on the app ends on Slack's
+"Invalid permissions requested". `vercel connect update` changes only
+branding, so set them through the API, with the connector's `scl_` id
+(`vercel connect list`):
+
+```
+vercel api /v1/connect/connectors/<connector-id>   # userTokens.scopes, data.botScopes, data.appId
+cat > slack-user-scopes.json <<'JSON'
+{"data":{"userScopes":["search:read.public","search:read.private","search:read.mpim","search:read.im","search:read.files","search:read.users","channels:history","groups:history","mpim:history","im:history","canvases:read","files:read","users:read","users:read.email"]}}
+JSON
+vercel api /v2/connect/connectors/<connector-id> -X PATCH --input slack-user-scopes.json
+```
+
+Those are what the read and search tools `integrations.ts` offers need, and
+none of them writes, so the token is read-only at Slack as well as in the
+offer. Carry the GET's `botScopes` in the same `data` object unchanged. The
+PATCH answers whether Connect synced the change to the Slack app
+(`serviceSync`) and whether a workspace owner must reinstall it
+(`reinstallNeeded`); a developer who connected before signs in again to
+pick the new scopes up. Slack's MCP server also serves only Marketplace and
+internal apps, never an unlisted one, so the app
+(`https://api.slack.com/apps/<appId>/distribute`) must not be publicly
+distributed.
 
 ## The models group
 
