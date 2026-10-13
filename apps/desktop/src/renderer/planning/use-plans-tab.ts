@@ -427,6 +427,8 @@ export function usePlansTab(input: {
     listening: boolean;
     requestMicrophoneAccess: () => void;
   };
+  /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
+  onOpenIntegrations: () => void;
 }): PlansControl {
   const { shown, voice } = input;
   const { act, tell } = input.acts;
@@ -522,6 +524,7 @@ export function usePlansTab(input: {
       if (region.kind === DOCUMENT_REGION.READY)
         markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
     },
+    onOpenIntegrations: input.onOpenIntegrations,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });

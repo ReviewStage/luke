@@ -30,6 +30,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
+import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-plan";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
@@ -76,6 +77,7 @@ import {
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
+import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { WorkedFor, WorkingLine } from "./working-time";
@@ -560,6 +562,7 @@ export function AgentTabView({
   transcript,
   composer,
   model,
+  servers,
   published,
   doors,
   startedAt,
@@ -577,6 +580,7 @@ export function AgentTabView({
   transcript: AgentTranscriptControl;
   composer: AgentComposerControl;
   model: AgentModelControl;
+  servers: AgentServersControl;
   /** What the agent published, once the service has said; nothing before. */
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
@@ -637,6 +641,7 @@ export function AgentTabView({
             models={models}
             readModels={readModels}
             usage={transcript.usage}
+            servers={servers}
             context={transcript.context}
             brief={agent.brief}
             published={published}
@@ -707,6 +712,11 @@ export function AgentTab({
     onStatus: control.onStatus,
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
+  const servers = useAgentServers({
+    agent,
+    write: control.onSwitchServers,
+    onOpenSettings: control.onOpenIntegrations,
+  });
   const published = useAgentPullRequest({
     agentId: agent.id,
     status: agent.status,
@@ -724,6 +734,7 @@ export function AgentTab({
       transcript={transcript}
       composer={composer}
       model={model}
+      servers={servers}
       published={published}
       doors={{ openGitHub, copy: copyWithToast, openChanges: onOpenChanges }}
       startedAt={shown ? agent.runStartedAt : undefined}

@@ -60,6 +60,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -1581,6 +1582,70 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           );
         }
+      }),
+  );
+
+  it.effect(
+    "the MCP servers a Start or a change switches off are written on the agent's row and answered on it, which the list reads back, an empty list switches every one back on; another account's agent is not found, and a list that is not one is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const drafted = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+            }),
+          ),
+        ).agent;
+        assert.deepEqual(drafted.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        assert.equal(agent.disabledServers, undefined);
+        const switchAs = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body }));
+
+        const off = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* switchAs(owner, { disabledServers: [INTEGRATION_PROVIDER.LINEAR] }),
+        );
+        assert.deepEqual(off.agent.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map(({ id, disabledServers }) => ({ id, disabledServers })),
+          [
+            { id: drafted.id, disabledServers: [INTEGRATION_PROVIDER.LINEAR] },
+            { id: agent.id, disabledServers: [INTEGRATION_PROVIDER.LINEAR] },
+          ],
+        );
+
+        assert.deepEqual(
+          yield* switchAs(other, { disabledServers: [] }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* switchAs(owner, { disabledServers: INTEGRATION_PROVIDER.LINEAR }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const on = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* switchAs(owner, { disabledServers: [] }),
+        );
+        assert.equal(on.agent.disabledServers, undefined);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.deepEqual(Option.getOrUndefined(stored)?.disabledServers, []);
       }),
   );
 

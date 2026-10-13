@@ -217,6 +217,11 @@ export function App(): React.JSX.Element {
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
+    // Arriving at Settings lands on its front page, so the page is turned after.
+    onOpenIntegrations: () => {
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
+    },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
   // Read through a ref, because the tab hands a new closure each render and

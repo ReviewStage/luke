@@ -701,6 +701,13 @@
       "when": 1791870478277,
       "tag": "20261013054758_plan_agent_edits_headings",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1791871596311,
+      "tag": "20261013060636_coding_agent_disabled_servers",
+      "breakpoints": true
     }
   ]
 }

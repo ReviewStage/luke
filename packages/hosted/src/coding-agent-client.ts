@@ -48,6 +48,7 @@ import {
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
   type CodingAgentRenameRequest,
+  type CodingAgentServersRequest,
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
   codingAgentChangesAnswerSchema,
@@ -56,6 +57,7 @@ import {
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
@@ -524,6 +526,23 @@ export class HostedCodingAgentClient {
     request: CodingAgentRenameRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentRenameRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
+  switchServers(
+    agentId: string,
+    request: CodingAgentServersRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(codingAgentServersRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
       this.#call.send({

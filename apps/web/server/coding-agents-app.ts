@@ -6,6 +6,7 @@ import {
   readCodingAgent,
   renameCodingAgent,
   updateCodingAgentChoice,
+  updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { readPlan } from "@sidecar/database/models/plan-store";
@@ -27,6 +28,7 @@ import {
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -367,7 +369,8 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, task, attachments } = asked.success;
+  const { idempotencyKey, model, effort, contextWindow, task, attachments, disabledServers } =
+    asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
   if (
@@ -387,6 +390,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       choice,
       task,
       attachments,
+      disabledServers,
     }),
   );
   if (!created) {
@@ -564,7 +568,9 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
  * against the catalog as a Start checks its own,
  * written on the row the steps read; the account's default is untouched.
  * A body naming `archived` archives the agent, stopping a turn still
- * running first as a Stop does, or brings it back.
+ * running first as a Stop does, or brings it back. A body naming
+ * `disabledServers` replaces the list of MCP servers switched off for the
+ * agent, which its next turn reads as it starts.
  */
 const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -596,6 +602,16 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
       yield* stoppedForGood(seams, writer, request, userId, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
+    if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(userId, changed.value),
+    });
+  }
+  const servers = readEither(codingAgentServersRequestSchema)(body);
+  if (Result.isSuccess(servers)) {
+    const changed = yield* hostedStoreOrUnavailable(
+      updateCodingAgentServers(userId, agent.id, servers.success.disabledServers),
+    );
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       agent: yield* summaryOf(userId, changed.value),

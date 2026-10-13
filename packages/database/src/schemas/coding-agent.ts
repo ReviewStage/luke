@@ -3,6 +3,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -39,6 +40,11 @@ import { conversations } from "./storage.js";
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
+ * `disabled_servers` is the MCP servers, by integration provider, the
+ * developer switched off for this agent from its composer, which its next
+ * turns are not handed; null, like an empty list, switches none off, so a
+ * server connected later is on for every agent. A provider no longer
+ * offered may stand in the list and is ignored where it is read.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -107,6 +113,8 @@ export const codingAgent = pgTable(
     published: jsonb("published").$type<CodingAgentPullRequest>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
+    /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
+    disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

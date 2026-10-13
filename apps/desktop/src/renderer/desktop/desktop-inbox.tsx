@@ -173,6 +173,8 @@ function InboxPlanItems({
     repository: plan.repository,
     archived: false,
     onUnarchive: () => undefined,
+    // The inbox draws no agent's composer, so nothing here opens Settings.
+    onOpenIntegrations: () => undefined,
     onStarted: () => undefined,
   });
   const inbox = usePlanInbox({

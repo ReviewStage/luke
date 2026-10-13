@@ -25,6 +25,7 @@ import {
   codingAgentMessagesParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   type DictationTranscribeAnswerView,
@@ -78,6 +79,7 @@ export type CodingAgentClient = Pick<
   | "message"
   | "choose"
   | "rename"
+  | "switchServers"
   | "archive"
   | "stop"
   | "pullRequest"
@@ -289,6 +291,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "renaming an agent names the agent and its title",
         );
         const answer = yield* asked(client.rename(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentServersParamsSchema,
+          params,
+          "switching an agent's MCP servers names the agent and the servers off",
+        );
+        const answer = yield* asked(client.switchServers(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>

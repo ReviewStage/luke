@@ -60,6 +60,14 @@
         "additionalProperties": false
       },
       "maxItems": 10
+    },
+    "disabledServers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "maxItems": 32
     }
   },
   "required": [

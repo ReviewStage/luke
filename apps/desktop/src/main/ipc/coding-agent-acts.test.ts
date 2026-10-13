@@ -154,6 +154,11 @@ function fixture() {
           asked.push(`rename:${agentId}:${title}`);
           return STARTED;
         }),
+      codingAgentServers: ({ agentId, disabledServers }) =>
+        Effect.sync(() => {
+          asked.push(`servers:${agentId}:${disabledServers.join(",")}`);
+          return STARTED;
+        }),
       codingAgentStop: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`stop:${agentId}`);

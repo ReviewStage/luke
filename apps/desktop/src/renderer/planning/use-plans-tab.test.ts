@@ -164,6 +164,7 @@ function mount(
       inboxWaiting: held.inboxWaiting,
       inboxPlans: held.inboxPlans,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
+      onOpenIntegrations: () => undefined,
     });
     return null;
   }
