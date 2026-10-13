@@ -1,3 +1,4 @@
+import { writeDrawing } from "@sidecar/database/models/board-store";
 import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { type DrawingElement, drawingElementsSchema } from "@sidecar/hosted/board-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
@@ -5,7 +6,6 @@ import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { layoutFindings } from "./board-layout.js";
-import { writeDrawing } from "./board-store.js";
 import { logStoreFailure } from "./store-failure.js";
 
 /**

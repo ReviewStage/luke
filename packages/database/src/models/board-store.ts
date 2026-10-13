@@ -1,10 +1,3 @@
-import { db } from "@sidecar/database/core/query";
-import {
-  PlanArchived,
-  type PlanStoreEffect,
-  type PlanStoreFailure,
-} from "@sidecar/database/models/plan-store";
-import { plan, planBoard } from "@sidecar/database/schemas/plan";
 import {
   type Board,
   type BoardElement,
@@ -15,6 +8,9 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { db } from "../core/query.js";
+import { plan, planBoard } from "../schemas/plan.js";
+import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";
 
 /**
  * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
