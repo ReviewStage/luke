@@ -122,10 +122,12 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
-  /** The plans of the chosen workspace the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
+  /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a plan in. */
   plans: PlanningView["plans"];
-  /** The chosen workspace's archived plans, newest archived first, which the sidebar keeps under Archived. */
+  /** Every archived plan of every workspace, newest archived first. */
   archived: PlanningView["plans"];
+  /** The chosen workspace's share of `plans` and `archived`, which alone the sidebar lists; every plan while no workspace is chosen. */
+  listed: { plans: PlanningView["plans"]; archived: PlanningView["plans"] };
   /** The workspaces the account is a member of, its personal one first; none before the first read lands. */
   workspaces: readonly Workspace[];
   /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
@@ -297,6 +299,9 @@ const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
+/** Why Install Luke on GitHub opened nothing: no read has yet named the App's page. */
+const INSTALL_UNREACHED_NOTE = "Luke could not reach GitHub to install the App. Try again.";
+
 /** What the toast says once a plan is deleted. */
 const PLAN_DELETED_NOTE = "Plan deleted";
 
@@ -393,11 +398,13 @@ export function usePlansTab(input: {
     [viewed, accountSignedIn],
   );
   const planning = markedView(renamedView(viewed, renames), marks);
-  // The sidebar, and the palette reading it, list the chosen workspace's
-  // plans alone; with none listed yet, every plan stands as it did before.
+  // The sidebar lists the chosen workspace's plans alone, and everything
+  // else that finds a plan, the palette, the inbox, and the history, finds
+  // it among them all; with no workspace listed yet, every plan is listed.
   const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
   const chosen = workspace.chosen;
-  const sidebar = sidebarPlans(
+  const sidebar = sidebarPlans(planning.plans);
+  const listedSidebar = sidebarPlans(
     chosen === undefined
       ? planning.plans
       : planning.plans.filter((plan) => plan.workspaceId === chosen.id),
@@ -546,8 +553,28 @@ export function usePlansTab(input: {
   // The version history is the plan's, so another plan, or none, leaves it.
   if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
   const historyOpen = historyFor !== undefined && historyFor.planId === boundFor;
+  // A plan opened from another workspace, from the palette, the inbox, or
+  // the history, lists its workspace, so the sidebar holds the plan open.
+  const chooseWorkspace = workspace.choose;
+  const planWorkspaces = useMemo(
+    () => new Map(planning.plans.map((plan) => [plan.id, plan.workspaceId])),
+    [planning.plans],
+  );
+  const listedIds = useMemo(
+    () => new Set(viewed.workspaces.map((each) => each.id)),
+    [viewed.workspaces],
+  );
+  const chosenId = chosen?.id;
   const select = useCallback(
     (planId: string) => {
+      const planWorkspace = planWorkspaces.get(planId);
+      if (
+        planWorkspace !== undefined &&
+        planWorkspace !== chosenId &&
+        listedIds.has(planWorkspace)
+      ) {
+        chooseWorkspace(planWorkspace);
+      }
       const ask = { planId, over: openPlanId };
       const withdraw = () => setAsked((held) => (held === ask ? undefined : held));
       if (fixture === undefined) setAsked(ask);
@@ -555,7 +582,7 @@ export function usePlansTab(input: {
         if (!opened) withdraw();
       }, withdraw);
     },
-    [act, fixture, openPlanId],
+    [act, fixture, openPlanId, planWorkspaces, chosenId, listedIds, chooseWorkspace],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
@@ -784,21 +811,35 @@ export function usePlansTab(input: {
   // plan's, else the one New plan starts in.
   const repositoriesOf =
     region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : chosen?.id;
+  // Each read keeps the installation page it answers, so an install asked
+  // while the service cannot be reached still opens the one last read.
+  const installationUrl = useRef<string | undefined>(undefined);
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
-    fixture !== undefined
+    (fixture !== undefined
       ? Promise.resolve(fixtureRepositories())
       : act(
           ACT_KIND.PLANNING_REPOSITORIES,
           repositoriesOf === undefined ? {} : { workspaceId: repositoriesOf },
         ).catch(() => ({
           failure: PLAN_CALL_FAILURE.UNANSWERED,
-        }));
+        }))
+    ).then((answer) => {
+      if ("repositories" in answer) installationUrl.current = answer.repositories.installationUrl;
+      return answer;
+    });
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
   // The installation page is the one the repository chip offers, read with
-  // the account's repositories; a read that answers none opens nothing.
+  // the account's repositories. Note that the page's address is the
+  // deployment's own App, which only the service names, so a read that
+  // fails opens the one an earlier read answered, and says why where none did.
   const installApp = () => {
-    readRepositories().then((answer) => {
-      if ("repositories" in answer) openGitHub(answer.repositories.installationUrl);
+    readRepositories().then(() => {
+      const url = installationUrl.current;
+      if (url !== undefined) {
+        openGitHub(url);
+        return;
+      }
+      toast({ words: INSTALL_UNREACHED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     });
   };
   // A fixture's workspaces are joined nowhere. A join lists the workspace it
@@ -938,6 +979,10 @@ export function usePlansTab(input: {
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
+    listed: {
+      plans: [...listedSidebar.pinned, ...listedSidebar.rest],
+      archived: listedSidebar.archived,
+    },
     workspaces: viewed.workspaces,
     workspace: chosen,
     onChooseWorkspace: workspace.choose,

@@ -104,6 +104,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     signedIn: true,
     plans: [],
     archived: [],
+    listed: { plans: overrides.plans ?? [], archived: overrides.archived ?? [] },
     workspaces: [],
     workspace: undefined,
     onChooseWorkspace: ignore,

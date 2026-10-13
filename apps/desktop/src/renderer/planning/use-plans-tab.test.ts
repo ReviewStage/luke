@@ -1207,13 +1207,13 @@ const UNSTARTED = {
   [ACT_KIND.PLANNING_START]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
 };
 
-test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone, and New plan starts in the one chosen", async () => {
+test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
 
   const personal = {
     workspace: tab.control().workspace?.id,
-    plans: tab.control().plans.map((plan) => plan.id),
-    archived: tab.control().archived.map((plan) => plan.id),
+    plans: tab.control().listed.plans.map((plan) => plan.id),
+    archived: tab.control().listed.archived.map((plan) => plan.id),
   };
   await tab.control().newPlan.start("Invites", null);
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -1226,14 +1226,41 @@ test("the sidebar lists the personal workspace's plans first, a workspace chosen
   });
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.deepEqual(
-    tab.control().plans.map((plan) => plan.id),
+    tab.control().listed.plans.map((plan) => plan.id),
     ["alerts"],
   );
   assert.deepEqual(
-    tab.control().archived.map((plan) => plan.id),
+    tab.control().listed.archived.map((plan) => plan.id),
     ["old-launch"],
   );
   assert.deepEqual(startedIn(tab.payloads), [PERSONAL.id, ACME.id]);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+    "the palette, the inbox, and the history find every workspace's plans",
+  );
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    ["old-launch", "old-notes"],
+  );
+});
+
+test("opening a plan of another workspace lists that workspace, and one of the workspace listed changes nothing", () => {
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() => tab.control().onSelect("billing"));
+  const stayed = tab.control().workspace?.id;
+  act(() => tab.control().onSelect("alerts"));
+
+  assert.equal(stayed, PERSONAL.id);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["alerts"],
+  );
 });
 
 test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the personal one", () => {
@@ -1248,7 +1275,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
   assert.equal(kept, ACME.id);
   assert.equal(relaunched.control().workspace?.id, PERSONAL.id);
   assert.deepEqual(
-    relaunched.control().plans.map((plan) => plan.id),
+    relaunched.control().listed.plans.map((plan) => plan.id),
     ["notes", "billing"],
   );
 });
@@ -1260,7 +1287,7 @@ test("before the workspaces are read every plan is listed and New plan names no 
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(
-    tab.control().plans.map((plan) => plan.id),
+    tab.control().listed.plans.map((plan) => plan.id),
     ["notes", "alerts", "billing"],
   );
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
@@ -1359,6 +1386,40 @@ test("Install Luke on GitHub opens the installation page the repository read ans
   ]);
 });
 
+test("Install Luke on GitHub opens the page an earlier read answered when the read now fails, and says why where none ever did", async () => {
+  const installationUrl = "https://github.com/apps/luke/installations/new";
+  let reachable = true;
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        reachable
+          ? Promise.resolve({
+              repositories: { installed: true, repositories: [], installationUrl },
+            })
+          : Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+    },
+  );
+  const offline = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+    },
+  );
+
+  await tab.control().repositories.read();
+  reachable = false;
+  act(() => tab.control().onInstallApp());
+  await settle();
+  act(() => offline.control().onInstallApp());
+  await settle();
+
+  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_OPEN);
+  assert.equal(offline.told.includes(ACT_KIND.GITHUB_OPEN), false);
+  assert.equal(toast(), "Luke could not reach GitHub to install the App. Try again.");
+});
+
 test("a workspace left lists the personal one again", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -1372,13 +1433,13 @@ test("a workspace left lists the personal one again", () => {
 
 test("a fixture run lists its personal workspace's plans under the switcher, and a choice there is kept nowhere", () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
-  const staged = fixture.control().plans.map((plan) => plan.name);
+  const staged = fixture.control().listed.plans.map((plan) => plan.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
   act(() => fixture.control().onJoinWorkspace(4242));
 
   assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
   assert.deepEqual(
-    fixture.control().plans.map((plan) => plan.name),
+    fixture.control().listed.plans.map((plan) => plan.name),
     ["Usage alerts"],
   );
   assert.equal(fixture.control().workspaces.length, 2);
