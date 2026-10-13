@@ -517,6 +517,11 @@ export function App(): React.JSX.Element {
               onLeft: plans.onLeftWorkspace,
               onConnectGitHub: plans.onConnectGitHub,
             },
+            github: {
+              connection: plans.github,
+              onConnect: plans.onConnectAccountGitHub,
+              onDisconnect: plans.onDisconnectAccountGitHub,
+            },
           }}
         />
       </div>

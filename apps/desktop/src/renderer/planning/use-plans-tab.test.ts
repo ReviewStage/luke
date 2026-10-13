@@ -790,6 +790,20 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
+test("Settings' GitHub row is the connection main's view holds, and its Connect and Disconnect ask main for their pages", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
+    { [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined) },
+  );
+
+  act(() => tab.control().onConnectAccountGitHub());
+  act(() => tab.control().onDisconnectAccountGitHub());
+  await settle();
+
+  assert.deepEqual(tab.control().github, { connected: true, login: null });
+  assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
+});
+
 test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
   const listed = {
     repositories: {

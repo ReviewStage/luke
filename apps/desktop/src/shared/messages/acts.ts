@@ -216,6 +216,10 @@ export const ACT_KIND = {
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The page that disconnects the account's GitHub, opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -578,6 +582,9 @@ const press = (refusal: string): ActDeclaration<undefined, void> => ({
   refusal,
 });
 
+/** Connect GitHub and Disconnect, which open one page of the service's and are refused alike. */
+const GITHUB_PAGE_PRESS = press("Could not open GitHub's connection page on this system.");
+
 /**
  * Every act, one row per kind, and everything this build says about a kind in
  * that one row: the parser its payload has to pass, the guard its answer has
@@ -704,6 +711,8 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not open that link on this system.",
   },
+  [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
+  [ACT_KIND.GITHUB_DISCONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.WORKSPACE_CREATE]: {
     payload: actSchema(planningWorkspaceCreateParamsSchema),

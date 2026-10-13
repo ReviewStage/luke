@@ -20,7 +20,7 @@ const SKILLS_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
     "The Luke GitHub App no longer reaches this plan's repository.",
   [PLAN_FILE_REFUSAL.SIGN_IN_REQUIRED]:
-    "Sign in with GitHub again to read this repository's skills.",
+    "Connect GitHub in Settings to read this repository's skills.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
   [PLAN_FILE_REFUSAL.SECRET]: "This repository's skills could not be read.",
   [PLAN_FILE_REFUSAL.MISSING]: "This repository's skills could not be read.",

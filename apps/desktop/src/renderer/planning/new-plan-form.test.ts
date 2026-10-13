@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { NewPlanForm } from "./new-plan-form";
 import type { RepositoryChooser } from "./repository-chip";
 
@@ -23,6 +25,7 @@ let template: string | undefined;
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installScrollIntoView();
   template = TEMPLATE;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -70,9 +73,13 @@ async function mount(answer: string | undefined = undefined, staging: Staging = 
       return Promise.resolve(answer);
     },
   };
+  let connects = 0;
   let repositories: RepositoryChooser = {
     ...control.repositories,
     recent: ["acme/web"],
+    connectGitHub: () => {
+      connects += 1;
+    },
     ...staging.chooser,
   };
   const container = document.createElement("div");
@@ -100,6 +107,9 @@ async function mount(answer: string | undefined = undefined, staging: Staging = 
       await settle();
     },
     create,
+    container,
+    /** How many times the chip's menu asked to connect GitHub. */
+    connects: () => connects,
     /** Stands the page again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
@@ -196,4 +206,29 @@ test("the workspace first resolving keeps a repository picked before the workspa
   await page.pressReturn();
 
   assert.deepEqual(page.starts, [["Dark mode", "alice/private"]]);
+});
+
+test("a list refused for GitHub not connected points to Settings, and the menu's Connect GitHub opens the connect page", async () => {
+  const page = await mount(undefined, {
+    chooser: {
+      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
+    },
+  });
+  const chip =
+    page.container.querySelector<HTMLButtonElement>(".plan-compose-chip") ??
+    assert.fail("the page draws the repository chip");
+
+  act(() => chip.click());
+  await settle();
+  const buttons = () => [...page.container.querySelectorAll("button")];
+  const alert = page.container.querySelector("[role=alert]")?.textContent;
+  const retry = buttons().find((button) => button.textContent === "Retry");
+  const connect = buttons().find((button) => button.textContent === "Connect GitHub");
+  assert.ok(connect, "the menu offers to connect GitHub");
+  act(() => connect.click());
+
+  assert.equal(alert, "Connect GitHub in Settings to use a repository with Luke.");
+  assert.equal(retry, undefined);
+  assert.equal(page.connects(), 1);
+  assert.equal(page.container.querySelector(".plan-compose-menu"), null);
 });
