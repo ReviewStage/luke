@@ -29,7 +29,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
-import { CodingAgentsIcon, TranscriptIcon } from "@sidecar/panel";
+import { CallIcon, CodingAgentsIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -1180,7 +1180,7 @@ test("the Call tab with neither a call nor a turn says what will appear there, u
     }),
   );
   const glyph = document.createElement("div");
-  glyph.innerHTML = renderToStaticMarkup(createElement(TranscriptIcon));
+  glyph.innerHTML = renderToStaticMarkup(createElement(CallIcon));
 
   assert.match(markup, /Nothing said yet — start a call and the transcript appears here\./u);
   assert.ok(

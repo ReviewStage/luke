@@ -14,11 +14,11 @@ import {
 } from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
+  CallIcon,
   CodeIcon,
   CollapseIcon,
   ExpandIcon,
   SidePanelIcon,
-  TranscriptIcon,
 } from "@sidecar/panel";
 import { AppWindowIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -197,7 +197,7 @@ function documentReserve(area: HTMLElement): number {
 export const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
-  [SIDE_PANEL_TAB.CALL]: <TranscriptIcon />,
+  [SIDE_PANEL_TAB.CALL]: <CallIcon />,
 } as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {

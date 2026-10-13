@@ -20,7 +20,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanningTreeAnswer,
 } from "@sidecar/hosted/planning-view";
-import { BoardIcon, CodeIcon, TranscriptIcon } from "@sidecar/panel";
+import { BoardIcon, CallIcon, CodeIcon } from "@sidecar/panel";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -566,7 +566,7 @@ test("Show board and the panel's other kinds are listed with the commands, with 
   for (const [kind, glyph] of [
     ["Show board", BoardIcon],
     ["Show code", CodeIcon],
-    ["Show call", TranscriptIcon],
+    ["Show call", CallIcon],
   ] as const) {
     assert.ok(rows().includes(kind), `${kind} is listed alone, with no chord`);
     const row = listedRows().find((each) => rowWords(each) === kind);
