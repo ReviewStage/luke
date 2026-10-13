@@ -9,7 +9,7 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
-import { DocumentIcon, TerminalIcon } from "@sidecar/panel";
+import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -399,7 +399,7 @@ function AgentMessage({
  * or knows nothing of where it stands, as a revision's author, wears it bare.
  */
 export function AgentMark({ provider }: { provider: ModelProvider | undefined }) {
-  return provider === undefined ? <TerminalIcon /> : <HarnessMark provider={provider} />;
+  return provider === undefined ? <CodingAgentsIcon /> : <HarnessMark provider={provider} />;
 }
 
 /**

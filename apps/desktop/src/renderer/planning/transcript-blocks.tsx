@@ -27,8 +27,8 @@ import {
   PlayIcon,
   SearchIcon,
   SendIcon,
-  SquareTerminalIcon,
   TerminalIcon,
+  WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
@@ -194,7 +194,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph's terminal for the agents read. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
@@ -216,8 +216,8 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
-  [CALL_KIND.LIST_AGENTS]: SquareTerminalIcon,
-  [CALL_KIND.READ_AGENT]: SquareTerminalIcon,
+  [CALL_KIND.LIST_AGENTS]: WorkflowIcon,
+  [CALL_KIND.READ_AGENT]: WorkflowIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,

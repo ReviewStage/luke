@@ -28,7 +28,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
-import { TerminalIcon } from "@sidecar/panel";
+import { CodingAgentsIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -3241,11 +3241,13 @@ test("the column's + offers the plan's Inbox first by itself, then New coding ag
     ["GPT 5.6 Sol", "", true],
   ]);
   assert.ok(addRow("Inbox").querySelector("svg.lucide-inbox"), "the Inbox's tray");
-  const terminal = renderToStaticMarkup(createElement(TerminalIcon));
+  const generic = renderToStaticMarkup(createElement(CodingAgentsIcon));
   assert.equal(
-    [...document.querySelectorAll(".tab-add-menu svg")].some((svg) => svg.outerHTML === terminal),
+    [...document.querySelectorAll(".tab-add-menu svg")].some(
+      (svg) => svg.outerHTML === generic || svg.classList.contains("lucide-terminal"),
+    ),
     false,
-    "no row wears the generic terminal",
+    "no row wears a terminal or the generic Coding agents glyph",
   );
   assert.equal(document.activeElement?.getAttribute("placeholder"), "Search tabs");
   // An agent's row wears its harness's mark and says nothing of where it

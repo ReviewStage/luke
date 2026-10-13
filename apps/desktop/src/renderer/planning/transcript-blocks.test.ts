@@ -510,15 +510,11 @@ test.each([
     "lucide-code-xml",
   ],
   [
-    "the agents listed wear the Coding agents terminal, not the subagent's robot",
+    "the agents listed wear the Coding agents glyph, not a terminal or the subagent's robot",
     CALL_KIND.LIST_AGENTS,
-    "lucide-square-terminal",
+    "lucide-workflow",
   ],
-  [
-    "an agent read wears the Coding agents terminal too",
-    CALL_KIND.READ_AGENT,
-    "lucide-square-terminal",
-  ],
+  ["an agent read wears the Coding agents glyph too", CALL_KIND.READ_AGENT, "lucide-workflow"],
 ] as const)("a call's row: %s", (_what, kind, glyph) => {
   const container = mounted(
     createElement(TranscriptTool, {
@@ -532,7 +528,9 @@ test.each([
   );
   assert.equal(container.querySelector(`summary svg.${glyph}`) === null, false);
   assert.equal(
-    container.querySelector("summary svg.lucide-file-code, summary svg.lucide-bot") === null,
+    container.querySelector(
+      "summary svg.lucide-file-code, summary svg.lucide-bot, summary svg.lucide-square-terminal",
+    ) === null,
     true,
   );
 });

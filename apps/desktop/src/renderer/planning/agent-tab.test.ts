@@ -17,7 +17,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { DocumentIcon } from "@sidecar/panel";
+import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -31,7 +31,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PublishedChip, PublishedRow } from "./agent-published";
-import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
+import { AgentGlyph, AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -796,6 +796,16 @@ test("the reasoning folds under one quiet line previewing its words and opens on
     reasoning.querySelector("summary + div")?.textContent,
     "Read AGENTS.md before anything else.",
   );
+});
+
+test("an agent whose harness Luke does not know wears the Coding agents glyph, never a terminal", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(AgentGlyph, {
+      agent: { model: "mistral/large-3", status: CODING_AGENT_STATUS.COMPLETED },
+    }),
+  );
+  assert.ok(drawn.includes(renderToStaticMarkup(createElement(CodingAgentsIcon))));
+  assert.doesNotMatch(drawn, /terminal/u);
 });
 
 test("the plan is a card across the top of the transcript, folded under its title, not a bubble", () => {
