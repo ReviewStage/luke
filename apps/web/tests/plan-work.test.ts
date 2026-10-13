@@ -737,6 +737,8 @@ test("a planner page says where each worker its turns delegated to stands, read 
 
   const running = await database.run(plannerTurnsPage(target, undefined));
   assert.deepEqual(statusOf(running), [[callId, CODING_AGENT_STATUS.RUNNING]]);
+  // The turn that started the worker has answered, but the planner still works while its worker does.
+  assert.equal(running.status, CODING_AGENT_STATUS.RUNNING);
 
   await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
   const answered = await database.run(plannerPagePast(target, running.cursor));
@@ -860,4 +862,54 @@ test("a planning worker's title is awaited while it is untitled and its turn set
   assert.equal(await database.run(plannerTitleAwaited(target, child)), true);
   await database.run(fillChildTitle(target, child, "Queue libraries"));
   assert.equal(await database.run(plannerTitleAwaited(target, child)), false);
+});
+
+test("a page no journal moved says where a worker under a turn older than a page of them stands, so its end is heard", async () => {
+  const target = await planConversation();
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: PLANNER_DELEGATE_TOOL.name,
+          input: { task: "Compare the two queue libraries." },
+          output:
+            "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "A worker is comparing them."),
+    ],
+    standingFor(target),
+  );
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, "call-0-0"),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  // More turns follow than a page of them, so the worker's own turn is older than any page reads.
+  for (let index = 0; index <= PLAN_WORK_BOUNDS.TURNS; index += 1) {
+    await play(
+      [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, `Answer ${index}.`)],
+      standingFor(target),
+    );
+  }
+  const { cursor } = await database.run(plannerTurnsPage(target, undefined));
+  await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
+
+  const past = await database.run(plannerPagePast(target, cursor));
+  assert.deepEqual(past.messages, []);
+  assert.deepEqual(
+    past.subagents?.map((worker) => [worker.callId, worker.status]),
+    [["call-0-0", CODING_AGENT_STATUS.COMPLETED]],
+  );
 });
