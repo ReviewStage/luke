@@ -211,9 +211,14 @@ export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
 }
 
+/** One plan's pages (GET): each page's newest version, the most recently written first. */
+export function planPagesPath(planId: string): string {
+  return `${planPath(planId)}/pages`;
+}
+
 /** One version of one page of one plan, with its HTML (GET). */
 export function planPageVersionPath(planId: string, pageId: string, version: number): string {
-  return `${planPath(planId)}/pages/${encodeURIComponent(pageId)}/versions/${version}`;
+  return `${planPagesPath(planId)}/${encodeURIComponent(pageId)}/versions/${version}`;
 }
 
 /** One revision of the account's plan template: its text beside the text before it (GET). */

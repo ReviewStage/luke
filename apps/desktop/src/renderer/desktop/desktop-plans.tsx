@@ -426,6 +426,7 @@ function PlanDocument({
           repository={plan.repository}
           board={plans.board}
           shownCode={plans.shownCode}
+          pages={plans.pages}
           transcript={plans.transcript}
           work={plans.work}
           agents={agents}

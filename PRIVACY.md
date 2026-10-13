@@ -213,6 +213,23 @@ Luke showed. An inbox item's line reference is read the same way, at the
 commit the agent named, for the lines on the item and the File tab it opens;
 nothing of the file is stored.
 
+**Pages an agent makes.** Luke's planning model and coding agents can make a
+page for a plan: an interactive HTML document, such as a chart or a mockup,
+that opens in the plan's side panel. Our service stores each page with the
+plan, as written and readable by our own operators: its title and HTML, at
+most 256 KB a version, and every version it has had, each kept as written and
+never changed. Deleting the plan deletes its pages. A page made by the
+planning model is part of the planning conversation, so it is sent back to
+the planning model as the conversation goes on (see "Who we send it to").
+Luke on your Mac reads a page's HTML from our service only to draw it, holds
+it in memory only, and never passes it to the rest of the panel. A page runs
+sealed off from Luke: it cannot read the panel, your account, or another
+page, and cannot store anything, open a window, or send anything anywhere.
+The one place it may load from is cdnjs.cloudflare.com, for code libraries
+such as charts and diagrams, which Cloudflare's CDN then sees requested from
+your Mac's address. A link inside a page does not open. A page is never
+shared or published: only you can open it, from Luke.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary when it grows long — on our service, under the terms
@@ -402,8 +419,8 @@ caption of what you or Luke said, your name and email address, and anything
 you type all appear as blocks. As a second line, some parts are left out whole: the
 feedback form, since a screenshot you attach could carry another app's words;
 a plan's name, its document while you edit it, its whiteboard, transcript,
-Work, Code, and File tabs with their tree, and its version history with the
-earlier version you are viewing; the Inbox and its pictures; each coding
+Work, Code, and File tabs with their tree, its pages, and its version history
+with the earlier version you are viewing; the Inbox and its pictures; each coding
 agent's tab, its message box, and the files you attach there; code drawn in a
 transcript; the API keys and Plan template pages of Settings; and the cards
 that open over a row on hover. The whiteboard draws its words as pixels,

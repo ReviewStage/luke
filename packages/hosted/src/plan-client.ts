@@ -19,7 +19,12 @@ import {
   type GitHubRepositoriesAnswer,
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { type PageVersion, planPageVersionAnswerSchema } from "./page-wire.js";
+import {
+  type PageLine,
+  type PageVersion,
+  planPagesAnswerSchema,
+  planPageVersionAnswerSchema,
+} from "./page-wire.js";
 import {
   type PlanEditAnswer,
   type PlanEditRequest,
@@ -71,6 +76,7 @@ import {
   planBoardPath,
   planEditPath,
   planFilePath,
+  planPagesPath,
   planPageVersionPath,
   planPath,
   planRestorePath,
@@ -391,6 +397,19 @@ export class HostedPlanClient {
         planRevisionAnswerSchema,
       ),
       (answer) => answer?.revision,
+    );
+  }
+
+  /** One plan's pages, each by its newest version; nothing where the service did not answer them. */
+  readPages(
+    planId: string,
+  ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: planPagesPath(planId) },
+        planPagesAnswerSchema,
+      ),
+      (answer) => answer?.pages,
     );
   }
 

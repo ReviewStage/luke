@@ -5,7 +5,11 @@ import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
 } from "./github-repositories-wire.js";
-import { pageVersionNumberSchema, planPageVersionAnswerSchema } from "./page-wire.js";
+import {
+  pageLineSchema,
+  pageVersionNumberSchema,
+  planPageVersionAnswerSchema,
+} from "./page-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -418,6 +422,13 @@ export const planningViewSchema = EffectSchema.Struct({
   work: EffectSchema.optionalKey(EffectSchema.Array(planWorkTurnSchema)),
   /** The turn the active plan's next older page of work is read before; absent where none stands or before the first read. */
   workEarlier: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The pages agents wrote for the active plan, each by its newest version,
+   * the most recently written first, as last read with the plan; absent with
+   * none, and cleared with the activity. Their HTML is never held here: the
+   * frame that draws a page reads it alone (`planning.page`).
+   */
+  pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),
 });
 
 export type PlanningView = typeof planningViewSchema.Type;

@@ -19,7 +19,7 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import type { PageVersion } from "@sidecar/hosted/page-wire";
+import type { PageLine, PageVersion } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
@@ -138,6 +138,8 @@ interface FakeService extends PlanningClient {
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
   /** Every version of every page the service holds, for any plan. */
   pages: PageVersion[];
+  /** Each plan's pages as the service lists them, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  pageLines: Record<string, readonly PageLine[]>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: PlanEditAnswer | undefined;
   /** The account's pinned repositories, newest pinned first, as the service keeps them. */
@@ -176,6 +178,8 @@ function fakeService(plans: Plan[]): FakeService {
       Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
     readRevision: (_planId, seq) => Effect.sync(() => service.revisions[seq]),
     pages: [],
+    pageLines: {},
+    readPages: (planId) => Effect.sync(() => service.pageLines[planId]),
     readPageVersion: (_planId, pageId, version) =>
       Effect.sync(() =>
         service.pages.find((page) => page.id === pageId && page.version === version),
@@ -2006,6 +2010,30 @@ it.effect(
         failure: PLAN_CALL_FAILURE.UNANSWERED,
       });
       assert.equal(told.length, viewsTold);
+    }),
+);
+
+it.effect(
+  "opening a plan lists its pages by title and newest version, and opening another drops them",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        plan(INVITES, "Teammate invitations", "# Draft", 10),
+        plan(BILLING, "Billing export", "# Billing export", 20),
+      ]);
+      const chart: PageLine = {
+        id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+        title: "Invite funnel",
+        version: 3,
+        at: 100,
+      };
+      service.pageLines[INVITES] = [chart];
+      service.pageLines[BILLING] = [];
+      const { call, last } = yield* openPlan(service);
+
+      assert.deepEqual(last()?.pages, [chart]);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+      assert.equal(last()?.pages, undefined);
     }),
 );
 

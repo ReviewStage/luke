@@ -36,6 +36,8 @@ interface Stood {
   subagents: readonly string[] | undefined;
   /** The files Luke showed on the plan, by path. */
   files?: readonly string[] | undefined;
+  /** The pages agents wrote for the plan, by id. */
+  pages?: readonly string[] | undefined;
   /** The open plan and what it holds; one that has used every fixed tab where absent. */
   plan?: OpenPlan;
 }
@@ -50,6 +52,7 @@ function mountStood(stood: Stood) {
       held.agents,
       held.subagents,
       held.files,
+      held.pages,
     );
     return null;
   }
@@ -191,6 +194,35 @@ test("a closed tab is replaced by one the plan draws, never a tab viewed that an
   act(() => panel.control().onClose({ subagent: CALL }));
   assert.equal(panel.control().tab, undefined);
   assert.deepEqual(panel.control().subagents, []);
+});
+
+const PAGE = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
+
+test('a page\'s tab opens once from the "+" and is chosen, stands while the plan lists its page, closes to the tab viewed before it, and is kept across no launch', () => {
+  const panel = mountStood({ agents: [], subagents: [], pages: [PAGE] });
+  const page = { page: PAGE };
+  act(() => panel.control().onChoose(page));
+  assert.equal(panel.control().open, true);
+  assert.deepEqual(panel.control().tab, page);
+  act(() => panel.control().onChoose({ page: PAGE }));
+  assert.deepEqual(panel.control().pages, [page]);
+  assert.equal(sameTab(page, { changes: PAGE }), false);
+
+  // A plan that lists no such page shows the first tab; listing it again shows the page's.
+  panel.render({ agents: [], subagents: [], pages: [] });
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
+  panel.render({ agents: [], subagents: [], pages: [PAGE] });
+  assert.deepEqual(panel.control().tab, page);
+
+  act(() => panel.control().onClose(page));
+  assert.deepEqual(panel.control().pages, []);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
+
+  // A launch after it was chosen opens none, on the first tab.
+  act(() => panel.control().onChoose(page));
+  const second = mountStood({ agents: [], subagents: [], pages: [PAGE] });
+  assert.deepEqual(second.control().pages, []);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
 const INVITE = "src/invite.ts";

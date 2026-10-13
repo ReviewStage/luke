@@ -531,6 +531,39 @@ test("the Code tab draws every code Luke showed on the plan, and says so where h
   assert.ok(drawn(undefined)?.querySelector(".empty-state-icon svg"), "under the tab's glyph");
 });
 
+test("a page's tab is named by its page's title and draws the page at its newest version in a frame of its own scheme", () => {
+  const funnel = {
+    id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+    title: "Invite funnel",
+    version: 2,
+    at: 1,
+  };
+  const page = document.createElement("div");
+  page.innerHTML = renderToStaticMarkup(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        sidePanel: {
+          ...plansControl().sidePanel,
+          open: true,
+          tab: { page: funnel.id },
+          pages: [{ page: funnel.id }],
+        },
+        pages: [funnel],
+      }),
+    }),
+  );
+
+  assert.equal(tabNamed(page, "Invite funnel").getAttribute("aria-selected"), "true");
+  const frame = page.querySelector(".side-panel [role='tabpanel'] iframe");
+  assert.equal(frame?.getAttribute("src"), `luke-page://page/${PLAN.id}/${funnel.id}/2`);
+  assert.equal(frame?.getAttribute("sandbox"), "allow-scripts");
+});
+
 test("a tab with something new on it reads in semibold and says it is new, and the tab shown does not, with no dot on any", () => {
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(

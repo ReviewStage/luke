@@ -197,6 +197,8 @@ export interface PlansControl {
   board: Board | undefined;
   /** Every code Luke showed on the open plan, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: PlanningView["shownCode"];
+  /** The pages agents wrote for the open plan, each by its newest version; absent with none. */
+  pages: PlanningView["pages"];
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: {
     region: TranscriptRegion;
@@ -581,12 +583,15 @@ export function usePlansTab(input: {
     agents.heldIds,
   );
   mainRef.current = mainTabs;
+  // A page's tab is held to the pages agents wrote for the plan.
+  const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
     { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
     mainTabs.openAgents,
     workers,
     files,
+    pages,
   );
   // An agent pinned to the sidebar is named there as its tab is named now,
   // so a pin made before the agent had its title, or before a rename,
@@ -1133,6 +1138,7 @@ export function usePlansTab(input: {
     unreadTabs,
     board: planning.board,
     shownCode: planning.shownCode,
+    pages: planning.pages,
     transcript: {
       region: transcript,
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),

@@ -163,6 +163,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       subagents: [],
       files: [],
       changes: [],
+      pages: [],
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
@@ -185,6 +186,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     unreadTabs: [],
     board: undefined,
     shownCode: undefined,
+    pages: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
       turns: undefined,

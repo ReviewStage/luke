@@ -25,8 +25,8 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
  * pictures of the person's screen, a plan's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
- * typing, and its whiteboard, transcript, Work, Code, and File tabs, version
- * history, Inbox, and coding agents' tabs, among others. The whiteboard is
+ * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
+ * version history, Inbox, and coding agents' tabs, among others. The whiteboard is
  * the one surface that draws its words on a canvas, which the text masking
  * cannot reach, so its block is its only line, and canvas recording is held
  * off by name rather than by the library's default.

@@ -687,6 +687,33 @@ button.code-card-path:hover {
   background: var(--desktop-well);
 }
 
+/* A page's tab (page-pane.tsx): a File tab's bar over the page's frame,
+   which takes the rest of the pane. The frame sets no background of its
+   own: a page that names no colour scheme is a light document, and
+   Chromium grounds a frame whose scheme differs from the window's dark one
+   in the page's own white, as a browser draws it. */
+.page-view-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-view-version {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.page-view-frame {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+}
+
 /* An agent's Changes tab (agent-changes-tab.tsx): a File tab's bar and its
    tree to the right, the chosen file's unified diff in the file's place. */
 .changes-view {
