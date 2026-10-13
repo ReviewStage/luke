@@ -9,7 +9,6 @@ import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { openFenceAt, planSections } from "./plan-document.js";
 import {
-  PLAN_ACTOR,
   PLAN_BOUNDS,
   PLAN_FIELD,
   PLAN_SECTION_BOUNDS,
@@ -551,24 +550,6 @@ export const planAgentEditSchema = EffectSchema.Struct({
 });
 
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
-
-/**
- * Who last changed one field of a plan, and when, as the fixed template kept
- * it; the type the `plan.field_writers` column still names until the
- * migration that drops it.
- */
-const planFieldWriterSchema = EffectSchema.Struct({
-  field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
-  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
-  /** The coding agent's id, where a coding agent made the save. */
-  agentId: EffectSchema.optionalKey(EffectSchema.String),
-  /** Present, and true, where the notetaker made the save on one of the plan's calls. */
-  duringCall: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Epoch milliseconds of the save. */
-  at: EffectSchema.Number,
-});
-
-export type PlanFieldWriter = typeof planFieldWriterSchema.Type;
 
 /** The journal with one more save on its end, the oldest let go past the bound. */
 export function withAgentEdit(

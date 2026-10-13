@@ -78,6 +78,9 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
 const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // Migration 0088 moved the fixed kinds into `blocks` and `response`.
   ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
+  // Every plan is one document since the backfill, so the fixed template's columns go.
+  ["plan", new Set(["body", "assumptions", "fields", "field_writers"])],
+  ["plan_revision", new Set(["fields", "assumptions"])],
 ]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
