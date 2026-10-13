@@ -10,7 +10,11 @@ import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js
 import { member, organization, user } from "../schemas/auth.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
-import type { WorkspaceCreation, WorkspaceSeams } from "./workspace-seams.js";
+import {
+  PERSONAL_WORKSPACE_METADATA,
+  type WorkspaceCreation,
+  type WorkspaceSeams,
+} from "./workspace-seams.js";
 
 /**
  * workspace-store.ts -- the workspaces an account is a member of, and the one that is its own.
@@ -32,9 +36,6 @@ import type { WorkspaceCreation, WorkspaceSeams } from "./workspace-seams.js";
 
 /** The slug every personal workspace is made under, one per account, which is what makes the plugin refuse a second. */
 const PERSONAL_SLUG_PREFIX = "personal-";
-
-/** The metadata the plugin stores on a personal workspace, as JSON text; only the server writes it. */
-const PERSONAL_WORKSPACE_METADATA = { personal: true } as const;
 
 /** One workspace as its members see it: the account's own one is marked personal, and each carries the account's role in it. */
 export interface Workspace {

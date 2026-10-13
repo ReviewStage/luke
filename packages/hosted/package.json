@@ -29,6 +29,7 @@
     "./planning-view": "./src/planning-view.js",
     "./provider-key-wire": "./src/provider-key-wire.js",
     "./transcript-wire": "./src/transcript-wire.js",
+    "./workspace-invitation-wire": "./src/workspace-invitation-wire.js",
     "./workspace-wire": "./src/workspace-wire.js"
   },
   "types": "./src/index.ts",

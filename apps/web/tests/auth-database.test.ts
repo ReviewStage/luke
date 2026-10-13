@@ -250,10 +250,6 @@ const ORGANIZATION_WRITES: ReadonlyArray<{
   { path: "/organization/remove-member", body: { memberIdOrEmail: "owner@example.com" } },
   { path: "/organization/update-member-role", body: { memberId: "member", role: "owner" } },
   { path: "/organization/leave", body: {} },
-  {
-    path: "/organization/invite-member",
-    body: { email: "stranger@example.com", role: "member" },
-  },
 ];
 
 /** An account signed up through the server API, and the cookie its sign-up set. */
