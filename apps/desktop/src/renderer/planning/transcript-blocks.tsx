@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
+  BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
   CircleDotIcon,
@@ -203,6 +204,7 @@ const CALL_ICON = {
   [CALL_KIND.SEARCH]: SearchIcon,
   [CALL_KIND.WEB_SEARCH]: SearchIcon,
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
+  [CALL_KIND.LOAD_SKILL]: BookOpenIcon,
   [CALL_KIND.SHOW_CODE]: CodeXmlIcon,
   [CALL_KIND.DRAW_ON_BOARD]: PencilLineIcon,
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,

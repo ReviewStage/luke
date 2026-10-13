@@ -230,6 +230,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planTreeEntrySchema: planWire.planTreeEntrySchema,
     planTreeFolderSchema: planWire.planTreeFolderSchema,
     planTreeAnswerSchema: planWire.planTreeAnswerSchema,
+    planSkillSchema: planWire.planSkillSchema,
+    planSkillsSchema: planWire.planSkillsSchema,
+    planSkillsAnswerSchema: planWire.planSkillsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "provider-key-wire": {
     providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,

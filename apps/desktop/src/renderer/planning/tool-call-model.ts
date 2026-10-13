@@ -50,6 +50,7 @@ export const AGENT_TOOL = {
   GLOB: "glob",
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  LOAD_SKILL: "load_skill",
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
   POST_TO_INBOX: INBOX_TOOL.POST,
@@ -159,6 +160,11 @@ function wordsOutput(output: WireValue, key: string): ToolBlock {
   if (words === undefined) return jsonBlock(output);
   const truncated = isRecord(output) && output.truncated === true;
   return textBlock(truncated ? `${words.trimEnd()}\n${TRUNCATED_NOTE}` : words);
+}
+
+/** A loaded skill's answer, which is its instructions as words; anything else as its JSON. */
+function skillOutput(output: WireValue): ToolBlock {
+  return isWireString(output) ? textBlock(output) : jsonBlock(output);
 }
 
 /**
@@ -394,6 +400,13 @@ function knownToolView(
         subject: stringAt(input, "query") ?? "",
         input: textBlock(stringAt(input, "query") ?? ""),
         output: output === undefined ? undefined : jsonBlock(output),
+      };
+    case AGENT_TOOL.LOAD_SKILL:
+      return {
+        kind: CALL_KIND.LOAD_SKILL,
+        subject: stringAt(input, "skill") ?? "",
+        input: textBlock(stringAt(input, "skill") ?? ""),
+        output: output === undefined ? undefined : skillOutput(output),
       };
     case AGENT_TOOL.EDIT_PLAN:
       return {

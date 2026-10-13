@@ -28,6 +28,7 @@
  * which is what a harness does with a key it does not know.
  */
 
+import { PLAN_SKILL_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";
@@ -44,14 +45,14 @@ type SkillRoot = (typeof SKILL_ROOT)[keyof typeof SKILL_ROOT];
 
 /** How much of a repository's skills is read. */
 export const REPOSITORY_SKILLS = {
-  /** The most skills read, across every root. */
-  MAX_SKILLS: 64,
+  /** The most skills read, across every root: as many as the desktop's read of them carries. */
+  MAX_SKILLS: PLAN_SKILL_BOUNDS.MAX_SKILLS,
   /** The most `SKILL.md` files read, across every root: a skill's in each root, twice the skills. */
   MAX_READS: 128,
   /** The largest `SKILL.md` read; a larger one is left out. */
   MAX_FILE_BYTES: 64 * 1024,
-  /** The convention's bound on a description, past which it is cut. */
-  MAX_DESCRIPTION_CHARS: 1024,
+  /** The convention's bound on a description, past which it is cut, which the desktop's read holds it to. */
+  MAX_DESCRIPTION_CHARS: PLAN_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
   /** How many `SKILL.md` reads stand at once. */
   READ_CONCURRENCY: 8,
 } as const;

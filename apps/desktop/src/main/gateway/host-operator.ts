@@ -96,6 +96,8 @@ import {
   type PlanningRevisionsParams,
   type PlanningSetRepositoryAnswer,
   type PlanningSetRepositoryParams,
+  type PlanningSkillsAnswer,
+  type PlanningSkillsParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningTreeAnswer,
@@ -107,6 +109,7 @@ import {
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
   planningSetRepositoryAnswerSchema,
+  planningSkillsAnswerSchema,
   planningStartAnswerSchema,
   planningTreeAnswerSchema,
   planningViewSchema,
@@ -226,6 +229,8 @@ export interface HostOperator {
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
   planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
   planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
+  /** The skills a developer may choose of a plan's repository; or why they are not read. */
+  planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -581,6 +586,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningSkills: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: params.planId }),
+        (answer): PlanningSkillsAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

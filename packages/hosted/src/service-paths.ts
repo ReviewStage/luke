@@ -176,6 +176,11 @@ export function planTreePath(
   return query.size === 0 ? path : `${path}?${query}`;
 }
 
+/** The skills a developer may choose of one plan's repository, as GitHub holds it now (GET). */
+export function planSkillsPath(planId: string): string {
+  return `${planPath(planId)}/skills`;
+}
+
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
 export function planRevisionsPath(planId: string, before?: number): string {
   const path = `${planPath(planId)}/revisions`;

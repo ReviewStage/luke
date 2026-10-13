@@ -17,6 +17,7 @@ import {
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
   planSchema,
+  planSkillsSchema,
   planSummarySchema,
   planTreeFolderSchema,
   planTreeRequestSchema,
@@ -598,6 +599,22 @@ export const planningTreeAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
+
+/** The skills a developer may choose of a plan's repository, as the window asks the host for them: the plan. */
+export const planningSkillsParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+});
+
+export type PlanningSkillsParams = typeof planningSkillsParamsSchema.Type;
+
+/** The read of a repository's skills, as the window hears it: the skills, why they are not read, or that the service did not answer. */
+export const planningSkillsAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ skills: planSkillsSchema }),
+  planFileRefusalSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningSkillsAnswer = typeof planningSkillsAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({

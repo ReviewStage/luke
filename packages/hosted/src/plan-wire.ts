@@ -705,3 +705,46 @@ export const planTreeAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanTreeAnswer = typeof planTreeAnswerSchema.Type;
+
+export const PLAN_SKILL_BOUNDS = {
+  /** The most skills one read carries, which is as many as the service reads of a repository. */
+  MAX_SKILLS: 64,
+  /** The Agent Skills convention's bound on a skill's name. */
+  MAX_NAME_CHARS: 64,
+  /** The convention's bound on a description, past which the service cuts it. */
+  MAX_DESCRIPTION_CHARS: 1024,
+} as const;
+
+/** One skill of the plan's repository a developer may choose by name: the name its folder carries, and the description a model routes on. */
+export const planSkillSchema = EffectSchema.Struct({
+  name: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(PLAN_SKILL_BOUNDS.MAX_NAME_CHARS),
+  ),
+  description: EffectSchema.String.check(
+    EffectSchema.isMaxLength(PLAN_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS),
+  ),
+});
+
+/**
+ * The skills a developer may choose of the plan's repository as it stands
+ * now on its default branch, read through the Luke GitHub App (GET
+ * `/api/plans/{id}/skills`): the repository and the branch read, and the
+ * skills in name order. A skill its `SKILL.md` says the model alone loads
+ * is not one of them.
+ */
+export const planSkillsSchema = EffectSchema.Struct({
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
+  skills: EffectSchema.Array(planSkillSchema).check(
+    EffectSchema.isMaxLength(PLAN_SKILL_BOUNDS.MAX_SKILLS),
+  ),
+});
+
+/** The read of the repository's skills answered: the skills, or why they are not read, in the File tab's own refusals. */
+export const planSkillsAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ skills: planSkillsSchema }),
+  planFileRefusalSchema,
+]);
+
+export type PlanSkillsAnswer = typeof planSkillsAnswerSchema.Type;
