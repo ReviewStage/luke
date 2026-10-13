@@ -157,6 +157,7 @@ test("Tabs & panels lists the panes' and the tabs' own shortcuts, and none that 
       APP_COMMAND.EXIT_FULL_SCREEN,
       APP_COMMAND.NEW_TAB,
       APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
     ],

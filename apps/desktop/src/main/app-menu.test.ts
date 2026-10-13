@@ -106,7 +106,7 @@ test("Help offers the two notes to the people who make Luke, each handing the wi
   ]);
 });
 
-test("File's New Tab and Close Tab hand the window their commands on a click, ⌘T is left to the window's keymap, a ⌘W with no tab to close closes the window, and Close Window closes it on ⇧⌘W or a click", () => {
+test("File's New Tab, Reopen Closed Tab, and Close Tab hand the window their commands on a click, ⌘T and ⇧⌘T are left to the window's keymap, a ⌘W with no tab to close closes the window, and Close Window closes it on ⇧⌘W or a click", () => {
   const file = appMenuTemplate("Luke").find((menu) => menu.label === "File");
   assert.ok(Array.isArray(file?.submenu));
   assert.deepEqual(
@@ -115,21 +115,25 @@ test("File's New Tab and Close Tab hand the window their commands on a click, �
       .map((each) => [each.label, each.accelerator]),
     [
       ["New Tab", "Command+T"],
+      ["Reopen Closed Tab", "Shift+Command+T"],
       ["Close Tab", "Command+W"],
       ["Close Window", "Shift+Command+W"],
     ],
   );
   const window = new FakeBrowserWindow();
   choose("New Tab", window, true);
-  assert.deepEqual(window.sent, [], "a ⌘T the window left unclaimed does nothing");
+  choose("Reopen Closed Tab", window, true);
+  assert.deepEqual(window.sent, [], "a ⌘T or ⇧⌘T the window left unclaimed does nothing");
   assert.equal(window.closes, 0);
   choose("Close Tab", window, true);
   assert.equal(window.closes, 1, "a ⌘W the window had no tab for closes the window");
   assert.deepEqual(window.sent, []);
   choose("New Tab", window, false);
+  choose("Reopen Closed Tab", window, false);
   choose("Close Tab", window, false);
   assert.deepEqual(window.sent, [
     [channels.onMenuCommand, APP_COMMAND.NEW_TAB],
+    [channels.onMenuCommand, APP_COMMAND.REOPEN_CLOSED_TAB],
     [channels.onMenuCommand, APP_COMMAND.CLOSE_TAB],
   ]);
   assert.equal(window.closes, 1, "a click on Close Tab is the window's to answer");
@@ -137,7 +141,7 @@ test("File's New Tab and Close Tab hand the window their commands on a click, �
   choose("Close Window", window, true);
   choose("Close Window", window, false);
   assert.equal(window.closes, 3);
-  assert.equal(window.sent.length, 2, "Close Window hands the page nothing");
+  assert.equal(window.sent.length, 3, "Close Window hands the page nothing");
 });
 
 test("the menu bar offers no item that opens a side-panel tab, nor any ⌥⌘1 to ⌥⌘4, the panel's + being what opens one", () => {

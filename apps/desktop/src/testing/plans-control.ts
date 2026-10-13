@@ -156,6 +156,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       fullScreen: false,
       newTabAsked: false,
       tabs: SIDE_PANEL_TABS,
+      strip: SIDE_PANEL_TABS,
       order: [],
       closedTabs: [],
       used: SIDE_PANEL_TABS,
@@ -174,6 +175,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onShow: ignore,
       onClose: ignore,
       onMove: ignore,
+      onReopen: ignore,
       onPin: ignore,
       onUnpin: ignore,
       onRenamePins: ignore,
@@ -228,6 +230,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
+    onReopenClosedTab: undefined,
     chosenPin: undefined,
     repositories: {
       recent: [],

@@ -109,10 +109,9 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, with New Tab,
- * Close Tab, and Close Window as Chrome's File keeps them; Edit is the
- * system's own, spelt out so its Find submenu can hold the window's find as
- * every Mac app's Edit does; the window's
- * columns, the system's full screen, and its zoom are View's, the zoom in
+ * Reopen Closed Tab, Close Tab, and Close Window as Chrome's File keeps
+ * them; Edit is the system's own, spelt out so its Find submenu can hold
+ * the window's find as every Mac app's Edit does; the window's columns, the system's full screen, and its zoom are View's, the zoom in
  * the order Chrome's View keeps it, the call's microphone and speaker are
  * Call's, back and forward are Go's as Finder and Safari keep them, the
  * window's own are macOS's Window menu, and the shortcuts and the notes to
@@ -144,6 +143,7 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.NEW_PLAN),
         SEPARATOR,
         commandItem(APP_COMMAND.NEW_TAB),
+        commandItem(APP_COMMAND.REOPEN_CLOSED_TAB),
         closeTabItem(),
         closeWindowItem(),
         SEPARATOR,

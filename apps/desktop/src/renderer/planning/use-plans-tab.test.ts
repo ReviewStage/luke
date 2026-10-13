@@ -2221,3 +2221,115 @@ test("an inbox item's file asked on a plan the host refused to open is let go, s
   tab.stand({ planning: OPEN });
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 });
+
+/** Presses ⇧⌘T, which must be offered. */
+function reopenClosedTab(tab: ReturnType<typeof mount>): void {
+  const reopen = tab.control().onReopenClosedTab;
+  assert.ok(reopen, "⇧⌘T is offered");
+  act(() => reopen());
+}
+
+/** The open plan with a call and a snippet on it, so its side panel draws the Code and Call tabs. */
+const WITH_TABS: PlanningView = { ...NOTHING_YET, transcript: ONE_CALL, shownCode: SHOWN };
+
+test("⇧⌘T reopens the tabs closed, newest first, each in its own strip where it stood, and is offered no more once none is left", async () => {
+  const tab = mount(
+    { shown: true, planning: WITH_TABS },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed yet");
+  assert.deepEqual(tab.control().sidePanel.strip, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.CALL]);
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
+  act(() => tab.control().mainTabs.onClose({ agent: AGENT_ID }));
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.PLAN]);
+  // A tab opened since stands at the strip's end, after the Call tab.
+  const file = { file: CODE.ref.path };
+  act(() => tab.control().sidePanel.onChoose(file));
+  assert.deepEqual(tab.control().sidePanel.strip, [SIDE_PANEL_TAB.CALL, file]);
+
+  reopenClosedTab(tab);
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.PLAN, { agent: AGENT_ID }]);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.deepEqual(
+    tab.control().sidePanel.strip,
+    [SIDE_PANEL_TAB.CALL, file],
+    "one press, one tab",
+  );
+
+  reopenClosedTab(tab);
+  assert.deepEqual(
+    tab.control().sidePanel.strip,
+    [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.CALL, file],
+    "first, where it stood, rather than at the strip's end",
+  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.equal(tab.control().onReopenClosedTab, undefined);
+});
+
+test("⇧⌘T passes over a tab whose subject is gone since, an agent archived, for the one closed before it", async () => {
+  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  const tab = mount(
+    { shown: true, planning: WITH_TABS },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }) },
+  );
+  await settle();
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
+  act(() => tab.control().mainTabs.onClose({ agent: AGENT_ID }));
+  listed = [{ ...RUNNING_AGENT, archivedAt: 5 }];
+  act(() => tab.control().agents.onRetryList());
+  await settle();
+
+  reopenClosedTab(tab);
+  assert.deepEqual(tab.control().mainTabs.tabs, [MAIN_TAB.PLAN], "the archived agent's stays shut");
+  assert.deepEqual(tab.control().sidePanel.strip, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.CALL]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.equal(tab.control().onReopenClosedTab, undefined);
+});
+
+test("⇧⌘T remembers the twenty tabs closed last, and lets go of the one closed before them", () => {
+  const paths = Array.from({ length: 21 }, (_, n) => `src/file-${n}.ts`);
+  const shownCode = paths.map((path, n) => ({
+    callId: `show-${n}`,
+    turnId: "turn-1",
+    shownAt: n,
+    code: { ...CODE, ref: { path, startLine: 1, endLine: 1 } },
+  }));
+  const tab = mount({ shown: true, planning: { ...NOTHING_YET, shownCode } });
+  for (const path of paths) {
+    act(() => tab.control().sidePanel.onChoose({ file: path }));
+    act(() => tab.control().sidePanel.onClose({ file: path }));
+  }
+  assert.deepEqual(tab.control().sidePanel.files, []);
+
+  for (let press = 0; press < 20; press += 1) reopenClosedTab(tab);
+  assert.equal(tab.control().onReopenClosedTab, undefined, "the twenty-first is not remembered");
+  assert.deepEqual(
+    tab
+      .control()
+      .sidePanel.files.map((file) => file.path)
+      .sort(),
+    paths.slice(1).sort(),
+  );
+});
+
+test("⇧⌘T reopens a tab closed on another plan by opening that plan first, a file's tab on the lines it showed", () => {
+  const { document: _document, ...summary } = PLAN;
+  const onPlan: PlanningView = { ...NOTHING_YET, shownCode: SHOWN, plans: [summary] };
+  const onOther: PlanningView = { ...onPlan, activePlanId: OTHER_PLAN_ID, shownCode: [] };
+  const tab = mount(
+    { shown: true, planning: onPlan },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  const ref = { path: CODE.ref.path, startLine: 3, endLine: 5 };
+  act(() => tab.control().sidePanel.onOpenFile(ref));
+  act(() => tab.control().sidePanel.onClose({ file: ref.path }));
+  tab.stand({ planning: onOther });
+
+  reopenClosedTab(tab);
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.equal(tab.control().boundFor, PLAN.id);
+  tab.stand({ planning: onPlan });
+  assert.deepEqual(panelOf(tab), { open: true, tab: { file: ref.path } });
+  assert.deepEqual(tab.control().sidePanel.files[0]?.range, { startLine: 3, endLine: 5 });
+});
