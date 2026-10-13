@@ -31,7 +31,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, and one about an installation shows or hides its workspace.
+ * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, and one about an installation marks its workspace active or not.
  *
  * The events read are a pull request's, a check suite's, a check run's once
  * it ends, and a commit status's, since the checks' one word counts the
@@ -52,8 +52,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * An installation's own deliveries, which GitHub sends every App without
  * its subscribing, move the status of the workspace that stands for it
- * (`hosted/github-installations.ts`): removed or suspended hides it, and
- * unsuspended shows it again. Nothing is deleted, so an installation
+ * (`hosted/github-installations.ts`): removed or suspended marks it
+ * inactive, and unsuspended active again. Nothing is deleted, so an installation
  * suspended and brought back keeps its members and its plans.
  */
 

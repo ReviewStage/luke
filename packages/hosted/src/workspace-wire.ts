@@ -12,7 +12,8 @@ import { workspaceIdSchema } from "./plan-wire.js";
  * the rest by name, each with the account's role in it, and then every
  * workspace of an installation the account reaches but is not a member of,
  * which it may join. A workspace whose installation was suspended or
- * removed is in neither list. A workspace's id is the one a plan's summary
+ * removed is still listed, marked inactive, and is never offered to join.
+ * A workspace's id is the one a plan's summary
  * names, `plan-wire.ts`'s `workspaceIdSchema`.
  */
 
@@ -36,6 +37,8 @@ export const workspaceSchema = EffectSchema.Struct({
   /** The account's own personal workspace, which no teammate's answer marks. */
   personal: EffectSchema.Boolean,
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
+  /** False where the workspace's GitHub App installation was suspended or removed: its plans still open, and GitHub refuses its repository work. */
+  active: EffectSchema.Boolean,
 });
 
 /** A workspace the account may join: the GitHub App installation it stands for, by GitHub's id, and its name, the account's login. */

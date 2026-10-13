@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/hosted/workspace-wire";
-import { and, asc, eq, exists, isNull, or, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, exists, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
@@ -41,6 +42,8 @@ export interface Workspace {
   readonly name: string;
   readonly personal: boolean;
   readonly role: WorkspaceRole;
+  /** False where the workspace's GitHub App installation was suspended or removed; a workspace of no installation is active. */
+  readonly active: boolean;
 }
 
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
@@ -61,6 +64,8 @@ const WorkspaceRowSchema = Schema.Struct({
   personalOf: Schema.NullOr(Schema.String),
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
+  /** The workspace's installation's status, or null for a workspace of no installation. */
+  status: Schema.NullOr(Schema.String),
 });
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
@@ -88,6 +93,21 @@ const findOrganizationBySlug = SqlSchema.findOneOption({
       .select({ organizationId: organization.id })
       .from(organization)
       .where(eq(organization.slug, slug)),
+});
+
+const findPersonalWorkspaceOf = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: OrganizationIdSchema,
+  execute: ({ userId, organizationId }) =>
+    db
+      .select({ organizationId: personalWorkspace.organizationId })
+      .from(personalWorkspace)
+      .where(
+        and(
+          eq(personalWorkspace.userId, userId),
+          eq(personalWorkspace.organizationId, organizationId),
+        ),
+      ),
 });
 
 const insertPersonalWorkspace = SqlSchema.void({
@@ -137,6 +157,7 @@ const findWorkspaces = SqlSchema.findAll({
         name: organization.name,
         personalOf: personalWorkspace.userId,
         role: member.role,
+        status: githubInstallation.status,
       })
       .from(member)
       .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -148,16 +169,7 @@ const findWorkspaces = SqlSchema.findAll({
         ),
       )
       .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
-      .where(
-        and(
-          eq(member.userId, userId),
-          // Note that a workspace of no installation is shown, and one of an installation only while it is active.
-          or(
-            isNull(githubInstallation.status),
-            eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.ACTIVE),
-          ),
-        ),
-      )
+      .where(eq(member.userId, userId))
       .orderBy(asc(organization.name), asc(organization.id)),
 });
 
@@ -167,28 +179,48 @@ function roleOf(text: string): WorkspaceRole {
   return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
 }
 
+/** Whether an organization already stands for what a workspace is being made for: the row of the caller's own that names it. */
+export type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
+
 /**
- * The workspace the plugin holds under the slug asked for: the one this call
- * just made, with the account as its owner, or, where the plugin refused
- * because the slug was taken, the one a racing call made first. Nothing
- * under the slug means the plugin's refusal was something else, and it is
- * answered as it was.
+ * A workspace made under the first of the slugs the plugin takes, with the
+ * account as its owner. A slug the plugin refuses as taken is adopted only
+ * where the organization under it is already linked to what the workspace
+ * stands for, which is a racing call having made it first; an organization
+ * anyone else made under the slug is never adopted, and the next slug is
+ * tried. Nothing under the slug means the plugin refused for another
+ * reason, and that refusal, or the last slug's, is answered as it was.
  */
-export function createOrAdoptOrganization(
-  creation: WorkspaceCreation,
+export function createLinkedOrganization(
+  creation: Omit<WorkspaceCreation, "slug">,
+  slugs: readonly [string, ...string[]],
+  linked: OrganizationLinked,
   seams: WorkspaceSeams,
 ): WorkspaceStoreEffect<string, Cause.UnknownError> {
-  return seams.createOrganization(creation).pipe(
+  const [slug, ...rest] = slugs;
+  return seams.createOrganization({ ...creation, slug }).pipe(
     Effect.map((created) => created.id),
     Effect.catch((refusal) =>
-      Effect.flatMap(findOrganizationBySlug(creation.slug), (standing) =>
-        Option.match(standing, {
-          onNone: () => Effect.fail(refusal),
-          onSome: (row) => Effect.succeed(row.organizationId),
-        }),
-      ),
+      Effect.flatMap(findOrganizationBySlug(slug), (standing) => {
+        if (Option.isNone(standing)) return Effect.fail(refusal);
+        const { organizationId } = standing.value;
+        return Effect.flatMap(linked(organizationId), (adopted) => {
+          if (adopted) return Effect.succeed(organizationId);
+          const [next, ...after] = rest;
+          if (next === undefined) return Effect.fail(refusal);
+          return createLinkedOrganization(creation, [next, ...after], linked, seams);
+        });
+      }),
     ),
   );
+}
+
+/** Whether the organization is the account's personal workspace by its row: a racing ensure's, never one made by anyone else. */
+function isPersonalWorkspace(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<boolean> {
+  return Effect.map(findPersonalWorkspaceOf({ userId, organizationId }), Option.isSome);
 }
 
 /** The account's personal workspace, by id; nothing before it was ever ensured. */
@@ -216,13 +248,12 @@ export function ensurePersonalWorkspace(
     if (Option.isSome(standing)) return standing;
     const account = yield* findAccountName(userId);
     if (Option.isNone(account)) return Option.none();
-    const organizationId = yield* createOrAdoptOrganization(
-      {
-        name: account.value.name,
-        slug: `${PERSONAL_SLUG_PREFIX}${userId}`,
-        userId,
-        metadata: PERSONAL_WORKSPACE_METADATA,
-      },
+    const slug = `${PERSONAL_SLUG_PREFIX}${userId}`;
+    const organizationId = yield* createLinkedOrganization(
+      { name: account.value.name, userId, metadata: PERSONAL_WORKSPACE_METADATA },
+      // Note that the second slug is one nobody can know beforehand, for a first taken by someone else.
+      [slug, `${slug}-${randomUUID()}`],
+      (candidate) => isPersonalWorkspace(userId, candidate),
       seams,
     );
     const now = yield* DateTime.nowAsDate;
@@ -240,9 +271,10 @@ export function isWorkspaceMember(
 }
 
 /**
- * Every workspace the account is a member of and may see, its personal one
- * first and the rest by name: a workspace of a GitHub App installation
- * suspended or removed is left out.
+ * Every workspace the account is a member of, its personal one first and the
+ * rest by name. A workspace of a GitHub App installation suspended or
+ * removed is listed as inactive rather than left out, so its plans stay
+ * reachable; GitHub refuses its repository work on its own.
  */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {
   return Effect.map(findWorkspaces(userId), (rows) => {
@@ -251,6 +283,7 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       name: row.name,
       personal: row.personalOf !== null,
       role: roleOf(row.role),
+      active: row.status === null || row.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
     }));
     return [
       ...workspaces.filter((workspace) => workspace.personal),

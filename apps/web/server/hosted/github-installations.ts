@@ -15,7 +15,7 @@ import { db } from "../db/query.js";
 import { GitHubApp, type GitHubUserReadFailure } from "../github/github-app.js";
 import type { StoreFailure } from "./store-failure.js";
 import type { WorkspaceSeams } from "./workspace-seams.js";
-import { createOrAdoptOrganization, memberOfWorkspace } from "./workspace-store.js";
+import { createLinkedOrganization, memberOfWorkspace } from "./workspace-store.js";
 
 /**
  * github-installations.ts -- the workspaces that stand for installations of the Luke GitHub App.
@@ -32,7 +32,8 @@ import { createOrAdoptOrganization, memberOfWorkspace } from "./workspace-store.
  * sync never adds or removes a member, since it would put back a member an
  * admin removed; a workspace of an installation the account reaches but is
  * not in is offered to it instead. The installation webhook keeps each
- * row's status, and only an active installation's workspace is shown.
+ * row's status: a workspace of an installation not active is listed as
+ * inactive and offered to nobody.
  */
 
 /** What an installation reached on the account's token is, as far as a workspace is made of it. */
@@ -64,6 +65,21 @@ const findInstallationOfAccount = SqlSchema.findOneOption({
       .select({ organizationId: githubInstallation.organizationId })
       .from(githubInstallation)
       .where(eq(githubInstallation.accountId, accountId)),
+});
+
+const findLinkedInstallation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, accountId: Schema.Number }),
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ organizationId, accountId }) =>
+    db
+      .select({ organizationId: githubInstallation.organizationId })
+      .from(githubInstallation)
+      .where(
+        and(
+          eq(githubInstallation.organizationId, organizationId),
+          eq(githubInstallation.accountId, accountId),
+        ),
+      ),
 });
 
 const moveInstallation = SqlSchema.void({
@@ -171,9 +187,11 @@ const findAvailable = SqlSchema.findAll({
  * login and kind refreshed; the one of an earlier installation on the same
  * GitHub account, which an uninstall and a reinstall leave behind, moved to
  * this installation and shown again with its members and its plans; or one
- * made now with the account as its owner. Where another account's sync made
- * it first, the plugin refuses the slug and the workspace under it is
- * adopted without the account joining it.
+ * made now with the account as its owner, slugged with the login. Where
+ * another account's sync made it first, the plugin refuses the slug and the
+ * workspace under it is adopted without the account joining it; where an
+ * organization of anyone else's holds the login as its slug, it is never
+ * adopted, and the workspace is slugged with the login and the account's id.
  */
 function syncInstallation(
   userId: string,
@@ -188,8 +206,14 @@ function syncInstallation(
     }
     const earlier = yield* findInstallationOfAccount(reached.accountId);
     if (Option.isSome(earlier)) return yield* moveInstallation({ ...reached, now });
-    const organizationId = yield* createOrAdoptOrganization(
-      { name: reached.accountLogin, slug: reached.accountLogin, userId, metadata: {} },
+    const organizationId = yield* createLinkedOrganization(
+      { name: reached.accountLogin, userId, metadata: {} },
+      [reached.accountLogin, `${reached.accountLogin}-${reached.accountId}`],
+      (candidate) =>
+        Effect.map(
+          findLinkedInstallation({ organizationId: candidate, accountId: reached.accountId }),
+          Option.isSome,
+        ),
       seams,
     );
     yield* insertInstallation({ ...reached, organizationId, now });

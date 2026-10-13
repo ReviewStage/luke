@@ -103,7 +103,12 @@ function answerOf(answered: Answer): WorkspacesAnswer {
 
 /** The workspaces of an answer without their ids, which the plugin generates. */
 function namesOf(answered: WorkspacesAnswer) {
-  return answered.workspaces.map(({ name, personal, role }) => ({ name, personal, role }));
+  return answered.workspaces.map(({ name, personal, role, active }) => ({
+    name,
+    personal,
+    role,
+    active,
+  }));
 }
 
 const organizationIds = () => db.select({ id: organization.id }).from(organization);
@@ -137,7 +142,13 @@ it.effect("the first read makes the personal workspace, and the second answers t
 
       assert.deepEqual(first, {
         workspaces: [
-          { id: first.workspaces[0]?.id, name: "Ada Lovelace", personal: true, role: "owner" },
+          {
+            id: first.workspaces[0]?.id,
+            name: "Ada Lovelace",
+            personal: true,
+            role: "owner",
+            active: true,
+          },
         ],
         available: [],
       });
@@ -167,9 +178,9 @@ it.effect(
         const second = answerOf(yield* ask(seams, github, ada));
 
         assert.deepEqual(namesOf(first), [
-          { name: "Ada Lovelace", personal: true, role: WORKSPACE_ROLE.OWNER },
-          { name: "acme", personal: false, role: WORKSPACE_ROLE.OWNER },
-          { name: "octo-dev", personal: false, role: WORKSPACE_ROLE.OWNER },
+          { name: "Ada Lovelace", personal: true, role: WORKSPACE_ROLE.OWNER, active: true },
+          { name: "acme", personal: false, role: WORKSPACE_ROLE.OWNER, active: true },
+          { name: "octo-dev", personal: false, role: WORKSPACE_ROLE.OWNER, active: true },
         ]);
         assert.deepEqual(first.available, []);
         assert.deepEqual(second, first);
@@ -213,7 +224,7 @@ it.effect(
         const graces = answerOf(yield* ask(seams, github, grace));
 
         assert.deepEqual(namesOf(graces), [
-          { name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
+          { name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER, active: true },
         ]);
         assert.deepEqual(graces.available, [{ installationId: ACME.id, name: "acme" }]);
         assert.deepEqual(
@@ -222,6 +233,45 @@ it.effect(
             .from(member)
             .where(eq(member.organizationId, acme)),
           [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
+        );
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "an organization someone else made under an installation's login is never adopted by the installation's sync",
+  () =>
+    Effect.gen(function* () {
+      const { api, seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const mallory = yield* openUser("Mallory");
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const squatted = yield* Effect.promise(() =>
+          api.createOrganization({ body: { name: "acme", slug: "acme", userId: mallory } }),
+        );
+
+        const adas = answerOf(yield* ask(seams, githubReaching([ACME_ACCOUNT]), ada));
+
+        const acme = adas.workspaces[1];
+        assert.deepEqual(
+          { name: acme?.name, role: acme?.role, active: acme?.active },
+          { name: "acme", role: WORKSPACE_ROLE.OWNER, active: true },
+        );
+        assert.notEqual(acme?.id, squatted.id);
+        assert.deepEqual(
+          yield* db
+            .select({ slug: organization.slug, installationId: githubInstallation.installationId })
+            .from(organization)
+            .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
+            .where(eq(organization.id, acme?.id ?? "")),
+          [{ slug: `acme-${ACME_ACCOUNT.accountId}`, installationId: ACME_ACCOUNT.id }],
+        );
+        assert.deepEqual(
+          yield* db
+            .select({ userId: member.userId })
+            .from(member)
+            .where(eq(member.organizationId, squatted.id)),
+          [{ userId: mallory }],
         );
       }).pipe(Effect.provide(database));
     }),
@@ -287,8 +337,8 @@ it.effect(
         const graces = answerOf(yield* ask(seams, githubReaching([ACME]), grace));
 
         assert.deepEqual(namesOf(graces), [
-          { name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
-          { name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER },
+          { name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER, active: true },
+          { name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER, active: true },
         ]);
         assert.equal(graces.workspaces[1]?.id, acme.id);
         assert.deepEqual(graces.available, []);

@@ -266,8 +266,9 @@ A redelivery reads the same again. GitHub's `ping` and any other event are
 answered and ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
-a workspace whose installation is not active is hidden from
-`GET /api/workspaces`, and nothing is deleted. `tests/github-webhook-app.test.ts`
+a workspace whose installation is not active is listed by
+`GET /api/workspaces` with `active: false`, so its plans stay reachable, and
+nothing is deleted. `tests/github-webhook-app.test.ts`
 holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
@@ -909,7 +910,7 @@ rewrite reads the next segment as a plan's id.
 `server/workspaces-app.ts` answers `GET /api/workspaces`
 (`packages/hosted/src/workspace-wire.ts`): `workspaces`, every workspace the
 bearer's account is a member of, its personal one first and the rest by name,
-each `{ id, name, personal, role }`, and `available`, each
+each `{ id, name, personal, role, active }`, and `available`, each
 `{ installationId, name }`, the workspaces of Luke GitHub App installations
 the account's GitHub reaches that it is not a member of. A workspace beside
 the personal one stands for one installation: a `github_installation` row
@@ -929,7 +930,13 @@ member, since it would put back a member an admin removed; that is what
 `available` is for. A GitHub the account cannot read (no GitHub sign-in, an
 App not configured, GitHub down) leaves the installations unsynced and
 `available` empty and is logged by its kind; a plugin refusal answers
-`unavailable`. Only an active installation's workspace is listed.
+`unavailable`. A workspace of a suspended or removed installation is listed
+with `active: false` and is never offered in `available`. A slug the plugin
+refuses as taken is adopted only where the organization under it is already
+linked to the same GitHub account (a racing sync); an organization anyone else
+made under the login is never adopted, and the workspace is slugged
+`<login>-<account id>` instead. The personal ensure follows the same rule
+against its own `personal_workspace` row.
 `tests/workspaces-app.test.ts` holds it over the plugin on PGlite and a
 scripted GitHub.
 
