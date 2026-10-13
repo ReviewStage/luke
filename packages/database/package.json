@@ -21,6 +21,7 @@
     "./models/plan-revisions": "./src/models/plan-revisions.js",
     "./models/plan-store": "./src/models/plan-store.js",
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",
+    "./models/provider-key-store": "./src/models/provider-key-store.js",
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
     "./models/repository-pin-store": "./src/models/repository-pin-store.js",
