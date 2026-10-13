@@ -5,6 +5,7 @@ import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
@@ -16,7 +17,6 @@ import {
   writeAccountPreferences,
 } from "../server/hosted/account-store";
 import { CODING_AGENT_DEFAULT_CHOICE } from "../server/hosted/model-catalog";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The account group's own reads and writes against a real Postgres dialect.
@@ -55,7 +55,7 @@ const countRows = (userId: string) =>
     };
   });
 
-it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it) => {
   it.effect("an account that stored nothing reads as nothing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

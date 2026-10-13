@@ -6,6 +6,7 @@ import { user } from "@sidecar/database/schemas/auth";
 import { plan } from "@sidecar/database/schemas/plan";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { getTestDB } from "@sidecar/database/testing";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -33,7 +34,6 @@ import {
 import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The named plans and their one document, through the store's public
@@ -131,7 +131,7 @@ function sectionText(text: string, heading: string): string {
   return section?.text ?? assert.fail(`the text holds no section under ${heading}`);
 }
 
-it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
+it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("two named plans keep independent documents", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

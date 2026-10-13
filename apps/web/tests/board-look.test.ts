@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect } from "effect";
@@ -18,7 +19,6 @@ import {
 import { writeDrawing, writeScene } from "../server/hosted/board-store";
 import { createPlan } from "../server/hosted/plan-store";
 import { driven, forkClockDriven } from "./support/clock-driven";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The planning model's look at its latest drawing: the Mac's first save of
@@ -45,7 +45,7 @@ const openPlan = Effect.gen(function* () {
   return { userId, planId: started.id, binding: { userId, planId: started.id } };
 });
 
-it.layer(testSqlClient)("look_at_board", (it) => {
+it.layer(getTestDB())("look_at_board", (it) => {
   it.effect("a look answers the image the Mac's save of the latest drawing carried", () =>
     Effect.gen(function* () {
       const { userId, planId, binding } = yield* openPlan;

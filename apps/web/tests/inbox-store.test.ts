@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -26,7 +27,6 @@ import {
   withdrawInboxAnswer,
 } from "../server/hosted/inbox-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -81,7 +81,7 @@ const SETTINGS: InboxPost = {
   needsReply: false,
 };
 
-it.layer(testSqlClient)("the inbox store", (it) => {
+it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
     "a post is one open item; posting under the same key again writes it again, moves its revision on, and opens it once answered",
     () =>

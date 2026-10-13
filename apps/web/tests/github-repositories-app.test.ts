@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -20,7 +21,6 @@ import {
   githubReaching,
   openGithubUser,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
@@ -97,7 +97,7 @@ function listed(answered: Answer) {
   return read.success;
 }
 
-it.layer(testSqlClient)("the repositories route", (it) => {
+it.layer(getTestDB())("the repositories route", (it) => {
   it.effect(
     "lists what the bearer's account reaches through the App, most recently updated first",
     () =>

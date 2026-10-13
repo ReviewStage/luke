@@ -3,15 +3,18 @@ import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { db } from "@sidecar/database/core/query";
+import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { user } from "@sidecar/database/schemas/auth";
+import {
+  cloneStoreTestPostgres,
+  STORE_TEST_DATABASE_ENVIRONMENT,
+  sqlClientOverPglite,
+} from "@sidecar/database/testing";
 import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { type HostedStore, hostedStore } from "../../server/hosted/store";
-import { sqlClientOverPglite } from "./sql-client";
-import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres";
 
 /**
  * The store's tests run against the real generated migrations on a real
@@ -22,7 +25,7 @@ import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store
  * runner applies, because it is opened empty; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied. Each opening
  * is a database of its own on either dialect: a fresh PGlite, or a clone of
- * the migrated Postgres that `close` drops (`store-test-postgres.ts`), so a
+ * the migrated Postgres that `close` drops (`@sidecar/database/testing`), so a
  * statement one file forgets to scope reaches no other file's rows.
  */
 /**

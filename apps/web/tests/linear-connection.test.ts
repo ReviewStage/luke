@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { getTestDB } from "@sidecar/database/testing";
 import { ConnectError, UserAuthorizationRequiredError } from "@vercel/connect";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -40,7 +41,6 @@ import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { storeWriter } from "../server/hosted/store";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The one Linear connection all four agents register, through the token
@@ -234,7 +234,7 @@ const connected = (userId: string) =>
 const tokenRead = (admission: LinearAdmission, grants: Map<string, FakeGrant>) =>
   linearAccessToken(admission).pipe(Effect.provide(connectLayer(grants)));
 
-it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the Linear connection's token read", (it) => {
+it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the Linear connection's token read", (it) => {
   it.effect(
     "the planning root reads the token of the account the session was admitted for, and never another connected account's",
     () =>

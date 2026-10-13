@@ -10,12 +10,12 @@ import {
   webMigrationJournal,
   webMigrations,
 } from "@sidecar/database/core/migrator";
+import { getTestDB, unmigratedPgliteSqlClient } from "@sidecar/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { testSqlClient, unmigratedPgliteSqlClient } from "./support/sql-client";
 
 interface RecordedMigration {
   readonly id: number;
@@ -98,7 +98,7 @@ function seedDrizzleHistory(createdAt: number) {
   });
 }
 
-it.layer(withPlatform(testSqlClient))(
+it.layer(withPlatform(getTestDB()))(
   "the web migration runner over a database already at the latest migration",
   (it) => {
     it.effect("applies nothing, and records every migration the folder holds", () =>

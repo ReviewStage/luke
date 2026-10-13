@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect } from "effect";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The one query `events-app.ts` owns directly, over the ambient `SqlClient`:
@@ -28,7 +28,7 @@ const openUser = (name: string) =>
     return userId;
   });
 
-it.layer(testSqlClient)("events-app's own query over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("events-app's own query over effect/unstable/sql", (it) => {
   it.effect("reads the signed-in user's own name and email", () =>
     Effect.gen(function* () {
       const userId = yield* openUser("Ada Lovelace");

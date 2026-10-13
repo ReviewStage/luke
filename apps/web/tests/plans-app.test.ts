@@ -6,6 +6,7 @@ import { user } from "@sidecar/database/schemas/auth";
 import { planBoard } from "@sidecar/database/schemas/plan";
 import { turns } from "@sidecar/database/schemas/storage";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -83,7 +84,6 @@ import {
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -480,7 +480,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-it.layer(testSqlClient)("the plan routes", (it) => {
+it.layer(getTestDB())("the plan routes", (it) => {
   it.effect(
     "a listed plan names its open pull request among the few it carries, ahead of newer merged and closed ones",
     () =>

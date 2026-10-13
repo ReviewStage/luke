@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { account, session, user } from "@sidecar/database/schemas/auth";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect } from "effect";
 import { USER_ROLE } from "../server/admin/admin-access";
 import {
@@ -17,7 +18,6 @@ import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
 } from "../server/admin/http";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The roster, the day detail, the account page, and the star against a real
@@ -37,7 +37,7 @@ const YESTERDAY = "2097-03-14";
 const BUSY_DAY_CALLS = 6_000;
 const SESSION_SEEN_AT = "2097-03-15T09:00:00.000Z";
 
-it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (it) => {
+it.layer(getTestDB())("the dashboard's roster, day, account page, and star", (it) => {
   it.effect("what each read answers for one seeded roster", () =>
     Effect.gen(function* () {
       const token = `t${randomUUID().replace(/-/g, "")}`;

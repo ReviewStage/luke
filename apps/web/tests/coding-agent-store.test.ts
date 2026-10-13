@@ -6,6 +6,7 @@ import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
@@ -29,7 +30,6 @@ import {
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The coding agents of an account's plans, through the store's public
@@ -118,7 +118,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 3,
 };
 
-it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
+it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   it.effect(
     "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
     () =>

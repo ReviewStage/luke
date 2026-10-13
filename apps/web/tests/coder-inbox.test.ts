@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -33,7 +34,6 @@ import {
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
@@ -189,7 +189,7 @@ const SHOT = {
   response: { type: INBOX_RESPONSE.APPROVAL },
 };
 
-it.layer(testSqlClient)("the coding agent's inbox", (it) => {
+it.layer(getTestDB())("the coding agent's inbox", (it) => {
   it.effect(
     "a post is one open item the plan's inbox reads; posting under the same key again replaces it, moves its revision on, and opens it again once answered",
     () =>
