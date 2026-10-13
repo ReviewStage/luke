@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
 import { account } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { eq } from "drizzle-orm";
@@ -48,7 +49,7 @@ const INSTALLATION_ID = 777;
 function installationJson(id: number): Response {
   return Response.json({
     id,
-    account: { login: "octo-org", type: "Organization" },
+    account: { login: "octo-org", id: 7_001, type: "Organization" },
     repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
     app_id: Number(APP_ID),
   });
@@ -89,6 +90,8 @@ it.effect(
       assert.deepEqual(Option.getOrUndefined(found), {
         id: INSTALLATION_ID,
         accountLogin: "octo-org",
+        accountId: 7_001,
+        accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
         repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED,
         ciReadable: false,
       });
@@ -144,7 +147,7 @@ it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
               installations: [
                 {
                   id: INSTALLATION_ID,
-                  account: { login: "octocat", type: "User" },
+                  account: { login: "octocat", id: 583_231, type: "User" },
                   repository_selection: GITHUB_REPOSITORY_SELECTION.ALL,
                 },
               ],
@@ -160,6 +163,8 @@ it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
         {
           id: INSTALLATION_ID,
           accountLogin: "octocat",
+          accountId: 583_231,
+          accountType: GITHUB_ACCOUNT_TYPE.USER,
           repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
           ciReadable: false,
         },

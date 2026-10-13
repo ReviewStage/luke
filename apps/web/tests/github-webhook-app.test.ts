@@ -3,15 +3,21 @@ import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@sidecar/database/github-installation-vocabulary";
+import {
   type CodingAgent,
   createCodingAgent,
   listPublishedCodingAgents,
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
+import { listWorkspaces } from "@sidecar/database/models/workspace-store";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { getTestDB } from "@sidecar/database/testing";
 import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { githubWebhookApp } from "../server/github-webhook-app";
@@ -23,7 +29,7 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { startPlan } from "./support/workspaces";
+import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function
@@ -235,6 +241,60 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           yield* answer(github, SECRET, new Request(new URL(WEBHOOK, ORIGIN))),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "an installation removed or suspended leaves its workspace's GitHub account inactive, and one brought back active again",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const installationId = 900_000 + Math.floor(Math.random() * 90_000);
+        const login = `acme-${randomUUID()}`;
+        const github = githubReaching([{ id: installationId, login, repositories: [] }]);
+        const { id: workspaceId } = yield* (yield* fakeWorkspaceSeams).createOrganization({
+          name: "Acme",
+          slug: login,
+          userId: owner,
+          metadata: {},
+        });
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db.insert(githubInstallation).values({
+            organizationId: workspaceId,
+            installationId,
+            accountId: installationId + 1,
+            accountLogin: login,
+            accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+            status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        );
+        const connected = () =>
+          Effect.map(listWorkspaces(owner), (workspaces) =>
+            workspaces
+              .filter((workspace) => workspace.id === workspaceId)
+              .map(({ github: account }) => account),
+          );
+        const deliver = (action: string) =>
+          answer(
+            github,
+            SECRET,
+            delivery("installation", { action, installation: { id: installationId } }),
+          );
+        assert.deepEqual(yield* connected(), [{ login, active: true }]);
+
+        yield* deliver("suspend");
+        const suspended = yield* connected();
+        yield* deliver("unsuspend");
+        const unsuspended = yield* connected();
+        yield* deliver("deleted");
+        const deleted = yield* connected();
+
+        assert.deepEqual(suspended, [{ login, active: false }]);
+        assert.deepEqual(unsuspended, [{ login, active: true }]);
+        assert.deepEqual(deleted, [{ login, active: false }]);
       }),
   );
 });
