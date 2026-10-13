@@ -497,8 +497,12 @@ only when you press Send.
   each session's history (the messages, files, tool calls, and answers its
   model works from) so the session can pick up where it stopped. Deleting a
   plan or your account ends each of its sessions for good, a turn still
-  running included, but does not remove that history; Vercel keeps it under
-  its own retention.
+  running included. When a planning or coding-agent session ends, Vercel
+  deletes that history at once, though the session's ids, status, and times
+  may stay as long as Vercel's own retention. This holds for a session
+  started on or after 13 October 2026; a session started before then, and
+  the session of a worker either one hands work to, keeps its history under
+  Vercel's own retention.
 - GitHub, asked by your Mac itself and unauthenticated: to check for updates,
   carrying nothing about you, and for the picture of each repository owner
   the app names, an organization's logo or a person's avatar, carrying only
@@ -566,8 +570,9 @@ reports by Sentry.
   and the grant stays until you revoke Luke in Linear's own settings. It
   ends every session of yours on Vercel Workflow and, shortly after, deletes
   their sandboxes with the snapshots no other sandbox uses; the session
-  history Vercel Workflow keeps stays under Vercel's retention, and anything
-  stored only on your Mac stays there until you remove it.
+  history Vercel Workflow keeps goes as described under "Who we send it
+  to", and anything stored only on your Mac stays there until you remove
+  it.
 
 ## Google user data
 
