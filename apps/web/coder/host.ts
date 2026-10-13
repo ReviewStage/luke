@@ -12,6 +12,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import { switchableConnection, turnServer } from "../server/hosted/coder-host/servers.js";
 import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import {
@@ -151,13 +152,17 @@ export function sessionSkills(
  * One integration's connection under one of this project's ownership
  * checks, the agent's or the worker's, for each one's own
  * `connections/<provider>.ts`, on the same terms as the planning project's
- * (`../eve/host.ts`).
+ * (`../eve/host.ts`), handed to a turn only while the agent has it
+ * switched on (`server/hosted/coder-host/servers.ts`).
  */
 export function integrationConnectionFor(
   provider: IntegrationProvider,
   admit: (auth: SessionAuth, sessionId: string) => IntegrationAdmission,
 ) {
-  return integrationConnection(provider, (auth, sessionId) =>
-    runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  return switchableConnection(
+    (auth, sessionId) => runWeb(turnServer(admit(auth, sessionId), provider)),
+    integrationConnection(provider, (auth, sessionId) =>
+      runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+    ),
   );
 }

@@ -227,6 +227,7 @@ function tabElement(
       note: undefined,
       choose: ignore,
     },
+    servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
     published: undefined,
     doors: SHUT,
     onStop: () => Promise.resolve(),

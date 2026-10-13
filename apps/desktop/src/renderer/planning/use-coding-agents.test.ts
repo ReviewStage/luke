@@ -12,6 +12,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -22,7 +23,12 @@ import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#sha
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
-import { MODEL_CHANGE_FAILED, START_ARCHIVED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
+import {
+  MODEL_CHANGE_FAILED,
+  SERVERS_FAILED,
+  START_ARCHIVED,
+  START_NEEDS_REPOSITORY,
+} from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -97,6 +103,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       planId: held.planId,
       repository: held.repository,
       archived: held.archived === true,
+      onOpenIntegrations: () => undefined,
       onUnarchive: () => {
         unarchives += 1;
       },
@@ -457,6 +464,62 @@ it.effect(
     }),
 );
 
+// Note that the refusal raises the window's toast, whose waits stand on the test's clock.
+it.effect(
+  "a switch of an agent's MCP servers asks the service for that agent alone with the whole list off, and the agent it answers takes its place in the list; two switches are sent in the order made, each once the one before has answered, and the last stands; a refusal changes nothing and says so in the window's toast",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
+      yield* Effect.promise(async () => {
+        const off = { ...STARTED, disabledServers: [INTEGRATION_PROVIDER.LINEAR] };
+        tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+        tab.answer(ACT_KIND.CODING_AGENTS_SERVERS, { agent: off });
+        await tab.mount();
+
+        await tab.control().onSwitchServers(AGENT, [INTEGRATION_PROVIDER.LINEAR]);
+        await settle();
+        assert.deepEqual(tab.asked.at(-1), {
+          kind: ACT_KIND.CODING_AGENTS_SERVERS,
+          payload: { agentId: AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] },
+        });
+        assert.deepEqual(tab.control().agents, [off]);
+
+        // Two switches in quick succession: the second is sent only once the first has
+        // answered, so the service writes them in the order made, and the last stands.
+        let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
+        const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
+          answerFirst = resolve;
+        });
+        tab.answer(ACT_KIND.CODING_AGENTS_SERVERS, first, { agent: STARTED });
+        const sent = () =>
+          tab.asked.filter((asked) => asked.kind === ACT_KIND.CODING_AGENTS_SERVERS).length;
+        const before = sent();
+        const older = tab.control().onSwitchServers(AGENT, [INTEGRATION_PROVIDER.LINEAR]);
+        const newer = tab.control().onSwitchServers(AGENT, []);
+        await settle();
+        assert.equal(sent(), before + 1, "the second waits for the first's answer");
+        answerFirst?.({ agent: off });
+        await older;
+        await newer;
+        await settle();
+        assert.equal(sent(), before + 2);
+        assert.deepEqual(tab.asked.at(-1), {
+          kind: ACT_KIND.CODING_AGENTS_SERVERS,
+          payload: { agentId: AGENT, disabledServers: [] },
+        });
+        assert.deepEqual(tab.control().agents, [STARTED]);
+
+        tab.answer(ACT_KIND.CODING_AGENTS_SERVERS, {
+          failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+        });
+        await act(() => tab.control().onSwitchServers(AGENT, [INTEGRATION_PROVIDER.LINEAR]));
+        await settle();
+        assert.deepEqual(tab.control().agents, [STARTED]);
+        assert.equal(newestToastSays(), SERVERS_FAILED);
+      });
+    }),
+);
+
 it.effect(
   "a refused Stop, the newest rename refused, and a Start that fails after the developer left its plan each say so in the window's toast",
   () =>
@@ -606,7 +669,7 @@ test("a change names the context window only where it is the standard one, so th
   });
 });
 
-test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, opening its tab", async () => {
+test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
   const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
@@ -629,11 +692,13 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // The words and the choice are the draft's, held while another plan opens a draft of its own.
+  // The words, the choice, and the servers off are the draft's, held while another plan opens a draft of its own.
   const task = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
   act(() => tab.control().onDraftChange({ task }));
   act(() => tab.control().onDraftChange({ choice }));
+  act(() => tab.control().onDraftChange({ disabledServers }));
   await tab.stand({ planId: OTHER_PLAN });
   assert.equal(tab.control().draft, undefined);
   let other = "";
@@ -642,7 +707,13 @@ test("a draft asks nothing of the service, one per plan, until its first message
   });
   assert.notEqual(other, draft);
   await tab.stand({ planId: PLAN });
-  assert.deepEqual(tab.control().draft, { id: draft, task, attachments: [], choice });
+  assert.deepEqual(tab.control().draft, {
+    id: draft,
+    task,
+    attachments: [],
+    choice,
+    disabledServers,
+  });
 
   let failed: string | undefined;
   await act(async () => {
@@ -657,12 +728,12 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, undefined, [notes]);
+    failed = await tab.control().startTask(draft, task, undefined, [notes], disabledServers);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     { planId: PLAN, idempotencyKey: draft, task, ...choice },
-    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes] },
+    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes], disabledServers },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");

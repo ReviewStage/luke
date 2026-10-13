@@ -82,6 +82,7 @@ function mount(...answers: readonly SkillsRead[]) {
       models: undefined,
       readModels: ignore,
       usage: undefined,
+      servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => Promise.resolve(),

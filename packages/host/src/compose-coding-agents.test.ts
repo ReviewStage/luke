@@ -20,6 +20,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -205,6 +206,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`rename:${agentId}:${request.title}`);
         return { agent: { ...AGENT, title: request.title } };
+      }),
+    switchServers: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
+        return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
     stop: (agentId) =>
       Effect.sync(() => {
@@ -408,6 +414,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { agent: { ...AGENT, title: "Sign-out button" } },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+        agentId: AGENT_ID,
+        disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+      }),
+      { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
@@ -473,6 +486,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
+      `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `pull-request:${AGENT_ID}`,

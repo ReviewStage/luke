@@ -12,8 +12,10 @@ import {
   type NewCodingAgent,
   readCodingAgent,
   readCodingAgentContext,
+  readCodingAgentOfConversation,
   recordCodingAgentPublished,
   updateCodingAgentChoice,
+  updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
 import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -27,7 +29,8 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
-import { count, eq } from "drizzle-orm";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { count, eq, sql } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -197,6 +200,62 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         const read = yield* readCodingAgent(userId, long.id);
         assert.equal(Option.getOrUndefined(read)?.contextWindow, CONTEXT_WINDOW.LONG);
         assert.equal(Option.getOrUndefined(read)?.effort, "low");
+      }),
+  );
+
+  it.effect(
+    "the MCP servers switched off for an agent read back on it, from its Start or a later change, and another account's change writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openUser;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        assert.deepEqual(agent.disabledServers, []);
+        const drafted = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { disabledServers: [INTEGRATION_PROVIDER.LINEAR] }),
+          ),
+        );
+        assert.deepEqual(drafted.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+
+        const changed = yield* updateCodingAgentServers(userId, agent.id, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        assert.deepEqual(Option.getOrUndefined(changed)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        assert.deepEqual(yield* updateCodingAgentServers(other, drafted.id, []), Option.none());
+        const ofConversation = yield* readCodingAgentOfConversation(userId, agent.conversationId);
+        assert.deepEqual(Option.getOrUndefined(ofConversation)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        const untouched = yield* readCodingAgent(userId, drafted.id);
+        assert.deepEqual(Option.getOrUndefined(untouched)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+
+        yield* updateCodingAgentServers(userId, agent.id, []);
+        const cleared = yield* readCodingAgent(userId, agent.id);
+        assert.deepEqual(Option.getOrUndefined(cleared)?.disabledServers, []);
+      }),
+  );
+
+  it.effect(
+    "a server no longer offered, left on an agent's row, reads as nothing switched off",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        yield* db
+          .update(codingAgent)
+          .set({ disabledServers: sql`'["retired-provider", "linear"]'::jsonb` })
+          .where(eq(codingAgent.id, agent.id));
+
+        const read = yield* readCodingAgent(userId, agent.id);
+        assert.deepEqual(Option.getOrUndefined(read)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
       }),
   );
 

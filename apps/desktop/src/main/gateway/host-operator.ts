@@ -39,6 +39,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
+  type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   codingAgentAccountInboxAnswerViewSchema,
@@ -265,6 +266,7 @@ export interface HostOperator {
   codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
@@ -725,6 +727,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
           ...("task" in params ? { task: params.task } : undefined),
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
+          ...("disabledServers" in params
+            ? { disabledServers: params.disabledServers }
+            : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -762,6 +767,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_RENAME, {
           agentId: params.agentId,
           title: params.title,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentServers: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+          agentId: params.agentId,
+          disabledServers: params.disabledServers,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

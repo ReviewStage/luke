@@ -1928,12 +1928,13 @@ button.attached-file-face:hover img {
   text-underline-offset: 2px;
 }
 
-/* The chips along the box's foot: the model chip and the context ring,
-   each the box its popover hangs from (`anchored-popover.tsx`), above
-   itself since the box stands at the panel's foot, and after them what the
-   agent published, in the same chip style, the pull request's wearing its
+/* The chips along the box's foot: the model chip, the MCP button, and the
+   context ring, each the box its popover hangs from (`anchored-popover.tsx`),
+   above itself since the box stands at the panel's foot, and after them what
+   the agent published, in the same chip style, the pull request's wearing its
    state's colour, the branch's its name in the code face. */
 .agent-model-chip,
+.agent-servers,
 .agent-context {
   position: relative;
   display: flex;
@@ -1980,7 +1981,28 @@ button.attached-file-face:hover img {
   color: var(--text-tertiary);
 }
 
-/* The context ring beside the model chip: the window's one icon button
+/* The MCP servers popover: the model menu's surface and rows, one per
+   server, each its mark, its name, where it stands in muted words, and at
+   its end a switch or what a press does; a row with nothing to press is
+   muted and takes no fill. */
+.agent-servers-list {
+  display: block;
+  padding: 0 0 var(--space-4);
+}
+
+.agent-servers-menu div.plan-compose-menu-row:hover {
+  background: none;
+}
+
+.agent-servers-menu .plan-compose-menu-detail {
+  margin-left: var(--space-4);
+}
+
+.agent-servers-menu .plan-compose-menu-foot-note {
+  padding-bottom: var(--space-4);
+}
+
+/* The context ring beside the MCP button: the window's one icon button
    holding a ring a glyph's size, its track faint and its fill muted with
    room to spare, amber within a tenth of the window of eve's compaction,
    and red at or past it. */

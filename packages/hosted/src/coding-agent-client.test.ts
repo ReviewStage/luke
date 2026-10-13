@@ -24,6 +24,7 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
 } from "./inbox-wire.js";
+import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { DEFAULT_PLAN_TEMPLATE, PLAN_TEMPLATE_BOUNDS } from "./plan-document-template.js";
 import {
@@ -511,6 +512,38 @@ it.effect(
 
       const refused = yield* Effect.provide(
         client().rename(AGENT_ID, { title: "x".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1) }),
+        api.layer,
+      );
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1);
+    }),
+);
+
+it.effect(
+  "switches an agent's MCP servers at its own address, as the whole list of those off, and refuses a list past the bound without asking",
+  () =>
+    Effect.gen(function* () {
+      const switched = { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] };
+      const api = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: switched }) },
+      });
+
+      const answer = yield* Effect.provide(
+        client().switchServers(AGENT_ID, { disabledServers: [INTEGRATION_PROVIDER.LINEAR] }),
+        api.layer,
+      );
+      assert.deepEqual(answer, { agent: switched });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+      });
+
+      const refused = yield* Effect.provide(
+        client().switchServers(AGENT_ID, {
+          disabledServers: Array.from(
+            { length: CODING_AGENT_BOUNDS.MAX_SERVERS + 1 },
+            () => INTEGRATION_PROVIDER.LINEAR,
+          ),
+        }),
         api.layer,
       );
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });

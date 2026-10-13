@@ -170,6 +170,9 @@ export function codingAgentSummary(
     turnId: standing.turn?.id ?? null,
     brief: agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
+    ...(agent.disabledServers.length === 0
+      ? undefined
+      : { disabledServers: agent.disabledServers }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,

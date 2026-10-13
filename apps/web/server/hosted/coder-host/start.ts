@@ -9,6 +9,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
@@ -61,13 +62,14 @@ import {
  * (`coder-host/channel.ts`).
  */
 
-/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, and the task where the agent is handed one in the plan's place, with the files attached to it. */
+/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, the task where the agent is handed one in the plan's place, with the files attached to it, and the MCP servers its draft switched off. */
 export interface StartAsk {
   readonly planId: string;
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
   readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -132,6 +134,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       ...brief,
       repository,
+      disabledServers: ask.disabledServers,
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

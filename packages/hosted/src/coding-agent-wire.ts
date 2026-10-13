@@ -1,6 +1,11 @@
 import { MESSAGE_ROLE, WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
+import {
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+  integrationProviderFromWire,
+} from "./integration-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -34,7 +39,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * handed, which no one renames. An agent may be archived, which stops a
  * turn still running and leaves it out of the plan's list unless the list
  * asks for archived agents, and brought back; its transcript and pull
- * request are kept.
+ * request are kept. The MCP servers an agent is handed, one per integration
+ * provider the account connected, can each be switched off for it, at its
+ * Start or while it stands: the change is read as its next turn starts, so
+ * a turn already running keeps what it was handed.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -52,6 +60,9 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CALL_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
+  /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
+  MAX_SERVERS: 32,
+  MAX_SERVER_CHARS: 64,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
   /** The most items one to-do list may hold: a long run of work, never a log of every command. */
@@ -249,6 +260,27 @@ export function hasWordsOrFiles(
 }
 
 /**
+ * The MCP servers switched off for an agent, by integration provider. A
+ * provider this build does not know is left out rather than refused, so a
+ * service that offers one more provider than a desktop knows still answers
+ * that desktop its agents, and a provider retired from the list reads as
+ * nothing switched off.
+ */
+export const disabledServersSchema = EffectSchema.Array(
+  EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVER_CHARS)),
+).pipe(
+  EffectSchema.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVERS)),
+  EffectSchema.decodeTo(
+    EffectSchema.Array(EffectSchema.Literals(INTEGRATION_PROVIDER_LIST)),
+    SchemaTransformation.transform({
+      decode: (named): readonly IntegrationProvider[] =>
+        named.flatMap((id) => integrationProviderFromWire(id) ?? []),
+      encode: (servers): readonly string[] => servers,
+    }),
+  ),
+);
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -256,7 +288,8 @@ export function hasWordsOrFiles(
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
- * with a task.
+ * with a task. The MCP servers its draft switched off go with it, and none
+ * is off where the Start names none.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -265,6 +298,7 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 }).check(
   EffectSchema.makeFilter(({ task, attachments }) =>
     task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),
@@ -315,6 +349,17 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
+
+/**
+ * Switching the agent's MCP servers (PATCH): the whole list of those off,
+ * which replaces the list standing, so two quick changes land as the later
+ * one. Empty switches every server back on.
+ */
+export const codingAgentServersRequestSchema = EffectSchema.Struct({
+  disabledServers: disabledServersSchema,
+});
+
+export type CodingAgentServersRequest = typeof codingAgentServersRequestSchema.Type;
 
 /**
  * The plan's agent list's query (GET): `archived=include` lists the
@@ -370,6 +415,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

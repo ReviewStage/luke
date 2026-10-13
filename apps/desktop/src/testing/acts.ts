@@ -195,6 +195,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_RENAME,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", title: "Sign-out button" },
   },
+  [ACT_KIND.CODING_AGENTS_SERVERS]: {
+    kind: ACT_KIND.CODING_AGENTS_SERVERS,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", disabledServers: ["linear"] },
+  },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     kind: ACT_KIND.CODING_AGENTS_STOP,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },

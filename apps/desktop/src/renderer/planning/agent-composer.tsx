@@ -25,6 +25,7 @@ import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
+import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { DictateButton, DictationStrip } from "./dictation-strip";
@@ -124,6 +125,7 @@ export function AgentComposer({
   models,
   readModels,
   usage,
+  servers,
   context,
   brief,
   published,
@@ -142,6 +144,8 @@ export function AgentComposer({
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** The MCP servers the agent is handed and their switches. */
+  servers: AgentServersControl;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: CodingAgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
@@ -343,6 +347,7 @@ export function AgentComposer({
                     usage={usage}
                   />
                 )}
+                <AgentServersButton servers={servers} />
                 <AgentContextRing context={context} brief={brief} />
                 <DictateButton dictation={dictation} disabled={held} />
                 {showsStop ? (

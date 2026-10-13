@@ -203,6 +203,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       },
       composer,
       model,
+      servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => {
@@ -299,7 +300,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       ].filter(
         (each) =>
           !each.matches(
-            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .dictate-button, .attached-file-face, .corner-dismiss",
+            ".plan-compose-chip, .agent-model-button, .agent-servers-button, .agent-composer-attach, .dictate-button, .attached-file-face, .corner-dismiss",
           ),
       );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
@@ -706,11 +707,9 @@ test("once a step has ended, a ring stands beside the model chip, coloured by ho
   const button = ring();
   assert.ok(button);
   assert.equal(
-    button
-      .closest(".agent-context")
-      ?.previousElementSibling?.classList.contains("agent-model-chip"),
+    button.closest(".agent-context")?.previousElementSibling?.classList.contains("agent-servers"),
     true,
-    "the ring stands right after the model chip",
+    "the ring stands right after the MCP servers button",
   );
   assert.equal(button.dataset.level, "room");
   act(() => {
@@ -830,7 +829,7 @@ test("each composer popover opens right above the button that opened it, from it
   }
 });
 
-test("the foot reads as its keys go: the + at its left, then at its right the model, the context ring, the microphone, and the round button", async () => {
+test("the foot reads as its keys go: the + at its left, then at its right the model, the MCP servers, the context ring, the microphone, and the round button", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   await tab.stand({ context: CONTEXT });
   const name = (button: HTMLButtonElement) =>
@@ -841,12 +840,14 @@ test("the foot reads as its keys go: the + at its left, then at its right the mo
   assert.deepEqual(presses(".agent-composer form"), [
     "Attach files",
     "model",
+    "MCP servers",
     "Context usage",
     "Dictate",
     "Stop",
   ]);
   assert.deepEqual(presses(".agent-composer-actions"), [
     "model",
+    "MCP servers",
     "Context usage",
     "Dictate",
     "Stop",

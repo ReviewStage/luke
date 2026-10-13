@@ -6,10 +6,15 @@ import {
   codingAgentPullRequestSchema,
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+  integrationProviderFromWire,
+} from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
@@ -106,6 +111,8 @@ export interface CodingAgent {
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
+  /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
+  readonly disabledServers: readonly IntegrationProvider[];
   readonly createdAt: Date;
 }
 
@@ -133,6 +140,8 @@ export type NewCodingAgent = CodingAgentBriefText & {
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
+  /** The MCP servers the draft switched off before it started; none where the Start names none. */
+  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -149,8 +158,32 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
+  disabledServers: codingAgent.disabledServers,
   createdAt: codingAgent.createdAt,
 };
+
+/**
+ * The `disabled_servers` column as an agent reads it: null is none, and a
+ * provider no longer offered is left out rather than failing the row, so a
+ * provider retired from the list never takes an agent's reads down with it.
+ */
+const DisabledServersColumnSchema = Schema.NullOr(Schema.Array(Schema.String)).pipe(
+  Schema.decodeTo(
+    Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST)),
+    SchemaTransformation.transform({
+      decode: (stored): readonly IntegrationProvider[] =>
+        (stored ?? []).flatMap((id) => integrationProviderFromWire(id) ?? []),
+      encode: (servers): readonly string[] | null => servers,
+    }),
+  ),
+);
+
+/** The column as a write stores it: each provider once, and null for none, which is what a row from before the column reads as. */
+function storedServers(
+  servers: readonly IntegrationProvider[],
+): readonly IntegrationProvider[] | null {
+  return servers.length === 0 ? null : [...new Set(servers)];
+}
 
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
@@ -165,6 +198,7 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  disabledServers: DisabledServersColumnSchema,
   createdAt: InstantColumnSchema,
 });
 
@@ -218,6 +252,7 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
+    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -234,6 +269,7 @@ const insertAgent = SqlSchema.findOne({
         planSnapshot: write.planSnapshot,
         task: write.task,
         repository: write.repository,
+        disabledServers: write.disabledServers,
         idempotencyKey: write.idempotencyKey,
         createdAt: write.now,
       })
@@ -253,6 +289,21 @@ const updateAgentChoice = SqlSchema.findOneOption({
     db
       .update(codingAgent)
       .set({ model, effort, contextWindow })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .returning(CODING_AGENT_COLUMNS),
+});
+
+const updateAgentServers = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId, disabledServers }) =>
+    db
+      .update(codingAgent)
+      .set({ disabledServers })
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
       .returning(CODING_AGENT_COLUMNS),
 });
@@ -526,6 +577,7 @@ export function createCodingAgent(
           planSnapshot: started.planSnapshot,
           task: started.task,
           repository: started.repository,
+          disabledServers: storedServers(started.disabledServers ?? []),
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -635,6 +687,15 @@ export function updateCodingAgentChoice(
     effort: choice.effort,
     contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
   });
+}
+
+/** The MCP servers switched off for the account's agent, the whole list, which its next turn on is not handed; nothing for an agent the account does not own. */
+export function updateCodingAgentServers(
+  userId: string,
+  agentId: string,
+  disabledServers: readonly IntegrationProvider[],
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
 }
 
 /** The branch checked out in the account's agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent the account does not own. */

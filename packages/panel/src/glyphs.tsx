@@ -435,6 +435,21 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * The Model Context Protocol's mark, its three strokes redrawn in this
+ * file's weight and box rather than shipped as the project's artwork: the
+ * composer's button over the MCP servers an agent is handed.
+ */
+export function McpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2.44 11.45l8.92-8.92c1.23-1.23 3.23-1.23 4.46 0 1.23 1.23 1.23 3.23 0 4.46l-6.73 6.73" />
+      <path d="M9.18 13.63l6.64-6.64c1.23-1.23 3.23-1.23 4.46 0l.05.05c1.23 1.23 1.23 3.23 0 4.46l-8.06 8.06c-.41.41-.41 1.08 0 1.49l1.66 1.66" />
+      <path d="M13.59 4.76 7 11.35c-1.23 1.23-1.23 3.23 0 4.46 1.23 1.23 3.23 1.23 4.46 0l6.59-6.59" />
+    </Glyph>
+  );
+}
+
 /** A window with a pane down its right side: the side panel beside the document, shown or hidden. */
 export function SidePanelIcon(): React.JSX.Element {
   return (

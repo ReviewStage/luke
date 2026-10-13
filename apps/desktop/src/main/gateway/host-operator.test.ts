@@ -4,6 +4,7 @@ import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from 
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_REPLY } from "@sidecar/hosted/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
@@ -284,7 +285,7 @@ it.effect(
 );
 
 it.effect(
-  "the files attached to a task or a message travel to the host with it, and a Start or a message with none carries no files field",
+  "the files attached to a task or a message, and the MCP servers a draft switched off, travel to the host with it, and a Start or a message with none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -299,6 +300,7 @@ it.effect(
         idempotencyKey: "press-1",
         task: "Fix what this shows.",
         attachments,
+        disabledServers: [INTEGRATION_PROVIDER.LINEAR],
       });
       yield* operator.codingAgentMessage({
         agentId: "agent-1",
@@ -317,7 +319,13 @@ it.effect(
         [
           [
             GATEWAY_METHOD.CODING_AGENTS_START,
-            { planId, idempotencyKey: "press-1", task: "Fix what this shows.", attachments },
+            {
+              planId,
+              idempotencyKey: "press-1",
+              task: "Fix what this shows.",
+              attachments,
+              disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+            },
           ],
           [
             GATEWAY_METHOD.CODING_AGENTS_MESSAGE,

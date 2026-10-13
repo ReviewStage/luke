@@ -70,6 +70,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_RENAME: "codingAgents.rename",
+  /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */

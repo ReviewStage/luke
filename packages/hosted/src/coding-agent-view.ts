@@ -8,6 +8,7 @@ import {
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
@@ -238,6 +239,14 @@ export const codingAgentRenameParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentRenameParams = typeof codingAgentRenameParamsSchema.Type;
+
+/** One agent's MCP servers switched, as the window asks it: the agent and the whole list of those off. */
+export const codingAgentServersParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentServersRequestSchema.fields,
+});
+
+export type CodingAgentServersParams = typeof codingAgentServersParamsSchema.Type;
 
 /** One agent archived or brought back, as the window asks it: the agent and which. */
 export const codingAgentArchiveParamsSchema = EffectSchema.Struct({

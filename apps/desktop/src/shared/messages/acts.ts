@@ -45,6 +45,7 @@ import {
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   type DictationTranscribeAnswerView,
@@ -235,6 +236,7 @@ export const ACT_KIND = {
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /**
@@ -727,6 +729,11 @@ export const ACT = {
     payload: actSchema(codingAgentRenameParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not rename the agent on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_SERVERS]: {
+    payload: actSchema(codingAgentServersParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not switch the agent's MCP servers on this system.",
   },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     payload: actSchema(codingAgentStopParamsSchema),

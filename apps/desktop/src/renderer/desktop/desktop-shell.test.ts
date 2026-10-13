@@ -808,6 +808,7 @@ function NamedWindow({
     inboxWaiting: [],
     inboxPlans: [],
     voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: ignore },
+    onOpenIntegrations: ignore,
   });
   return createElement(DesktopShell, {
     gates: {

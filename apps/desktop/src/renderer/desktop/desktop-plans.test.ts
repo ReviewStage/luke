@@ -3489,6 +3489,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     repository,
     archived: false,
     onUnarchive: () => undefined,
+    onOpenIntegrations: () => undefined,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });
