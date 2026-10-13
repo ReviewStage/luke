@@ -82,6 +82,7 @@ import {
   codeLinesSchema,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
+  type PlanningPageSourceAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -96,6 +97,8 @@ import {
   planningFileAnswerSchema,
   planningFileParamsSchema,
   planningMessagesParamsSchema,
+  planningPageParamsSchema,
+  planningPageSourceAnswerSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
@@ -228,6 +231,8 @@ export const ACT_KIND = {
   PLANNING_REVISION: "planning.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
+  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
+  PLANNING_PAGE_SOURCE: "planning.pageSource",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -707,6 +712,11 @@ export const ACT = {
     payload: actSchema(planningRevisionParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not restore that version on this system.",
+  },
+  [ACT_KIND.PLANNING_PAGE_SOURCE]: {
+    payload: actSchema(planningPageParamsSchema),
+    result: wireResult<PlanningPageSourceAnswer>(isReadable(planningPageSourceAnswerSchema)),
+    refusal: "Could not read that page's source on this system.",
   },
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",

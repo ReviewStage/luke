@@ -1,8 +1,21 @@
 import type { PageLine } from "@sidecar/hosted/page-wire";
-import { ChevronLeftIcon, ChevronRightIcon, RotateCwIcon } from "lucide-react";
-import { useState } from "react";
+import type { CodeLines, PlanningPageSourceAnswer } from "@sidecar/hosted/planning-view";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardCopyIcon,
+  CodeXmlIcon,
+  RotateCwIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { pageFrameUrl } from "#shared/page-frame";
+import { useCopyToast } from "../copy-feedback";
+import { RetryButton } from "../retry-button";
+import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { CodeLineRows } from "./code-pane";
+import { LinesMenu } from "./file-menu";
+import { useLinesLook } from "./file-tab";
 
 /**
  * page-pane.tsx -- one page an agent wrote for the plan, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
@@ -18,9 +31,45 @@ import { Tooltip } from "../tooltip";
  * but a page, and Reload draws the page again. What the page draws is the
  * plan's, so the pane is left out of the screen recording (`ph-no-capture`);
  * the recording could not see into the frame in any case.
+ *
+ * The bar's code toggle shows the version's HTML in the frame's place, as a
+ * File tab draws a file (`file-tab.tsx`): the same numbered, coloured lines
+ * under the same settings, the same ⋯ to copy them by, and ⌘F over them.
+ * The frame's own read is the frame's alone, so the source is read again,
+ * once a version, through main, which colours it as HTML
+ * (`ACT_KIND.PLANNING_PAGE_SOURCE`), and is held by the tab until Reload.
+ * The tab stays on the source or the page while its versions are stepped.
  */
 
 const PAGE_SANDBOX = "allow-scripts";
+
+/** What the tab shows: the page drawn, or its HTML as source. */
+const PAGE_VIEW = {
+  PAGE: "page",
+  SOURCE: "source",
+} as const;
+
+type PageView = (typeof PAGE_VIEW)[keyof typeof PAGE_VIEW];
+
+/** Where a read of one version's source stands. */
+const SOURCE_READ = {
+  READING: "reading",
+  READY: "ready",
+  FAILED: "failed",
+} as const;
+
+type SourceRead =
+  | { readonly kind: typeof SOURCE_READ.READING }
+  | { readonly kind: typeof SOURCE_READ.READY; readonly lines: CodeLines }
+  | { readonly kind: typeof SOURCE_READ.FAILED };
+
+/** Reads one version's source: the answer, or a rejection where main refused the act. */
+export type ReadPageSource = (version: number) => Promise<PlanningPageSourceAnswer>;
+
+/** The source's lines as the page's text. */
+function sourceText(lines: CodeLines): string {
+  return lines.map((line) => line.map((run) => run.text).join("")).join("\n");
+}
 
 /** A step between a page's versions: a press of one of the bar's chevrons. */
 function VersionStep({
@@ -51,13 +100,108 @@ function VersionStep({
   );
 }
 
-/** The page's tab: its title, its versions where it has more than one, a reload, and the page. */
-export function PagePane({ planId, page }: { planId: string; page: PageLine }): React.JSX.Element {
+/**
+ * The sources the tab has read, by version: each read the first time the
+ * source of its version is shown, and held until Reload forgets them all.
+ * A read that failed is held as one, so it is asked again only on Retry.
+ */
+function usePageSources(readSource: ReadPageSource) {
+  const [held, setHeld] = useState<ReadonlyMap<number, SourceRead>>(new Map());
+  const latest = useRef(readSource);
+  latest.current = readSource;
+  const ask = useCallback((version: number) => {
+    const land = (read: SourceRead) => setHeld((was) => new Map(was).set(version, read));
+    land({ kind: SOURCE_READ.READING });
+    latest.current(version).then(
+      (answer) =>
+        land(
+          "lines" in answer
+            ? { kind: SOURCE_READ.READY, lines: answer.lines }
+            : { kind: SOURCE_READ.FAILED },
+        ),
+      () => land({ kind: SOURCE_READ.FAILED }),
+    );
+  }, []);
+  const forget = useCallback(() => setHeld(new Map()), []);
+  return { held, ask, forget };
+}
+
+/** The version's source in the frame's place: its lines as a File tab draws them, or why they are not. */
+function PageSource({
+  title,
+  read,
+  onRetry,
+}: {
+  title: string;
+  read: SourceRead;
+  onRetry: () => void;
+}): React.JSX.Element {
+  const look = useLinesLook();
+  if (read.kind === SOURCE_READ.READING) return <SpinnerRegion label="Loading source" />;
+  if (read.kind === SOURCE_READ.FAILED) {
+    return (
+      <div className="side-panel-empty" role="alert">
+        <p className="m-0">The page's source could not be read.</p>
+        <RetryButton onRetry={onRetry} />
+      </div>
+    );
+  }
+  return (
+    <section className="file-tab" aria-label={`${title} source`}>
+      <div className="code-lines file-tab-lines" {...look}>
+        <CodeLineRows firstLine={1} lines={read.lines} pointed={{ path: title }} />
+      </div>
+    </section>
+  );
+}
+
+/** The bar's ⋯ over the source: its text copied, then the File tabs' settings its lines follow. */
+function SourceMenu({ read }: { read: SourceRead | undefined }): React.JSX.Element {
+  const copyWithToast = useCopyToast();
+  return (
+    <LinesMenu
+      label="Source actions"
+      actions={[
+        {
+          label: "Copy source",
+          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          disabled: read?.kind !== SOURCE_READ.READY,
+          onSelect: () => {
+            if (read?.kind === SOURCE_READ.READY) {
+              copyWithToast(sourceText(read.lines), "Source copied");
+            }
+          },
+        },
+      ]}
+    />
+  );
+}
+
+/** The page's tab: its title, its versions where it has more than one, the source's toggle, a reload, and the page or its source. */
+export function PagePane({
+  planId,
+  page,
+  readSource,
+}: {
+  planId: string;
+  page: PageLine;
+  readSource: ReadPageSource;
+}): React.JSX.Element {
   // The version stepped to, none while the newest is followed.
   const [chosen, setChosen] = useState<number | undefined>(undefined);
   const [reloads, setReloads] = useState(0);
+  const [view, setView] = useState<PageView>(PAGE_VIEW.PAGE);
+  const sources = usePageSources(readSource);
   const version = chosen === undefined ? page.version : Math.min(chosen, page.version);
   const step = (to: number) => setChosen(to === page.version ? undefined : to);
+  const showingSource = view === PAGE_VIEW.SOURCE;
+  const source = sources.held.get(version);
+  const { ask } = sources;
+  // The source of the version shown is read the first time it is asked for.
+  useEffect(() => {
+    if (showingSource && source === undefined) ask(version);
+  }, [showingSource, source, version, ask]);
+  const toggleLabel = showingSource ? "View page" : "View source";
   return (
     <div className="page-view file-view ph-no-capture">
       <header className="file-view-bar">
@@ -82,27 +226,50 @@ export function PagePane({ planId, page }: { planId: string; page: PageLine }): 
               />
             </>
           ) : null}
+          <Tooltip label={toggleLabel}>
+            <button
+              type="button"
+              className="icon-button page-view-source-toggle"
+              aria-label={toggleLabel}
+              data-source={String(showingSource)}
+              onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
+            >
+              <CodeXmlIcon aria-hidden="true" />
+            </button>
+          </Tooltip>
           <Tooltip label="Reload">
             <button
               type="button"
               className="icon-button"
               aria-label="Reload page"
-              onClick={() => setReloads((was) => was + 1)}
+              onClick={() => {
+                setReloads((was) => was + 1);
+                sources.forget();
+              }}
             >
               <RotateCwIcon aria-hidden="true" />
             </button>
           </Tooltip>
+          {showingSource ? <SourceMenu read={source} /> : null}
         </div>
       </header>
-      <iframe
-        key={reloads}
-        className="page-view-frame"
-        title={page.title}
-        src={pageFrameUrl({ planId, pageId: page.id, version })}
-        sandbox={PAGE_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
-      />
+      {showingSource ? (
+        <PageSource
+          title={page.title}
+          read={source ?? { kind: SOURCE_READ.READING }}
+          onRetry={() => ask(version)}
+        />
+      ) : (
+        <iframe
+          key={reloads}
+          className="page-view-frame"
+          title={page.title}
+          src={pageFrameUrl({ planId, pageId: page.id, version })}
+          sandbox={PAGE_SANDBOX}
+          allow=""
+          referrerPolicy="no-referrer"
+        />
+      )}
     </div>
   );
 }

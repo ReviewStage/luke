@@ -895,7 +895,14 @@ function TabContent({
     return page === undefined ? (
       <SpinnerRegion label="Loading page" />
     ) : (
-      <PagePane key={page.id} planId={planId} page={page} />
+      <PagePane
+        key={page.id}
+        planId={planId}
+        page={page}
+        readSource={(version) =>
+          act(ACT_KIND.PLANNING_PAGE_SOURCE, { planId, pageId: page.id, version })
+        }
+      />
     );
   }
   if (isChangesTab(tab)) {
