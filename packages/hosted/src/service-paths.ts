@@ -54,6 +54,13 @@ export const HOSTED_SERVICE_PATH = {
    * plan's inbox is. `account-inbox-wire.ts` declares the answer.
    */
   INBOX: "/api/inbox",
+  /**
+   * The shell commands the account's agents asked to run on the developer's
+   * Mac: the ones waiting, held open while none is, each claimed for the
+   * Mac that read it (GET), and one's result (POST). `mac-command-wire.ts`
+   * declares the bodies.
+   */
+  MAC_COMMANDS: "/api/mac-commands",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

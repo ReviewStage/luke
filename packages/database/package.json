@@ -19,6 +19,7 @@
     "./models/content-addressed": "./src/models/content-addressed.js",
     "./models/hosted-store": "./src/models/hosted-store.js",
     "./models/ids": "./src/models/ids.js",
+    "./models/mac-command-store": "./src/models/mac-command-store.js",
     "./models/message-reads": "./src/models/message-reads.js",
     "./models/plan-revisions": "./src/models/plan-revisions.js",
     "./models/plan-template-revisions": "./src/models/plan-template-revisions.js",
@@ -43,6 +44,7 @@
     "./schemas/inbox": "./src/schemas/inbox.js",
     "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",
     "./schemas/integration": "./src/schemas/integration.js",
+    "./schemas/mac-command": "./src/schemas/mac-command.js",
     "./schemas/plan": "./src/schemas/plan.js",
     "./schemas/plan-revision": "./src/schemas/plan-revision.js",
     "./schemas/plan-template-revision": "./src/schemas/plan-template-revision.js",
@@ -76,6 +78,7 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",

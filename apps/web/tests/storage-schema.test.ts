@@ -59,6 +59,8 @@ const DECLARED_TABLES = [
   "inbox_item",
   "integration_connection",
   "jwks",
+  "mac_command",
+  "mac_command_listener",
   "messages",
   "oauth_access_token",
   "oauth_client",
