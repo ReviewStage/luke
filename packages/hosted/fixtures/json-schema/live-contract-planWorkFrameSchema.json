@@ -341,6 +341,14 @@
             ]
           }
         },
+        "asked": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "maxItems": 20
+        },
         "model": {
           "type": "string",
           "maxLength": 200
