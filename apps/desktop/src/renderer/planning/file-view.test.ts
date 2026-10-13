@@ -17,7 +17,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { finishAll, installAnimations, MOTION, motion, running } from "#testing/animations";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { sheetStyle } from "#testing/css-rules";
+import { selectable, selectedText, sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
@@ -415,6 +415,41 @@ test("the crumbs are in the window's own type, as a tab's name is, while the fil
   const line = view.container.querySelector(".code-lines");
   assert.ok(line);
   assert.match(style(line, "font-family") ?? "", codeType);
+});
+
+test("the file's lines select and copy as text, the gutter's numbers left out and a blank line kept as one; Luke's note over them selects too, its header no part of it", async () => {
+  const style = await sheetStyle();
+  const lines = [[{ text: "const seats = 3;" }], [], [{ text: "  return " }, { text: "seats;" }]];
+  const view = mounted(
+    [shownLines("call-guard", 3, 3, "The seats are counted here.")],
+    undefined,
+    () =>
+      Promise.resolve({
+        file: {
+          path: FILE,
+          repository: REPOSITORY,
+          branch: "main",
+          firstLine: 1,
+          lineCount: 3,
+          lines,
+        },
+      }),
+  );
+  await view.draw(FILE, { startLine: 3, endLine: 3 });
+
+  const rows = [...view.container.querySelectorAll(".file-tab-lines .code-line")];
+  // Note that each line leaves text in the copy, because a line that leaves
+  // none is closed up by the browser's copy, blank lines and all.
+  assert.deepEqual(
+    rows.map((row) => selectedText(style, row)),
+    ["const seats = 3;", "\n", "  return seats;"],
+  );
+  const card = view.container.querySelector(".file-note");
+  assert.ok(card);
+  assert.equal(selectedText(style, card), "The seats are counted here.");
+  const header = card.querySelector(".file-note-header");
+  assert.ok(header);
+  assert.equal(selectable(style, header), false);
 });
 
 test("each crumb hangs the tree over the folder it stands in, through the view's listings, the tab's file revealed and taking the keyboard; the chevrons between are no controls; a file the tree opens is browsed to from the repository's root, and takes the tree down", async () => {

@@ -18,6 +18,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { codingAgentsControl } from "#testing/plans-control";
 import type { FileTreeProps } from "../file-tree/contract";
 import { AgentChangesTab } from "./agent-changes-tab";
@@ -175,7 +176,7 @@ function mount() {
     [...container.querySelectorAll(".diff-hunk-header, .diff-line")].map((row) =>
       [...row.children].map((cell) => cell.textContent).join("|"),
     );
-  return { reads, sent, draw, answer, press, text, rows };
+  return { container, reads, sent, draw, answer, press, text, rows };
 }
 
 test("the tab reads as it shows and draws the first file's hunks, each row numbered on its side, beside the tree of every changed file", async () => {
@@ -206,6 +207,21 @@ test("the tab reads as it shows and draws the first file's hunks, each row numbe
     kind: ACT_KIND.GITHUB_OPEN,
     payload: { url: `${PULL_REQUEST}/files` },
   });
+});
+
+test("a diff's lines select and copy as text, both gutters' numbers left out and a blank line kept as one", async () => {
+  const style = await sheetStyle();
+  const tab = mount();
+  await tab.draw();
+  await tab.answer(changed([{ ...INVITE, patch: "@@ -1,2 +1,3 @@\n a();\n+\n b();" }]));
+
+  const lines = [...tab.container.querySelectorAll(".diff-line")];
+  // Note that each line leaves text in the copy, because a line that leaves
+  // none is closed up by the browser's copy.
+  assert.deepEqual(
+    lines.map((line) => selectedText(style, line)),
+    ["a();", "\n", "b();"],
+  );
 });
 
 test("choosing a binary file, one too large to show, or one only moved says so in the diff's place rather than drawing it as unchanged", async () => {

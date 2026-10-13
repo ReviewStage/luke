@@ -876,7 +876,9 @@ function SettledCard({
     <Plan data-item-id={item.id} aria-label={cardTitle(item.title)}>
       <PlanHeader>{line}</PlanHeader>
       <PlanContent className="flex flex-col gap-2">
-        {words.note === undefined ? null : <p className="m-0 whitespace-pre-line">{words.note}</p>}
+        {words.note === undefined ? null : (
+          <p className="m-0 whitespace-pre-line select-text">{words.note}</p>
+        )}
         {item.blocks.length === 0 ? null : (
           <div className="text-muted-foreground">
             <Blocks

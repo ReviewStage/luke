@@ -78,6 +78,20 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
 }
 
+/**
+ * What a blank line's text holds, here and in a diff. Note that it is a
+ * newline rather than nothing, because the gutter's number is left out of a
+ * selection, so a line holding no text would leave nothing to copy and the
+ * copy would close up the blank lines between the code; drawn in `pre-wrap`,
+ * a lone newline takes no more room than the line.
+ */
+export const BLANK_LINE_TEXT = "\n";
+
+/** Whether a line holds no text to copy. */
+function isBlank(tokens: PlanCode["lines"][number]): boolean {
+  return tokens.every((token) => token.text === "");
+}
+
 /** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
 export function CodeLineRows({
   firstLine,
@@ -104,6 +118,7 @@ export function CodeLineRows({
                 {line}
               </span>
               <code className="code-line-text">
+                {isBlank(tokens) ? BLANK_LINE_TEXT : null}
                 {tokens.map((token, at) => (
                   <span key={at} style={runColours(token)}>
                     {token.text}

@@ -218,3 +218,30 @@ export async function sheetStyle(): Promise<
       .at(-1)
       ?.declarations.get(property);
 }
+
+/** What `sheetStyle` answers: the sheet's value for an element's property. */
+export type SheetStyle = Awaited<ReturnType<typeof sheetStyle>>;
+
+/**
+ * Whether a selection takes the node, as the browser resolves `user-select`:
+ * the nearest element the sheet gives a value decides, `auto` standing for
+ * its parent's, so the window's own `none` reaches every node nothing nearer
+ * opts back in.
+ */
+export function selectable(style: SheetStyle, node: Node): boolean {
+  for (let at = node instanceof Element ? node : node.parentElement; at; at = at.parentElement) {
+    const value = style(at, "user-select");
+    if (value !== undefined && value !== "auto") return value !== "none";
+  }
+  return true;
+}
+
+/** The text a selection across the element copies: each of its text nodes a selection takes, in order. */
+export function selectedText(style: SheetStyle, element: Element): string {
+  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let text = "";
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (selectable(style, node)) text += node.nodeValue ?? "";
+  }
+  return text;
+}

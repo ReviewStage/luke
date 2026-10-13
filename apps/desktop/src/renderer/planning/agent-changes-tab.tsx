@@ -20,6 +20,7 @@ import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import { CHANGES_WORDS, DIFF_ROW, fileNotice, patchHunks, STATUS_LETTER } from "./changes-model";
+import { BLANK_LINE_TEXT } from "./code-pane";
 import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -184,7 +185,11 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
                   <span className="diff-line-number">{row.oldLine}</span>
                   <span className="diff-line-number">{row.newLine}</span>
                   <span className="diff-line-text">
-                    {row.kind === DIFF_ROW.NOTE ? row.text.trim() : row.text}
+                    {row.kind === DIFF_ROW.NOTE
+                      ? row.text.trim()
+                      : row.text === ""
+                        ? BLANK_LINE_TEXT
+                        : row.text}
                   </span>
                 </div>
               ))}
