@@ -124,6 +124,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.INTEGRATIONS_CONNECT,
     payload: { provider: "linear" },
   },
+  [ACT_KIND.INTEGRATIONS_TOOLS]: {
+    kind: ACT_KIND.INTEGRATIONS_TOOLS,
+    payload: { provider: "linear" },
+  },
   [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
     kind: ACT_KIND.INTEGRATIONS_DISCONNECT,
     payload: { provider: "linear" },

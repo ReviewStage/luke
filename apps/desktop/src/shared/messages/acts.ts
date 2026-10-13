@@ -69,10 +69,12 @@ import {
   type IntegrationConnectView,
   type IntegrationStatusesView,
   type IntegrationStatusView,
+  type IntegrationToolsView,
   integrationConnectViewSchema,
   integrationProviderParamsSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
+  integrationToolsViewSchema,
 } from "@sidecar/hosted/integration-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
@@ -163,6 +165,8 @@ export const ACT_KIND = {
   INTEGRATIONS_STATUS: "integrations.status",
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** The tools one provider's server offers the account's agents, read from the service when a list of them is shown. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   UPDATE_CHECK: "update.check",
@@ -703,6 +707,11 @@ export const ACT = {
     payload: actSchema(integrationProviderParamsSchema),
     result: wireResult<IntegrationConnectView>(isReadable(integrationConnectViewSchema)),
     refusal: "Could not connect that integration on this system.",
+  },
+  [ACT_KIND.INTEGRATIONS_TOOLS]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationToolsView>(isReadable(integrationToolsViewSchema)),
+    refusal: "Could not read that integration's tools on this system.",
   },
   [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
     payload: actSchema(integrationProviderParamsSchema),

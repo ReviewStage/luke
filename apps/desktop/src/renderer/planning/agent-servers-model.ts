@@ -7,25 +7,29 @@ import {
 } from "@sidecar/hosted/integration-wire";
 
 /**
- * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: where its connection stands and whether this agent has it on.
+ * agent-servers-model.ts -- what the MCP servers popover at an agent's composer says of each server: how many tools it offers, whether this agent has it on, or how to connect it.
  *
  * Every MCP server Luke hands a coding agent is one integration's, so the
  * popover has one row per integration provider, in the provider list's
  * order. A connected server carries a switch, on unless the agent switched
  * it off, which is all the agent's row keeps: a server connected later is on
- * for every agent. A server that is not connected, whose sign-in expired, or
- * that this deployment does not offer carries no switch, since there is
- * nothing to hand the agent either way, and says why in muted words; the two
- * the developer can mend in Settings say so. A read of the connections that
- * failed is the one error, said on every row with a way to read again.
+ * for every agent. Its row names how many tools the server offers once they
+ * have been read, and that count opens the list of them. A server not
+ * connected offers to connect it, there and then; one whose sign-in expired
+ * offers to reconnect; one this deployment does not offer is a dimmed row
+ * with nothing to press. No row says where it stands in words: the switch,
+ * the count, and the button are what say it. A read of the connections that
+ * failed is the one error, offered as a way to read again.
  */
 
 /** The kinds of row the popover draws. */
 export const SERVER_ROW = {
-  /** Connected: a switch for this agent. */
+  /** Connected: a switch for this agent, and the count of its tools. */
   SWITCH: "switch",
-  /** Mended in Settings › Integrations: not connected, or its sign-in expired. */
+  /** Not connected, or a sign-in under way: connect it from here. */
   CONNECT: "connect",
+  /** Its sign-in expired: connect it again from here. */
+  RECONNECT: "reconnect",
   /** Nothing to do from here: this deployment offers no such server, or the read has not answered yet. */
   QUIET: "quiet",
   /** The read of the connections failed: read again. */
@@ -34,19 +38,10 @@ export const SERVER_ROW = {
 
 type ServerRowKind = (typeof SERVER_ROW)[keyof typeof SERVER_ROW];
 
-/** The muted words a row says of its server. */
-const SERVER_STATE = {
-  CONNECTED: "Connected",
-  NOT_CONNECTED: "Not connected",
-  EXPIRED: "Sign-in expired",
-  NOT_AVAILABLE: "Not available",
-  READING: "Checking…",
-  ERROR: "Error",
-} as const;
-
 /** What a row offers at its end where it offers a press but no switch. */
 export const SERVER_ACTION = {
-  CONNECT: "Connect in Settings",
+  CONNECT: "Connect",
+  RECONNECT: "Reconnect",
   RETRY: "Try again",
 } as const;
 
@@ -56,36 +51,33 @@ export const SERVERS_NOTE = "Changes apply from the agent's next turn.";
 /** What the popover and its button are called. */
 export const SERVERS_LABEL = "MCP servers";
 
+/** How a connected server's count of tools reads. */
+export function toolsCount(count: number): string {
+  return count === 1 ? "1 tool" : `${count} tools`;
+}
+
 /** One server's row. */
 export interface ServerRow {
   readonly provider: IntegrationProvider;
   readonly name: string;
   readonly kind: ServerRowKind;
-  readonly state: string;
   /** Whether the agent has it on; a row with no switch has it on only by default, which is never drawn. */
   readonly on: boolean;
 }
 
 /** What a row is, from where its connection stands; nothing is a read that has not answered. */
-function rowOf(
-  status: IntegrationStatus | undefined,
-  readFailed: boolean,
-): Pick<ServerRow, "kind" | "state"> {
-  if (status === undefined) {
-    return readFailed
-      ? { kind: SERVER_ROW.RETRY, state: SERVER_STATE.ERROR }
-      : { kind: SERVER_ROW.QUIET, state: SERVER_STATE.READING };
-  }
+function kindOf(status: IntegrationStatus | undefined, readFailed: boolean): ServerRowKind {
+  if (status === undefined) return readFailed ? SERVER_ROW.RETRY : SERVER_ROW.QUIET;
   switch (status) {
     case INTEGRATION_STATUS.CONNECTED:
-      return { kind: SERVER_ROW.SWITCH, state: SERVER_STATE.CONNECTED };
+      return SERVER_ROW.SWITCH;
     case INTEGRATION_STATUS.PENDING:
     case INTEGRATION_STATUS.DISCONNECTED:
-      return { kind: SERVER_ROW.CONNECT, state: SERVER_STATE.NOT_CONNECTED };
+      return SERVER_ROW.CONNECT;
     case INTEGRATION_STATUS.EXPIRED:
-      return { kind: SERVER_ROW.CONNECT, state: SERVER_STATE.EXPIRED };
+      return SERVER_ROW.RECONNECT;
     case INTEGRATION_STATUS.UNAVAILABLE:
-      return { kind: SERVER_ROW.QUIET, state: SERVER_STATE.NOT_AVAILABLE };
+      return SERVER_ROW.QUIET;
   }
 }
 
@@ -102,7 +94,7 @@ export function serverRows(input: {
   return INTEGRATION_PROVIDER_LIST.map((provider) => ({
     provider,
     name: INTEGRATION_NAME[provider],
-    ...rowOf(input.statusOf(provider), input.readFailed),
+    kind: kindOf(input.statusOf(provider), input.readFailed),
     on: !input.disabled.includes(provider),
   }));
 }

@@ -1,0 +1,49 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "unavailable",
+            "not-opened"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

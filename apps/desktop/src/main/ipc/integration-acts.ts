@@ -3,6 +3,7 @@ import type {
   IntegrationProviderParams,
   IntegrationStatusesView,
   IntegrationStatusView,
+  IntegrationToolsView,
 } from "@sidecar/hosted/integration-view";
 import type { Effect } from "effect";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -22,13 +23,15 @@ export interface IntegrationActsDependencies {
     integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
     integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
     integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
+    integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   };
 }
 
 type IntegrationActKind =
   | typeof ACT_KIND.INTEGRATIONS_STATUS
   | typeof ACT_KIND.INTEGRATIONS_CONNECT
-  | typeof ACT_KIND.INTEGRATIONS_DISCONNECT;
+  | typeof ACT_KIND.INTEGRATIONS_DISCONNECT
+  | typeof ACT_KIND.INTEGRATIONS_TOOLS;
 
 /** The refusal a window that draws no Settings hears, in its kind's own words. */
 function refuseUnlessPanel(kind: IntegrationActKind, sender: ActSender): void {
@@ -47,6 +50,10 @@ export function integrationActRows(
     [ACT_KIND.INTEGRATIONS_CONNECT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.INTEGRATIONS_CONNECT, sender);
       return host.integrationsConnect(params);
+    },
+    [ACT_KIND.INTEGRATIONS_TOOLS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.INTEGRATIONS_TOOLS, sender);
+      return host.integrationsTools(params);
     },
     [ACT_KIND.INTEGRATIONS_DISCONNECT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.INTEGRATIONS_DISCONNECT, sender);

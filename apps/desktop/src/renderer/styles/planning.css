@@ -1982,24 +1982,118 @@ button.attached-file-face:hover img {
 }
 
 /* The MCP servers popover: the model menu's surface and rows, one per
-   server, each its mark, its name, where it stands in muted words, and at
-   its end a switch or what a press does; a row with nothing to press is
-   muted and takes no fill. */
+   server, each its mark and its name, how many tools it offers right after
+   the name, and at its end its switch or the button that connects it. A
+   row with nothing to press is dimmed as the menu's other disabled rows
+   are, and takes no fill; no row is one press, since each holds its own
+   controls. */
 .agent-servers-list {
   display: block;
   padding: 0 0 var(--space-4);
 }
 
-.agent-servers-menu div.plan-compose-menu-row:hover {
+.agent-servers-menu .agent-servers-row:hover {
   background: none;
 }
 
-.agent-servers-menu .plan-compose-menu-detail {
-  margin-left: var(--space-4);
+.agent-servers-row .plan-compose-menu-name {
+  flex: 0 1 auto;
 }
 
-.agent-servers-menu .plan-compose-menu-foot-note {
+.agent-servers-tools {
+  display: flex;
+  flex: none;
+}
+
+/* The count follows the server's name, in the menu's muted detail type, and
+   lifts to the body's colour while its list is open, which is while it is
+   hovered or focused; the switch or the button keeps the row's end. */
+.agent-servers-tools-count {
+  padding: 0 var(--space-4);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-servers-tools:is(:hover, :focus-within) .agent-servers-tools-count {
+  color: var(--text-body);
+}
+
+.agent-servers-switch {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border-radius: var(--menu-row-radius);
+  background: none;
+}
+
+.agent-servers-connect {
+  flex: none;
+  margin-left: auto;
+}
+
+/* The tools stand beside the popover, on its leading side since it hangs
+   from the composer's trailing edge, up from the row's foot since it stands
+   at the panel's foot, and scroll inside themselves past a bounded height:
+   each its name in the code face, with the first line of what it does
+   under it in the muted type, cut where the list's width ends. */
+.agent-servers-menu .agent-servers-tools-menu {
+  display: none;
+  right: calc(100% + var(--menu-inset) + 9px);
+  width: 280px;
+  max-height: 320px;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.agent-servers-tools:is(:hover, :focus-within) .agent-servers-tools-menu {
+  display: block;
+}
+
+.agent-servers-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-4) var(--row-inset);
+}
+
+.agent-servers-tool-name {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.agent-servers-tool-description {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The foot: the note on its own line, and Settings one quiet press away. */
+.agent-servers-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   padding-bottom: var(--space-4);
+}
+
+.agent-servers-settings {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--row-inset);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-servers-settings:hover {
+  color: var(--text-primary);
 }
 
 /* The context ring beside the MCP button: the window's one icon button

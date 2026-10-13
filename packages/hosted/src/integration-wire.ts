@@ -81,6 +81,13 @@ export const integrationStatusAnswerSchema = EffectSchema.Struct({
   status: integrationStatusSchema,
 });
 
+/** The tools one provider's server offers the account's agents (GET): each one's name, and the first line of what it does. */
+export const integrationToolsAnswerSchema = EffectSchema.Struct({
+  tools: EffectSchema.Array(
+    EffectSchema.Struct({ name: EffectSchema.String, description: EffectSchema.String }),
+  ),
+});
+
 /** The address a sign-in opens in the browser (POST): https, and nothing else. */
 export const integrationConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isPattern(/^https:\/\/\S+$/)),

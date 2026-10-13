@@ -154,12 +154,14 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationStatusesViewSchema: integrationView.integrationStatusesViewSchema,
     integrationStatusViewSchema: integrationView.integrationStatusViewSchema,
     integrationConnectViewSchema: integrationView.integrationConnectViewSchema,
+    integrationToolsViewSchema: integrationView.integrationToolsViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationView>,
   "integration-wire": {
     integrationProviderSchema: integrationWire.integrationProviderSchema,
     integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
     integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,
     integrationConnectAnswerSchema: integrationWire.integrationConnectAnswerSchema,
+    integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,

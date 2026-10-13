@@ -1,0 +1,11 @@
+{
+  "status": 503,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"unavailable\"}"
+}
