@@ -870,13 +870,15 @@ vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
-Then set the provider's variable (`LINEAR_CONNECTOR_UID`, `NOTION_CONNECTOR_UID`) to that
-UID in the web project and in both eve projects (`eve`, `coder`), because
-the agents read tokens too. Asking Connect about an arbitrary user id needs
-the deployment's own Vercel OIDC token, which the SDK reads from the request
-(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for all
-three projects, and make sure each one is linked to the connector for the
-environments it runs in. For local development, `vercel env pull` writes a
+Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
+preview, and development. The web, `eve`, and `coder` are services of that
+one project (`vercel.json`'s `services`), so its variables and the
+connector's link reach all three, which matters because the agents read
+tokens too. Asking Connect about an arbitrary user id needs the deployment's
+own Vercel OIDC token, which the SDK reads from the request
+(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
+project. For local development, `vercel env pull` writes a
 short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
 runs every agent without that provider, and Settings shows its row as
 unavailable. Every token request is billed by Connect and rate-limited per
