@@ -504,9 +504,48 @@ const HAIKU: CatalogModel = {
 };
 
 test.each([
+  [
+    "code shown wears the Code tab's brackets, not the file glyph",
+    CALL_KIND.SHOW_CODE,
+    "lucide-code-xml",
+  ],
+  [
+    "the agents listed wear the Coding agents terminal, not the subagent's robot",
+    CALL_KIND.LIST_AGENTS,
+    "lucide-square-terminal",
+  ],
+  [
+    "an agent read wears the Coding agents terminal too",
+    CALL_KIND.READ_AGENT,
+    "lucide-square-terminal",
+  ],
+] as const)("a call's row: %s", (_what, kind, glyph) => {
+  const container = mounted(
+    createElement(TranscriptTool, {
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind,
+      subject: "src/invite.ts",
+      input: { kind: TOOL_BLOCK.TEXT, text: "{}" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "{}" },
+      errorText: undefined,
+    }),
+  );
+  assert.equal(container.querySelector(`summary svg.${glyph}`) === null, false);
+  assert.equal(
+    container.querySelector("summary svg.lucide-file-code, summary svg.lucide-bot") === null,
+    true,
+  );
+});
+
+test.each([
   ["Claude Code's Clawd for an Anthropic model", HAIKU.id, "svg.provider-mark"],
   ["Codex's cloud for an OpenAI model", GPT.id, 'img.provider-mark[src="marks/codex-16.png"]'],
-  ["the robot for a model the catalog does not list", "anthropic/claude-haiku-9", "svg.lucide-bot"],
+  [
+    "Clawd for an Anthropic model the catalog does not list yet",
+    "anthropic/claude-haiku-9",
+    "svg.provider-mark",
+  ],
+  ["the robot for a model of no provider Luke runs agents on", "mistral/large-3", "svg.lucide-bot"],
 ] as const)("a subagent's row leads with %s", (_glyph, model, drawn) => {
   const container = mounted(
     createElement(TranscriptSubagent, {
