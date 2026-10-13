@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { CODING_AGENT_BOUNDS, storedObjectSchema, turnRecordFields } from "./coding-agent-wire.js";
+import { githubConnectionAnswerSchema } from "./github-connection-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -351,6 +352,8 @@ export const planningViewSchema = EffectSchema.Struct({
   listStatus: planningReadSchema,
   /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
+  /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
+  github: EffectSchema.optionalKey(githubConnectionAnswerSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -727,3 +730,11 @@ export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;
+
+/** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
+export const planningGitHubPageAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ url: EffectSchema.String }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningGitHubPageAnswer = typeof planningGitHubPageAnswerSchema.Type;

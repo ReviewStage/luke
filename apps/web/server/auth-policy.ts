@@ -6,6 +6,12 @@
  * worth asserting without one.
  */
 
+import {
+  isPersonalWorkspaceMetadata,
+  type StoredOrganizationMetadata,
+} from "@sidecar/database/models/workspace-seams";
+import { APIError } from "better-auth/api";
+
 /**
  * What a GitHub sign-in asks for. It is the Luke GitHub App's user
  * authorization, and a GitHub App has permissions rather than scopes: what
@@ -48,17 +54,22 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * (`github/github-app.ts`), and root AGENTS.md pins that no credential
  * travels in an answer, so neither door is open.
  *
- * Every organization write a browser could reach is shut as well. A
- * workspace's slug is what a later sync adopts a workspace by, so a session
- * free to create an organization, or to rename its own, could take a slug
- * before the team it belongs to arrives and be adopted in its place.
- * Workspaces and their members are written only by Luke's server, through
- * the server-only `auth.api` calls, which these paths do not reach. The
- * invitation endpoints are shut for a second reason: Luke sends no
- * invitation mail, and the plugin would otherwise write an invitation row
- * nobody is told about. The team and role endpoints are listed although
- * this deployment does not mount them, so turning either option on later
- * opens no door by itself.
+ * Every organization write a browser could reach is shut as well, but for
+ * the invitations. A session free to create an organization, or to rename
+ * its own, could take a slug before the team it belongs to arrives, so
+ * workspaces are created and their members removed only by Luke's server,
+ * through the server-only `auth.api` calls, which these paths do not reach.
+ *
+ * A teammate joins by invitation, Better Auth's own
+ * (https://www.better-auth.com/docs/plugins/organization#invitations): the
+ * invite page asks for one, lists and cancels the pending ones, and the
+ * invitee's page reads and accepts theirs, so exactly those five endpoints
+ * are served (`invite-member`, `list-invitations`, `cancel-invitation`,
+ * `get-invitation`, `accept-invitation`). The plugin checks each against the
+ * caller's role and address itself. Rejecting and listing one's own
+ * invitations stay shut, since no page of Luke's asks for either. The team
+ * and role endpoints are listed although this deployment does not mount
+ * them, so turning either option on later opens no door by itself.
  */
 export const DISABLED_AUTH_PATHS = [
   "/token",
@@ -73,12 +84,7 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/remove-member",
   "/organization/update-member-role",
   "/organization/leave",
-  "/organization/invite-member",
-  "/organization/cancel-invitation",
-  "/organization/accept-invitation",
   "/organization/reject-invitation",
-  "/organization/get-invitation",
-  "/organization/list-invitations",
   "/organization/list-user-invitations",
   "/organization/create-team",
   "/organization/update-team",
@@ -91,16 +97,45 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/delete-role",
 ] as const;
 
+/** Why the plugin refused an invitation on Luke's own terms, apart from its own refusals. */
+export const INVITATION_REFUSAL = {
+  PERSONAL_WORKSPACE: "PERSONAL_WORKSPACE_TAKES_NO_INVITATIONS",
+} as const;
+
+/**
+ * Refuses an invitation into a personal workspace, which is its account's
+ * alone. The plugin's `beforeCreateInvitation` hook is the documented place
+ * to stop one (https://www.better-auth.com/docs/plugins/organization#organization-hooks),
+ * and it is handed the organization, whose metadata only Luke's server
+ * writes, since organization updates are shut.
+ */
+async function refusePersonalInvitation(data: {
+  organization: { metadata?: StoredOrganizationMetadata };
+}) {
+  if (!isPersonalWorkspaceMetadata(data.organization.metadata)) return;
+  throw new APIError("FORBIDDEN", {
+    code: INVITATION_REFUSAL.PERSONAL_WORKSPACE,
+    message: "A personal workspace is yours alone, so it takes no invitations.",
+  });
+}
+
 /**
  * How Better Auth keeps workspaces, each an organization of its members. A
  * workspace is never deleted, so no plan is lost with one, and no signed-in
  * user creates one: the plugin still lets a server-only call that names a
  * `userId` and carries no session through, which is the one way Luke
  * creates a workspace.
+ *
+ * An invitation's id is the accept link an owner copies and shares by hand,
+ * so it travels outside the invitee's mailbox, which is the case the plugin's
+ * `requireEmailVerificationOnInvitation` names: only an account whose
+ * provider verified the invited address reads or accepts it.
  */
 export const ORGANIZATION_OPTIONS = {
   allowUserToCreateOrganization: false,
   disableOrganizationDeletion: true,
+  requireEmailVerificationOnInvitation: true,
+  organizationHooks: { beforeCreateInvitation: refusePersonalInvitation },
 } as const;
 
 export const JWT_KEY_STORAGE = {

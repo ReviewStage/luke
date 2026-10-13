@@ -48,6 +48,7 @@ const DECLARED_TABLES = [
   "coding_agent",
   "coding_agent_delegation",
   "conversations",
+  "github_connect_intent",
   "github_install_intent",
   "github_installation",
   "hosted_usage",

@@ -6,6 +6,7 @@ import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
   type CodeLines,
   PLAN_CALL_FAILURE,
+  type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
 } from "@sidecar/hosted/planning-view";
@@ -45,6 +46,8 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
+const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=intent-1";
+const DISCONNECT_PAGE = "https://tryluke.dev/connect-github.html?disconnect=1";
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -64,8 +67,12 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  /** Whether the host refuses a workspace write as the account's role not allowing it, and the install address a connection answers. */
-  const host = { notPermitted: false, connectUrl: INSTALL_URL };
+  /**
+   * Whether the host refuses a workspace write as the account's role not
+   * allowing it, the install address a connection answers, and whether the
+   * host names no page to connect the account's own GitHub.
+   */
+  const host = { notPermitted: false, connectUrl: INSTALL_URL, githubUnanswered: false };
   const refusal = () =>
     host.notPermitted
       ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
@@ -162,6 +169,18 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`restore:${params.seq}`);
           return true;
+        }),
+      githubConnect: () =>
+        Effect.sync((): PlanningGitHubPageAnswer => {
+          asked.push("github-connect");
+          return host.githubUnanswered
+            ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+            : { url: CONNECT_PAGE };
+        }),
+      githubDisconnect: () =>
+        Effect.sync((): PlanningGitHubPageAnswer => {
+          asked.push("github-disconnect");
+          return { url: DISCONNECT_PAGE };
         }),
       workspaceCreate: (params) =>
         Effect.sync(() => {
@@ -373,6 +392,29 @@ it.effect(
       assert.deepEqual(f.asked, [`edit:${PLAN_ID}:Invites expire.`]);
     }),
 );
+it.effect(
+  "Connect GitHub opens the page the host named in the browser, Disconnect its own, and neither from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const connected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
+      const disconnected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL);
+      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, VOICE);
+      f.host.githubUnanswered = true;
+      const unanswered = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
+
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(unanswered, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
+      });
+      assert.deepEqual(f.opened, [CONNECT_PAGE, DISCONNECT_PAGE]);
+    }),
+);
+
 it.effect(
   "a web link opens an http or https address in the browser, and no other scheme nor an address past the cap",
   () =>
