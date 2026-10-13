@@ -72,7 +72,8 @@ const migrationsThrough = (tag: string) =>
       );
     };
     yield* journal(tag);
-    return { folder, journal };
+    const latest = entries.at(-1)?.tag ?? assert.fail("no migrations");
+    return { folder, journal, latest };
   });
 
 /**
@@ -186,7 +187,7 @@ it.effect(
     Effect.provide(
       Effect.scoped(
         Effect.gen(function* () {
-          const { folder, journal } = yield* migrationsThrough(BEFORE);
+          const { folder, journal, latest } = yield* migrationsThrough(BEFORE);
           yield* runWebMigrations(folder);
           const agent = yield* openAgent;
           yield* Effect.forEach(OLD_ROWS, (row) => writeOldRow(agent, row));
@@ -197,6 +198,10 @@ it.effect(
             applied.map(([, name]) => name),
             [MIGRATION],
           );
+          // Note that the store reads below gate on the workspace a later migration adds, so the
+          // database is carried the rest of the way first; the triggers 0088 left still stand.
+          yield* journal(latest);
+          yield* runWebMigrations(folder);
 
           const items = yield* planInboxItems(agent.userId, agent.planId);
           assert.ok(items.every((item) => item.version === BLOCKS_VERSION));
