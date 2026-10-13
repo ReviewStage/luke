@@ -81,12 +81,39 @@ export const integrationStatusAnswerSchema = EffectSchema.Struct({
   status: integrationStatusSchema,
 });
 
-/** The tools one provider's server offers the account's agents (GET): each one's name, and the first line of what it does. */
-export const integrationToolsAnswerSchema = EffectSchema.Struct({
-  tools: EffectSchema.Array(
-    EffectSchema.Struct({ name: EffectSchema.String, description: EffectSchema.String }),
-  ),
-});
+/** Why a connected provider's server listed no tools when the service asked it. */
+export const INTEGRATION_TOOLS_PROBLEM = {
+  /** The server refused the account's sign-in. */
+  REFUSED: "refused",
+  /** The server answered with an error of its own, whose message is kept where it sent one. */
+  REJECTED: "rejected",
+  /** The server never answered, or answered with an error status and no message. */
+  UNREACHABLE: "unreachable",
+  /** The server answered what no MCP client reads. */
+  UNREADABLE: "unreadable",
+} as const;
+
+export type IntegrationToolsProblemReason =
+  (typeof INTEGRATION_TOOLS_PROBLEM)[keyof typeof INTEGRATION_TOOLS_PROBLEM];
+
+/**
+ * The tools one provider's server offers the account's agents (GET): each
+ * one's name and the first line of what it does, or why the server listed
+ * none, with the server's own one-line message where it sent one.
+ */
+export const integrationToolsAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    tools: EffectSchema.Array(
+      EffectSchema.Struct({ name: EffectSchema.String, description: EffectSchema.String }),
+    ),
+  }),
+  EffectSchema.Struct({
+    problem: EffectSchema.Struct({
+      reason: EffectSchema.Literals(Object.values(INTEGRATION_TOOLS_PROBLEM)),
+      message: EffectSchema.optionalKey(EffectSchema.String),
+    }),
+  }),
+]);
 
 /** The address a sign-in opens in the browser (POST): https, and nothing else. */
 export const integrationConnectAnswerSchema = EffectSchema.Struct({

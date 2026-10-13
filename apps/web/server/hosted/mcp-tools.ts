@@ -11,8 +11,11 @@
  * first line of its description: nothing the model would be handed, only
  * what a person picking servers reads.
  *
- * Every failure is one word, never the server's message, which nothing here
- * can vouch for holding no credential.
+ * Every failure is one word. The one thing kept of what the server said is
+ * the first line of a JSON-RPC error's message, bounded, and only where it
+ * carries neither the bearer nor anything shaped like a credential: that
+ * line ("App is not enabled for Slack MCP server access") is what tells a
+ * developer how to mend a connection, and it reaches their window.
  */
 
 import { Data, Duration, Effect, Option, Schema } from "effect";
@@ -49,12 +52,27 @@ const END_TIMEOUT = Duration.seconds(2);
 /** The most of a description's first line a tool keeps. */
 const DESCRIPTION_MAX_CHARS = 160;
 
+/** The most of a server's error message a failure keeps. */
+const MESSAGE_MAX_CHARS = 200;
+
+/**
+ * What a server's message may not carry to be kept: a bearer header, a
+ * Slack token's prefix, or a long unbroken run of token characters (a
+ * path's or a host's segments are short, so an address in it is kept).
+ */
+const CREDENTIAL_SHAPE = /bearer\s|xox[a-z]-|[A-Za-z0-9_+=-]{32,}/i;
+
+/** The shortest run of the bearer whose echo in a server's message drops it, so a truncated token is caught too. */
+const TOKEN_ECHO_CHARS = 12;
+
 /** Why no list could be read. */
-const MCP_TOOLS_FAILURE = {
-  /** The server never answered, or answered an error status. */
+export const MCP_TOOLS_FAILURE = {
+  /** The server never answered, or answered an error status with no message. */
   UNREACHABLE: "unreachable",
   /** The server refused the bearer. */
   REFUSED: "refused",
+  /** The server answered with a JSON-RPC error of its own. */
+  REJECTED: "rejected",
   /** The server answered what is no JSON-RPC answer the read understands. */
   UNREADABLE: "unreadable",
 } as const;
@@ -63,6 +81,10 @@ export type McpToolsFailureReason = (typeof MCP_TOOLS_FAILURE)[keyof typeof MCP_
 
 export class McpToolsFailure extends Data.TaggedError("McpToolsFailure")<{
   readonly reason: McpToolsFailureReason;
+  /** The server's JSON-RPC error code, where it answered one. */
+  readonly code?: number;
+  /** The first line of the server's error message, where one was safe to keep. */
+  readonly serverMessage?: string;
 }> {}
 
 /** The JSON-RPC error code an MCP server answers an unauthorized request with. */
@@ -74,10 +96,13 @@ export interface McpTool {
   readonly description: string;
 }
 
-const RpcError = Schema.Struct({ code: Schema.Number });
+const RpcError = Schema.Struct({
+  code: Schema.Number,
+  message: Schema.optionalKey(Schema.String),
+});
 
 const RpcAnswer = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
+  id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String, Schema.Null])),
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(RpcError),
 });
@@ -116,23 +141,55 @@ function answersOf(contentType: string, body: string): readonly RpcAnswerType[] 
   return texts.flatMap((text) => Option.toArray(decodeAnswerText(text)));
 }
 
-/** A tool's description as the list keeps it: its first line, bounded. */
-function firstLine(description: string | undefined): string {
-  const line = (description ?? "").trim().split(/\r?\n/)[0] ?? "";
-  return line.length <= DESCRIPTION_MAX_CHARS
-    ? line
-    : `${line.slice(0, DESCRIPTION_MAX_CHARS - 1)}…`;
+/** A text's first line, bounded to `max` characters. */
+function firstLine(text: string | undefined, max: number): string {
+  const line = (text ?? "").trim().split(/\r?\n/)[0] ?? "";
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
 }
 
 const unreachable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREACHABLE });
 const refused = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.REFUSED });
 const unreadable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREADABLE });
 
+/** Whether `line` repeats any run of the bearer long enough to be part of it rather than chance. */
+function echoesToken(line: string, token: string): boolean {
+  if (token.length <= TOKEN_ECHO_CHARS) return line.includes(token);
+  for (let start = 0; start + TOKEN_ECHO_CHARS <= token.length; start += 1) {
+    if (line.includes(token.slice(start, start + TOKEN_ECHO_CHARS))) return true;
+  }
+  return false;
+}
+
+/**
+ * A server's error message as a failure may keep it: its first line, or
+ * nothing where that could carry a credential, which is any run of the
+ * bearer the server was sent, the only account secret it holds of ours,
+ * or anything shaped like one.
+ */
+function keptMessage(message: string | undefined, token: string): string | undefined {
+  const line = (message ?? "").trim().split(/\r?\n/)[0] ?? "";
+  if (line === "" || echoesToken(line, token) || CREDENTIAL_SHAPE.test(line)) return undefined;
+  return firstLine(line, MESSAGE_MAX_CHARS);
+}
+
+/** The failure a JSON-RPC error amounts to: a refusal of the bearer, or the server's own error with what was safe to keep of it. */
+function rpcFailure(error: typeof RpcError.Type, token: string): McpToolsFailure {
+  if (error.code === RPC_UNAUTHORIZED) return refused;
+  const serverMessage = keptMessage(error.message, token);
+  return new McpToolsFailure({
+    reason: MCP_TOOLS_FAILURE.REJECTED,
+    code: error.code,
+    ...(serverMessage !== undefined ? { serverMessage } : undefined),
+  });
+}
+
 /**
  * The tools the server at `url` lists for the bearer `token`, in its order.
- * A server that refuses the bearer is `refused`; one that answers what is
- * no JSON-RPC answer is `unreadable`; anything that never answered is
- * `unreachable`.
+ * A server that refuses the bearer is `refused`; one that answers a JSON-RPC
+ * error of its own, under any status, is `rejected` with its code and what
+ * was safe to keep of its message; one that answers what is no JSON-RPC
+ * answer is `unreadable`; anything that never answered, or answered an
+ * error status with no JSON-RPC error, is `unreachable`.
  */
 export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(function* (
   url: string,
@@ -166,7 +223,14 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
       if (response.status === 401 || response.status === 403) {
         return yield* refused;
       }
-      if (response.status >= 400) return yield* unreachable;
+      if (response.status >= 400) {
+        // Note that we read an error status's body, because a server says there why it refused.
+        const failed = yield* Effect.mapError(response.text, () => unreachable);
+        const error = answersOf(response.headers["content-type"] ?? "", failed).find(
+          (message) => message.error !== undefined,
+        )?.error;
+        return yield* error === undefined ? unreachable : rpcFailure(error, token);
+      }
       session = Option.getOrElse(
         Option.fromUndefinedOr(response.headers[MCP_HEADER.SESSION]),
         () => session,
@@ -177,9 +241,7 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
         (message) => message.id === id,
       );
       if (answer === undefined) return yield* unreadable;
-      if (answer.error !== undefined) {
-        return yield* answer.error.code === RPC_UNAUTHORIZED ? refused : unreadable;
-      }
+      if (answer.error !== undefined) return yield* rpcFailure(answer.error, token);
       return answer.result;
     });
 
@@ -198,7 +260,10 @@ export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(functi
       const read = Option.getOrUndefined(decodePage(result));
       if (read === undefined) return yield* unreadable;
       for (const tool of read.tools)
-        tools.push({ name: tool.name, description: firstLine(tool.description) });
+        tools.push({
+          name: tool.name,
+          description: firstLine(tool.description, DESCRIPTION_MAX_CHARS),
+        });
       cursor = read.nextCursor;
       if (cursor === undefined) return tools;
     }

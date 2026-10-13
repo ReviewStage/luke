@@ -21,8 +21,11 @@
  *   provider's server offers the account's agents, read from the server with
  *   the account's token as an MCP client reads them, narrowed to the ones its
  *   table entry allows, and held for a few minutes per account and provider
- *   so a popover opened again asks the server nothing. A provider the account
- *   has not connected is refused before any token is read.
+ *   so a popover opened again asks the server nothing. A server that listed
+ *   none answers why, with its own one-line message where it sent one that
+ *   carries no credential (`hosted/mcp-tools.ts`), and is never held, so a
+ *   connection mended at the provider reads as mended at once. A provider
+ *   the account has not connected is refused before any token is read.
  * - `GET /api/account/integrations/connected` is where Connect returns the
  *   browser from any provider: the sign-in's state names the account and the
  *   provider, Connect is asked for a token afresh, and the browser is sent
@@ -31,7 +34,8 @@
  * The rewrite moves a provider's path segment into the `provider` query, so
  * the two provider routes read it there. Root AGENTS.md pins that no
  * credential travels in an answer: what each endpoint answers is status
- * words or the sign-in address, never a token. The sign-in address is not
+ * words, a server's credential-free message, or the sign-in address, never
+ * a token. The sign-in address is not
  * logged either, since it begins a grant for the account it was issued for.
  */
 
@@ -43,9 +47,11 @@ import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
+  INTEGRATION_TOOLS_PROBLEM,
   type IntegrationLandingStatus,
   type IntegrationProvider,
   type IntegrationStatus,
+  type IntegrationToolsProblemReason,
   integrationLandingPath,
   integrationProviderFromWire,
 } from "@sidecar/hosted/integration-wire";
@@ -74,7 +80,13 @@ import {
   type IntegrationStoreEffect,
 } from "./hosted/integration-store.js";
 import { INTEGRATION, type IntegrationDefinition } from "./hosted/integrations.js";
-import { listMcpTools, type McpTool } from "./hosted/mcp-tools.js";
+import {
+  listMcpTools,
+  MCP_TOOLS_FAILURE,
+  type McpTool,
+  type McpToolsFailure,
+  type McpToolsFailureReason,
+} from "./hosted/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
@@ -263,11 +275,29 @@ const statusesEndpoint = /* @__PURE__ */ Effect.fn("web/integrationsStatusesEndp
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { integrations });
 });
 
+/** The wire's word for each way a server's tools read can fail. */
+const TOOLS_PROBLEM_OF = {
+  [MCP_TOOLS_FAILURE.REFUSED]: INTEGRATION_TOOLS_PROBLEM.REFUSED,
+  [MCP_TOOLS_FAILURE.REJECTED]: INTEGRATION_TOOLS_PROBLEM.REJECTED,
+  [MCP_TOOLS_FAILURE.UNREACHABLE]: INTEGRATION_TOOLS_PROBLEM.UNREACHABLE,
+  [MCP_TOOLS_FAILURE.UNREADABLE]: INTEGRATION_TOOLS_PROBLEM.UNREADABLE,
+} as const satisfies Record<McpToolsFailureReason, IntegrationToolsProblemReason>;
+
+/** Why a server listed no tools, as the window is told: its word, and its own message where one was kept. */
+function toolsProblem(failure: McpToolsFailure) {
+  return {
+    reason: TOOLS_PROBLEM_OF[failure.reason],
+    ...(failure.serverMessage !== undefined ? { message: failure.serverMessage } : undefined),
+  };
+}
+
 /**
  * GET: the tools one provider's server offers the account's agents. A
- * provider with no connector here, one the account has not connected, a
- * token Connect will not give, and a server that cannot be read are all the
- * one unavailable refusal: the desktop draws no count for any of them.
+ * provider with no connector here, one the account has not connected, and a
+ * Connect that could not be asked are the one unavailable refusal. A grant
+ * Connect no longer holds, and a server that listed none, are an answer
+ * rather than a refusal: why, which the desktop draws in place of the
+ * connection's "Connected", and never held.
  */
 const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(function* (
   seams: IntegrationsAppSeams,
@@ -300,22 +330,37 @@ const toolsEndpoint = /* @__PURE__ */ Effect.fn("web/integrationToolsEndpoint")(
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { tools: held.tools });
   }
   const name = INTEGRATION_NAME[provider];
-  const issued = yield* connector.token(userId, { fresh: false }).pipe(
-    Effect.tapError((failure) =>
-      Effect.logWarning(`Vercel Connect gave no ${name} token for its tools`, failure.message),
-    ),
-    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-  );
+  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  if (Result.isFailure(issued)) {
+    // A grant Connect no longer holds is a refusal the developer mends by reconnecting, not an outage.
+    if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+        problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED },
+      });
+    }
+    yield* Effect.logWarning(
+      `Vercel Connect gave no ${name} token for its tools`,
+      issued.failure.message,
+    );
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
   const definition: IntegrationDefinition = INTEGRATION[provider];
-  const listed = yield* listMcpTools(definition.MCP_URL, Redacted.value(issued.token)).pipe(
-    Effect.tapError((failure) =>
-      Effect.logWarning(`${name}'s MCP server listed no tools: ${failure.reason}`),
-    ),
-    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  const listed = yield* Effect.result(
+    listMcpTools(definition.MCP_URL, Redacted.value(issued.success.token)),
   );
+  if (Result.isFailure(listed)) {
+    const failure = listed.failure;
+    yield* Effect.logWarning(
+      `${name}'s MCP server listed no tools: ${failure.reason}`,
+      failure.code ?? "no code",
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { problem: toolsProblem(failure) });
+  }
   const allowed = definition.ALLOWED_TOOLS;
   const tools =
-    allowed === undefined ? listed : listed.filter((tool) => allowed.includes(tool.name));
+    allowed === undefined
+      ? listed.success
+      : listed.success.filter((tool) => allowed.includes(tool.name));
   heldToolsSwept(cache, seams.now());
   const accountReads = cache.get(userId) ?? new Map<IntegrationProvider, ToolsRead>();
   accountReads.set(provider, { at: seams.now(), connectedAt: grant, tools });
