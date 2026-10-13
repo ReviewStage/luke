@@ -340,13 +340,17 @@ function hint(): string | null | undefined {
 }
 
 it.effect(
-  "the version history lists each version newest first: who wrote it, what it did, and when, under the plan's name",
+  "the version history lists each version newest first under its title alone: who wrote it, what it did, and when",
   () =>
     Effect.gen(function* () {
       const page = yield* mount(fakeService(), yield* registryOnTestClock);
 
       assert.equal(page.querySelector(".version-log-title")?.textContent, "Version history");
-      assert.equal(page.querySelector(".version-log-plan")?.textContent, "Teammate invitations");
+      assert.equal(
+        page.querySelector(".version-log")?.textContent?.includes("Teammate invitations"),
+        false,
+        "no line under the title",
+      );
       assert.deepEqual(rows(page), [
         "Luke · 2h · 2 changes",
         "Invite emails · 5h · 1 change",
@@ -456,35 +460,82 @@ it.effect(
     }),
 );
 
-/** The Open standing at the end of the row whose words read `row`, if it has one. */
-function openButton(page: HTMLElement, row: string): HTMLButtonElement | null | undefined {
-  const item = [...page.querySelectorAll(".version-item")].find(
+/** The item of the row whose words read `row`. */
+function itemOf(page: HTMLElement, row: string): HTMLElement {
+  const item = [...page.querySelectorAll<HTMLElement>(".version-item")].find(
     (each) => each.querySelector(".version-row")?.textContent === row,
   );
-  return item?.querySelector<HTMLButtonElement>(".version-row-open");
+  assert.ok(item, `no row reads "${row}"`);
+  return item;
+}
+
+/** The items of the menu standing open, as they read. */
+function menuItems(): string[] {
+  return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+/** What each button of the row whose words read `row` is called, the row itself by its words. */
+function rowButtons(page: HTMLElement, row: string): string[] {
+  return [...itemOf(page, row).querySelectorAll("button")].map(
+    (button) => button.getAttribute("aria-label") ?? button.textContent ?? "",
+  );
+}
+
+/** Presses the ⋯ of the row whose words read `row`, and answers the items of the menu it dropped. */
+function openMenu(page: HTMLElement, row: string) {
+  const ellipsis = itemOf(page, row).querySelector<HTMLButtonElement>(
+    'button[aria-label="Version actions"]',
+  );
+  assert.ok(ellipsis, `no ⋯ on the row reading "${row}"`);
+  return Effect.map(
+    Effect.promise(() => act(async () => ellipsis.click())),
+    menuItems,
+  );
 }
 
 /** Right-clicks the row whose words read `row`, and answers the items of the menu it opened. */
 function rightClick(page: HTMLElement, row: string) {
-  const button = [...page.querySelectorAll<HTMLButtonElement>(".version-row")].find(
-    (each) => each.textContent === row,
-  );
-  assert.ok(button, `no row reads "${row}"`);
+  const button = itemOf(page, row).querySelector(".version-row");
+  assert.ok(button);
   return Effect.map(
     Effect.promise(() =>
       act(async () => {
         button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
       }),
     ),
-    () =>
-      [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
-        (item) => item.textContent ?? "",
-      ),
+    menuItems,
+  );
+}
+
+/** Closes the menu standing open, as Escape does. */
+function closeMenu() {
+  const menu = document.querySelector('[role="menu"]');
+  assert.ok(menu, "no menu open");
+  return Effect.promise(() =>
+    act(async () => {
+      menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    }),
   );
 }
 
 it.effect(
-  "a version's Open goes where it was written: an agent's to its tab, Luke's on a call to the call, Luke's other saves to their moment in Work, and the developer's nowhere",
+  "a row carries one ⋯ beside it and nothing else, which drops the same menu its right-click opens",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
+
+      assert.deepEqual(rowButtons(page, "Luke2h2 changes"), ["Luke2h2 changes", "Version actions"]);
+      const dropped = yield* openMenu(page, "Luke2h2 changes");
+      assert.deepEqual(dropped, ["Show changes", "Open in Work"]);
+      yield* closeMenu();
+      assert.deepEqual(yield* rightClick(page, "Luke2h2 changes"), dropped);
+    }),
+);
+
+it.effect(
+  "a version's Open in its menu goes where it was written: an agent's to its tab, Luke's on a call to the call, Luke's other saves to their moment in Work, and the developer's nowhere",
   () =>
     Effect.gen(function* () {
       const service = fakeService();
@@ -500,11 +551,14 @@ it.effect(
       });
       const page = yield* mount(service, yield* registryOnTestClock);
 
-      assert.equal(openButton(page, "You1d1 change"), null);
-      for (const row of ["Luke2h2 changes", "Invite emails5h1 change", "Luke1d4 changes"]) {
-        const open = openButton(page, row);
-        assert.ok(open, `no Open on "${row}"`);
-        yield* Effect.promise(() => act(async () => open.click()));
+      const opens = [
+        ["Luke2h2 changes", "Open in Transcript"],
+        ["Invite emails5h1 change", "Open Invite emails"],
+        ["Luke1d4 changes", "Open in Work"],
+      ] as const;
+      for (const [row, open] of opens) {
+        assert.ok((yield* openMenu(page, row)).includes(open), `no ${open} on "${row}"`);
+        yield* press(document.body, open);
       }
       assert.deepEqual(shownSources, [
         { planId: PLAN_ID, source: { kind: REVISION_SOURCE.CALL, callId } },
@@ -512,19 +566,14 @@ it.effect(
         { planId: PLAN_ID, source: { kind: REVISION_SOURCE.WORK, at: offCall.lastEdit.at } },
       ]);
       assert.equal(
-        openButton(page, "Luke2h2 changes")?.getAttribute("aria-label"),
-        "Open in Transcript",
+        (yield* openMenu(page, "You1d1 change")).some((item) => item.startsWith("Open")),
+        false,
       );
-      assert.equal(
-        openButton(page, "Invite emails5h1 change")?.getAttribute("aria-label"),
-        "Open Invite emails",
-      );
-      assert.equal(openButton(page, "Luke1d4 changes")?.getAttribute("aria-label"), "Open in Work");
     }),
 );
 
 it.effect(
-  "a version's right-click offers its Open and its sections where it has them, and the developer's own one change offers no menu",
+  "a version's menu offers only what applies to it: Show changes for several changes, its Open, and Restore for any but the plan as it stands",
   () =>
     Effect.gen(function* () {
       const service = fakeService(NOW, SECTIONED);
@@ -536,13 +585,56 @@ it.effect(
       });
       const page = yield* mount(service, yield* registryOnTestClock);
 
-      assert.deepEqual(yield* rightClick(page, "Luke2h2 changes"), [
+      assert.deepEqual(yield* rightClick(page, "Luke1d4 changes"), [
+        "Show changes",
         "Open in Work",
-        "Show the sections it changed",
+        "Restore this version",
       ]);
-      yield* press(document.body, "Open in Work");
-      assert.equal(shownSources.at(-1)?.source.kind, REVISION_SOURCE.WORK);
-      assert.deepEqual(yield* rightClick(page, "You1d1 change"), []);
+      yield* closeMenu();
+      assert.deepEqual(yield* rightClick(page, "You1d1 change"), ["Restore this version"]);
+    }),
+);
+
+it.effect("the plan as it stands, by the developer in one change, offers no menu at all", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    service.lines.unshift({
+      seq: 4,
+      lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false },
+      startedAt: NOW,
+      changes: 1,
+    });
+    const page = yield* mount(service, yield* registryOnTestClock);
+
+    assert.deepEqual(rowButtons(page, "Younow1 change"), ["Younow1 change"]);
+    assert.deepEqual(yield* rightClick(page, "Younow1 change"), []);
+  }),
+);
+
+it.effect("an archived plan's version menus offer no restore", () =>
+  Effect.gen(function* () {
+    const page = yield* mount(fakeService(), yield* registryOnTestClock, true);
+
+    assert.deepEqual(yield* rightClick(page, "Luke1d4 changes"), ["Show changes", "Open in Work"]);
+  }),
+);
+
+it.effect(
+  "a version's Restore in its menu chooses it and asks, and the answer restores that version",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      yield* rightClick(page, "Luke1d4 changes");
+      const menu = document.querySelector('[role="menu"]');
+      assert.ok(menu);
+      yield* press(menu, "Restore this version");
+      assert.equal(chosen(page), "Luke");
+      assert.equal(chosenSummary(page), "4 changes");
+      assert.ok(document.querySelector('[role="alertdialog"]'), "the restore asks first");
+      yield* press(document, "Restore");
+      assert.equal(service.current, FIRST);
     }),
 );
 
@@ -581,14 +673,12 @@ function sectionsOpen(page: HTMLElement): boolean {
   return page.querySelector(".version-log-track")?.getAttribute("data-opened") === "true";
 }
 
-/** Presses the chevron beside the row whose words read `row`, which opens the sections its version changed. */
+/** Chooses Show changes from the ⋯ of the row whose words read `row`, which opens the sections its version changed. */
 function openSections(page: HTMLElement, row: string) {
-  const item = [...page.querySelectorAll(".version-item")].find(
-    (each) => each.querySelector(".version-row")?.textContent === row,
-  );
-  const chevron = item?.querySelector<HTMLButtonElement>(".version-row-sections");
-  assert.ok(chevron, `no chevron on the row reading "${row}"`);
-  return Effect.promise(() => act(async () => chevron.click()));
+  return Effect.gen(function* () {
+    yield* openMenu(page, row);
+    yield* press(document.body, "Show changes");
+  });
 }
 
 /** Runs the version history's Escape, as the window's keymap does. */
@@ -614,25 +704,28 @@ it.effect(
       });
       const page = yield* mount(service, yield* registryOnTestClock);
 
-      const offered = [...page.querySelectorAll(".version-item")].map(
-        (item) => item.querySelector(".version-row-sections") !== null,
-      );
+      const offered: boolean[] = [];
+      for (const row of rows(page)) {
+        offered.push((yield* rightClick(page, row.replaceAll(" · ", ""))).includes("Show changes"));
+        yield* closeMenu();
+      }
       assert.deepEqual(offered, [true, false, true, false]);
     }),
 );
 
 it.effect(
-  "a version's chevron slides its sections in, under who wrote it and when: each a row by its name, an added one saying so, the first drawn alone",
+  "Show changes slides a version's sections in over the title, under who wrote it alone: each a row by its name, an added one saying so, the first drawn alone",
   () =>
     Effect.gen(function* () {
       const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
 
       yield* openSections(page, "Luke2h2 changes");
       assert.equal(sectionsOpen(page), true);
-      assert.equal(
-        page.querySelector(".version-sections-head")?.textContent?.startsWith("Luke·"),
-        true,
+      assert.ok(
+        page.querySelector(".version-log-title")?.closest("[inert]"),
+        "the title slid away",
       );
+      assert.equal(page.querySelector(".version-sections-head")?.textContent, "Luke");
       assert.deepEqual(sectionRows(page), ["Goal", "DecisionsAdded"]);
       assert.equal(chosenSection(page), "Goal");
       assert.equal(page.querySelector(".version-page .plan-title"), null);
@@ -643,6 +736,42 @@ it.effect(
       assert.equal(chosenSection(page), "Decisions");
       assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
       assert.doesNotMatch(body(page) ?? "", /Any member/u);
+    }),
+);
+
+it.effect(
+  "over a version's sections, who wrote it opens where it was written, with a hint saying where, and the developer's own is not pressed",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService(NOW, SECTIONED);
+      service.lines.push({
+        seq: 4,
+        lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
+        startedAt: NOW - 30 * HOUR,
+        changes: 3,
+      });
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      yield* openSections(page, "Luke2h2 changes");
+      const head = page.querySelector<HTMLElement>(".version-sections-head");
+      assert.equal(head?.tagName, "BUTTON");
+      act(() => head?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+      assert.equal(hint(), "Open in Work");
+      yield* press(page, "Luke");
+      assert.deepEqual(
+        shownSources.map((shown) => shown.source.kind),
+        [REVISION_SOURCE.WORK],
+      );
+
+      yield* press(page, "All versions");
+      yield* openSections(page, "You1d3 changes");
+      assert.equal(page.querySelector(".version-sections-head")?.tagName, "P");
+      assert.equal(
+        [...page.querySelectorAll(".version-log button")].some(
+          (each) => each.textContent === "You",
+        ),
+        false,
+      );
     }),
 );
 

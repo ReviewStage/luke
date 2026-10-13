@@ -482,7 +482,6 @@ test("a plan's version history is one step: Back, Escape, and Command-[ return t
   openPlan(INVITATIONS);
   openVersionHistory(INVITATIONS);
   assert.equal(where(), VERSION_HISTORY);
-  assert.equal(document.body.querySelector(".version-log-plan")?.textContent, INVITATIONS.name);
   assert.equal(
     document.body.querySelector(".title-bar-controls[data-edge='end']"),
     null,
@@ -507,7 +506,6 @@ test("a version history opened from another plan's row opens over that plan, and
   openPlan(INVITATIONS);
   openVersionHistory(BILLING);
   assert.equal(where(), VERSION_HISTORY);
-  assert.equal(document.body.querySelector(".version-log-plan")?.textContent, BILLING.name);
 
   pressEscape();
   assert.equal(where(), INVITATIONS.name);

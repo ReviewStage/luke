@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
-import { BackIcon, ChevronRightIcon, TerminalIcon, WingFace } from "@sidecar/panel";
-import { ArrowUpRightIcon, HistoryIcon } from "lucide-react";
+import { BackIcon, EllipsisIcon, TerminalIcon, WingFace } from "@sidecar/panel";
+import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -23,19 +23,19 @@ import {
   sourceLabel,
   VERSION_CHANGE,
   versionDiff,
-  versionMoment,
 } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ, type ViewedVersion } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { VersionSkeleton, VersionView } from "../planning/version-view";
+import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton, RetryRowLabel } from "../retry-button";
+import type { DialogConfirm } from "../settings/confirm-dialog";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
-import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -45,24 +45,27 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * The left column is as wide as the plans' sidebar and resizes it from its
  * own edge, never folding, as Settings' page list does. At its head stand
  * back and forward and the Back row, which Escape presses too, then the
- * plan's name under the view's own, then the versions, newest first: who
- * wrote each, drawn as the rest of the window draws them (Luke's face as
- * the Transcript wears it, the reader's account picture as You, a coding
- * agent's harness and title), what it did, and how long ago, in the
- * sidebar's few letters with the moment itself on hover. The newest is the plan as it stands and the one
- * drawn when the view opens, wearing no tag of its own: its Restore says it
- * is already current. Opened from a section's "Edited by", the view draws
+ * view's title, then the versions, newest first: who wrote each, drawn as
+ * the rest of the window draws them (Luke's face as the Transcript wears
+ * it, the reader's account picture as You, a coding agent's harness and
+ * title), what it did, and how long ago, in the sidebar's few letters with
+ * the moment itself on hover. The newest is the plan as it stands and the
+ * one drawn when the view opens, wearing no tag of its own: its Restore says
+ * it is already current. Opened from a section's "Edited by", the view draws
  * the version that made the section's last change instead, its row brought
  * into the list's view. Choosing a row, or stepping with the up and down
  * arrows, draws that version beside the list (`version-view.tsx`), and older
- * versions are read a page at a time from the list's foot. A version of
- * several changes carries a chevron at its row's end, and it or the right
- * arrow slides the column one level over, as a nested page of System
- * Settings does: All versions at its head, who wrote the version and when on
- * one line, then a row for each section it changed, a section added or
- * removed saying so. The first is drawn alone beside them, the arrows step
- * through the rest, and the left arrow, Escape, or All versions slide back
- * with the version still chosen. A version keeps only the text its writer's
+ * versions are read a page at a time from the list's foot. A row's ⋯, which
+ * stands in its time's place while the row is hovered or holds the
+ * keyboard as a sidebar plan's Pin and Archive do, and its right-click offer
+ * what applies to its version: Show changes, its Open, and its Restore. Show
+ * changes, or the right arrow, slides the column one level over, as a nested
+ * page of System Settings does, the title going with the list: All versions
+ * at its head, who wrote the version, which opens where it was written, then
+ * a row for each section it changed, a section added or removed saying so.
+ * The first is drawn alone beside them, the arrows step through the rest,
+ * and the left arrow, Escape, or All versions slide back with the version
+ * still chosen. A version keeps only the text its writer's
  * saves left, so a section is the finest step it is read in. While the
  * versions are read, the list and the page stand as quiet blocks in their
  * own shapes (`skeleton.tsx`).
@@ -78,8 +81,11 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 /** What the page says while the plan has no revision yet. */
 const NO_HISTORY_LINE = "Versions appear here as the plan is written.";
 
-/** What the chevron that opens a revision's sections says. */
-const SECTIONS_HINT = "Show the sections it changed";
+/** What the menu item that opens a revision's sections says. */
+const SECTIONS_LABEL = "Show changes";
+
+/** What a row's ⋯ says. */
+const ACTIONS_LABEL = "Version actions";
 
 /** The word a changed section wears beside its name: none for an edit, which most are. */
 const SECTION_CHANGE_WORDS = {
@@ -149,28 +155,12 @@ function showMenuAt(menu: ReturnType<typeof useActionMenu>) {
   };
 }
 
-/** A revision's Open: a quiet arrow that stands at the row's end while the row is hovered or focused, and goes to the place that wrote it. */
-function OpenSourceButton({ source }: { source: SourceDoor }): React.JSX.Element {
-  return (
-    <Tooltip label={source.label}>
-      <button
-        type="button"
-        className="version-row-open"
-        aria-label={source.label}
-        tabIndex={-1}
-        onClick={source.onOpen}
-      >
-        <ArrowUpRightIcon />
-      </button>
-    </Tooltip>
-  );
-}
-
 /**
  * One revision's row: who wrote it, what it did, and when; lit while its
- * version is drawn. A revision of several changes carries a chevron at its
- * end that opens the sections it changed, a button beside the row rather
- * than inside it, since a button holds no other.
+ * version is drawn. Its ⋯ stands over the time while the row is hovered or
+ * holds the keyboard, a button beside the row rather than inside it, since a
+ * button holds no other, and drops the same menu the row's right-click
+ * hangs at the pointer. A row with nothing to offer has neither.
  */
 function RevisionRow({
   line,
@@ -181,6 +171,7 @@ function RevisionRow({
   onSelect,
   onOpenSections,
   source,
+  onRestore,
 }: {
   line: PlanRevisionLine;
   author: RevisionAuthor;
@@ -192,15 +183,30 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
+  /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived plan's. */
+  onRestore: (() => void) | undefined;
 }): React.JSX.Element {
   const { lastEdit } = line;
   const menu = useActionMenu(true);
-  const items = [
-    ...(source === undefined ? [] : [sourceItem(source)]),
-    ...(onOpenSections === undefined
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
+  const groups = [
+    [
+      ...(onOpenSections === undefined
+        ? []
+        : [{ label: SECTIONS_LABEL, icon: <FileDiffIcon />, onSelect: onOpenSections }]),
+      ...(source === undefined ? [] : [sourceItem(source)]),
+    ],
+    onRestore === undefined
       ? []
-      : [{ label: SECTIONS_HINT, icon: <ChevronRightIcon />, onSelect: onOpenSections }]),
-  ];
+      : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
+  ].filter((group) => group.length > 0);
+  const offered = groups.length > 0;
+  // Note that the ⋯ is what a right-click's menu hands focus back to, since
+  // it is the menu's own door from the keyboard.
+  const showMenu = (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
+  };
   return (
     <li className="version-item" data-menu-open={String(menu.open !== undefined)}>
       <button
@@ -209,7 +215,7 @@ function RevisionRow({
         className="version-row"
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
-        onContextMenu={items.length === 0 ? undefined : showMenuAt(menu)}
+        onContextMenu={offered ? showMenu : undefined}
       >
         <RevisionMark author={author} />
         <span className="version-row-text">
@@ -228,61 +234,78 @@ function RevisionRow({
           <span className="version-row-summary">{revisionSummary(line)}</span>
         </span>
       </button>
-      {source === undefined ? null : <OpenSourceButton source={source} />}
-      {onOpenSections === undefined ? null : (
-        <Tooltip label={SECTIONS_HINT}>
-          <button
-            type="button"
-            className="version-row-sections"
-            aria-label={SECTIONS_HINT}
-            tabIndex={-1}
-            onClick={onOpenSections}
-          >
-            <ChevronRightIcon />
-          </button>
-        </Tooltip>
-      )}
+      {offered ? (
+        <span className="version-row-actions">
+          <Tooltip label={ACTIONS_LABEL}>
+            <button
+              ref={ellipsis}
+              type="button"
+              className="sidebar-plan-mark"
+              aria-label={ACTIONS_LABEL}
+              aria-haspopup="menu"
+              aria-expanded={menu.open !== undefined}
+              onClick={(event) => {
+                if (menu.open !== undefined) {
+                  menu.close(true);
+                  return;
+                }
+                menu.show(dropBelow(event.currentTarget), event.currentTarget);
+              }}
+              onContextMenu={showMenu}
+            >
+              <EllipsisIcon />
+            </button>
+          </Tooltip>
+        </span>
+      ) : null}
       {menu.open === undefined ? null : (
-        <ActionMenu
-          label="Version actions"
-          menu={menu.open}
-          groups={[items]}
-          onClose={menu.close}
-        />
+        <ActionMenu label={ACTIONS_LABEL} menu={menu.open} groups={groups} onClose={menu.close} />
       )}
     </li>
   );
 }
 
-/** The head of a revision's sections: the way back to every version, and who wrote it and when, on one line. */
+/**
+ * The head of a revision's sections: the way back to every version, and who
+ * wrote it, which goes where it was written where anywhere in the window
+ * did, and is said and not pressed where nowhere did.
+ */
 function SectionsHead({
-  line,
   author,
   source,
   onBack,
 }: {
-  line: PlanRevisionLine;
   author: RevisionAuthor;
   source: SourceDoor | undefined;
   onBack: () => void;
 }): React.JSX.Element {
+  const who = (
+    <>
+      <RevisionMark author={author} />
+      <span className="version-row-author" data-author={author.kind}>
+        {authorName(author)}
+      </span>
+    </>
+  );
   return (
     <>
       <button type="button" className="sidebar-item version-sections-back" onClick={onBack}>
         <BackIcon />
         All versions
       </button>
-      <p className="version-sections-head">
-        <RevisionMark author={author} />
-        <span className="version-row-author" data-author={author.kind}>
-          {authorName(author)}
-        </span>
-        <span aria-hidden="true">·</span>
-        <time dateTime={new Date(line.lastEdit.at).toISOString()}>
-          {versionMoment(line.lastEdit.at)}
-        </time>
-        {source === undefined ? null : <OpenSourceButton source={source} />}
-      </p>
+      {source === undefined ? (
+        <p className="version-sections-head">{who}</p>
+      ) : (
+        <Tooltip label={source.label}>
+          <button
+            type="button"
+            className="version-sections-head version-sections-source"
+            onClick={source.onOpen}
+          >
+            {who}
+          </button>
+        </Tooltip>
+      )}
     </>
   );
 }
@@ -488,15 +511,16 @@ function openedSections(
 
 /**
  * The version history's page beside the list: the version chosen, or the
- * state standing in its place. A restore that lands leaves for the plan it
- * restored, which is not always the one Back returns to; an archived plan's
- * versions are read and not restored.
+ * state standing in its place; an archived plan's versions are read and not
+ * restored.
  */
 function VersionPage({
   plans,
+  restore,
   section,
 }: {
   plans: PlansControl;
+  restore: DialogConfirm;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
 }): React.JSX.Element {
@@ -505,10 +529,8 @@ function VersionPage({
     const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
     return (
       <VersionView
-        history={history}
         viewing={history.viewing}
-        shown={plans.shown}
-        onRestored={history.onClose}
+        restore={restore}
         restorable={plan?.archivedAt === undefined}
         title={plan?.name}
         section={section}
@@ -581,12 +603,11 @@ export function DesktopVersionHistory({
   const edge = useSidebarEdge(sidebar);
   const reader = readerOf(account);
   const agents = plans.agents.agents ?? [];
-  // The plan is named as its document is drawn, or as the list names it while its read is on its way.
   const { region } = plans;
   const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
-  const name =
-    plan?.name ??
-    [...plans.plans, ...plans.archived].find((each) => each.id === plans.boundFor)?.name;
+  const restorable = plan?.archivedAt === undefined;
+  // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
+  const restore = useVersionRestore(versions, plans.shown, restorable, versions.onClose);
   // A newer version arriving while another's sections are open moves the
   // history on to it, as it does over the list, so the sections give way.
   if (opened !== undefined && versions.selected !== opened.seq) setOpened(undefined);
@@ -610,6 +631,14 @@ export function DesktopVersionHistory({
   const openSections = (seq: number) => {
     versions.onSelect(seq);
     setOpened({ seq, heading: undefined });
+  };
+  const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
+    const newest = revisions[0]?.seq;
+    if (!restorable || line.seq === newest) return undefined;
+    return () => {
+      versions.onSelect(line.seq);
+      restore.ask();
+    };
   };
   const closeSections = () => {
     if (opened === undefined) return;
@@ -656,35 +685,39 @@ export function DesktopVersionHistory({
           Back
           <ShortcutGlyphs command={APP_COMMAND.EXIT_VERSION_HISTORY} className="row-shortcut" />
         </button>
-        <h1 className="version-log-title">Version history</h1>
-        {name === undefined ? null : <p className="version-log-plan">{name}</p>}
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
-          <div ref={log} className="sidebar-section version-log-pane" inert={opened !== undefined}>
-            {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-            <ol className="version-list">
-              {revisions.map((line) => {
-                const author = revisionAuthorOf(line, reader, agents);
-                return (
-                  <RevisionRow
-                    key={line.seq}
-                    line={line}
-                    author={author}
-                    source={sourceOf(line, author)}
-                    selected={line.seq === versions.selected}
-                    now={now}
-                    rowRef={(row) => {
-                      if (row === null) rows.delete(line.seq);
-                      else rows.set(line.seq, row);
-                    }}
-                    onSelect={() => versions.onSelect(line.seq)}
-                    onOpenSections={opensSections(line) ? () => openSections(line.seq) : undefined}
-                  />
-                );
-              })}
-            </ol>
-            {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
-              <EarlierRow onRead={versions.onLoadEarlier} />
-            ) : null}
+          <div className="version-log-pane" inert={opened !== undefined}>
+            <h1 className="version-log-title">Version history</h1>
+            <div ref={log} className="sidebar-section">
+              {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
+              <ol className="version-list">
+                {revisions.map((line) => {
+                  const author = revisionAuthorOf(line, reader, agents);
+                  return (
+                    <RevisionRow
+                      key={line.seq}
+                      line={line}
+                      author={author}
+                      source={sourceOf(line, author)}
+                      selected={line.seq === versions.selected}
+                      now={now}
+                      rowRef={(row) => {
+                        if (row === null) rows.delete(line.seq);
+                        else rows.set(line.seq, row);
+                      }}
+                      onSelect={() => versions.onSelect(line.seq)}
+                      onOpenSections={
+                        opensSections(line) ? () => openSections(line.seq) : undefined
+                      }
+                      onRestore={restoreOf(line)}
+                    />
+                  );
+                })}
+              </ol>
+              {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
+                <EarlierRow onRead={versions.onLoadEarlier} />
+              ) : null}
+            </div>
           </div>
           <section
             className="sidebar-section version-log-pane"
@@ -694,7 +727,6 @@ export function DesktopVersionHistory({
             {openedLine === undefined ? null : (
               <>
                 <SectionsHead
-                  line={openedLine}
                   author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents)}
                   source={openedSource}
                   onBack={closeSections}
@@ -723,7 +755,11 @@ export function DesktopVersionHistory({
         <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
-        <VersionPage plans={plans} section={opened === undefined ? undefined : unit} />
+        <VersionPage
+          plans={plans}
+          restore={restore}
+          section={opened === undefined ? undefined : unit}
+        />
       </section>
     </div>
   );

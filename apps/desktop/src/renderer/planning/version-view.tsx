@@ -3,6 +3,7 @@ import { MarkdownMessage } from "../markdown-message";
 import {
   ConfirmDialog,
   DIALOG_TONE,
+  type DialogConfirm,
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
@@ -148,26 +149,44 @@ function VersionContent({
 }
 
 /**
+ * The restore of the version chosen, asked in the window's dialog: held by
+ * the history around the page rather than the page itself, so a version
+ * row's menu can choose its version and ask in one press. `shown` is
+ * whether the window shows the history, which the question stands on, and
+ * `onRestored` what follows a restore that landed. Note that the answer
+ * restores whichever version is chosen when it is given, which is the one
+ * the question names, since choosing another takes focus off the dialog.
+ */
+export function useVersionRestore(
+  history: PlanHistoryControl,
+  shown: boolean,
+  restorable: boolean,
+  onRestored: () => void,
+): DialogConfirm {
+  // An archive landing while the question stands takes the question down with the button.
+  return useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
+    const result = await history.onRestore();
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
+    return result;
+  });
+}
+
+/**
  * The version chosen in the version history, the page beside its list: the
- * bar with when it was saved and its restore, over the version itself.
- * `shown` is whether the window shows it, which the restore's question
- * stands on, and `onRestored` what follows a restore that landed. An
+ * bar with when it was saved and its restore, over the version itself. An
  * archived plan's versions are read but not restored, so its bar offers no
  * restore.
  */
 export function VersionView({
-  history,
   viewing,
-  shown,
-  onRestored,
+  restore,
   restorable = true,
   title,
   section,
 }: {
-  history: PlanHistoryControl;
   viewing: ViewedVersion;
-  shown: boolean;
-  onRestored: () => void;
+  /** The restore's question, held by the history around the page (`useVersionRestore`). */
+  restore: DialogConfirm;
   /** Whether the version may be restored: not while the plan is archived. */
   restorable?: boolean;
   /** The plan's name, which every version is drawn under. */
@@ -175,12 +194,6 @@ export function VersionView({
   /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
 }): React.JSX.Element {
-  // An archive landing while the question stands takes the question down with the button.
-  const restore = useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
-    const result = await history.onRestore();
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
-    return result;
-  });
   const { line } = viewing;
   return (
     <>
