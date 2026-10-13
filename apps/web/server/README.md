@@ -48,8 +48,7 @@ reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each
 order, and records what it applied in its own `effect_sql_migrations` table,
 which is what makes a second deploy a no-op. The older Drizzle-based runner's
 `drizzle.__drizzle_migrations`, which every database was bootstrapped from
-once, is read by nothing now and waits on the same drop as the dead tables
-below. The Neon integration
+once, went with its schema in `20261013123642_dead_tables_drop`. The Neon integration
 creates a database branch for each Preview deployment, so its committed schema
 changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
@@ -1799,20 +1798,16 @@ whose rows a `Schema` decodes and whose path rule is that schema too, which
 answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
-The database still carries tables and columns nothing reads or writes any
-more — `events`, `provider_cursors`, `provider_key` (not the BYOK keys,
-which are `account_provider_key`), `roster_snapshot`, `transcript_mark`,
-`observation_pass`, `workspace_file`, `workspace_embedding`, `devices`,
-`account_workspace_preference`, and `introduction_usage`,
-`account_preference.default_workspace_provider`, and the conversation row's
-observed-session columns (`provider_id`, `provider_session_id`,
-`workspace`), its `spawned_by_message_id` and `completion_delivered_at`, its
-`next_event_seq`, and its three `memory_flush_*` columns. No schema module
-declares them, so no insert names them, and the drift check's
-`PENDING_DROP` and `PENDING_DROP_TABLES` list them until the migration that
-drops them. A child's `parent_conversation_id`, `label`, `title`, and
-`expects_completion` are live: a subagent's and a coding agent's worker's
-child conversation writes them.
+`20261013123642_dead_tables_drop` dropped the tables and columns nothing
+read or wrote any more — `events`, `provider_cursors`, `provider_key` (not
+the BYOK keys, which are `account_provider_key`), `roster_snapshot`,
+`transcript_mark`, `observation_pass`, `workspace_file`,
+`workspace_embedding`, `devices`, `account_workspace_preference`,
+`introduction_usage`, `account_preference.default_workspace_provider`, and
+the conversation row's observed-session, event-sequence, completion-sweep,
+and memory-flush columns. A child's `parent_conversation_id`, `label`,
+`title`, and `expects_completion` are live: a subagent's and a coding
+agent's worker's child conversation writes them.
 
 The conversation tables are the shape the LUKE-95 storage plan settled on,
 less the `prompts` table it drew and less the `tool_sets` table
@@ -1841,7 +1836,7 @@ The store writer, `packages/database/src/models/writer.ts`, is the one path by w
 `messages` or `turns` row is written, and
 `tests/store-writer-boundary.test.ts` holds the server's own sources to that:
 the writer is the one server module with an insert, an update, or a delete over
-`messages`, `turns`, or `events`, whether as a Drizzle table imported from the schema or in the
+`messages` or `turns`, whether as a Drizzle table imported from the schema or in the
 text of a statement, and the modules that name one at all are the writer and
 the two readers, each listed there by name. It
 consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)

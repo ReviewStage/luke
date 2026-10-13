@@ -6,9 +6,9 @@ import ts from "typescript";
 import { test } from "vitest";
 
 /**
- * No code path writes a message, a turn, or an event except the store writer:
+ * No code path writes a message or a turn except the store writer:
  * the invariant the writer establishes, stated over the server's own sources.
- * A module that could write one of the three tables has to reach it, and
+ * A module that could write one of the two tables has to reach it, and
  * there are two ways to reach one: name it in the text of a statement the
  * `SqlClient` runs, or hold the Drizzle table the query builder renders from,
  * which a module can only come by through an import. So the modules that
@@ -45,11 +45,11 @@ const SERVER_ROOTS = ["server/", `${DATABASE_SOURCES}/`].map((root) =>
 
 const DATABASE_PACKAGE = "@sidecar/database/";
 
-const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "events"]);
+const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 
 const WRITER = `${DATABASE_SOURCES}/models/writer.ts`;
 
-/** What the writer writes: every guarded table but `events`, which nothing on the server writes now. */
+/** What the writer writes: every guarded table. */
 const WRITER_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 
 /** The read module: the message and turn reads the brain and the voice make select from those tables and insert into none. */
@@ -65,13 +65,13 @@ const TABLES_REACHED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [ABANDONED_TURNS_READER, new Set(["turns"])],
 ]);
 
-/** The modules that may write one of the three tables, which is the writer and nothing else. */
+/** The modules that may write one of the two tables, which is the writer and nothing else. */
 const TABLE_WRITERS: ReadonlySet<string> = new Set([WRITER]);
 
 /** A table as a statement spells it: unquoted or quoted, bare or schema-qualified, in any case. */
-const STATEMENT_TABLE_NAME = `(?:public\\.)?"?(messages|turns|events)\\b"?`;
+const STATEMENT_TABLE_NAME = `(?:public\\.)?"?(messages|turns)\\b"?`;
 
-/** A statement's write over one of the three tables, and the clauses that merely name one. */
+/** A statement's write over one of the two tables, and the clauses that merely name one. */
 const STATEMENT_WRITE = new RegExp(
   `\\b(?:insert\\s+into|update|delete\\s+from|truncate(?:\\s+table)?)\\s+${STATEMENT_TABLE_NAME}`,
   "gi",
@@ -138,7 +138,7 @@ function moduleSpecifier(node: ts.ImportDeclaration | ts.ExportDeclaration): str
   return specifier !== undefined && ts.isStringLiteral(specifier) ? specifier.text : undefined;
 }
 
-/** The table a declaration declares, when it is `pgTable("<name>", …)` over one of the three. */
+/** The table a declaration declares, when it is `pgTable("<name>", …)` over one of the two. */
 function declaredTable(declaration: ts.VariableDeclaration): string | undefined {
   const initializer = declaration.initializer;
   if (initializer === undefined || !ts.isCallExpression(initializer)) return undefined;
@@ -324,7 +324,7 @@ function readable(
   );
 }
 
-test("the writer and the two readers are the server modules that reach the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the two readers are the server modules that reach the messages or turns table, and only the writer writes one", async () => {
   const reach = tableReach(await serverSources());
   const reached = new Map([...reach].map(([file, found]) => [file, found.reached]));
   const writers = [...reach]
@@ -348,8 +348,7 @@ const SCHEMA_SOURCES: ReadonlyMap<string, string> = new Map([
     `import { pgTable, text, uuid } from "drizzle-orm/pg-core";
      export const conversations = pgTable("conversations", { id: uuid("id") });
      export const messages = pgTable("messages", { id: uuid("id") });
-     export const turns = pgTable("turns", { id: uuid("id") });
-     export const events = pgTable("events", { id: uuid("id") });`,
+     export const turns = pgTable("turns", { id: uuid("id") });`,
   ],
   [`${DATABASE_SOURCES}/schemas/index.ts`, `export * from "./storage.js";`],
   [`${DATABASE_SOURCES}/schemas/auth.ts`, `export const user = pgTable("user", {});`],
@@ -380,9 +379,9 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   {
     name: "a builder delete over a namespace member",
     source: `import * as schema from "@sidecar/database/schemas";
-      export const purge = (db) => db.delete(schema.events);`,
-    reached: ["events"],
-    written: ["events"],
+      export const purge = (db) => db.delete(schema.turns);`,
+    reached: ["turns"],
+    written: ["turns"],
   },
   {
     name: "a builder select and join reach without writing",
@@ -416,9 +415,9 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   {
     name: "a raw statement's write",
     source: `export const write = (sql) =>
-        sql\`insert into events (user_id, seq) values (\${id}, \${seq})\`;`,
-    reached: ["events"],
-    written: ["events"],
+        sql\`insert into messages (user_id, seq) values (\${id}, \${seq})\`;`,
+    reached: ["messages"],
+    written: ["messages"],
   },
   {
     name: "a raw statement's write, quoted, qualified, and in upper case",

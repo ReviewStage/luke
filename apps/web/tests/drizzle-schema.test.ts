@@ -78,24 +78,6 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
 const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // Migration 0088 moved the fixed kinds into `blocks` and `response`.
   ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
-  // Nothing reads or writes these: the preference outlived the workspace
-  // picker, and the rest outlived observed sessions, the event ledger, the
-  // completion sweep, and the memory flush.
-  ["account_preference", new Set(["default_workspace_provider"])],
-  [
-    "conversations",
-    new Set([
-      "provider_id",
-      "provider_session_id",
-      "workspace",
-      "spawned_by_message_id",
-      "next_event_seq",
-      "memory_flush_operation_id",
-      "memory_flush_outcome",
-      "memory_flushed_at",
-      "completion_delivered_at",
-    ]),
-  ],
 ]);
 
 /**
@@ -103,19 +85,7 @@ const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
  * terms as `PENDING_DROP`: nothing reads or writes them, and they leave the
  * database one deployment after they left their modules.
  */
-const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([
-  "account_workspace_preference",
-  "devices",
-  "events",
-  "introduction_usage",
-  "observation_pass",
-  "provider_cursors",
-  "provider_key",
-  "roster_snapshot",
-  "transcript_mark",
-  "workspace_embedding",
-  "workspace_file",
-]);
+const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
