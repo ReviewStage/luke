@@ -141,6 +141,51 @@ function dispatcherPlugin(web: string, functions: readonly FunctionDefinition[])
   };
 }
 
+/** zod's pure re-export entry modules, as a resolved path ends: the package root, `zod/v4`, and the classic index `zod/v4` re-exports. */
+const ZOD_ENTRY_MODULES = [
+  "/node_modules/zod/index.js",
+  "/node_modules/zod/v4/index.js",
+  "/node_modules/zod/v4/classic/index.js",
+];
+/** The specifiers that reach them: `zod` and `zod/v4` from a dependency, `./classic/index.js` from inside `zod/v4`. */
+const ZOD_ENTRY_SPECIFIER = /^(zod(\/v4)?|\.\/classic\/index\.js)$/;
+const ZOD_ENTRY_PLUGIN = "zod-entry-side-effects";
+
+/**
+ * Keeps zod's re-export entry modules in every bundle. A module that some
+ * bundled dependency reaches through a dynamic `import()` is wrapped by esbuild
+ * in a lazy initializer, and Better Auth 1.7 dynamically imports modules that
+ * reach `zod`, so zod's schemas are wrapped. A static importer of a wrapped
+ * module is handed an `init_…()` call ahead of its own code, but the `ai`
+ * package imports `zod/v4`, which reaches the schemas through two pure
+ * re-export files that zod's `sideEffects` list lets esbuild drop, and esbuild
+ * drops the initializer call with them (0.27.7 and 0.28.2 alike): `ai`'s top-level `z.lazy(…)` then runs before `ZodLazy`
+ * is assigned and the function fails to load. Note that we mark only those
+ * re-export files as having side effects, because keeping them costs a few
+ * lines and keeps the initializer call esbuild would otherwise lose.
+ */
+function zodEntryPlugin(): Plugin {
+  return {
+    name: ZOD_ENTRY_PLUGIN,
+    setup(build) {
+      build.onResolve({ filter: ZOD_ENTRY_SPECIFIER }, async (args) => {
+        // The plugin's own resolve below re-enters this hook; it is passed through by its marker.
+        if (args.pluginData === ZOD_ENTRY_PLUGIN) return undefined;
+        const resolved = await build.resolve(args.path, {
+          kind: args.kind,
+          importer: args.importer,
+          resolveDir: args.resolveDir,
+          pluginData: ZOD_ENTRY_PLUGIN,
+        });
+        const entry = ZOD_ENTRY_MODULES.some((suffix) => resolved.path.endsWith(suffix));
+        return entry && resolved.errors.length === 0
+          ? { ...resolved, sideEffects: true }
+          : undefined;
+      });
+    },
+  };
+}
+
 export async function functionBundlePlan(web: string): Promise<FunctionBundlePlan> {
   const functions = await webFunctions(web);
   const entryPoints = functions.map((definition) => ({
@@ -169,7 +214,7 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       sourcemap: false,
       metafile: true,
       logLevel: "warning",
-      plugins: [dispatcherPlugin(web, functions)],
+      plugins: [dispatcherPlugin(web, functions), zodEntryPlugin()],
       external: exceptions,
       banner: { js: REQUIRE_BANNER },
     },
