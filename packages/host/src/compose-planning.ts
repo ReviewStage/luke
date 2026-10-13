@@ -7,12 +7,24 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type {
+  HostedCodingAgentClient,
   HostedPlanClient,
   PlanActivityFrame,
   PlanDraftFrame,
   PlanMarks,
 } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+  type CodingAgentMessagesAnswerView,
+} from "@sidecar/hosted/coding-agent-view";
+import {
+  applyMessagesPage,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessagesAnswer,
+  type CodingAgentStatus,
+} from "@sidecar/hosted/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
@@ -39,6 +51,7 @@ import {
   planningBoardSaveParamsSchema,
   planningEditParamsSchema,
   planningFileParamsSchema,
+  planningMessagesParamsSchema,
   planningPageParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
@@ -53,7 +66,19 @@ import {
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
+import {
+  Data,
+  Duration,
+  Effect,
+  FiberHandle,
+  Option,
+  Queue,
+  Result,
+  Schedule,
+  Schema,
+  type Scope,
+  Semaphore,
+} from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -97,7 +122,10 @@ import type { RunMode } from "./run-mode.js";
  * title and newest version alone, and again whenever the call's activity
  * says a page the planning model showed just settled or it stopped working;
  * a page's HTML is answered to the frame that draws it and held nowhere
- * here.
+ * here. Beside the work, the open plan's planning conversation is read as
+ * an agent's transcript is, on the service's held read, and held on the
+ * view for the Call tab to switch to; a planning worker's transcript is
+ * answered to the tab that asks for it and held nowhere here.
  */
 
 /**
@@ -108,6 +136,69 @@ import type { RunMode } from "./run-mode.js";
  * land; this is that wait's margin.
  */
 const TRANSCRIPT_SETTLE = Duration.seconds(5);
+
+/**
+ * How long the conversation's read waits after one the service did not
+ * answer: the first wait, doubling on each read that fails again, up to the
+ * longest.
+ */
+const CONVERSATION_RETRY = { FIRST: Duration.seconds(1), LONGEST: Duration.seconds(30) } as const;
+
+const CONVERSATION_BACKOFF = Schedule.exponential(CONVERSATION_RETRY.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, CONVERSATION_RETRY.LONGEST)),
+  ),
+);
+
+/** The statuses a conversation page reads as still writing: a planning turn, or a worker of one, that may add to it. */
+const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
+  CODING_AGENT_STATUS.STARTING,
+  CODING_AGENT_STATUS.RUNNING,
+]);
+
+/** A read of a plan's conversation the service did not answer, as the backoff retries it. */
+class ConversationUnanswered extends Data.TaggedError("ConversationUnanswered")<{
+  readonly failure: CodingAgentCallFailure;
+}> {}
+
+/** Whether a page says the planner, or a worker of its, may still add to the conversation. */
+function conversationWriting(page: CodingAgentMessagesAnswer): boolean {
+  return (
+    CONVERSATION_WRITING.has(page.status) ||
+    (page.subagents ?? []).some((worker) => CONVERSATION_WRITING.has(worker.status))
+  );
+}
+
+/**
+ * The entries held of a conversation's workers with a page's joined in by
+ * the call that started each: the page's in place of one held under the
+ * same call, and a new one after the rest. Note that the list is joined
+ * rather than replaced, because a planning conversation's page names only
+ * the workers of the turns it carries and of its newest few.
+ */
+function joinedByCall<Entry extends { readonly callId: string }>(
+  held: readonly Entry[] | undefined,
+  page: readonly Entry[] | undefined,
+): readonly Entry[] | undefined {
+  if (page === undefined || page.length === 0) return held;
+  const heard = new Map(page.map((entry) => [entry.callId, entry]));
+  const kept = (held ?? []).map((entry) => heard.get(entry.callId) ?? entry);
+  const known = new Set((held ?? []).map((entry) => entry.callId));
+  return [...kept, ...page.filter((entry) => !known.has(entry.callId))];
+}
+
+/** Where each worker stands and what it is titled, the page's joined to those held, each list only where it names one. */
+function withWorkers(
+  held: CodingAgentMessagesAnswer,
+  page: CodingAgentMessagesAnswer,
+): Pick<CodingAgentMessagesAnswer, "subagents" | "subagentTitles"> {
+  const subagents = joinedByCall(held.subagents, page.subagents);
+  const subagentTitles = joinedByCall(held.subagentTitles, page.subagentTitles);
+  return {
+    ...(subagents === undefined ? undefined : { subagents }),
+    ...(subagentTitles === undefined ? undefined : { subagentTitles }),
+  };
+}
 
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
@@ -143,10 +234,14 @@ export type PlanningClient = Pick<
   | "edit"
 >;
 
+/** The service's side of a plan's planning conversation, read as an agent's transcript is. */
+export type PlanningConversationClient = Pick<HostedCodingAgentClient, "planMessages">;
+
 export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
+  conversations: PlanningConversationClient;
   /**
    * Ends the planning call standing about `planId`, or whatever it is about
    * where none is named, and waits for it to end. A call about another plan
@@ -203,11 +298,27 @@ export interface PlanningComposer extends Composer {
  * else moves. The Plans tab showing reads the list and the open plan again,
  * while the open plan and its call stand through the tab hiding. Behind a
  * closed account gate, or on a run that sends nothing, nothing is read.
+ *
+ * The open plan's conversation is read the way an agent's tab reads its
+ * transcript: its newest page when the plan opens, starts, or is refreshed,
+ * then one held read past the cursor after another, which the service holds
+ * open while a planning turn or one of its workers runs and nothing new
+ * stands. The read follows while the last page says the planner or a worker
+ * still writes, and parks once a page says neither, because the service
+ * answers an idle conversation at once and asking again would be a loop on
+ * no clock at all. Note that it reads the workers the page names rather
+ * than the list held, because a worker no page names any more reads as it
+ * last did and would keep the read asking. Any word of the open plan's call (its activity, or its
+ * end) wakes a parked read, from the cursor held, since a turn begins only
+ * on a call and its activity says so. One read stands at a time: opening
+ * another plan replaces it, and leaving the plan or a sign-out stops it. A
+ * read the service did not answer is asked again after a backoff; a plan the
+ * service no longer holds parks it.
  */
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, endPlanCall } = dependencies;
+  const { kernel, account, client, conversations, endPlanCall } = dependencies;
   const idleView = (): PlanningView => IDLE_PLANNING_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -233,7 +344,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, no board, no transcript, no code, no work, and no pages read or told, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, no code, no work, no conversation, and no pages read or told, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
@@ -241,6 +352,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     shownCode: _shownCode,
     work: _work,
     workEarlier: _workEarlier,
+    conversation: _conversation,
     pages: _pages,
     ...rest
   }: PlanningView): PlanningView {
@@ -255,6 +367,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   /** The plans a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
+
+  /** The one read of the open plan's conversation; running another interrupts it. */
+  const conversationRead = yield* FiberHandle.make<void>();
+
+  /** The plans whose call just said something, whose parked conversation read the loop below wakes. */
+  const conversationWakes = yield* Queue.sliding<string>(1);
+
+  /**
+   * Whether the open plan's call said something since the conversation read
+   * last asked. Note that a read already out when a turn began can answer
+   * the conversation idle, so the read checks this before it parks rather
+   * than miss the turn until the call's next word.
+   */
+  let conversationWoken = false;
 
   /**
    * The plan whose call is telling its turns' work as they run, and the
@@ -515,6 +641,110 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     });
   }
 
+  /** One page of a plan's conversation, or why the service did not answer it. */
+  function askConversation(planId: string, page: { after?: string; before?: string }) {
+    return Effect.flatMap(
+      Effect.provide(conversations.planMessages(planId, page), FetchHttpClient.layer),
+      (answer) =>
+        "failure" in answer
+          ? Effect.fail(new ConversationUnanswered({ failure: answer.failure }))
+          : Effect.succeed(answer),
+    );
+  }
+
+  /**
+   * The held conversation with a page read from its newest turns or past its
+   * cursor joined in by message id and its workers by call, the cursor and
+   * where the planner stands taken from the page. Note that the turn the next older page
+   * is read before stays the held one once a page older than this one is
+   * held, because the page's own names a turn already read.
+   */
+  function withForwardPage(page: CodingAgentMessagesAnswer): CodingAgentMessagesAnswer {
+    const held = view.conversation;
+    if (held === undefined) return page;
+    const { earlier: _read, subagents: _workers, subagentTitles: _titles, ...rest } = page;
+    const oldest = held.messages[0]?.id;
+    const olderHeld =
+      oldest !== undefined && !page.messages.some((message) => message.id === oldest);
+    const earlier = olderHeld ? held.earlier : page.earlier;
+    return {
+      ...rest,
+      messages: applyMessagesPage(held.messages, page.messages),
+      ...withWorkers(held, page),
+      ...(earlier === undefined ? undefined : { earlier }),
+    };
+  }
+
+  /**
+   * Follows `planId`'s conversation while it is the open plan: from its
+   * newest page, or past the cursor held, then past each page's cursor while
+   * the page says it is still written or the call woke it meanwhile. A read
+   * the service did not answer is asked again after the backoff; a plan it
+   * no longer holds, or a gate that closed, ends the follow.
+   */
+  function followConversation(planId: string, newest: boolean) {
+    return Effect.gen(function* () {
+      let after = newest ? undefined : view.conversation?.cursor;
+      while (gate() && view.activePlanId === planId) {
+        conversationWoken = false;
+        const page = yield* askConversation(planId, after === undefined ? {} : { after }).pipe(
+          Effect.retry({
+            schedule: CONVERSATION_BACKOFF,
+            while: (unanswered) =>
+              unanswered.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND && gate(),
+          }),
+          Effect.option,
+        );
+        if (Option.isNone(page) || view.activePlanId !== planId) return;
+        write({ conversation: withForwardPage(page.value) });
+        if (!conversationWriting(page.value) && !conversationWoken) return;
+        after = page.value.cursor;
+      }
+    });
+  }
+
+  /** Reads `planId`'s conversation from its newest turns and follows it, in place of any read standing. */
+  function openConversation(planId: string) {
+    return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(planId, true)));
+  }
+
+  /** Wakes the open plan's parked conversation read, where `planId` is the open plan. */
+  function wakeConversation(planId: string): void {
+    if (view.activePlanId !== planId) return;
+    conversationWoken = true;
+    Queue.offerUnsafe(conversationWakes, planId);
+  }
+
+  /**
+   * Reads the page of the active plan's conversation before the oldest turn
+   * held, where one stands, and lays it before the rest, its workers joined
+   * by call. Note that the cursor and where the planner stands stay the held
+   * read's, because the page's cursor is the conversation's now and would
+   * skip what the held read has not heard yet. A failed read keeps what is held.
+   */
+  function readEarlierConversation(planId: string) {
+    return Effect.gen(function* () {
+      const before = view.conversation?.earlier;
+      if (before === undefined) return;
+      const answer = yield* Effect.provide(
+        conversations.planMessages(planId, { before }),
+        FetchHttpClient.layer,
+      );
+      const held = view.conversation;
+      // The plan was left, or opened again, while this read was out.
+      if ("failure" in answer || view.activePlanId !== planId || held?.earlier !== before) return;
+      const { earlier: _read, subagents: _workers, subagentTitles: _titles, ...rest } = held;
+      write({
+        conversation: {
+          ...rest,
+          messages: applyMessagesPage(answer.messages, held.messages),
+          ...withWorkers(held, answer),
+          ...(answer.earlier === undefined ? undefined : { earlier: answer.earlier }),
+        },
+      });
+    });
+  }
+
   /**
    * Shows the call's activity, and asks for the board again where it says a
    * draw just settled: the planning model's pending call was a draw and is
@@ -530,6 +760,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       write({ callActivity: activity });
       return;
     }
+    wakeConversation(planId);
     const was = view.activity?.planner;
     const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
@@ -570,6 +801,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(callEndReads, planId);
+    wakeConversation(planId);
   }
 
   /** Draws `plan` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -638,6 +870,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
+        const open = view.activePlanId;
+        if (open !== undefined) yield* openConversation(open);
         yield* serial(
           Effect.gen(function* () {
             yield* readList;
@@ -669,6 +903,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           };
           publish();
         }
+        yield* openConversation(planId);
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(planId);
@@ -686,6 +921,35 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (!gate() || planId === undefined) return {};
         yield* serial(readEarlierWork(planId));
         return {};
+      }),
+    [GATEWAY_METHOD.PLANNING_CONVERSATION_EARLIER]: () =>
+      Effect.gen(function* () {
+        const planId = view.activePlanId;
+        if (!gate() || planId === undefined) return {};
+        yield* serial(readEarlierConversation(planId));
+        return {};
+      }),
+    // A page of a plan's conversation, or of a planning worker's, is answered
+    // to the tab that asked and held nowhere: the tab keeps what it read.
+    [GATEWAY_METHOD.PLANNING_MESSAGES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningMessagesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a plan's conversation names the plan, and a cursor, a turn, or a worker's call",
+          );
+        }
+        if (!gate()) {
+          return carried<CodingAgentMessagesAnswerView>({
+            failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+          });
+        }
+        const { planId, callId, ...page } = read.success;
+        const answer = yield* Effect.provide(
+          conversations.planMessages(planId, page, callId),
+          FetchHttpClient.layer,
+        );
+        return carried<CodingAgentMessagesAnswerView>(answer);
       }),
     // A file's window is answered to the File tab that asked, coloured here,
     // and held nowhere: the tab keeps the windows it has scrolled through.
@@ -822,6 +1086,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // showed, and leaves its call standing, as opening another plan does.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
+        yield* FiberHandle.clear(conversationRead);
         yield* serial(
           Effect.sync(() => {
             const { activePlanId: _closed, ...rest } = withoutActivity(view);
@@ -853,6 +1118,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
               transcript: { status: PLANNING_READ.READY, transcript: EMPTY_TRANSCRIPT },
             };
             publish();
+            yield* openConversation(plan.id);
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
           }),
@@ -873,6 +1139,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (!deleted) return { deleted: false };
             const plans = view.plans.filter((plan) => plan.id !== planId);
             if (view.activePlanId === planId) {
+              yield* FiberHandle.clear(conversationRead);
               const { activePlanId: _deleted, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: PLANNING_READ.IDLE } };
             }
@@ -1054,6 +1321,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     callEnded,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
+      yield* FiberHandle.clear(conversationRead);
       yield* serial(
         Effect.sync(() => {
           view = idleView();
@@ -1061,8 +1329,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The board and page reads a settled draw or page asks for, and the
-    // transcript and work reads a call's end asks for; every other read of
+    // The board and page reads a settled draw or page asks for, the
+    // transcript and work reads a call's end asks for, and the wake of a
+    // parked conversation read the call's words ask for; every other read of
     // the plans is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
@@ -1082,13 +1351,33 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(callEndReads), (planId) => {
+            // The conversation's parked read is woken with each read too, since its last journal may land after the call's end.
             const read = Effect.suspend(() =>
               gate() && view.activePlanId === planId
-                ? serial(Effect.andThen(readTranscript(planId), readWork(planId)))
+                ? serial(Effect.andThen(readTranscript(planId), readWork(planId))).pipe(
+                    Effect.andThen(Effect.sync(() => wakeConversation(planId))),
+                  )
                 : Effect.void,
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      // Note that a read still following is left alone, because it already
+      // reads past what the call just said.
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(conversationWakes), (planId) =>
+            Effect.suspend(() =>
+              gate() && view.activePlanId === planId
+                ? Effect.asVoid(
+                    FiberHandle.run(conversationRead, followConversation(planId, false), {
+                      onlyIfMissing: true,
+                    }),
+                  )
+                : Effect.void,
+            ),
+          ),
         ),
       );
     }),

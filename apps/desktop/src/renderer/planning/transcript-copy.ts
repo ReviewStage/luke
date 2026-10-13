@@ -1,5 +1,6 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  applyMessagesPage,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_CURSOR_START,
@@ -12,7 +13,6 @@ import {
   AGENT_PART,
   type AgentPart,
   agentRows,
-  applyMessagesPage,
   isDelegation,
   messageWords,
   workerLines,
