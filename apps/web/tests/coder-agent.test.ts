@@ -139,8 +139,8 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   const channel = coderChannelInput(
     async () => undefined,
     {
-      sessionOwner: async (sessionId) => (sessionId === OWN_SESSION ? ACCOUNT : "user-b"),
-      ownsConversation: async (userId, conversationId) =>
+      reachesSession: async (userId, sessionId) => userId === ACCOUNT && sessionId === OWN_SESSION,
+      reachesConversation: async (userId, conversationId) =>
         userId === ACCOUNT && conversationId === CONVERSATION,
     },
     {

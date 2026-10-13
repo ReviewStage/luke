@@ -15,7 +15,7 @@ import { upstreamSideband } from "./live-sideband.js";
 /**
  * The hosted exchange as the voice service is offered it, one per signed-in
  * session: the conversation of the plan the session is bound to resolved at
- * the session's start, the writer the function already holds, eve reached as the deployment for that account, and a notetaker
+ * the session's start, the writer the function already holds, eve reached as the deployment for the calling account, and a notetaker
  * writing the plan as the call goes. This is the whole of what
  * `VoiceServiceOptions.exchange` takes, kept apart from the function's
  * composition, which passes it composed over the deployment's seams
@@ -51,15 +51,17 @@ const PLAN_GONE_MESSAGE = "the plan the session is bound to no longer stands";
 
 /**
  * The conversation a call lands in: its plan's, opened and attached now
- * where the plan has none yet. A plan deleted since the session was created
- * has none to offer, and the session is refused.
+ * where the plan has none yet, and answered under the member who opened it
+ * where a teammate did. A plan deleted since the session was created, or
+ * one the account no longer reaches, has none to offer, and the session is
+ * refused.
  */
 const planConversation = (userId: string, planId: string) =>
   Effect.flatMap(
     openPlanConversation(userId, planId),
     Option.match({
       onNone: () => Effect.fail(new ExchangeCannotStand({ message: PLAN_GONE_MESSAGE })),
-      onSome: (conversationId) => Effect.succeed(conversationId),
+      onSome: (opened) => Effect.succeed(opened),
     }),
   );
 
@@ -72,12 +74,12 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     Scope.Scope | SqlClient.SqlClient
   > =>
     Effect.gen(function* () {
-      const conversationId = yield* planConversation(session.accountId, session.planId);
+      const opened = yield* planConversation(session.accountId, session.planId);
       const scribeModel = deps.scribeModel();
       const exchange = yield* hostedLiveExchange({
-        userId: session.accountId,
+        accountId: session.accountId,
         liveSessionId: session.sessionId,
-        conversationId,
+        conversation: { userId: opened.ownerId, conversationId: opened.conversationId },
         ...(scribeModel === undefined
           ? undefined
           : {

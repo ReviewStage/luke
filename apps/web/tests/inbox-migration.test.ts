@@ -8,7 +8,6 @@ import {
   webMigrationJournal,
 } from "@sidecar/database/core/migrator";
 import { db } from "@sidecar/database/core/query";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -94,18 +93,20 @@ const migrationsThrough = (tag: string) =>
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const planId = randomUUID();
+  const sql = yield* SqlClient.SqlClient;
+  // The plan is written by hand too, since the store's own start names the workspace a later migration added.
+  yield* sql`insert into plan (id, user_id, name, document) values (${planId}, ${userId}, ${"Teammate invitations"}, ${""})`;
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)
     .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
   const agentId = randomUUID();
-  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     insert into coding_agent (id, plan_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
-    values (${agentId}, ${plan.id}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})
+    values (${agentId}, ${planId}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})
   `;
-  return { userId, planId: plan.id, agentId };
+  return { userId, planId, agentId };
 });
 
 /** An item in the shape the deployment before 0088 wrote it. */
@@ -205,6 +206,10 @@ it.effect(
             applied.map(([, name]) => name),
             [MIGRATION],
           );
+          // Note that the store reads below gate on the workspace a later migration adds, so the
+          // database is carried the rest of the way first; the triggers 0088 left still stand.
+          yield* journal(latest);
+          yield* runWebMigrations(folder);
 
           const items = yield* planInboxItems(agent.userId, agent.planId);
           assert.ok(items.every((item) => item.version === BLOCKS_VERSION));

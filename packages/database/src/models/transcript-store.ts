@@ -5,7 +5,7 @@ import {
   type TranscriptCall,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@sidecar/live";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { db } from "../core/query.js";
@@ -15,6 +15,7 @@ import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import { type SpokenRow, spokenRowsOn } from "./message-reads.js";
 import type { PlanStoreEffect } from "./plan-store.js";
+import { reachablePlan } from "./workspace-store.js";
 
 /**
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.
@@ -27,10 +28,11 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * voice wrote for it in the plan's conversation, found by its call, its
  * speaker, and where on the call their words began. Beside its words, each call says what
  * its session row recorded of it: when and why it ended, its metered
- * seconds, and its model, each only where the row holds it. Every statement names the
- * account beside the plan, so a plan another account owns reads as no plan,
- * exactly as in `plan-store.ts`, and a call another account made about a
- * plan of the same id is never gathered. Nothing is written here.
+ * seconds, and its model, each only where the row holds it. The plan is read
+ * under the account's membership of its workspace, so a plan of a workspace
+ * the account is not in reads as no plan, exactly as in `plan-store.ts`;
+ * past that gate a shared plan's transcript is every member's calls about
+ * it, so the calls are gathered by the plan alone. Nothing is written here.
  */
 
 const SPEAKER_OF_ROLE = {
@@ -40,14 +42,14 @@ const SPEAKER_OF_ROLE = {
 
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
 
-const findOwnedPlan = SqlSchema.findOneOption({
+const findReachablePlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.NullOr(Schema.String) }),
   execute: ({ userId, planId }) =>
     db
       .select({ id: plan.id, conversationId: plan.conversationId })
       .from(plan)
-      .where(and(eq(plan.id, planId), eq(plan.userId, userId))),
+      .where(reachablePlan(userId, planId)),
 });
 
 const SegmentRowSchema = Schema.Struct({
@@ -62,14 +64,14 @@ const SegmentRowSchema = Schema.Struct({
 type SegmentRow = typeof SegmentRowSchema.Type;
 
 /**
- * The newest fragments of the account's calls about the plan, newest first:
+ * The newest fragments of every member's calls about the plan, newest first:
  * the call by its start, then the fragment by its place. One more than the
  * bound is asked for, so the read can tell whether older words stand.
  */
 const findNewestSegments = SqlSchema.findAll({
-  Request: PlanKeySchema,
+  Request: Schema.String,
   Result: SegmentRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: (planId) =>
     db
       .select({
         voiceSessionId: voiceTranscriptSegments.voiceSessionId,
@@ -81,7 +83,7 @@ const findNewestSegments = SqlSchema.findAll({
       })
       .from(voiceTranscriptSegments)
       .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-      .where(and(eq(voiceSessions.userId, userId), eq(voiceSessions.planId, planId)))
+      .where(eq(voiceSessions.planId, planId))
       .orderBy(
         desc(voiceSessions.startedAt),
         desc(voiceSessions.id),
@@ -100,11 +102,11 @@ const CallRecordRowSchema = Schema.Struct({
 
 type CallRecordRow = typeof CallRecordRowSchema.Type;
 
-/** What the account's session rows recorded of the calls named: how each ended, what it metered, and its model. */
+/** What the session rows recorded of the calls named, whichever member made each: how each ended, what it metered, and its model. */
 const findCallRecords = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, ids: Schema.Array(Schema.String) }),
+  Request: Schema.Array(Schema.String),
   Result: CallRecordRowSchema,
-  execute: ({ userId, ids }) =>
+  execute: (ids) =>
     db
       .select({
         id: voiceSessions.id,
@@ -114,7 +116,7 @@ const findCallRecords = SqlSchema.findAll({
         model: voiceSessions.model,
       })
       .from(voiceSessions)
-      .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
+      .where(inArray(voiceSessions.id, [...ids])),
 });
 
 /** The rows a line was written as: each of its speaker's on its call whose words began inside the line's span, more than one where a call that reattached split one utterance across rows. */
@@ -209,18 +211,18 @@ function spokenRowsOf(
   });
 }
 
-/** What was said on the plan's calls, oldest call first; nothing where the account owns no such plan. */
+/** What was said on the plan's calls, oldest call first; nothing where the account reaches no such plan. */
 export function readTranscript(
   userId: string,
   planId: string,
 ): PlanStoreEffect<Option.Option<PlanTranscript>> {
   return Effect.gen(function* () {
-    const owned = yield* findOwnedPlan({ userId, planId });
+    const owned = yield* findReachablePlan({ userId, planId });
     if (Option.isNone(owned)) return Option.none();
-    const newestFirst = yield* findNewestSegments({ userId, planId });
+    const newestFirst = yield* findNewestSegments(planId);
     const calls = callsOf(newestFirst);
     const ids = calls.map((call) => call.first.voiceSessionId);
-    const records = ids.length === 0 ? [] : yield* findCallRecords({ userId, ids });
+    const records = ids.length === 0 ? [] : yield* findCallRecords(ids);
     const spoken = yield* spokenRowsOf(userId, owned.value.conversationId, ids);
     return Option.some(
       transcriptOf(

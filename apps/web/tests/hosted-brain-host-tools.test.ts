@@ -8,7 +8,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -40,8 +40,8 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import {
   claimRuntimeSession,
-  conversationOwnedBy,
-  runtimeSessionOwner,
+  conversationReachableBy,
+  runtimeSessionReachableBy,
 } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
@@ -67,6 +67,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 import { insertConversation } from "./support/store-rows";
 import { titleModelAnswering } from "./support/title-model";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -126,9 +127,10 @@ const seams: BrainHostSeams = {
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
-    sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
-    ownsConversation: (userId, conversationId) =>
-      database.run(conversationOwnedBy(userId, conversationId)),
+    reachesSession: (userId, sessionId) =>
+      database.run(runtimeSessionReachableBy(userId, sessionId)),
+    reachesConversation: (userId, conversationId) =>
+      database.run(conversationReachableBy(userId, conversationId)),
   },
   openAi: () => undefined,
   deploymentSecret: () => undefined,
@@ -177,16 +179,22 @@ function toolContext(
   };
 }
 
-/** A tool caller over one session claimed on the conversation, as the store hook claims it at the session's start; the services and the catalog are what a call may reach, and the call id is eve's for the call, `call-1` unless said. */
+/** A tool caller over one session claimed on the conversation, as the store hook claims it at the session's start; the services and the catalog are what a call may reach, the speaker is the conversation's opener unless a teammate is named, and the call id is eve's for the call, `call-1` unless said. */
 async function callerOn(
   host: BrainHost,
   target: ConversationTarget,
   services: Layer.Layer<GitHubApp | HttpClient.HttpClient> = NO_GITHUB,
   catalog: readonly OfferedModel[] = [],
+  speaker?: string,
 ): Promise<(name: string, input: WireRecord, callId?: string) => Promise<WireRecord>> {
   const id = sessionId();
-  const auth = seat(target);
-  const starting = await database.run(host.admitStarting(auth, id));
+  const opened = seat(target);
+  // A teammate speaks into the session the conversation's opener started, under its own principal.
+  const auth =
+    speaker === undefined
+      ? opened
+      : { current: seat({ ...target, userId: speaker }).current, initiator: opened.initiator };
+  const starting = await database.run(host.admitStarting(opened, id));
   if (Result.isFailure(starting)) return assert.fail(starting.failure);
   assert.equal(await database.run(host.sessionStarted(starting.success, id)), true);
   const binding = {
@@ -209,16 +217,16 @@ async function callerOn(
 async function planConversation(
   userId?: string,
   repository?: string,
-): Promise<ConversationTarget & { readonly planId: string }> {
+): Promise<ConversationTarget & { readonly planId: string; readonly workspaceId: string }> {
   const owner = userId ?? (await database.createUser());
   const name = "Teammate invitations";
   const plan = await database.run(
-    createPlan(owner, repository === undefined ? { name } : { name, repository }),
+    startPlan(owner, repository === undefined ? { name } : { name, repository }),
   );
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(owner, plan.id)),
-  );
-  return { userId: owner, conversationId, planId: plan.id };
+  ).conversationId;
+  return { userId: owner, conversationId, planId: plan.id, workspaceId: plan.workspaceId };
 }
 
 /** An agent started on the plan, the session eve runs it in recorded on its conversation as the store hook records it. */
@@ -648,6 +656,34 @@ test("a message to the plan's agent steers its session as the deployment acting 
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
   );
   assert.equal(eve.sent.length, 1);
+});
+
+test("a member speaking in the plan conversation a teammate opened messages the teammate's agent: eve is reached as the deployment acting for the member, on the starter's session, and the line stands under the starter", async () => {
+  const opener = await database.run(openGithubUser());
+  const member = await database.run(openGithubUser());
+  const plan = await planConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(plan.workspaceId, member));
+  const agent = await agentOn(opener, plan.planId);
+  const eve = fakeCoderEve();
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services, [], member);
+
+  const sent = await call(MESSAGE_CODING_AGENT_TOOL.name, { agentId: agent.id, text: INSTRUCTION });
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  assert.equal(sent.delivery, STEER_OUTCOME.SENT);
+  assert.equal(eve.sent.length, 1);
+  const [request] = eve.sent;
+  assert.equal(request?.path, `/eve/coder/v1/session/${agent.sessionId}`);
+  assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), member);
+  assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), agent.conversationId);
+  assert.equal(
+    await database.run(sentLineStands(opener, agent.conversationId, sentLineId("call-1"))),
+    true,
+  );
 });
 
 /** The agent a start answered, as the model reads it; the test fails where the answer carries none. */

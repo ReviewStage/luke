@@ -140,11 +140,11 @@ function conversationSessionOf(session: Pick<SessionContext["session"], "id" | "
 type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 export interface BrainHost {
-  /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */
+  /** Whether the session stands for a conversation the caller reaches and is the one it runs in; every other function takes what this admitted. */
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The admission a subagent's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
+  /** The admission a subagent's resolvers take, on reach alone: eve hands a resolver no lineage, and the child's id is no record's. */
   admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The kind of turn the current request opened, or nothing for a request that named none. */
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
@@ -181,7 +181,7 @@ export interface BrainHost {
   /**
    * Relays one event of a subagent's session into the child conversation of
    * the call that started it, as a child turn; a session with no parent, or
-   * one the account does not own, relays nothing.
+   * one the caller does not reach, relays nothing.
    */
   relayChild(
     event: MessageStreamEvent,
@@ -195,8 +195,8 @@ export interface BrainHost {
   /**
    * A subagent's title generated from the first task it received, read from
    * the child conversation of the call that started it, and written there
-   * where none stands yet; a session with no parent, one the account does
-   * not own, a child whose first task has not landed, a deployment with no
+   * where none stands yet; a session with no parent, one the caller does
+   * not reach, a child whose first task has not landed, a deployment with no
    * title model, and a failed call each write nothing.
    */
   titleChild(session: SessionContext["session"]): HostEffect<void>;
@@ -260,12 +260,12 @@ function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> 
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
 
-  /** The account's metered model and its effort, or why none runs. */
+  /** The caller's metered model and its effort, or why none runs. */
   const modelFor = (admitted: AdmittedConversation): Result.Result<CoderModelSelection, string> => {
     const access = seams.openAi();
     if (!access) return Result.fail(BRAIN_HOST_REFUSAL.NO_MODEL);
     return brainModelSelection(access, {
-      spend: () => seams.spend(admitted.target.userId),
+      spend: () => seams.spend(admitted.caller),
       report: (message) => console.warn(message),
     });
   };
@@ -279,9 +279,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       : { apiKey: access.apiKey, modelId: named.modelId };
   };
 
-  /** The plan a conversation belongs to, as the account owns it now; nothing once it is deleted. */
-  const planOf = (target: ConversationTarget) =>
-    Effect.map(readPlanOfConversation(target.userId, target.conversationId), Option.getOrUndefined);
+  /** The plan the admitted conversation belongs to, as the caller reaches it now; nothing once it is deleted or out of reach. */
+  const planOf = (admitted: AdmittedConversation) =>
+    Effect.map(
+      readPlanOfConversation(admitted.caller, admitted.target.conversationId),
+      Option.getOrUndefined,
+    );
 
   /**
    * Relays one event of a session's stream into the conversation and turn
@@ -377,11 +380,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     standingContext: (admitted) =>
       Effect.gen(function* () {
-        const plan = yield* planOf(admitted.target);
+        const plan = yield* planOf(admitted);
         const board =
-          plan === undefined
-            ? Option.none()
-            : yield* readBoard(admitted.target.userId, plan.plan.id);
+          plan === undefined ? Option.none() : yield* readBoard(admitted.caller, plan.plan.id);
         return planningStandingContext(
           plan,
           Option.getOrElse(board, () => EMPTY_BOARD),
@@ -410,26 +411,28 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.failure };
         }
         // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
-        const { target } = standing.success;
-        const plan = yield* planOf(target);
+        // The caller is who acts: the plan, its repository, the research meter, and the agents are
+        // reached and paid for as the member speaking, whoever opened the conversation.
+        const { caller } = standing.success;
+        const plan = yield* planOf(standing.success);
         // A message to a coding agent reaches its session as the deployment acting for the
-        // account, as a Stop does above: the planning session holds no bearer of the account's.
+        // caller, as a Stop does above: the planning session holds no bearer of the caller's.
         const secret = seams.deploymentSecret();
         const origin = seams.eveOrigin();
         const eve = yield* eveSessionsComposer;
         const coder =
           secret === undefined || origin === undefined
             ? undefined
-            : eve({ origin, caller: { secret, account: target.userId }, mount: EVE_MOUNT.CODER });
+            : eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER });
         return yield* runPlanningTool(
           name,
           plan === undefined
             ? undefined
             : {
-                plan: { userId: target.userId, planId: plan.plan.id },
+                plan: { userId: caller, planId: plan.plan.id },
                 // The repository as the row holds it now, so a plan given one mid-conversation reads it on its next call.
                 repository: {
-                  plan: { userId: target.userId, planId: plan.plan.id },
+                  plan: { userId: caller, planId: plan.plan.id },
                   repository: plan.plan.repository,
                   sandbox: () => context.getSandbox(),
                 },
@@ -438,12 +441,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   budget: research,
                   openAi: researchAccess(),
                   spend: Effect.tryPromise({
-                    try: () => seams.spend(target.userId),
+                    try: () => seams.spend(caller),
                     catch: (cause) => new MeterUnavailable({ cause }),
                   }),
                 },
                 agents: {
-                  plan: { userId: target.userId, planId: plan.plan.id },
+                  plan: { userId: caller, planId: plan.plan.id },
                   eve: coder,
                   writer: seams.writer(),
                   clientKey: context.callId,
@@ -471,7 +474,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       Effect.gen(function* () {
         const parent = session.parent;
         if (parent === undefined) return;
-        // Admitted on ownership alone, as the subagent's resolvers are: claiming the parent's
+        // Admitted on reach alone, as the subagent's resolvers are: claiming the parent's
         // record for the child's session would refuse every later call of the planning session.
         const admitted = yield* admitConversation(session.auth, {
           id: session.id,
@@ -498,17 +501,22 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     skills: (admitted) =>
       Effect.gen(function* () {
-        const plan = yield* planOf(admitted.target);
+        const plan = yield* planOf(admitted);
         const repository = plan?.plan.repository ?? null;
         if (repository === null) return [];
-        return yield* repositorySkills(admitted.target, repository, planningSkillMarkdown);
+        // The repository is read on the caller's own App token, as every planning read of it is.
+        return yield* repositorySkills(
+          { userId: admitted.caller, conversationId: admitted.target.conversationId },
+          repository,
+          planningSkillMarkdown,
+        );
       }),
 
     titleChild: (session) =>
       Effect.gen(function* () {
         const parent = session.parent;
         if (parent === undefined) return;
-        // Admitted on ownership alone, as the relay of the same session is.
+        // Admitted on reach alone, as the relay of the same session is.
         const admitted = yield* admitConversation(session.auth, {
           id: session.id,
           standing: SESSION_STANDING.DELEGATED,

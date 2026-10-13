@@ -33,6 +33,7 @@ const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const PLAN: Plan = {
   id: INVITES,
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -276,7 +277,7 @@ test("an archived plan opens no call, and its own call still standing is still m
 
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
 function onRepository(name: string, repository: string | null, updatedAt: number) {
-  return { id: name, name, createdAt: 1, updatedAt, repository };
+  return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
 
 test("plans group by repository, the group updated last first and the plans with none last, each group keeping the order it was handed", () => {

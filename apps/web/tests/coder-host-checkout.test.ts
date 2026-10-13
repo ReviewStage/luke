@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan } from "@sidecar/database/models/plan-store";
 import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Option, Redacted } from "effect";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
@@ -15,6 +14,7 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { sandboxDouble } from "./support/repository-sandbox";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A coding agent's checkout: the repository cloned whole into its sandbox
@@ -51,7 +51,7 @@ function carriesToken(text: string): boolean {
 const openAgent = (repository: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, { name: "Teammate invitations", repository });
+    const plan = yield* startPlan(userId, { name: "Teammate invitations", repository });
     const started = yield* createCodingAgent(userId, {
       planId: plan.id,
       idempotencyKey: "start-1",

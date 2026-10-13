@@ -23,7 +23,8 @@ on disk, and in memory only the tabs described next.
 what Luke spoke to disk, and no record of what he did is kept there. While a
 plan is open, Luke on your Mac reads from our service, for the plan's side
 panel: the spoken words of the plan's calls, for the Transcript tab, never his
-judgment's record; each coding agent's transcript (its words, reasoning
+judgment's record; the transcript of each coding agent on the plan, yours or
+another member's (its words, reasoning
 summaries, and tool calls with their output), for its own tab, while the tab
 shows and the agent runs; and, for the Work tab, the turns of the planning
 model and of the worker it hands research to — what each wrote, the summary
@@ -48,8 +49,13 @@ send one a message it writes for you (kept in that agent's transcript as
 yours), and start a new one; what it read and sent is kept with the plan's
 planning conversation. A fixture or evidence run keeps no conversation at all.
 
-**Feature plans.** When you start a named plan, our service stores under your
-account its name and its one Markdown document, which begins as a copy of
+**Feature plans.** When you start a named plan, our service stores it in a
+workspace: your personal workspace unless you start it in another workspace
+you are a member of, and the plan records which. Every member of that
+workspace can read, change, and delete the plan, its board, its pages, and
+its history, read what was said on its calls, yours included, and read,
+message, rename, and stop the coding agents any member started on it. It stores
+under your account its name and its one Markdown document, which begins as a copy of
 your plan template and is written by the planning call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
@@ -300,6 +306,10 @@ sign-in method, whether you are an administrator, when you joined and were
 last active, and your daily counts, on an admin page of our site that only an
 account we have marked as an administrator can open; nothing you type, say,
 or run appears on it.
+
+Every account also has a personal workspace on our service, a record named
+with your name and holding you as its owner; it goes when you delete your
+account.
 
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his

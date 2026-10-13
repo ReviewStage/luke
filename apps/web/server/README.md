@@ -91,6 +91,79 @@ as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
 adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
+The organization plugin's tables (`organization`, `member`, `invitation`, and
+`session.active_organization_id`) are transcribed into
+`packages/database/src/schemas/auth.ts` from `auth generate` for 1.6.29 with
+one edit, instants through `timestamptz()`, and migration
+`20261013154224_organization` is drizzle-kit's from that module. They keep
+Better Auth's default model names, since the Drizzle adapter finds a model by
+its export's name. A Luke workspace is an
+`organization` and its team the `member` rows, under the plugin's default
+roles `owner`, `admin`, and `member`. A desktop caller holds an OAuth token and
+no Better Auth session, which every member and organization endpoint requires,
+so a hosted route reads membership through Drizzle over these tables and
+writes only through the plugin's server-only `auth.api.createOrganization`
+(with a `userId` and no headers) and `auth.api.addMember`. Never call either
+inside `client.withTransaction`: Better Auth writes over its own pool, outside
+the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
+member through the plugin over PGlite.
+
+Every account has a personal workspace, named for the account, slugged
+`personal-<user id>`, with `{"personal":true}` as its metadata text, and named
+the account's own by a `personal_workspace` row
+(`packages/database/src/schemas/personal-workspace.ts`; its generated migration
+is followed by a custom one that backfills one for every account lacking it in
+one data-modifying statement). `packages/database/src/models/workspace-store.ts`'s
+`ensurePersonalWorkspace` makes it the first time it is asked for, through
+`models/workspace-seams.ts`'s
+`createOrganization` over the plugin, so its organization and owner rows are
+the plugin's own; no transaction encloses it, so two Macs ensuring at once
+settle on the unique slug and the row's primary key, and the one the plugin
+refuses adopts the workspace under the slug. `listWorkspaces` answers every
+workspace the account is a member of, its personal one first and the rest by
+name. `tests/workspace-store.test.ts` holds the three. The workspace names the
+account rather than being named by it, so the user row's cascade would take
+only the `personal_workspace` row and leave the organization, with the
+account's name and id, standing: `account-store.ts`'s `deleteAccount` deletes
+it first (`deletePersonalWorkspace`), in the same transaction as the user row.
+That is a direct delete from the plugin's table, because Better Auth documents
+no deletion without a session: `deleteOrganization` requires session cookies
+and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
+fresh session.
+
+Every plan belongs to one workspace: `plan.organization_id`, not null and
+cascading with the organization (`20261013161138_plan_organization` adds the
+column, and the custom `20261013161206_plan_organization_backfill` after it
+moves every plan standing into its starter's personal workspace and then
+sets the column not null). A plan's summary on the wire names it as `workspaceId`.
+`memberOfWorkspace` is the one membership condition, a `member` row, which a
+statement joins into its own where clause. A plan is read and written by
+every member of its workspace, whichever of them started it:
+`planReachableBy` and `reachablePlan` gate every plan statement in
+`plan-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
+and `plan-revisions.ts`, and the voice door's `heldPlan`, on the caller's
+membership of the plan's workspace rather than on the plan's starter. Past
+that gate a shared plan's transcript and a new call's earlier calls are
+every member's calls about it.
+
+A plan's conversation keeps the member who opened it as its `user_id`, the
+address its messages, turns, and asks are written under, and is reached by
+every member of the plan's workspace: `conversationReachableBy` in
+`hosted/brain-host/recorded-session.ts` admits the opener, or a member of the
+workspace of the plan or coding agent naming the conversation, or naming its
+parent one hop up (a subagent's session). The eve doors
+(`brain-host/door.ts`), the two hosts' admission (`brain-host/conversation.ts`,
+which answers the caller beside the conversation's owner), and the ask door
+all read it, so a member speaks into the session a teammate opened. From
+there the caller and the owner are two ids: the planning brain's inference
+and research are metered to the caller, not the conversation's owner, and
+the plan, the board, and every tool binding are read and written as the
+caller, while the writer, the seed, and the relay address the owner's rows.
+A voice call is the caller's `voice_sessions` row and meter, landing in the
+plan's one conversation, which `openPlanConversation` answers with its
+opener. A coding agent still runs on its starter's provider keys and GitHub
+token, and its steps are its starter's spend, whichever member messages it.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
@@ -605,6 +678,21 @@ outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
 
+The organization plugin is served in the group with `ORGANIZATION_OPTIONS`
+(`server/auth-policy.ts`): no workspace is deleted, and no signed-in user
+creates one (`allowUserToCreateOrganization: false`). Every organization
+write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
+because a workspace is adopted by its slug, and a session free to create an
+organization or rename its own could take a team's slug first. That covers
+create, update, delete, check-slug, set-active, member removal, role changes,
+leave, every invitation endpoint (Luke sends no invitation mail), and the
+team and role endpoints this deployment does not mount. `disabledPaths` is
+read by the HTTP router alone, so the server-only `auth.api` calls a hosted
+route makes still run, and a create that names a `userId` and carries no
+session passes the creation rule as a system action.
+`auth-database.test.ts` holds both sides with an account signed up through
+`auth.api.signUpEmail`.
+
 ## The events and maintenance groups
 
 `server/events-app.ts` and `server/maintenance-app.ts` are two route groups of
@@ -946,7 +1034,10 @@ started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
 template as its document, and the repository it is about where one is
-chosen, `GET /api/plans/{id}` opens one with its saved document,
+chosen, in the workspace its `workspaceId` names, which the account must be
+a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
+in the account's personal workspace, ensured first, where it names none,
+`GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, or several at once, each pin and archive a
 stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and
@@ -966,8 +1057,10 @@ plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`packages/database/src/models/plan-store.ts` names the account beside the plan, so another
-account's plan answers exactly as none does.
+`packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
+its membership of the plan's workspace, so a teammate's plan reads and
+writes as the account's own, and a plan of a workspace the account is not in
+answers exactly as none does.
 
 `server/repository-pins-app.ts` answers `/api/repository-pins`, the
 repositories the account pinned in the sidebar, whose groups of plans stand
@@ -1029,8 +1122,9 @@ locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
-A plan id another account owns reads as an empty history and restores as
-`not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
+Every member of the plan's workspace reads the history any of them wrote;
+a plan of a workspace the account is not in reads as an empty history and
+restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
 A plan's repository is `plan.repository` (migration 0063), the full name
@@ -1143,8 +1237,8 @@ or reserved; the check is a lookup ahead of the request, so a DNS answer that
 changes between the two is the case it does not cover. A turn gets at most
 4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
 page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
-inference on Luke's key, so each one is counted as one of the account's hosted
-uses before it is sent; a count that cannot be written is logged and stops
+inference on Luke's key, so each one is counted as one of the calling account's
+hosted uses before it is sent; a count that cannot be written is logged and stops
 nothing.
 `tests/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
@@ -1661,8 +1755,9 @@ held), and waits for every record write already started, so no line begun
 before the settle is cut; an append not yet sent is dropped with the session
 and never re-sent, and a write that fails after the socket closed is
 reported. `server/voice/exchange-attachment.ts` is what the function passes:
-the plan's conversation resolved at the session's start, the function's
-writer, eve reached as the deployment for the account, and the plan's
+the plan's conversation resolved at the session's start, under whichever
+member of its workspace opened it, the function's writer, eve reached as the
+deployment for the calling account, and the plan's
 notetaker (`server/voice/plan-scribe.ts`), which runs only where the
 deployment holds the OpenAI key.
 
@@ -1680,8 +1775,8 @@ route or kind of turn carrying the secret is refused outright rather than
 passed to the account authenticator behind it. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
-a turn only on a conversation the named account owns and cancel one only in
-a session that account's conversation recorded. Where eve answers is an
+a turn only on a conversation the named account reaches and cancel one only
+in a session a conversation that account reaches recorded. Where eve answers is an
 origin of this deployment's own, whose rewrites carry `/eve/v1/*` into the
 eve service (`deploymentEveOrigin` in `server/hosted/brain-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
@@ -2188,7 +2283,13 @@ delegation, so no sandbox opens there either.
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+reads, messages, re-models, and stops a plan's agents through. An agent
+belongs to its plan's workspace: every route reads it through the plan's
+membership gate (`coding-agent-store.ts`), so any member lists, reads,
+messages, renames, re-models, and stops an agent a teammate started, while
+its conversation stays its starter's, the row's `userId`, under which its
+turns and lines are read and written, and its Start's retry key stays the
+starter's own; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -2271,15 +2372,16 @@ of them leaves a row behind.
 transcript the same way, under the agent and eve's id for the `delegate`
 call that started it, which the call's tool part carries as `toolCallId`:
 the child conversation is `childConversationId` of the two, and only a
-delegation recorded under the account's agent answers, so another account's
-agent, or a call that made no delegation, is `not-found`.
+delegation recorded under an agent the account reaches answers, so an agent
+of a workspace the account is not in, or a call that made no delegation, is
+`not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with
 it; the coder agent reads the row at every step (`coder/agent.ts`'s
 `defineDynamic`, through `coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
-refuses another account's agent as not found and a model or effort the
+refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
 default as it was.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
