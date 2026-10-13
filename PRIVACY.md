@@ -303,12 +303,12 @@ transcripts are marked deleted and removed thirty days later; its call
 records, with the lines said on them, are deleted with the plan, or within a
 minute or so of the call ending for a call still open.
 
-**Linear, if you connect it.** Connecting Linear in Settings signs you in to
-Linear in your browser through Vercel Connect, which stores Linear's token
-for your account, encrypted, and renews it. Our service never writes the
-token down: it gets it from Vercel Connect when an agent uses Linear, holds
-it in memory while it is used, and sends it only to Linear's MCP server,
-never to your Mac, a model, or a sandbox. We keep only your connection's
+**Linear, if you connect it.** Connecting Linear in Settings › Integrations
+signs you in to Linear in your browser through Vercel Connect, which stores
+Linear's token for your account, encrypted, and renews it. Our service never
+writes the token down: it gets it from Vercel Connect when an agent uses
+Linear, holds it in memory while it is used, and sends it only to Linear's MCP
+server, never to your Mac, a model, or a sandbox. We keep only your connection's
 state (waiting for sign-in, connected, or expired) and when it last changed.
 While you are connected, Luke's planning model and its research worker, and
 every coding agent and its workers, can read and change whatever your Linear

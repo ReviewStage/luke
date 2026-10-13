@@ -1,17 +1,15 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { useConfirm, useConfirmGroup } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
-import { IntegrationRow, useIntegrationStatuses } from "./integration-row";
 
 /**
- * Who is signed in, the account's Linear connection, and the two ways out
- * of that. It sits at the foot of the front page: signing out and deleting
- * are done once or never. Both ways out ask before they act.
+ * Who is signed in, and the two ways out of that. It sits at the foot of the
+ * front page: signing out and deleting are done once or never. Both ways out
+ * ask before they act.
  */
 export function AccountSection({
   account,
@@ -43,7 +41,6 @@ export function AccountSection({
     ways,
   );
   const deletion = useConfirm(surroundings, onDeleteAccount, ways);
-  const integrations = useIntegrationStatuses();
 
   return (
     <section className="settings-section">
@@ -100,7 +97,6 @@ export function AccountSection({
           </button>
         </ConfirmSwap>
       </div>
-      <IntegrationRow provider={INTEGRATION_PROVIDER.LINEAR} statuses={integrations} />
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <span className="settings-copy">
           <strong>Delete account</strong>

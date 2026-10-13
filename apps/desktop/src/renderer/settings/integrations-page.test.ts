@@ -18,12 +18,13 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
-import { IntegrationRow, useIntegrationStatuses } from "./integration-row";
+import { IntegrationsSection } from "./integrations-page";
 
 /**
- * Linear's integration row through the bridge the host answers: where the
- * connection stands as drawn, Connect sending the browser and reading again
- * when the window comes back, and Disconnect asking first. The service's
+ * Settings › Integrations through the bridge the host answers, Linear standing
+ * for every provider: where the connection stands as drawn, Connect sending
+ * the browser and reading again when the window comes back, and Disconnect
+ * asking first. The service's
  * standing is the test's own variable, which a Connect leaves pending and the
  * browser's return settles.
  */
@@ -36,6 +37,8 @@ let standing: IntegrationStatus = INTEGRATION_STATUS.DISCONNECTED;
 let sent: Act[] = [];
 /** Whether the browser could be opened for a sign-in. */
 let opens = true;
+/** Whether the host answers a status read with no answer, the way an unreachable service reads. */
+let readFails = false;
 /** Where a Connect waits before the host answers it, when the test holds it. */
 let connectHeld: Promise<void> | undefined;
 
@@ -49,6 +52,7 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.INTEGRATIONS_STATUS:
+      if (readFails) return Promise.resolve(done({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED }));
       return Promise.resolve(done({ integrations: { linear: standing } }));
     case ACT_KIND.INTEGRATIONS_CONNECT:
       assert.deepEqual(request.payload, LINEAR);
@@ -63,12 +67,6 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
-/** Linear's row over the statuses read for it, the way a page draws it. */
-function LinearRow(): React.JSX.Element {
-  const statuses = useIntegrationStatuses();
-  return createElement(IntegrationRow, { provider: INTEGRATION_PROVIDER.LINEAR, statuses });
-}
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -76,6 +74,7 @@ beforeEach(() => {
   sent = [];
   opens = true;
   connectHeld = undefined;
+  readFails = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -93,12 +92,12 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(): Promise<HTMLElement> {
+async function mount(signedIn = true): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(LinearRow)));
+  act(() => root.render(createElement(IntegrationsSection, { signedIn })));
   await settle();
   return container;
 }
@@ -115,7 +114,7 @@ function button(row: HTMLElement, label: string): HTMLButtonElement {
 
 test("a disconnected account is offered Connect, which sends the browser and reads the sign-in's outcome when the window comes back", async () => {
   const row = await mount();
-  assert.match(line(row) ?? "", /read and update Linear/);
+  assert.equal(line(row), "Read and update issues, projects, and documents.");
 
   act(() => button(row, "Connect").click());
   await settle();
@@ -127,7 +126,7 @@ test("a disconnected account is offered Connect, which sends the browser and rea
     window.dispatchEvent(new Event("focus"));
   });
   await settle();
-  assert.match(line(row) ?? "", /^Connected\./);
+  assert.equal(line(row), "Read and update issues, projects, and documents.");
   assert.ok(button(row, "Disconnect"));
   assert.deepEqual(
     sent.map((request) => request.kind),
@@ -188,6 +187,32 @@ test("a browser that could not be opened says so under the row, and the account 
   assert.ok(button(row, "Connect"));
 });
 
+test("a read that failed still draws every row a search can land on, and reading again offers its action", async () => {
+  readFails = true;
+  const page = await mount();
+  assert.ok(page.querySelector('[data-search-anchor="linear"]'), "Linear's row stands");
+  assert.equal(
+    page.querySelector('[role="alert"]')?.textContent,
+    "Your integrations could not be read.",
+  );
+  assert.ok(![...page.querySelectorAll("button")].some((each) => each.textContent === "Connect"));
+
+  readFails = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+  assert.equal(page.querySelector('[role="alert"]'), null);
+  assert.ok(button(page, "Connect"));
+});
+
+test("signed out, the page asks for a sign-in and asks the host nothing", async () => {
+  const page = await mount(false);
+  assert.equal(
+    page.querySelector(".settings-note")?.textContent,
+    "Sign in to connect integrations.",
+  );
+  assert.deepEqual(sent, []);
+});
+
 test("an expired sign-in and a service with no Linear each say so, and only the first offers to connect", async () => {
   standing = INTEGRATION_STATUS.EXPIRED;
   const expired = await mount();
@@ -196,6 +221,6 @@ test("an expired sign-in and a service with no Linear each say so, and only the 
 
   standing = INTEGRATION_STATUS.UNAVAILABLE;
   const unavailable = await mount();
-  assert.match(line(unavailable) ?? "", /not available/);
+  assert.match(unavailable.textContent ?? "", /Not available/);
   assert.equal(unavailable.querySelectorAll("button").length, 0);
 });

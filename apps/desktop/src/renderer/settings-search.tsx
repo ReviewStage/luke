@@ -86,6 +86,7 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
+  [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
   [SETTINGS_VIEW.API_KEYS]: "API keys",
 } satisfies Record<SettingsView, string>;
 
@@ -139,13 +140,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
-    // Each integration's row, drawn once an account is signed in and anchored by its provider.
+    // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
     ...INTEGRATION_PROVIDER_LIST.map((provider) =>
       input.accountDrawn
         ? {
             id: provider,
             label: INTEGRATION_NAME[provider],
-            page: SETTINGS_VIEW.ROOT,
+            page: SETTINGS_VIEW.INTEGRATIONS,
             haystack: [
               INTEGRATION_NAME[provider],
               INTEGRATION_WORDS,

@@ -7,6 +7,7 @@ import {
   DocumentIcon,
   KeyboardIcon,
   KeyIcon,
+  PlugIcon,
   SpeakerIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
@@ -40,6 +41,10 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.CODING_AGENTS]: {
     title: "Coding agents",
     icon: <CodingAgentsIcon />,
+  },
+  [SETTINGS_VIEW.INTEGRATIONS]: {
+    title: "Integrations",
+    icon: <PlugIcon />,
   },
   [SETTINGS_VIEW.API_KEYS]: {
     title: "API keys",

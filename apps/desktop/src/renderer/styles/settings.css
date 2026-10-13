@@ -806,3 +806,16 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: calc(var(--focus-ring-width) / -2);
 }
+
+/* Settings › Integrations: a provider's mark and name over what connecting it
+   lets the agents do, its action at the row's end. A provider this deployment
+   offers no connector for says so in the muted ink where a button would be. */
+.integration-row .integration-mark {
+  width: 16px;
+  height: 16px;
+}
+
+.integration-unavailable {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
