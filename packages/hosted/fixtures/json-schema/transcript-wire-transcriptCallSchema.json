@@ -50,12 +50,15 @@
           "metadata": {
             "type": "object",
             "properties": {
-              "rowId": {
-                "type": "string"
+              "rowIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
-              "rowId"
+              "rowIds"
             ],
             "additionalProperties": false
           }

@@ -1525,7 +1525,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a transcript's line names the row the voice wrote for it, the id a planning turn names its ask by, and a line with no row on record names none",
+    "a transcript's line names the rows the voice wrote for it, the ids a planning turn names its ask by, both where a call that reattached split it across two, and a line with no row on record names none",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -1542,12 +1542,19 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
         const target = { userId: owner, conversationId };
         const span = { channel: MESSAGE_CHANNEL.VOICE, voice_session_id: call } as const;
-        // The developer's line and Luke's question are on record; Luke's "Mm." never was.
+        // The developer's line is on record as two rows, the call having reattached between its
+        // fragments, and Luke's question as one; Luke's "Mm." never was.
+        yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: "row-should",
+          text: "should expire.",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, ...span, from_ms: 700, to_ms: 1_200 },
+        });
         yield* writer.upsertSpokenRow(target, {
           role: MESSAGE_ROLE.USER,
           clientId: "row-invites",
-          text: "Invites should expire.",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, ...span, from_ms: 0, to_ms: 1_200 },
+          text: "Invites",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, ...span, from_ms: 0, to_ms: 500 },
         });
         yield* writer.upsertSpokenRow(target, {
           role: MESSAGE_ROLE.ASSISTANT,
@@ -1562,11 +1569,11 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(TRANSCRIPT, owner, { id: planId })),
         ).transcript;
         assert.deepEqual(
-          calls[0]?.messages.map((line) => [line.parts[0]?.text, line.metadata?.rowId]),
+          calls[0]?.messages.map((line) => [line.parts[0]?.text, line.metadata?.rowIds]),
           [
-            ["Invites should expire.", "row-invites"],
+            ["Invites should expire.", ["row-invites", "row-should"]],
             ["Mm.", undefined],
-            ["After how many days?", "row-how-many"],
+            ["After how many days?", ["row-how-many"]],
           ],
         );
       }),

@@ -23,9 +23,9 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * (`@sidecar/database/models/voice-writer`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
  * reads back in the lines its captions drew, each line one `UIMessage`
- * whose id is its place on the call and whose metadata names the row the
+ * whose id is its place on the call and whose metadata names the rows the
  * voice wrote for it in the plan's conversation, found by its call, its
- * speaker, and where on the call it began. Beside its words, each call says what
+ * speaker, and where on the call their words began. Beside its words, each call says what
  * its session row recorded of it: when and why it ended, its metered
  * seconds, and its model, each only where the row holds it. Every statement names the
  * account beside the plan, so a plan another account owns reads as no plan,
@@ -117,11 +117,13 @@ const findCallRecords = SqlSchema.findAll({
       .where(and(inArray(voiceSessions.id, [...ids]), eq(voiceSessions.userId, userId))),
 });
 
-/** The row a line was written as: one of its speaker's on its call whose words began inside the line's span; none where the record holds no such row. */
-function rowOf(line: TranscriptUtterance, rows: readonly SpokenRow[]): string | undefined {
-  return rows.find(
-    (row) => row.role === line.speaker && row.fromMs >= line.startMs && row.fromMs <= line.endMs,
-  )?.clientId;
+/** The rows a line was written as: each of its speaker's on its call whose words began inside the line's span, more than one where a call that reattached split one utterance across rows. */
+function rowsOf(line: TranscriptUtterance, rows: readonly SpokenRow[]): readonly string[] {
+  return rows
+    .filter(
+      (row) => row.role === line.speaker && row.fromMs >= line.startMs && row.fromMs <= line.endMs,
+    )
+    .map((row) => row.clientId);
 }
 
 /** One call as it is read: its first fragment, which names it, and the ledger its fragments are grouped by. */
@@ -145,8 +147,8 @@ function recordOf(row: CallRecordRow | undefined): Partial<TranscriptCall> {
  * Fragments read newest first, as the calls they were said on, oldest
  * first, each call's fragments appended to its ledger in the order they
  * were written. Note that the ledger's row ids are never read, because a
- * line's place on its call is what names it here and its row on record is
- * found by its span (`rowOf`).
+ * line's place on its call is what names it here and its rows on record
+ * are found by its span (`rowsOf`).
  */
 function callsOf(newestFirst: readonly SegmentRow[]): readonly CallRead[] {
   const calls: CallRead[] = [];
@@ -178,12 +180,12 @@ function transcriptOf(
       id: first.voiceSessionId,
       startedAt: first.startedAt.getTime(),
       messages: ledger.captionLines().map((line, index) => {
-        const rowId = rowOf(line, spoken.get(first.voiceSessionId) ?? []);
+        const rowIds = rowsOf(line, spoken.get(first.voiceSessionId) ?? []);
         return {
           id: String(index),
           role: line.speaker,
           parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.text }],
-          ...(rowId === undefined ? undefined : { metadata: { rowId } }),
+          ...(rowIds.length === 0 ? undefined : { metadata: { rowIds: [...rowIds] } }),
         };
       }),
       ...recordOf(records.get(first.voiceSessionId)),

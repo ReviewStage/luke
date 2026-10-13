@@ -788,6 +788,9 @@ export function turnsNamed(
   );
 }
 
+/** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
+const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
+
 const findSpokenAskRows = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -809,14 +812,16 @@ const findSpokenAskRows = SqlSchema.findAll({
           sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
         ),
       )
-      .orderBy(asc(messages.seq)),
+      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
 });
 
 /**
  * The developer's spoken lines each of the turns named took as its ask, by
- * the client id the voice's ledger minted for each line, in the order the
- * conversation holds them: the rows a delegation's attach or the turn's
- * receipt took into the turn. A turn no spoken line opened names none.
+ * the client id the voice's ledger minted for each line, in the order they
+ * were said, which is where on the call each began rather than where the
+ * conversation holds it, since a line taken into its turn moves there: the
+ * rows a delegation's attach or the turn's receipt took into the turn. A
+ * turn no spoken line opened names none.
  */
 export function spokenAskRowsOf(
   userId: string,
@@ -854,7 +859,7 @@ const findSpokenRows = SqlSchema.findAll({
         clientId: messages.clientId,
         role: messages.role,
         voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
-        fromMs: sql<number>`(${messages.metadata}->>'from_ms')::double precision`,
+        fromMs: SPOKEN_FROM_MS,
       })
       .from(messages)
       .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
@@ -865,10 +870,11 @@ const findSpokenRows = SqlSchema.findAll({
           inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
           sql`${messages.metadata}->>'from_ms' is not null`,
         ),
-      ),
+      )
+      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
 });
 
-/** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began. */
+/** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began, in the order they were said. */
 export function spokenRowsOn(
   userId: string,
   conversationId: string,

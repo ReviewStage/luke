@@ -1200,7 +1200,7 @@ it.live(
 );
 
 it.live(
-  "a planning turn's work names the developer's spoken line the turn took as its ask, from the first look that finds it",
+  "a planning turn's work names the developer's spoken lines the turn took as its ask, from the first look that finds one, and a line taken into it later from the look after",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -1249,14 +1249,35 @@ it.live(
       const [started, ...rest] = planningTurn(FIRST_EVE_TURN, NOW);
       assert.ok(started?.type === "turn.started");
       const delivered = stampedEveEvent(started, NOW, f.eve.delivered);
-      yield* Effect.promise(() => play([delivered, ...rest], standing));
-      yield* f.arrived(1);
-
-      assert.ok(shown.length > 0);
-      assert.deepEqual(
-        shown.map((work) => work.asked),
-        shown.map(() => ["row-what-changed"]),
+      const requested = rest.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play([delivered, ...rest.slice(0, requested)], standing));
+      yield* arrival(
+        (notify) => f.brain.onWork(notify),
+        () => shown.length >= 1,
+        "the first work",
       );
+      assert.deepEqual(shown[0]?.asked, ["row-what-changed"]);
+
+      // The developer goes on before the turn answers, and the voice takes the line into the same ask.
+      yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            yield* writer.upsertSpokenRow(conversation, {
+              role: MESSAGE_ROLE.USER,
+              clientId: "row-and-why",
+              text: "And why?",
+              metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+            });
+            yield* writer.attachSpokenAsk(conversation, {
+              delegationId: submissionId,
+              rowIds: ["row-and-why"],
+            });
+          }),
+        ),
+      );
+      yield* Effect.promise(() => play(rest.slice(requested), standing));
+      yield* f.arrived(1);
+      assert.deepEqual(shown.at(-1)?.asked, ["row-what-changed", "row-and-why"]);
       yield* Effect.promise(() => f.stop());
     }),
 );

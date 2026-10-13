@@ -205,7 +205,7 @@ interface FollowTold {
   workers: ReadonlyMap<string, string>;
   /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
   seeking: boolean;
-  /** The spoken lines the turn took as its ask, read until a look finds them and kept after, since a turn takes its lines as it receives its ask. */
+  /** The spoken lines the turn has taken as its ask so far, read again on every look, since a later ask folded into the turn brings lines of its own. */
   asked: readonly string[];
 }
 
@@ -587,15 +587,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     } = yield* subagentJournalsOf(turn.conversationId, told.workers);
     // The start of a task the last look's calls steered is looked for ahead of the journal too.
     const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
-    // So are the lines the turn took as its ask, until a look finds them.
-    if (told.asked.length === 0) {
-      const asked = yield* options.store.messages.spokenAskRows(
-        options.userId,
-        turn.conversationId,
-        [turn.id],
-      );
-      told.asked = asked.get(turn.id) ?? [];
-    }
+    // So are the lines the turn has taken as its ask.
+    const asked = yield* options.store.messages.spokenAskRows(options.userId, turn.conversationId, [
+      turn.id,
+    ]);
+    told.asked = asked.get(turn.id) ?? [];
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(

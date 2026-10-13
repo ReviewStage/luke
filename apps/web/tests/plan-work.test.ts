@@ -867,7 +867,7 @@ test("a plan's work reads back from its conversation after the call: its turns o
 async function spokenAsk(
   target: ConversationTarget,
   standing: RelayStanding,
-  lines: readonly (readonly [rowId: string, text: string])[],
+  lines: readonly (readonly [rowId: string, text: string, fromMs: number])[],
 ): Promise<void> {
   const delegationId = `dl_${randomUUID()}`;
   const record = askRecord();
@@ -884,13 +884,18 @@ async function spokenAsk(
       Effect.succeed({ sessionId: standing.sessionId, deliveryId: delegationId }),
     ),
   );
-  for (const [clientId, text] of lines) {
+  for (const [clientId, text, fromMs] of lines) {
     await database.run(
       writer.upsertSpokenRow(target, {
         role: MESSAGE_ROLE.USER,
         clientId,
         text,
-        metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          from_ms: fromMs,
+          to_ms: fromMs + 900,
+        },
       }),
     );
   }
@@ -900,13 +905,14 @@ async function spokenAsk(
   await play(spokenTurn(FIRST_EVE_TURN, NOW, [delegationId]), standing);
 }
 
-test("a plan's work read back names the developer's spoken lines each turn took as its ask, in the order they were said, and a turn no spoken line opened names none", async () => {
+test("a plan's work read back names the developer's spoken lines each turn took as its ask, in the order they were said however late one was written, and a turn no spoken line opened names none", async () => {
   const target = await planConversation();
   const spoken = standingFor(target);
   const typed = { ...standingFor(target), turn: BRAIN_HOST_TURN.TYPED };
+  // The later line is written first, as a fragment of the earlier one arriving late leaves them.
   await spokenAsk(target, spoken, [
-    ["row-who", "Who can withdraw an invite?"],
-    ["row-check", "Check how removal works."],
+    ["row-check", "Check how removal works.", 4_000],
+    ["row-who", "Who can withdraw an invite?", 1_000],
   ]);
   await askedAt(spoken, NOW - 60_000);
   await play([...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Done.")], typed);
