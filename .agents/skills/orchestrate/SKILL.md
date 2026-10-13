@@ -72,8 +72,12 @@ Every brief must contain:
    each conflict and runs `gh stack rebase --continue` (or `--abort` to give
    up), and after a successful rebase runs `gh stack push`, which pushes each
    branch with `--force-with-lease`. Without the extension, the fallback is
-   `git fetch` and `git rebase --update-refs origin/<base-branch>` from the
-   top branch, then a `--force-with-lease` push of every branch.
+   to note the old base tip (`git rev-parse origin/<base-branch>`), `git
+   fetch`, and run `git rebase --update-refs --onto origin/<base-branch>
+   <old-base-tip>` from the top branch, so a rewritten base's old commits
+   are not replayed; on a conflict, resolve and stage it, then
+   `git rebase --continue` (or `--abort`), and only after the rebase
+   succeeds push every branch with `--force-with-lease`.
 3. **Babysit and merge**: watch CI and review comments on every PR in the
    stack, fix what fails, and either merge on green or hold for an explicit
    go from the orchestrator, as the user chose at kickoff; say which. A PR
