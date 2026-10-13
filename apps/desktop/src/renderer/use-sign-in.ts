@@ -1,13 +1,13 @@
-import type { SignInProvider } from "@sidecar/credentials/snapshot";
+import type { AccountProvider } from "@sidecar/credentials/snapshot";
 import { useCallback, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { useStateWithRef } from "./use-state-with-ref";
 
 export interface SignIn {
-  signInWait: SignInProvider | undefined;
+  signInWait: AccountProvider | undefined;
   signInFailure: string | undefined;
-  beginSignIn: (provider: SignInProvider) => void;
+  beginSignIn: (provider: AccountProvider) => void;
   cancelSignIn: () => void;
 }
 
@@ -25,7 +25,7 @@ export function useSignIn(): SignIn {
    * because the attempt's own reply has to read whether it is still the one
    * being waited on.
    */
-  const [signInWait, setSignInWait, signInWaitNow] = useStateWithRef<SignInProvider | undefined>(
+  const [signInWait, setSignInWait, signInWaitNow] = useStateWithRef<AccountProvider | undefined>(
     undefined,
   );
   /**
@@ -36,7 +36,7 @@ export function useSignIn(): SignIn {
   const [signInFailure, setSignInFailure] = useState<string>();
 
   const beginSignIn = useCallback(
-    (provider: SignInProvider) => {
+    (provider: AccountProvider) => {
       if (signInWaitNow() !== undefined) return;
       const attempt = ++signInAttempt.current;
       setSignInFailure(undefined);

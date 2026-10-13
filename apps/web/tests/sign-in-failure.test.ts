@@ -54,17 +54,17 @@ test("the admin's sign-in card says a refused sign-in in an alert that was not t
   act(() => root.render(createElement(SignInCard)));
   assert.equal(alertWords(), undefined);
 
-  const github = [...container.querySelectorAll("button")].find((button) =>
-    button.textContent?.includes("GitHub"),
+  const google = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Google"),
   );
-  assert.ok(github, "the card offers GitHub");
-  act(() => github.click());
+  assert.ok(google, "the card offers Google");
+  act(() => google.click());
   await settle();
   assert.equal(alertWords(), "Sign-in could not start. Try again.");
 });
 
 test("the hosted sign-in page says a refused sign-in in an alert as the failure lands", async () => {
-  window.history.replaceState(null, "", "/sign-in.html?state=github.signed-state");
+  window.history.replaceState(null, "", "/sign-in.html?state=google.signed-state");
   const page = document.createElement("div");
   page.id = "root";
   document.body.append(page);

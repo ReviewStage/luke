@@ -1,8 +1,5 @@
-import {
-  ACCOUNT_PROVIDER,
-  type ACCOUNT_STATUS,
-  type AccountSnapshot,
-} from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -59,7 +56,7 @@ export function AccountSection({
         <span className="settings-copy">
           <strong>{account.email}</strong>
           <small>
-            Signed in with {account.provider === ACCOUNT_PROVIDER.GOOGLE ? "Google" : "GitHub"}
+            Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
           </small>
         </span>
         <button
