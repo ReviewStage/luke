@@ -28,6 +28,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
+import { TerminalIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -3220,17 +3221,24 @@ function addRow(label: string): HTMLElement {
   return row;
 }
 
-test("the column's + offers New coding agent and the plan's Inbox and coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
+test("the column's + offers the plan's Inbox first by itself, then New coding agent, then the plan's coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
   const page = mountAgents();
   act(() => columnAddButton(page).click());
 
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Opus 5.5", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Opus 5.5", "GPT 5.6 Sol"]]]);
   assert.deepEqual(addRows(), [
-    ["New coding agent", "", true],
     ["Inbox", "", true],
+    ["New coding agent", "", true],
     ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],
   ]);
+  assert.ok(addRow("Inbox").querySelector("svg.lucide-inbox"), "the Inbox's tray");
+  const terminal = renderToStaticMarkup(createElement(TerminalIcon));
+  assert.equal(
+    [...document.querySelectorAll(".tab-add-menu svg")].some((svg) => svg.outerHTML === terminal),
+    false,
+    "no row wears the generic terminal",
+  );
   assert.equal(document.activeElement?.getAttribute("placeholder"), "Search tabs");
   // An agent's row wears its harness's mark and says nothing of where it
   // stands, by word, by dot, or by the working mark its tab wears.
@@ -3356,7 +3364,7 @@ test("the + reads the plan's agents again as it opens, so an agent no tab follow
   // The agent is named with its tab closed, where nothing follows it.
   listed = [{ ...RUNNING_AGENT, title: "Queue spike" }, DONE_AGENT];
   act(() => columnAddButton(page).click());
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Queue spike", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Queue spike", "GPT 5.6 Sol"]]]);
 });
 
 /** The key the draft below is minted under, which its first message starts the agent with. */

@@ -338,21 +338,22 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
 }
 
 /**
- * The plan's Inbox as the "+" menu and ⌘K offer it, among the plan's
- * agents, since only they post to it; none on a plan with no agent. Picking
- * it opens the tab where it was closed and chooses it, through `onPick`.
+ * The plan's Inbox as the "+" menu and ⌘K offer it, by itself rather than
+ * among the plan's agents, though only they post to it; none on a plan with
+ * no agent. Picking it opens the tab where it was closed and chooses it,
+ * through `onPick`.
  */
 export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the plan holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
-  const entry = inboxEntry(onPick, 0);
-  return [{ ...entry, row: { ...entry.row, section: AGENTS_SECTION } }];
+  return [inboxEntry(onPick, 0)];
 }
 
 /**
- * The "+" menu's rows: New coding agent, unavailable with Start's own
- * reason while Start could not run, and left out on an archived plan; then
- * the plan's Inbox and each of its agents (`inboxEntries`, `agentEntries`).
+ * The "+" menu's rows: the plan's Inbox first, by itself under no heading
+ * (`inboxEntries`); New coding agent, unavailable with Start's own reason
+ * while Start could not run, and left out on an archived plan; then each
+ * of its agents under Coding agents (`agentEntries`).
  */
 function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
@@ -368,7 +369,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
   const agentRows = agentEntries(main, agents, false);
-  return [...(agents.onUnarchive === undefined ? [newAgent] : []), ...inbox, ...agentRows];
+  return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
 /**
