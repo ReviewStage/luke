@@ -37,9 +37,10 @@ first is live, runs `pnpm db:generate --custom --name=<table>_drop_<column>`,
 writes `DROP COLUMN IF EXISTS` into the file it gets, and deletes the entry.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
-connection Neon supplies for that deployment. No lock of its own: the run is
-one transaction, and one deployment of a branch migrating at a time is the
-deploy's to keep.
+connection Neon supplies for that deployment. No lock of its own: Drizzle's
+batch of migrations is one transaction (the one-time history transfer before
+it commits in its own), nothing serializes two runs, and running one
+migration process per branch database at a time is the deploy's to keep.
 
 What applies them is Drizzle's own Effect migrator, through
 `packages/database/src/core/migrator.ts`: it applies every folder under

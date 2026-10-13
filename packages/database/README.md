@@ -26,7 +26,10 @@ conflicting folder and every later one it added, and regenerate.
 `db:migrate` and for every test database: Drizzle's `migrate` from
 `drizzle-orm/effect-postgres/migrator` over the `Database` service. It applies
 every folder `public.__drizzle_migrations` does not name, in folder-name
-order, inside one transaction, and answers the names it applied. The history
+order, inside one transaction, and answers the names it applied. Nothing
+serializes two runs: a second process started while the first is under way
+reads the history before the first commits, so a database is migrated by
+one process at a time, which is the deploy's to keep. The history
 table sits in `public` rather than Drizzle's default `drizzle` schema, because
 `20261013123642_dead_tables_drop` drops that schema and would take the table
 with it partway through a fresh database's run.

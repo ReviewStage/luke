@@ -141,7 +141,7 @@ This writes one folder, `packages/database/migrations/<UTC timestamp>_user_add_a
 
 ## Custom Migrations (e.g. CREATE EXTENSION)
 
-For migrations that don't involve Drizzle schema changes (enabling a PostgreSQL extension, a data fix that must ship with the schema), use the `--custom` flag:
+For SQL-only migrations that don't involve Drizzle schema changes and are safe to run during deployment (for example, enabling a PostgreSQL extension), use the `--custom` flag. A backfill or historical-data reconciliation is never one; it runs as its own script ("Data backfill" above):
 
 ```bash
 pnpm db:generate --custom --name=enable_pg_search
