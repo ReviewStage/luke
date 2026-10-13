@@ -134,7 +134,7 @@ test("a worker's job cut short by its line is marked to fade at its end, while a
   assert.equal(faded(), "true");
 });
 
-test("a worker's row names the model and effort its session ran on, with its harness's mark where the catalog lists it, and no effort where none was recorded; a worker whose session named none keeps the robot and no pair", () => {
+test("a worker's row names the model and effort its session ran on, with the mark of the harness its model's id names, and no effort where none was recorded; a worker whose session named none keeps the robot and no pair", () => {
   const [turn] = TURNS;
   assert.ok(turn);
   const [part] = turn.parts;
@@ -190,7 +190,10 @@ test("a worker's row names the model and effort its session ran on, with its har
 
   const unlisted = drawn("openai/gpt-7-terra");
   assert.equal(unlisted?.querySelector("[data-subagent-pair]")?.textContent, "GPT 7 Terra");
-  assert.ok(unlisted?.querySelector("svg.lucide-bot"), "the robot where the catalog names none");
+  assert.ok(
+    unlisted?.querySelector('[data-subagent-harness="openai"] .provider-mark'),
+    "Codex's mark, read from the model's id, as the worker's tab wears it",
+  );
 
   const unnamed = drawn(undefined);
   assert.equal(unnamed?.querySelector("[data-subagent-pair]"), null);

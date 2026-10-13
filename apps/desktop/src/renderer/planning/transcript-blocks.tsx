@@ -10,8 +10,8 @@ import {
   CircleDotIcon,
   CircleIcon,
   CircleStopIcon,
+  CodeXmlIcon,
   EyeIcon,
-  FileCodeIcon,
   FilePenIcon,
   FileTextIcon,
   GlobeIcon,
@@ -28,6 +28,7 @@ import {
   SearchIcon,
   SendIcon,
   TerminalIcon,
+  WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
@@ -56,7 +57,7 @@ import {
 import { cn } from "../ai-elements/utils";
 import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
-import { opensOnGitHub } from "./coding-agent-model";
+import { opensOnGitHub, providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -193,7 +194,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
@@ -202,7 +203,7 @@ const CALL_ICON = {
   [CALL_KIND.SEARCH]: SearchIcon,
   [CALL_KIND.WEB_SEARCH]: SearchIcon,
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
-  [CALL_KIND.SHOW_CODE]: FileCodeIcon,
+  [CALL_KIND.SHOW_CODE]: CodeXmlIcon,
   [CALL_KIND.DRAW_ON_BOARD]: PencilLineIcon,
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
@@ -215,8 +216,8 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
-  [CALL_KIND.LIST_AGENTS]: BotIcon,
-  [CALL_KIND.READ_AGENT]: BotIcon,
+  [CALL_KIND.LIST_AGENTS]: WorkflowIcon,
+  [CALL_KIND.READ_AGENT]: WorkflowIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
@@ -455,18 +456,18 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
 };
 
-/** The subagent's glyph: the mark of the harness its model runs in, or the worker's robot where no catalog entry names the model, in the muted ink whether it runs or not, since the row's working mark says which. */
+/** The subagent's glyph: the mark of the harness its model runs in, read from the model's id as its tab reads it (`SubagentMark`), or the worker's robot where the model is no provider's Luke runs, in the muted ink whether it runs or not, since the row's working mark says which. */
 function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode {
-  const listed = pair?.models.find((model) => model.id === pair.choice.model);
-  if (listed === undefined) {
+  const provider = pair === undefined ? undefined : providerOf(pair.choice.model);
+  if (provider === undefined) {
     return <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
   }
   return (
     <span
       className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-      data-subagent-harness={listed.provider}
+      data-subagent-harness={provider}
     >
-      <HarnessMark provider={listed.provider} />
+      <HarnessMark provider={provider} />
     </span>
   );
 }

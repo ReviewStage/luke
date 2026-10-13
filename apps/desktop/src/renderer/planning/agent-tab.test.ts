@@ -17,7 +17,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { DocumentIcon } from "@sidecar/panel";
+import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -31,7 +31,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PublishedChip, PublishedRow } from "./agent-published";
-import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
+import { AgentGlyph, AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -301,7 +301,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with its harness's mark where the catalog names its model and the muted robot where it does not; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with the mark of the harness its model's id names, listed in the catalog or not yet; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -348,15 +348,11 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
   assert.ok(running.querySelector('[data-tool-state="input-available"] svg.working-mark'));
-  assert.equal(
-    running.querySelector("[data-subagent-harness]"),
-    null,
-    "Opus is not in the catalog",
-  );
   assert.ok(
-    running.querySelector("svg.lucide-bot.text-muted-foreground"),
-    "the robot in the muted ink, since the working mark says it runs",
+    running.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'),
+    "Clawd, though Opus is not in the catalog",
   );
+  assert.equal(running.querySelector("svg.lucide-bot") === null, true, "no robot");
   for (const row of rows) {
     assert.equal(row.tagName, "BUTTON", "the whole row is the button");
     assert.equal(row.closest("details"), null, "nothing to expand");
@@ -800,6 +796,16 @@ test("the reasoning folds under one quiet line previewing its words and opens on
     reasoning.querySelector("summary + div")?.textContent,
     "Read AGENTS.md before anything else.",
   );
+});
+
+test("an agent whose harness Luke does not know wears the Coding agents glyph, never a terminal", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(AgentGlyph, {
+      agent: { model: "mistral/large-3", status: CODING_AGENT_STATUS.COMPLETED },
+    }),
+  );
+  assert.ok(drawn.includes(renderToStaticMarkup(createElement(CodingAgentsIcon))));
+  assert.doesNotMatch(drawn, /terminal/u);
 });
 
 test("the plan is a card across the top of the transcript, folded under its title, not a bubble", () => {
