@@ -25,9 +25,10 @@ import { scriptedModel } from "./scripted-model.js";
 type Admission = (auth: SessionAuth, sessionId: string) => ReturnType<typeof host.admit>;
 
 /**
- * The model every inference of this project runs on, the root's and each
- * subagent's alike, chosen per inference so the account's daily meter is
- * spent once for each, under the admission the session takes.
+ * The model every inference of this project runs on and the effort it is
+ * asked for, the root's and each subagent's alike, chosen per inference so
+ * the account's daily meter is spent once for each, under the admission the
+ * session takes.
  */
 export function brainModel(admit: Admission) {
   return defineDynamic({
@@ -44,9 +45,9 @@ export function brainModel(admit: Admission) {
         if (host.turnKindOf(ctx.session.auth) === undefined) {
           throw new Error(BRAIN_HOST_REFUSAL.NO_TURN_KIND);
         }
-        const model = host.model(admitted.success);
-        if (!model) throw new Error(BRAIN_HOST_REFUSAL.NO_MODEL);
-        return { model, modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS };
+        const selected = host.model(admitted.success);
+        if (Result.isFailure(selected)) throw new Error(selected.failure);
+        return selected.success;
       },
     },
   });

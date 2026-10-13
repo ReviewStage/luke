@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
+import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
-import {
-  BRAIN_REASONING_SUMMARY,
-  meteredModel,
-  summarizedReasoningModel,
-} from "../server/hosted/brain-host/model";
+import { BRAIN_HOST } from "../server/hosted/brain-host/bounds";
+import { brainModelSelection, meteredModel } from "../server/hosted/brain-host/model";
+import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 
-/** The meter in front of the model: one count per inference, and no count stops an inference. */
+/**
+ * The meter in front of the model: one count per inference, and no count
+ * stops an inference; and the brain's model and effort reached as a coding
+ * agent's step reaches its own. Synthetic keys throughout.
+ */
+
+const LUKE_KEY = Redacted.make("sk-openai-fixture");
+
+/** A meter that counts nothing, for a selection read rather than run. */
+const IDLE_METER = { spend: async () => undefined, report: () => undefined };
+
+/** The provider's model as eve is told it, read off the SDK's handle under the meter. */
+const readModel = Schema.decodeUnknownOption(
+  Schema.Struct({ modelId: Schema.String, provider: Schema.String }),
+);
 
 /** The ceiling the service used to refuse past. */
 const FORMER_DAILY_LIMIT = 5_000;
@@ -64,18 +78,32 @@ test("a meter that cannot be written is reported, and the inference runs anyway"
   assert.deepEqual(reports, ["A hosted inference was not counted: fixture: store down"]);
 });
 
-test("the planning model is asked to summarise its reasoning on every inference, beside the OpenAI options the call already carries", async () => {
-  const inner = answer();
-  const model = summarizedReasoningModel(inner);
+test("the brain's model runs as a coding agent's does: OpenAI's Responses model at its own id, asked for the effort and a summary of its reasoning, in the brain's window", () => {
+  const selected = brainModelSelection(
+    {
+      apiKey: LUKE_KEY,
+      choice: { model: BRAIN_OPENAI_DEFAULTS.MODEL, effort: BRAIN_OPENAI_DEFAULTS.EFFORT },
+    },
+    IDLE_METER,
+  );
+  assert.ok(Result.isSuccess(selected));
+  const model = Option.getOrElse(readModel(selected.success.model), () =>
+    assert.fail("eve was told no provider model"),
+  );
+  assert.equal(model.modelId, "gpt-6.1-sol");
+  assert.equal(model.provider.startsWith("openai"), true);
+  assert.deepEqual(selected.success.modelOptions, {
+    providerOptions: { openai: { reasoningEffort: "medium", reasoningSummary: "auto" } },
+  });
+  assert.equal(selected.success.modelContextWindowTokens, BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS);
+});
 
-  await generateText({ model, prompt: "one", providerOptions: { openai: { store: false } } });
-  await generateText({ model, prompt: "two" });
-
+test("a model named by OpenAI's own id rather than the catalog's is refused by name, as a coding agent's is", () => {
   assert.deepEqual(
-    inner.doGenerateCalls.map((call) => call.providerOptions?.openai),
-    [
-      { store: false, reasoningSummary: BRAIN_REASONING_SUMMARY.AUTO },
-      { reasoningSummary: BRAIN_REASONING_SUMMARY.AUTO },
-    ],
+    brainModelSelection(
+      { apiKey: LUKE_KEY, choice: { model: "gpt-6.1-sol", effort: "medium" } },
+      IDLE_METER,
+    ),
+    Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER),
   );
 });

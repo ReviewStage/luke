@@ -422,6 +422,55 @@ test("a worker's session is recorded in its child conversation as a child turn, 
   assert.ok(Result.isSuccess(await database.run(host.admit(auth, rootId))));
 });
 
+test("the planning turn and its worker's turn each record the model and effort the brain asks of OpenAI, as a coding agent's worker's turn records its own", async () => {
+  const target = await planConversation();
+  const host = brainHost({
+    ...seams,
+    scriptedModel: () => false,
+    openAi: () => ({
+      apiKey: Redacted.make("sk-openai-fixture"),
+      choice: { model: SOL, effort: "medium" },
+    }),
+  });
+  const rootId = sessionId();
+  const auth = seat(target);
+  const starting = await database.run(host.admitStarting(auth, rootId));
+  if (Result.isFailure(starting)) return assert.fail(starting.failure);
+  assert.equal(await database.run(host.sessionStarted(starting.success, rootId)), true);
+  const turn = { id: "turn_0", sequence: 0 };
+  const root = { id: rootId, auth, turn };
+  const child = {
+    id: `${rootId}-child`,
+    auth,
+    turn,
+    parent: { callId: "call-worker-1", rootSessionId: rootId, sessionId: rootId, turn },
+  };
+  const started = stampedEveEvent(
+    { type: "turn.started", data: { turnId: "turn_0", sequence: 0 } },
+    NOW,
+  );
+
+  await database.run(
+    host
+      .relay(started, starting.success, root, memoryRelayState(), {})
+      .pipe(Effect.provide(NO_GITHUB)),
+  );
+  await database.run(
+    host.relayChild(started, child, memoryRelayState()).pipe(Effect.provide(NO_GITHUB)),
+  );
+
+  const planningId = hostTurnId(rootId, "turn_0");
+  const workerId = hostTurnId(child.id, "turn_0");
+  const turns = await database.run(
+    database.store.turns.named(target.userId, [planningId, workerId]),
+  );
+  const recorded = new Map(
+    turns.map(({ id, model, reasoningEffort }) => [id, { model, reasoningEffort }]),
+  );
+  assert.deepEqual(recorded.get(planningId), { model: SOL, reasoningEffort: "medium" });
+  assert.deepEqual(recorded.get(workerId), { model: SOL, reasoningEffort: "medium" });
+});
+
 test("a worker is titled from the first task it received, even where a later task's arrival is what asks, on the child conversation of the call that started it, once; a title call that fails, or a deployment with no title model, leaves a worker untitled", async () => {
   const target = await planConversation();
   const model = titleModelAnswering(['"Queue comparison."', "Second title"]);

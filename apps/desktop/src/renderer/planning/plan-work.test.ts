@@ -132,12 +132,12 @@ test("a worker's job cut short by its line is marked to fade at its end, while a
   assert.equal(faded(), "true");
 });
 
-test("a worker's row names the model its session ran on, with its harness's mark where the catalog lists it, and no effort where none was recorded; a worker whose session named none keeps the robot and no pair", () => {
+test("a worker's row names the model and effort its session ran on, with its harness's mark where the catalog lists it, and no effort where none was recorded; a worker whose session named none keeps the robot and no pair", () => {
   const [turn] = TURNS;
   assert.ok(turn);
   const [part] = turn.parts;
   assert.ok(part);
-  const ranOn = (model: string | undefined) => [
+  const ranOn = (model: string | undefined, effort: string | undefined) => [
     {
       ...turn,
       parts: [
@@ -147,15 +147,16 @@ test("a worker's row names the model its session ran on, with its harness's mark
             earlierOmitted: false,
             parts: [],
             ...(model === undefined ? undefined : { model }),
+            ...(effort === undefined ? undefined : { effort }),
           },
         },
       ],
     },
   ];
-  const drawn = (model: string | undefined) =>
+  const drawn = (model: string | undefined, effort?: string) =>
     mounted(
       createElement(PlanWork, {
-        turns: ranOn(model),
+        turns: ranOn(model, effort),
         callLive: false,
         earlier: undefined,
         onLoadEarlier: async () => undefined,
@@ -171,6 +172,10 @@ test("a worker's row names the model its session ran on, with its harness's mark
         ],
       }),
     ).querySelector("[data-subagent-row]");
+
+  const paired = drawn("openai/gpt-6.1-sol", "medium");
+  assert.equal(paired?.querySelector("[data-subagent-pair]")?.textContent, "GPT-6.1 Sol Medium");
+  assert.equal(paired?.querySelector(".model-label-detail")?.textContent, "Medium");
 
   const named = drawn("openai/gpt-6.1-sol");
   assert.equal(named?.querySelector("[data-subagent-pair]")?.textContent, "GPT-6.1 Sol");

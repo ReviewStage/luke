@@ -118,6 +118,11 @@ export interface CoderModelSelection {
   readonly modelOptions: AgentModelOptionsDefinition;
 }
 
+/** A selection reached at a provider's door, whose model is the SDK's own object and so can be wrapped further, as the brain's meter wraps it. */
+export interface ProviderModelSelection extends CoderModelSelection {
+  readonly model: Exclude<LanguageModel, string>;
+}
+
 /** The provider's own options for a step: the effort, the fast speed where the choice is a fast version, and the ask for its reasoning in words where that costs nothing more. */
 function stepOptions(named: ProviderModel, effort: string): AgentModelOptionsDefinition {
   switch (named.provider) {
@@ -203,7 +208,7 @@ function modelOnKey(
   modelId: string,
   key: ProviderKey,
   fetch: typeof globalThis.fetch | undefined,
-): LanguageModel {
+): Exclude<LanguageModel, string> {
   // The key is revealed here alone, into the SDK client that puts it on its requests.
   const settings = {
     apiKey: Redacted.value(key.key),
@@ -229,7 +234,7 @@ export function coderModel(
   choice: ModelChoice,
   keys: ProviderKeys,
   contextWindowTokens: number,
-): Result.Result<CoderModelSelection, CoderRefusal> {
+): Result.Result<ProviderModelSelection, CoderRefusal> {
   const named = providerModelOf(choice.model);
   if (named === undefined) return Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER);
   if (named.fast && !FAST_PROVIDERS.has(named.provider))
