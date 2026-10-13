@@ -806,6 +806,7 @@ function NamedWindow({
     shown: true,
     unseenAgents: [],
     inboxWaiting: [],
+    inboxPlans: [],
     voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: ignore },
   });
   return createElement(DesktopShell, {

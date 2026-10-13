@@ -4677,6 +4677,7 @@ test("the Inbox tab's menu offers Pin tab; pinned, it wears no × and offers no 
   chooseFromTab(tabNamed(again, "Inbox 1"), "Unpin tab");
   press(again, '[aria-label="Close Inbox"]');
   assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5"]);
+});
 
 test("the items waiting on the Inbox tab count as read once the tab is on screen with them, and not while another tab is chosen", async () => {
   const waiting = [{ planId: PLAN.id, items: [FIRST_ITEM, SECOND_ITEM] }];
