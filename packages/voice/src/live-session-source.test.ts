@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@sidecar/live";
+import {
+  AVATAR_END_REASON,
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarEndedFrame,
+  type AvatarStartedFrame,
+  type AvatarUnavailableFrame,
+  VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_PATH,
+} from "@sidecar/hosted";
+import { LIVE_SERVER_EVENT, LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { type HostedLiveSessionOptions, HostedLiveSessionSource } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
 import { type ScriptedOpening, type ScriptedSocketSeam, scriptedOpenSocket } from "./testing.js";
@@ -17,6 +26,14 @@ const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
+const AVATAR_STARTED = {
+  type: VOICE_SERVICE_FRAME.AVATAR_STARTED,
+  avatarSessionId: "av_1",
+  livekitUrl: "wss://room.example.test",
+  viewerToken: "viewer-token-1",
+  mediaUrl: "wss://media.example.test/v1/ws",
+  maxSeconds: 1_200,
+};
 
 function createdFrame(overrides: ParsedJsonObject = {}) {
   return {
@@ -110,5 +127,95 @@ it.live("the hosted source does not carry a renewed bearer for another account",
     assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
     assert.equal(script.opens.length, 1);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
+  }),
+);
+
+it.effect(
+  "the hosted source asks the service for the face and its end on the session's socket",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const opened = yield* hosted(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+
+      opened?.startAvatar?.();
+      opened?.stopAvatar?.(AVATAR_STOP_REASON.MEDIA_LOST);
+
+      const sent = script.sockets[0]?.sent.slice(1).map((data) => JSON.parse(data));
+      assert.deepEqual(sent, [
+        { type: VOICE_SERVICE_FRAME.AVATAR_START },
+        { type: VOICE_SERVICE_FRAME.AVATAR_STOP, reason: AVATAR_STOP_REASON.MEDIA_LOST },
+      ]);
+    }),
+);
+
+it.effect(
+  "the hosted source tells the face's frames to their listeners and the sideband reads only the session's events",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const opened = yield* hosted(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+      assert.ok(opened);
+      const started: AvatarStartedFrame[] = [];
+      const ended: AvatarEndedFrame[] = [];
+      const unavailable: AvatarUnavailableFrame[] = [];
+      opened.onAvatarStarted?.((frame) => started.push(frame));
+      opened.onAvatarEnded?.((frame) => ended.push(frame));
+      opened.onAvatarUnavailable?.((frame) => unavailable.push(frame));
+      const sideband = yield* opened.attach();
+      const socket = script.sockets[0];
+      assert.ok(socket);
+
+      socket.receive(AVATAR_STARTED);
+      socket.receive({ type: VOICE_SERVICE_FRAME.AVATAR_ENDED, reason: "a_newer_reason" });
+      socket.receive({
+        type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+        reason: AVATAR_UNAVAILABLE_REASON.NOT_CONFIGURED,
+      });
+      socket.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "started",
+        session: { id: SESSION_ID },
+      });
+      const [first] = yield* Stream.runCollect(Stream.take(sideband.arrivals, 1));
+
+      assert.deepEqual(started, [AVATAR_STARTED]);
+      // A reason a newer service added still says the face is down.
+      assert.deepEqual(ended, [
+        { type: VOICE_SERVICE_FRAME.AVATAR_ENDED, reason: AVATAR_END_REASON.ERROR },
+      ]);
+      assert.deepEqual(unavailable, [
+        {
+          type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+          reason: AVATAR_UNAVAILABLE_REASON.NOT_CONFIGURED,
+        },
+      ]);
+      assert.equal(
+        first !== undefined && "event" in first && first.event.type,
+        LIVE_SERVER_EVENT.SESSION_STARTED,
+      );
+    }),
+);
+
+it.effect("the hosted source tells its listener no face whose room is not on a secure socket", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const opened = yield* hosted(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+    assert.ok(opened);
+    const started: AvatarStartedFrame[] = [];
+    opened.onAvatarStarted?.((frame) => started.push(frame));
+    const sideband = yield* opened.attach();
+    const socket = script.sockets[0];
+    assert.ok(socket);
+
+    socket.receive({ ...AVATAR_STARTED, livekitUrl: "ws://room.example.test" });
+    socket.receive(AVATAR_STARTED);
+    socket.receive({
+      type: LIVE_SERVER_EVENT.SESSION_STARTED,
+      event_id: "started",
+      session: { id: SESSION_ID },
+    });
+    yield* Stream.runCollect(Stream.take(sideband.arrivals, 1));
+
+    assert.deepEqual(started, [AVATAR_STARTED]);
   }),
 );
