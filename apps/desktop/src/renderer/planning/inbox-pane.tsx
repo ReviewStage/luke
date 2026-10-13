@@ -18,7 +18,7 @@ import {
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
 import type { CodeRef, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { ChevronRightIcon } from "@sidecar/panel";
+import { ChevronRightIcon, DocumentIcon } from "@sidecar/panel";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -36,6 +36,7 @@ import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { AgentGlyph, AgentMark } from "./agent-tab";
 import { AgentTabCard } from "./agent-tab-card";
 import type { FileChip } from "./attachment-model";
@@ -100,14 +101,14 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * says it took the item back, and why. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
- * path, plan › agent, in the File tab's breadcrumbs, each crumb opening
- * what it names and hanging the card its sidebar row or tab hangs. Every
- * time shows its moment in the shared tooltip, and an agent this window
- * does not list, one started on another Mac, still leads with a glyph. The
- * pane shows words an agent wrote, a code block the repository's lines,
- * and an image block a picture of what it rendered, so its thread is out
- * of the session recording (`ph-no-capture`), and the viewer, drawn over
- * the window outside it, is out of it on its own.
+ * path, plan › agent, each crumb drawn as its tab in the plan's column,
+ * opening what it names and hanging the card its sidebar row or tab
+ * hangs. Every time shows its moment in the shared tooltip, and an agent
+ * this window does not list, one started on another Mac, still leads with
+ * a glyph. The pane shows words an agent wrote, a code block the
+ * repository's lines, and an image block a picture of what it rendered,
+ * so its thread is out of the session recording (`ph-no-capture`), and the
+ * viewer, drawn over the window outside it, is out of it on its own.
  */
 
 /** What a card says of an image whose read did not answer. */
@@ -791,7 +792,7 @@ function Withdrawn({
   );
 }
 
-/** The box an open item is answered in, docked under its thread as an agent's composer is under its transcript. */
+/** The box an open item is answered in, docked under its thread as an agent's composer is under its transcript, a note that it was not sent under the card as the composer's is. */
 function AnswerBox({
   item,
   control,
@@ -806,11 +807,6 @@ function AnswerBox({
   const placeholder = placeholderOf(item.response);
   return (
     <div className="agent-composer">
-      {note === undefined ? null : (
-        <p className="agent-note" role="alert">
-          {note}
-        </p>
-      )}
       {knownResponse(item.response) ? (
         <PromptInput
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
@@ -845,6 +841,11 @@ function AnswerBox({
           {NEWER_LUKE.RESPONSE}
         </p>
       )}
+      {note === undefined ? null : (
+        <p className="agent-note agent-composer-note" role="alert">
+          {note}
+        </p>
+      )}
     </div>
   );
 }
@@ -866,8 +867,42 @@ export interface InboxPaneDoors {
 const NO_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
 
 /**
- * The pane's path, plan › agent, in the File tab's breadcrumbs: each crumb
- * opens what it names, the plan or the agent's tab, and hangs the card its
+ * One crumb of the pane's path, drawn as a tab of the strip is: its glyph
+ * and its label in a tab's pill, the label fading where it is cut short,
+ * and the tab's hover fill, the chosen tab's while it is pressed. It is no
+ * tab of a strip, so it takes no tab's role, and says its whole name in its
+ * hint, or hangs the card it is given there.
+ */
+function Crumb({
+  icon,
+  label,
+  card,
+  onOpen,
+}: {
+  icon: React.JSX.Element;
+  label: string;
+  card: React.ReactNode;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const [words, clipped] = useClipped();
+  return (
+    <li className="tab inbox-crumb">
+      <Tooltip label={label} card={card}>
+        <button type="button" className="tab-button" onClick={onOpen}>
+          <span className="tab-icon">{icon}</span>
+          <span ref={words} className="tab-label" data-overflow={String(clipped)}>
+            {label}
+          </span>
+        </button>
+      </Tooltip>
+    </li>
+  );
+}
+
+/**
+ * The pane's path, plan › agent, each crumb drawn as its tab is in the
+ * plan's column, the plan's document glyph and the agent's mark: each opens
+ * what it names, the plan or the agent's tab, and hangs the card its
  * sidebar row or tab hangs. An agent this window does not list, one
  * started on another Mac, hangs no card but still opens its tab.
  */
@@ -895,32 +930,23 @@ function Crumbs({
       />
     );
   return (
-    <nav className="file-breadcrumbs" aria-label="Path">
+    <nav className="file-breadcrumbs inbox-crumbs" aria-label="Path">
       <ol>
-        <li>
-          <Tooltip label={plan.name} card={doors.planCard}>
-            <button type="button" className="file-breadcrumb" onClick={doors.onOpenPlan}>
-              {plan.name}
-            </button>
-          </Tooltip>
-        </li>
+        <Crumb
+          icon={<DocumentIcon />}
+          label={plan.name}
+          card={doors.planCard}
+          onOpen={doors.onOpenPlan}
+        />
         <li className="file-breadcrumb-separator" aria-hidden="true">
           <ChevronRightIcon />
         </li>
-        <li>
-          <Tooltip label={agentName} card={agentCard}>
-            <button
-              type="button"
-              className="file-breadcrumb inbox-crumb-agent"
-              onClick={() => doors.onOpenAgent(item.agentId)}
-            >
-              <span className="plan-summary-glyph">
-                <AuthorGlyph agent={agent} />
-              </span>
-              <span className="truncate">{agentName}</span>
-            </button>
-          </Tooltip>
-        </li>
+        <Crumb
+          icon={<AuthorGlyph agent={agent} />}
+          label={agentName}
+          card={agentCard}
+          onOpen={() => doors.onOpenAgent(item.agentId)}
+        />
       </ol>
     </nav>
   );
@@ -969,7 +995,8 @@ export function InboxPane({
       </header>
       <div className="desktop-inbox">
         <div
-          className="inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-(--section-gap) pb-5"
+          // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
+          className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
         >
           <Message from="assistant">

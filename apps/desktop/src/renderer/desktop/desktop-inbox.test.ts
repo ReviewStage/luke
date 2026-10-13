@@ -16,9 +16,11 @@ import {
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { DocumentIcon } from "@sidecar/panel";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import type { AppInboxPlanHolding } from "#shared/messages/app-state";
@@ -282,16 +284,23 @@ test("a settled choice keeps every option its agent offered with the developer's
   );
 });
 
-test("the pane's crumbs open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
+test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
   const { page, asked } = mount();
   await settle();
   const crumbs = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items .file-breadcrumb"),
+    ...page.querySelectorAll<HTMLButtonElement>('.inbox-view-items nav[aria-label="Path"] button'),
   ];
   assert.deepEqual(
     crumbs.map((crumb) => crumb.textContent),
     ["Billing usage alerts", "Alerts"],
   );
+  const [plan, agent] = crumbs;
+  assert.equal(
+    plan?.querySelector(".tab-icon")?.innerHTML,
+    renderToStaticMarkup(createElement(DocumentIcon)),
+    "the plan's crumb wears its tab's document glyph",
+  );
+  assert.ok(agent?.querySelector(".tab-icon .state-glyph"), "the agent's crumb wears its mark");
   assert.equal(page.querySelectorAll(".inbox-view-items .desktop-toolbar button").length, 2);
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
