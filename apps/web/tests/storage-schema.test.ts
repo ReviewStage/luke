@@ -66,6 +66,7 @@ const DECLARED_TABLES = [
   "oauth_refresh_token",
   "oauth_resource",
   "organization",
+  "personal_workspace",
   "plan",
   "plan_board",
   "plan_page_version",
