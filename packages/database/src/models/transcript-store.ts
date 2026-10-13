@@ -6,7 +6,7 @@ import {
   type TranscriptCall,
 } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger, type TranscriptUtterance } from "@sidecar/live";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
