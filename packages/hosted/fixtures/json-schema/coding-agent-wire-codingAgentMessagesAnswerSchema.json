@@ -9,6 +9,38 @@
           "id": {
             "type": "string"
           },
+          "turnId": {
+            "type": "string"
+          },
+          "asked": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "maxItems": 20
+          },
+          "askedAt": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "voiceSessionId": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "fromMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "voiceSessionId",
+                "fromMs"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20
+          },
           "role": {
             "type": "string",
             "enum": [
@@ -89,6 +121,9 @@
       }
     },
     "cursor": {
+      "type": "string"
+    },
+    "earlier": {
       "type": "string"
     },
     "status": {

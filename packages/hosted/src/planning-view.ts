@@ -333,6 +333,13 @@ export const planWorkAnswerSchema = EffectSchema.Struct({
 
 export type PlanWorkAnswer = typeof planWorkAnswerSchema.Type;
 
+/** Every code Luke showed on one plan, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
+export const planCodeAnswerSchema = EffectSchema.Struct({
+  code: EffectSchema.Array(planShownCodeSchema),
+});
+
+export type PlanCodeAnswer = typeof planCodeAnswerSchema.Type;
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
