@@ -93,6 +93,18 @@ describe("the turn gate", () => {
     expect(gate.open).toBe(true);
   });
 
+  it("ends the turn before a chunk whose early frames finish the quiet and whose last frame speaks", () => {
+    // The tail's last three frames, 19 quiet chunks, and this chunk's first frame make the whole quiet.
+    const tail = loud(1);
+    tail.fill(0, TURN_GATE.FRAME_SAMPLES);
+    const pause = Array.from({ length: QUIET_CHUNKS - 1 }, (_, index) => quiet(200 + index));
+    const resumed = quiet(300);
+    resumed.fill(4_000, 3 * TURN_GATE.FRAME_SAMPLES);
+    const { gate, feeds } = run([tail, ...pause, resumed]);
+    expect(sent(feeds).slice(-2)).toEqual([AVATAR_FEED_KIND.TURN_END, 300]);
+    expect(gate.open).toBe(true);
+  });
+
   it("owes a turn_end for a turn still open when the feed stops, and nothing otherwise", () => {
     expect(closeTurnGate(run([loud(1)]).gate)).toEqual([{ kind: AVATAR_FEED_KIND.TURN_END }]);
     expect(closeTurnGate(run([quiet(1)]).gate)).toEqual([]);

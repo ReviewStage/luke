@@ -57,14 +57,23 @@ function frameRms(frame: Int16Array): number {
   return Math.sqrt(energy / frame.length);
 }
 
-/** The quiet run at a chunk's end, given the run it began on, frame by frame. */
-function quietAfter(quietSamples: number, chunk: Int16Array): number {
+interface ChunkQuiet {
+  /** The quiet run at the chunk's end. */
+  readonly quietSamples: number;
+  /** Whether the run reached the whole quiet at some frame, though a later one may have broken it. */
+  readonly reachedQuiet: boolean;
+}
+
+/** The quiet run through a chunk, given the run it began on, frame by frame. */
+function quietThrough(quietSamples: number, chunk: Int16Array): ChunkQuiet {
   let quiet = quietSamples;
+  let reachedQuiet = false;
   for (let start = 0; start < chunk.length; start += TURN_GATE.FRAME_SAMPLES) {
     const frame = chunk.subarray(start, start + TURN_GATE.FRAME_SAMPLES);
     quiet = frameRms(frame) >= TURN_GATE.RMS_THRESHOLD ? 0 : quiet + frame.length;
+    reachedQuiet ||= quiet >= TURN_GATE.QUIET_SAMPLES;
   }
-  return quiet;
+  return { quietSamples: quiet, reachedQuiet };
 }
 
 /** One chunk as an `audio` feed: its PCM16 samples, little-endian, in base64. */
@@ -86,18 +95,26 @@ function keepPreRoll(chunks: readonly Int16Array[]): readonly Int16Array[] {
   return chunks.slice(from);
 }
 
-/** Feeds one chunk through the gate, answering the gate after it and what goes out. */
+/**
+ * Feeds one chunk through the gate, answering the gate after it and what goes
+ * out. Note that a quiet reached inside a chunk whose last frames speak again
+ * ends the turn before that chunk rather than after it, because the chunk
+ * goes out whole and its speech belongs to the turn it starts; the old turn
+ * loses no more than 30 ms of its trailing quiet.
+ */
 export function stepTurnGate(gate: TurnGate, chunk: Int16Array): TurnGateStep {
-  const quietSamples = quietAfter(gate.open ? gate.quietSamples : 0, chunk);
+  const { quietSamples, reachedQuiet } = quietThrough(gate.open ? gate.quietSamples : 0, chunk);
   const heardVoice = quietSamples < chunk.length;
   if (!gate.open && !heardVoice) {
     return { gate: { ...gate, preRoll: keepPreRoll([...gate.preRoll, chunk]) }, feeds: [] };
   }
   const audio = [...gate.preRoll, chunk].map(audioFeed);
-  if (quietSamples < TURN_GATE.QUIET_SAMPLES) {
-    return { gate: { open: true, preRoll: [], quietSamples }, feeds: audio };
+  if (quietSamples >= TURN_GATE.QUIET_SAMPLES) {
+    return { gate: TURN_GATE_IDLE, feeds: [...audio, { kind: AVATAR_FEED_KIND.TURN_END }] };
   }
-  return { gate: TURN_GATE_IDLE, feeds: [...audio, { kind: AVATAR_FEED_KIND.TURN_END }] };
+  const opened: TurnGate = { open: true, preRoll: [], quietSamples };
+  if (!reachedQuiet) return { gate: opened, feeds: audio };
+  return { gate: opened, feeds: [{ kind: AVATAR_FEED_KIND.TURN_END }, ...audio] };
 }
 
 /**
