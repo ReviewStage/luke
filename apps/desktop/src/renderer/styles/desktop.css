@@ -3788,6 +3788,19 @@ body:has(.app-stage[data-capture="true"])
   font-size: 11px;
 }
 
+/* A summary row's words under its card's name, Luke's note on a file or the
+   title of what waits in the Inbox, wrapped to three lines rather than cut
+   to one, since they are read whole rather than glanced at. */
+.tab-card-note {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 /* Renamed in place, the label gives way to a field in the same type,
    ringed rather than bordered so nothing moves. */
 .tab-button[data-editing="true"] {

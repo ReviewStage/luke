@@ -89,6 +89,10 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
   transform-origin: top left;
 }
 
+.tooltip[data-side="start"] {
+  transform-origin: top right;
+}
+
 @keyframes tooltip-fade {
   from {
     visibility: hidden;

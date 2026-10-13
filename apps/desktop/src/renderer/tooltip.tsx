@@ -86,6 +86,8 @@ const TOOLTIP_SIDE = {
   ABOVE: "above",
   /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
   END: "end",
+  /** Beside the control, before its start: a row's card where the window ends past the row, as the plan's summary at its right edge hangs one. */
+  START: "start",
 } as const;
 
 type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
@@ -159,7 +161,9 @@ function clampTo(value: number, size: number, room: number): number {
  * Where a pill of this size goes for its control: below it, or above where
  * the window ends; centred on it, or from its start for a card. A card hung
  * beside its control stands past the control's end, level with its top and
- * held inside the window.
+ * held inside the window, or before its start where the window ends past
+ * the control, as a menu turns at the screen's edge, so it never covers the
+ * control it describes.
  */
 function pillPlace(
   shown: Shown,
@@ -169,11 +173,13 @@ function pillPlace(
 ): PillPlace {
   const anchor = shown.anchor.getBoundingClientRect();
   if (card?.beside === true) {
-    return {
-      left: clampTo(anchor.right + TOOLTIP_GAP, width, window.innerWidth),
-      top: clampTo(anchor.top, height, window.innerHeight),
-      side: TOOLTIP_SIDE.END,
-    };
+    const top = clampTo(anchor.top, height, window.innerHeight);
+    const past = anchor.right + TOOLTIP_GAP;
+    const before = anchor.left - TOOLTIP_GAP - width;
+    if (past + width > window.innerWidth - TOOLTIP_MARGIN && before >= TOOLTIP_MARGIN) {
+      return { left: before, top, side: TOOLTIP_SIDE.START };
+    }
+    return { left: clampTo(past, width, window.innerWidth), top, side: TOOLTIP_SIDE.END };
   }
   const below = anchor.bottom + TOOLTIP_GAP;
   const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
@@ -308,7 +314,8 @@ function TooltipPill({
  * place, and its focus, while it does. `card`, while given, is drawn in the
  * pill's place, and always describes the control, since it says more than
  * the control's name; `cardBeside` hangs it past the control's end rather
- * than under it, as a list row's card hangs. A card's buttons and links
+ * than under it, as a list row's card hangs, or before its start where the
+ * window ends past the control. A card's buttons and links
  * take it down once chosen, and stay the pointer's alone, so the card is a
  * description the keyboard never enters.
  */
