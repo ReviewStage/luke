@@ -11,6 +11,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ConfigProvider, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import { type HostKernelTag, type HostService, hostKernelLayer } from "../effect/kernel.js";
 import {
   AppIdentity,
@@ -26,6 +27,7 @@ import {
 import type { HostSeams } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
+import { scriptedSpawner } from "./scripted-spawner.js";
 
 const NO_CIPHER: SecretCipherSeam = {
   isAvailable: () => false,
@@ -65,9 +67,18 @@ const testSeamLayers = (seams: HostSeams) =>
 /** Every seam `hostAssemblyLayer`/`hostStandingLayer` need, over a fixture state root. */
 export const testKernelLayer = (
   options: TestKernelOptions,
-): Layer.Layer<HostKernelTag | HostService | HostSeamTags | FileSystem.FileSystem | Path.Path> =>
+): Layer.Layer<
+  | HostKernelTag
+  | HostService
+  | HostSeamTags
+  | FileSystem.FileSystem
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+> =>
   Layer.mergeAll(
     Layer.provideMerge(hostKernelLayer, testSeamLayers(testKernelSeams(options))),
     NodeFileSystem.layer,
     NodePath.layer,
+    // A fixture host sends nothing, so no command reaches it; a spawn would fail to start.
+    scriptedSpawner(() => undefined).layer,
   );
