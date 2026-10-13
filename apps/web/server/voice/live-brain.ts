@@ -4,7 +4,11 @@ import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
 import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
-import { listJournals, type SpokenAskRow } from "@sidecar/database/models/message-reads";
+import {
+  listJournals,
+  type SpokenAskRow,
+  turnsBefore,
+} from "@sidecar/database/models/message-reads";
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
@@ -25,6 +29,7 @@ import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } 
 import { SqlClient } from "effect/sql";
 import {
   ASK_ORIGIN,
+  BRAIN_TURN_ORIGIN,
   isSettledToolPartState,
   isStoredToolPart,
   SLOW_STEP_KIND,
@@ -88,6 +93,14 @@ import {
  * reply once it has finished forming and every call ahead of it has settled,
  * which is what the voice speaks meanwhile.
  *
+ * A turn the backend opens on the conversation of its own while the call
+ * stands — a rollout worker's report, handed to Luke whether or not anyone
+ * is listening — has no ask of the call's behind it. The brain watches the
+ * conversation's newest turns for one for as long as the call stands,
+ * announces each as a woken run under the turn's own id ahead of its events,
+ * and follows it as it follows an ask's turn, so the service stands an
+ * exchange for it and says its reply once no asked run is under way.
+ *
  * How far each turn was told is written on the ask's row before it is told,
  * so a connection that re-attaches to the session on another function
  * instance takes the runs up again from the event after the last one told
@@ -105,7 +118,7 @@ import {
 /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
 const FOLLOW = Duration.minutes(10);
 
-const LIVE_BRAIN_FOLLOW_BOUNDS = {
+export const LIVE_BRAIN_FOLLOW_BOUNDS = {
   /** How often the record is read again while an ask's turn runs: the measured step boundary hosted is about 300 ms. */
   POLL: Duration.millis(250),
   FOLLOW,
@@ -120,7 +133,17 @@ const LIVE_BRAIN_FOLLOW_BOUNDS = {
    * hears that end. Following longer could hear nothing more.
    */
   PARKED_FOLLOW: Duration.sum(FOLLOW, Duration.millis(TURN_ABANDON.AFTER_MS)),
+  /**
+   * How often the conversation's newest turns are read for one a report
+   * opened while the call stands. Slower than the follow's poll, because it
+   * runs for the whole call rather than for one turn, and a report's turn
+   * takes seconds to say anything.
+   */
+  WATCH: Duration.seconds(1),
 } as const;
+
+/** How many of the conversation's newest turns each watch reads: more than can open between two reads. */
+const WATCHED_TURNS = 8;
 
 type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
 
@@ -149,6 +172,9 @@ const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
   [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
 } as const satisfies Record<TurnEventKind, LiveBrainRunEvent["kind"]>;
+
+/** The turns the backend opens of its own that a call announces as woken runs: a rollout worker's report. */
+const WOKEN_TURN_ORIGINS: ReadonlySet<string> = new Set([BRAIN_TURN_ORIGIN.REPORT]);
 
 const RUN_END_OF_TURN_END = {
   [TURN_END.COMPLETED]: LIVE_BRAIN_RUN_END.COMPLETED,
@@ -384,6 +410,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   // service speaks the newest request's reply alone; the rest tell only its
   // end, because each sentence told per ask was said per ask.
   const toldOfTurn = new Map<string, TurnTold>();
+  /** The turns announced woken, followed under their own ids, which no ask's row records the telling of. */
+  const woken = new Set<string>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
 
   function emit(event: LiveBrainRunEvent): void {
@@ -467,6 +495,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     events: readonly LiveBrainRunEvent[],
   ) {
     if (events.length === 0) return;
+    if (woken.has(askId)) {
+      for (const event of events) emit(event);
+      return;
+    }
     const at = told.ended ? new Date(yield* Clock.currentTimeMillis) : undefined;
     yield* Effect.uninterruptible(
       options.asks.asks
@@ -717,6 +749,52 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     );
     return Effect.asVoid(Effect.forkIn(following, socket));
   }
+
+  /** The turns the watch has seen on the conversation; nothing until its first read. */
+  let seen: Set<string> | undefined;
+
+  /**
+   * One read of the conversation's newest turns: each not seen before that
+   * a report opened is announced woken under its own id and followed from
+   * there, under revision zero, below every spoken ask's, so an ask eve
+   * folded into the same turn tells it. The first read only learns what
+   * already stands, so a report from before the call is never said on it.
+   * A read the store could not make is written down and tried again.
+   */
+  const watchOnce = Effect.fnUntraced(function* () {
+    const read = yield* turnsBefore(
+      options.conversation.userId,
+      options.conversation.conversationId,
+      WATCHED_TURNS,
+      undefined,
+    ).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (read === undefined) return;
+    if (seen === undefined) {
+      seen = new Set(read.turns.map((turn) => turn.id));
+      return;
+    }
+    for (const turn of read.turns) {
+      if (seen.has(turn.id)) continue;
+      seen.add(turn.id);
+      if (!WOKEN_TURN_ORIGINS.has(turn.origin)) continue;
+      woken.add(turn.id);
+      emit({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: turn.id });
+      yield* follow(turn.id, 0);
+    }
+  });
+
+  // The watch runs on a fiber of the socket's scope from the call's attach, so its close stops it.
+  yield* Effect.forkIn(
+    Effect.provideService(
+      Effect.repeat(watchOnce(), Schedule.spaced(bounds.WATCH)),
+      SqlClient.SqlClient,
+      sql,
+    ),
+    socket,
+  );
 
   /** Accepts one ask through the door and follows it under the revision given. */
   function submit(input: AskInput, revision: number): Effect.Effect<LiveBrainSubmission> {
