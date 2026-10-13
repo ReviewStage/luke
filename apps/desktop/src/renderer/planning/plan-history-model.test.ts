@@ -195,7 +195,7 @@ test("a section struck and another written in its place read as one unit changed
   ]);
   const after = documentOf([
     "## Context\n\nOnly admins invite.",
-    "## Plan of attack\n\n1. Schema.",
+    "## Data migration\n\n1. Schema.",
   ]);
 
   const diff = versionDiff(before, after);
@@ -204,10 +204,10 @@ test("a section struck and another written in its place read as one unit changed
     diff.units.map((unit) => [unit.key, unit.change]),
     [
       ["Context", VERSION_CHANGE.SAME],
-      ["Plan of attack", VERSION_CHANGE.CHANGED],
+      ["Data migration", VERSION_CHANGE.CHANGED],
     ],
   );
-  assert.ok(marked(diff, MARKDOWN_MARK.INSERTED).some((words) => words.includes("Plan of attack")));
+  assert.ok(marked(diff, MARKDOWN_MARK.INSERTED).some((words) => words.includes("Data migration")));
 });
 
 test("a unit struck with nothing written in its place is drawn struck whole, and one new is drawn added", () => {
