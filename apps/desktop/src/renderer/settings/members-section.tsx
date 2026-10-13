@@ -11,24 +11,17 @@ import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { SettingsGroup } from "./settings-group";
 
 /**
- * members-section.tsx -- Settings' Workspace section: the chosen workspace's members, the removal and the leave, and the way to install Luke on GitHub.
+ * members-section.tsx -- Settings' Members section: the listed team workspace's members, the removal, and the leave.
  *
- * A workspace beside the personal one is a GitHub App installation's, so a
- * team is made by installing the App, which the section offers to every
- * signed-in account. While the sidebar lists a team's workspace the section
- * also reads its members as the service holds them now, each with its name,
- * email, and role. An owner or an admin removes a member who is not an
- * owner, and anyone but an owner leaves, which lists the personal workspace
- * again. Both ask first in the confirm dialog, since neither is undone from
- * here, and a refusal is said in it: the account's role's own line where
- * that is why, the act's own sentence otherwise.
+ * While the sidebar lists a team's workspace the section reads its members
+ * as the service holds them now, each with its name, email, and role. An
+ * owner or an admin removes a member who is not an owner, and anyone but an
+ * owner leaves, which lists the personal workspace again. Both ask first in
+ * the confirm dialog, since neither is undone from here, and a refusal is
+ * said in it: the account's role's own line where that is why, the act's
+ * own sentence otherwise. The personal workspace has no team, so it draws
+ * no section.
  */
-
-/** What the section says, beside the members it lists. */
-const SECTION_LINE = {
-  INSTALL:
-    "An org owner or a repository admin installs Luke on GitHub; then everyone who can reach those repositories can join.",
-} as const;
 
 /** What each role reads as on a member's row. */
 const ROLE_WORDS = {
@@ -190,40 +183,25 @@ function TeamMembers({
   );
 }
 
-/** What Settings' Workspace section is handed: the workspace the sidebar lists, the fall back after a leave, and the install. */
+/** What Settings' Workspace section is handed: the workspace the sidebar lists, and the fall back after a leave. */
 export interface WorkspaceSettingsControl {
   /** The workspace the sidebar lists, absent before the workspaces are read. */
   workspace: Workspace | undefined;
   /** Lists the personal workspace again, once the chosen one is left. */
   onLeft: () => void;
-  /** Opens the Luke GitHub App's installation page in the browser. */
-  onInstall: () => void;
 }
 
+/** The listed team workspace's members; nothing for the personal workspace, which has no team. */
 export function MembersSection({
   control,
 }: {
   control: WorkspaceSettingsControl;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { workspace } = control;
-  const team = workspace !== undefined && !workspace.personal ? workspace : undefined;
+  if (workspace === undefined || workspace.personal) return null;
   return (
-    <SettingsGroup title={team === undefined ? "Workspace" : `Members of ${team.name}`}>
-      {team === undefined ? null : (
-        <TeamMembers key={team.id} workspace={team} onLeft={control.onLeft} />
-      )}
-      <div className="settings-row">
-        <span className="settings-copy">
-          <small>{SECTION_LINE.INSTALL}</small>
-        </span>
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          onClick={control.onInstall}
-        >
-          Install Luke on GitHub…
-        </button>
-      </div>
+    <SettingsGroup title={`Members of ${workspace.name}`}>
+      <TeamMembers key={workspace.id} workspace={workspace} onLeft={control.onLeft} />
     </SettingsGroup>
   );
 }

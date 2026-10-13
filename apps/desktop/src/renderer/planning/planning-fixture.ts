@@ -44,9 +44,8 @@ import {
 
 /**
  * The fixture account's workspaces: its personal one, which the sidebar
- * lists, the workspace of the acme organization's GitHub App installation,
- * which it is a member of, and globex's, which it may join, so the captures
- * draw the sidebar's switcher.
+ * lists, and Acme, a team's it is a member of, so the captures draw the
+ * sidebar's switcher.
  */
 const FIXTURE_PERSONAL: Workspace = {
   id: "workspace-personal",
@@ -57,13 +56,12 @@ const FIXTURE_PERSONAL: Workspace = {
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
-  name: "acme",
+  name: "Acme",
   personal: false,
   role: WORKSPACE_ROLE.MEMBER,
   active: true,
 };
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_PERSONAL, FIXTURE_TEAM];
-const FIXTURE_AVAILABLE: PlanningView["available"] = [{ installationId: 4242, name: "globex" }];
 
 /**
  * The reference journey's plan partway through its conversation: the
@@ -182,7 +180,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
-  available: FIXTURE_AVAILABLE,
+  available: [],
   document: { status: PLANNING_READ.IDLE },
 };
 

@@ -1394,54 +1394,6 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-const GLOBEX = { installationId: 4242, name: "globex" };
-const GLOBEX_JOINED = {
-  id: "workspace-globex",
-  name: "globex",
-  personal: false,
-  role: WORKSPACE_ROLE.MEMBER,
-  active: true,
-};
-
-test("joining an installation's workspace asks for it by the installation and lists it once main's view holds it", async () => {
-  const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
-    { [ACT_KIND.WORKSPACE_JOIN]: () => Promise.resolve(GLOBEX_JOINED) },
-  );
-
-  const offered = tab.control().available;
-  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
-  await settle();
-  tab.stand({
-    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, GLOBEX_JOINED], available: [] },
-  });
-
-  assert.deepEqual(offered, [GLOBEX]);
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_JOIN)
-      .map((asked) => Option.getOrUndefined(readJoin(asked.payload))?.installationId),
-    [GLOBEX.installationId],
-  );
-  assert.equal(tab.control().workspace?.id, GLOBEX_JOINED.id);
-});
-
-test("a join the service refuses says why in a toast and keeps the workspace listed", async () => {
-  const tab = mount(
-    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
-    {
-      [ACT_KIND.WORKSPACE_JOIN]: () =>
-        Promise.reject(new Error("Could not join that workspace on this system.")),
-    },
-  );
-
-  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
-  await settle();
-
-  assert.equal(toast(), "Could not join that workspace on this system.");
-  assert.equal(tab.control().workspace?.id, PERSONAL.id);
-});
-
 test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
   const listed = {
     repositories: {
@@ -1468,60 +1420,6 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   ]);
 });
 
-test("Install Luke on GitHub opens the installation page the repository read answers", async () => {
-  const installationUrl = "https://github.com/apps/luke/installations/new";
-  const tab = mount(
-    { shown: true, planning: TWO_WORKSPACES },
-    {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        Promise.resolve({ repositories: { installed: false, repositories: [], installationUrl } }),
-    },
-  );
-
-  act(() => tab.control().onInstallApp());
-  await settle();
-
-  assert.deepEqual(tab.told, [
-    ACT_KIND.PLANNING_REFRESH,
-    ACT_KIND.PLANNING_REPOSITORIES,
-    ACT_KIND.GITHUB_OPEN,
-  ]);
-});
-
-test("Install Luke on GitHub opens the page an earlier read answered when the read now fails, and says why where none ever did", async () => {
-  const installationUrl = "https://github.com/apps/luke/installations/new";
-  let reachable = true;
-  const tab = mount(
-    { shown: true, planning: TWO_WORKSPACES },
-    {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        reachable
-          ? Promise.resolve({
-              repositories: { installed: true, repositories: [], installationUrl },
-            })
-          : Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
-    },
-  );
-  const offline = mount(
-    { shown: true, planning: TWO_WORKSPACES },
-    {
-      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
-        Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
-    },
-  );
-
-  await tab.control().repositories.read();
-  reachable = false;
-  act(() => tab.control().onInstallApp());
-  await settle();
-  act(() => offline.control().onInstallApp());
-  await settle();
-
-  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_OPEN);
-  assert.equal(offline.told.includes(ACT_KIND.GITHUB_OPEN), false);
-  assert.equal(toast(), "Luke could not reach GitHub to install the App. Try again.");
-});
-
 test("a workspace left lists the personal one again", () => {
   const tab = mount({ shown: true, planning: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -1537,7 +1435,6 @@ test("a fixture run lists its personal workspace's plans under the switcher, and
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
   const staged = fixture.control().listed.plans.map((plan) => plan.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
-  act(() => fixture.control().onJoinWorkspace(4242));
 
   assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
   assert.deepEqual(
@@ -1545,8 +1442,6 @@ test("a fixture run lists its personal workspace's plans under the switcher, and
     ["Usage alerts"],
   );
   assert.equal(fixture.control().workspaces.length, 2);
-  assert.equal(fixture.control().available.length, 1);
-  assert.deepEqual(fixture.told, [], "a fixture's join asks nothing");
   assert.equal(window.localStorage.length, 0);
 });
 

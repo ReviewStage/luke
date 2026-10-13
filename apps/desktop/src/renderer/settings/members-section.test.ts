@@ -113,16 +113,13 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The section over `workspace`, keeping how often it asked to fall back and to install. */
+/** The section over `workspace`, keeping how often it asked to fall back. */
 async function mount(workspace: Workspace | undefined) {
-  const pressed = { left: 0, installed: 0 };
+  const pressed = { left: 0 };
   const control: WorkspaceSettingsControl = {
     workspace,
     onLeft: () => {
       pressed.left += 1;
-    },
-    onInstall: () => {
-      pressed.installed += 1;
     },
   };
   const container = document.createElement("div");
@@ -227,15 +224,9 @@ test("a member leaves after confirming, which lists the personal workspace again
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the personal workspace lists no members and offers the install with who may install", async () => {
-  const { page, pressed } = await mount(PERSONAL);
-  act(() => button(page, "Install Luke on GitHub…").click());
+test("the personal workspace, having no team, draws no section and reads nothing", async () => {
+  const { page } = await mount(PERSONAL);
 
   assert.deepEqual(sent, []);
-  assert.equal(page.querySelectorAll(".workspace-member").length, 0);
-  assert.match(
-    page.textContent ?? "",
-    /An org owner or a repository admin installs Luke on GitHub/u,
-  );
-  assert.equal(pressed.installed, 1);
+  assert.equal(page.textContent, "");
 });
