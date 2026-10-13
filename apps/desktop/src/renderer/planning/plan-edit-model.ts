@@ -1,6 +1,6 @@
 import {
   PLAN_EDIT_REFUSAL,
-  type PlanDocumentEditRequest,
+  type PlanEditRequest,
   type PlanEditValue,
 } from "@sidecar/hosted/plan-edit";
 import { PLAN_BOUNDS } from "@sidecar/hosted/plan-wire";
@@ -52,7 +52,7 @@ export interface DocumentEditor {
   /** The text the developer's words are a change from: what the editor opened on, or their own last save. */
   readonly base: string;
   /** The save still out; absent while none is. */
-  readonly sending?: PlanDocumentEditRequest;
+  readonly sending?: PlanEditRequest;
   readonly state: DocumentEditorState;
   /** Whether the developer asked to close it, which it does once nothing is left to save. */
   readonly closing: boolean;
@@ -111,7 +111,7 @@ export function editorTyped(editor: DocumentEditor, draft: string): DocumentEdit
  * waits on the developer, or a failed save waits to be tried again, and
  * nothing where the words already are what the service holds of theirs.
  */
-export function pendingSave(editor: DocumentEditor): PlanDocumentEditRequest | undefined {
+export function pendingSave(editor: DocumentEditor): PlanEditRequest | undefined {
   if (editor.sending !== undefined) return undefined;
   if (editor.state.kind !== DOCUMENT_EDITOR_STATE.EDITING) return undefined;
   const { base, draft } = editor;
@@ -119,10 +119,7 @@ export function pendingSave(editor: DocumentEditor): PlanDocumentEditRequest | u
   return { document: { base, value: draft } };
 }
 
-export function editorSent(
-  editor: DocumentEditor,
-  request: PlanDocumentEditRequest,
-): DocumentEditor {
+export function editorSent(editor: DocumentEditor, request: PlanEditRequest): DocumentEditor {
   return { ...editor, sending: request };
 }
 

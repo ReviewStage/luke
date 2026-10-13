@@ -14,8 +14,8 @@ import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-ed
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_BOUNDS,
   PLAN_FIELD,
-  PLAN_FIELD_BOUNDS,
   PLAN_FILE_REFUSAL,
   PLAN_TREE_BOUNDS,
   PLAN_TREE_ENTRY,
@@ -2412,7 +2412,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           );
 
         // At the bound alone, but past it once laid over the line Luke added.
-        const padding = "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS - INVITATIONS_TEXT.length);
+        const padding = "x".repeat(PLAN_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           planId,
           INVITATIONS_TEXT.replace("Only an admin", `Only an admin${padding}`),

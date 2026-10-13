@@ -1,42 +1,4 @@
 {
-  "anyOf": [
-    {
-      "anyOf": [
-        {
-          "type": "string",
-          "maxLength": 200000
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 200000
-      },
-      "maxItems": 200
-    },
-    {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "additionalProperties": false
-      },
-      "maxItems": 200
-    }
-  ]
+  "type": "string",
+  "maxLength": 200000
 }
