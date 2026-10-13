@@ -5,13 +5,16 @@
  * row, ⌘K and its foot, a button, and the Keyboard shortcuts page — so a
  * chord reads the same wherever it is met. A place says only how big and how
  * loud (`--shortcut-text`, `--shortcut-ink`), never draws it some other way.
+ * Each key is a glyph of its own (`shortcut-glyph`), so the stylesheet can set
+ * a modifier and a letter on one line and centre the chord on the words
+ * beside it.
  *
  * Its words are text like any other, so the session recording masks them with
  * the rest.
  */
 
 import type React from "react";
-import { type ShortcutChord, shortcutAccelerator, shortcutLabel } from "#shared/shortcuts";
+import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "#shared/shortcuts";
 
 /** Which chord: the window's own, or a system-wide key's accelerator as Settings stores it. */
 type ShortcutOf =
@@ -37,7 +40,11 @@ export function Shortcut(
       className={props.className ? `shortcut ${props.className}` : "shortcut"}
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
-      {shortcutLabel(accelerator)}
+      {shortcutGlyphs(accelerator).map((glyph) => (
+        <span key={glyph} className="shortcut-glyph">
+          {glyph}
+        </span>
+      ))}
     </kbd>
   );
 }

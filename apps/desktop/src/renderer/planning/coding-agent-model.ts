@@ -1,3 +1,4 @@
+import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -33,7 +34,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
-import { AGENT_TOOL, todosView } from "./tool-call-model";
+import { todosView } from "./tool-call-model";
 import {
   CALL_KIND,
   type CallKind,
@@ -832,7 +833,11 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
 
 /** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.said?.kind === CALL_KIND.WORKER;
+  return (
+    part.tool === CODING_AGENT_DELEGATE_TOOL ||
+    part.tool === EVE_TOOL.WORKER ||
+    part.said?.kind === CALL_KIND.WORKER
+  );
 }
 
 /** Whether a part is a delegation to a worker (`delegates`). */
@@ -848,7 +853,10 @@ export function isDelegation(
  * refused, which answers no agent.
  */
 export function startedAgentOf(part: AgentPart): string | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.said?.kind !== CALL_KIND.START_AGENT) return undefined;
+  if (part.kind !== AGENT_PART.TOOL) return undefined;
+  const starts =
+    part.said?.kind === CALL_KIND.START_AGENT || part.tool === AGENT_TOOL.START_CODING_AGENT;
+  if (!starts) return undefined;
   const agent = isRecord(part.output) ? part.output.agent : undefined;
   return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
 }
@@ -911,6 +919,19 @@ const AGENT_READING: RowReading<AgentPart> = {
     (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
 };
 
+/** No subagent's session saying it runs. */
+const NO_WORKERS: ReadonlySet<string> = new Set();
+
+/** What a tab knows of a turn beyond its message, which its rows read. */
+interface AgentTurnPlace {
+  /** The call whose to-do list stays out of a finished turn's fold. */
+  readonly newestTodos?: string | undefined;
+  /** The calls whose subagent its own session says still runs, since a call may settle the moment its worker is under way. */
+  readonly workers?: ReadonlySet<string>;
+  /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
+  readonly said?: boolean;
+}
+
 /** The parts of a message a row is drawn from: every part but a step boundary and a kind this build does not draw. */
 function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
   return agentParts(message).filter(
@@ -933,11 +954,13 @@ export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
   grouped = true,
-  newestTodos: string | undefined = undefined,
+  { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message);
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
+    running: (part) =>
+      AGENT_READING.running(part) || (part.kind === AGENT_PART.TOOL && workers.has(part.callId)),
     kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
   };
   return turnRows(parts, reading, {
@@ -945,6 +968,7 @@ export function agentRows(
     moving,
     done: grouped && !moving,
     grouped,
+    said,
   });
 }
 
@@ -996,6 +1020,24 @@ export function agentWorkingPhase(
     return at === lines.length - 1 ? WORKING_PHASE.WORKING : WORKING_PHASE.STARTING;
   }
   return drawnParts(journal).length === 0 ? WORKING_PHASE.THINKING : WORKING_PHASE.WORKING;
+}
+
+/**
+ * How a worker's row marks where it stands, as its own session reads: still
+ * running while it starts or works, at rest once it completed or was
+ * stopped, whose own tab says which, and failed where it failed.
+ */
+export function workerToolState(status: CodingAgentStatus): ToolState {
+  switch (status) {
+    case CODING_AGENT_STATUS.STARTING:
+    case CODING_AGENT_STATUS.RUNNING:
+      return TOOL_STATE.INPUT_AVAILABLE;
+    case CODING_AGENT_STATUS.FAILED:
+      return TOOL_STATE.OUTPUT_ERROR;
+    case CODING_AGENT_STATUS.COMPLETED:
+    case CODING_AGENT_STATUS.CANCELLED:
+      return TOOL_STATE.OUTPUT_AVAILABLE;
+  }
 }
 
 /** Where a worker stands, read from its delegation's part: running until the call answers, then completed, or failed where the call ended in an error. */

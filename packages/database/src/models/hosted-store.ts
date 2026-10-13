@@ -5,6 +5,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type MessageListRead,
   readMessageByClientId,
+  type SpokenAskRow,
   type StoredTurnRecord,
   spokenAskRowsOf,
   turnsNamed,
@@ -38,12 +39,12 @@ export interface HostedStore {
       tools: ToolSet,
       clientId: string,
     ): HostedStoreEffect<MessageListRead>;
-    /** The developer's spoken lines each turn named took as its ask, by the client id the voice minted for each, in the conversation's order. */
+    /** The developer's spoken lines each turn named took as its ask, by the client id the voice minted for each and where on its call each began, in the order they were said. */
     spokenAskRows(
       userId: string,
       conversationId: string,
       turnIds: readonly string[],
-    ): HostedStoreEffect<ReadonlyMap<string, readonly string[]>>;
+    ): HostedStoreEffect<ReadonlyMap<string, readonly SpokenAskRow[]>>;
   };
   turns: {
     /** The turn rows the given ids name, over standing conversations, in the order they last changed. */

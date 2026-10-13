@@ -40,6 +40,22 @@ export type FolderListing =
 /** Lists one folder of the repository. */
 export type ReadFolder = (path: string) => Promise<FolderListing>;
 
+/** What became of a file in a change set, as its row in the tree is marked: A, M, D, or R. */
+export const FILE_MARK = {
+  ADDED: "added",
+  MODIFIED: "modified",
+  DELETED: "deleted",
+  RENAMED: "renamed",
+} as const;
+
+export type FileMarkStatus = (typeof FILE_MARK)[keyof typeof FILE_MARK];
+
+/** One file's mark: its path and what became of it. */
+export interface FileMark {
+  readonly path: string;
+  readonly status: FileMarkStatus;
+}
+
 /** What the tab hands the tree when it mounts it. */
 export interface FileTreeProps {
   /**
@@ -86,6 +102,12 @@ export interface FileTreeHandle {
    * listed so far.
    */
   readonly within: (entries: readonly FolderEntry[]) => void;
+  /**
+   * Marks each file's row with what became of it, as an editor's source
+   * control does, and each folder above one as holding a change; none
+   * marks nothing.
+   */
+  readonly mark: (marks: readonly FileMark[]) => void;
   readonly unmount: () => void;
 }
 

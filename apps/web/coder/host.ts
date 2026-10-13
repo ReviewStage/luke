@@ -1,14 +1,22 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "../server/core.js";
-import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
-import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
-import { turnServers } from "../server/hosted/agent-runtime/servers.js";
+import { defineTool } from "eve/tools";
+import {
+  ACTION_RESULT_STATUS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+  type WireRecord,
+} from "../server/core.js";
+import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
+import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
+import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
 import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
@@ -17,7 +25,13 @@ import {
 } from "../server/hosted/coder-host/production.js";
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
-import { integrationAccessToken } from "../server/hosted/integration-connection.js";
+import {
+  MAC_COMMAND_STATUS,
+  type MacCommandAnswer,
+  RUN_ON_MAC_TOOL,
+  runOnMacTool,
+} from "../server/hosted/mac-command.js";
+import { showPageRejected } from "../server/hosted/page-tool.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -39,6 +53,22 @@ export const seams: CoderHostSeams = Effect.runSync(
 );
 
 export const host: CoderHost = coderHost(seams);
+
+/**
+ * The doors this project's authored files open onto the agent runtime
+ * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner. A
+ * session is offered skills only once its conversation is read as an
+ * agent's, whose repository they are read from.
+ */
+const edge = edgeKit(runWeb, {
+  host,
+  skills: (admitted) =>
+    Effect.gen(function* () {
+      const agent = yield* host.agent(admitted);
+      if (Result.isFailure(agent)) return [];
+      return yield* host.skills(admitted, agent.success);
+    }),
+});
 
 /**
  * A delegation made under the agent's session: the pair the worker runs on,
@@ -86,13 +116,13 @@ export async function selectDelegatedModel(
   return selected.success;
 }
 
-/** Relays one event of a worker's session into its child conversation, for the worker's own hook, which runs here rather than at an edge of its own. */
+/** Relays one event of a worker's session into its child conversation, for the worker's own hook. */
 export function relayChildEvent(
   event: Parameters<CoderHost["relayChild"]>[0],
   session: Parameters<CoderHost["relayChild"]>[1],
   state: Parameters<CoderHost["relayChild"]>[2],
 ): Promise<void> {
-  return runWeb(host.relayChild(event, session, state));
+  return edge.relayChildEvent(event, session, state);
 }
 
 /** One `edit_plan` call's notes taken into the agent's plan, for the tool, which runs here rather than at an edge of its own. */
@@ -122,6 +152,22 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/** One `show_page` call run under the agent's session, its path read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+export function runShowPageTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+): Promise<WireRecord> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
+      return yield* host.showPage(admitted.success, input, sandbox);
     }),
   );
 }
@@ -160,31 +206,42 @@ export function sessionSkills(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<readonly AgentSkill[]> {
-  return runWeb(
-    Effect.gen(function* () {
-      const admitted = yield* host.admitStarting(auth, sessionId);
-      if (Result.isFailure(admitted)) return [];
-      const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return [];
-      return yield* host.skills(admitted.success, agent.success);
-    }),
-  );
+  return edge.sessionSkills(AGENT_ROLE.CODER, auth, sessionId);
 }
 
 /**
  * Every integration one of this project's agents is handed, for that
- * agent's own `connections/integrations.ts`, on the same terms as the
- * planning project's (`../eve/host.ts`): a turn is handed only the servers
- * the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
+ * agent's own `connections/integrations.ts`: a turn is handed only the
+ * servers the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
  */
 export function integrationConnectionsFor(
   role: typeof AGENT_ROLE.CODER | typeof AGENT_ROLE.CODER_WORKER,
 ) {
-  const profile = ROLE_PROFILE[role];
-  const admit = profile.delegated ? host.admitDelegated : host.admit;
-  return integrationConnections({
-    servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
-    token: (provider) => (auth, sessionId) =>
-      runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  return edge.integrationConnections(role);
+}
+
+/**
+ * `run_on_mac` as the agent and its worker are offered it, each admitted on
+ * its own terms (the worker's on ownership, as its resolvers are), and run
+ * through the one door every agent's call goes through
+ * (`server/hosted/mac-command.ts`). A session the host does not admit runs
+ * nothing.
+ */
+export function runOnMacFor(admit: CoderHost["admit"]) {
+  return defineTool({
+    description: RUN_ON_MAC_TOOL.description,
+    inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
+    execute: (input, ctx): Promise<MacCommandAnswer> =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) {
+            return { status: MAC_COMMAND_STATUS.NOT_RUN, reason: admitted.failure };
+          }
+          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+          const call = unparsedWire(input as WireBoundaryInput);
+          return yield* runOnMacTool(admitted.success.target.userId, call);
+        }),
+      ),
   });
 }

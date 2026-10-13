@@ -867,7 +867,7 @@ vercel link
 vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
 vercel connect create mcp.notion.com --name notion   # Notion
 vercel connect create mcp.sentry.dev --name sentry   # Sentry
-vercel connect create slack --name slack             # Slack: Vercel's managed Slack app
+vercel connect create slack --name slack             # Slack: Vercel's managed Slack app; then its user scopes, below
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
@@ -884,6 +884,34 @@ short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
 runs every agent without that provider, and Settings shows its row as
 unavailable. Every token request is billed by Connect and rate-limited per
 team.
+
+**Slack's user scopes.** `vercel connect create slack` makes a Slack bot app
+with bot scopes and no user scopes, but Luke asks Connect for the
+developer's own grant (`subject: { type: "user" }`, no scopes, so Connect's
+default of the app's configured user scopes), and Slack's MCP server serves
+user tokens alone. A Connect with no user scopes on the app ends on Slack's
+"Invalid permissions requested". `vercel connect update` changes only
+branding, so set them through the API, with the connector's `scl_` id
+(`vercel connect list`):
+
+```
+vercel api /v1/connect/connectors/<connector-id>   # userTokens.scopes, data.botScopes, data.appId
+cat > slack-user-scopes.json <<'JSON'
+{"data":{"userScopes":["search:read.public","search:read.private","search:read.mpim","search:read.im","search:read.files","search:read.users","channels:history","groups:history","mpim:history","im:history","canvases:read","files:read","users:read","users:read.email"]}}
+JSON
+vercel api /v2/connect/connectors/<connector-id> -X PATCH --input slack-user-scopes.json
+```
+
+Those are what the read and search tools `integrations.ts` offers need, and
+none of them writes, so the token is read-only at Slack as well as in the
+offer. Carry the GET's `botScopes` in the same `data` object unchanged. The
+PATCH answers whether Connect synced the change to the Slack app
+(`serviceSync`) and whether a workspace owner must reinstall it
+(`reinstallNeeded`); a developer who connected before signs in again to
+pick the new scopes up. Slack's MCP server also serves only Marketplace and
+internal apps, never an unlisted one, so the app
+(`https://api.slack.com/apps/<appId>/distribute`) must not be publicly
+distributed.
 
 ## The models group
 
@@ -2057,9 +2085,22 @@ agent's own sandbox and checkout, uncommitted edits included
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`coder/tools/delegate.ts`), a workflow tool whose
-input is `{ task, model?, effort? }` and whose `execute` blocks the agent's
-turn until the worker answers, several calls in one step running at once.
+model sees `delegate` (`coder/tools/delegate.ts`), a resumable task
+(`serve`, the shape eve gives every agent call) whose input is
+`{ task, model?, effort?, background? }`. The call answers with eve's
+receipt at once and the worker's answer reaches the agent as a task result,
+so the turn stays open while it works; unless the agent sets `background`,
+the tool's words have it call `task_wait` right after, which is a foreground
+delegation in eve's terms, and a developer's message during the wait reaches
+the agent at once without stopping the worker. Several calls in one step run
+at once, and a call with the task's id sends the worker more, into the same
+session. The planning model delegates through the same shape
+(`eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
+and on its own model, its worker declared hidden too; the Work tab reads its
+calls as worker calls under either name, eve's `worker` in earlier
+transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
+says where the worker's own session stands (the page's `subagents`), since
+the call settles at the receipt.
 Its step fills the pair in from the agent's own row, holds it to the same
 catalog a Start is held to (`coder-host/delegation.ts`, refusing with the
 models offered or the named model's efforts, which the body throws so the
@@ -2072,8 +2113,8 @@ worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
 in the worker's own state as the session starts, the model resolver reads
 it at every step and is told the recorded pair (`host.delegatedModel`), and
 the hook relays the worker's stream into the child conversation as a child
-turn naming that pair (`host.relayChild`). The tool's output names the pair
-and the worker's answer; the tool part's `toolCallId` is what names the
+turn naming that pair (`host.relayChild`). The task's result names the pair
+and the worker's answer; the starting call's `toolCallId` is what names the
 child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
 delegation opens no sandbox, and counting it would have the turn's end open
 one only to stop it, so a sandbox a worker opened is stopped at the end of

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +58,33 @@ const EXCALIDRAW_FONTS = path.join(
 );
 const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
 
+// The commit the bundle is cut from, which Settings › Updates names
+// (`src/main/build-commit.ts`): the short SHA, whether the tree held
+// uncommitted changes (a new file the bundle may carry counts too), and the
+// branch unless the head is detached, as a tag's checkout is. A build made
+// where git cannot answer stamps none.
+function git(...args) {
+  return execFileSync("git", args, {
+    cwd: appRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+}
+
+function buildCommit() {
+  try {
+    const commit = {
+      sha: git("rev-parse", "--short", "HEAD"),
+      dirty: git("status", "--porcelain") !== "",
+    };
+    const branch = git("rev-parse", "--abbrev-ref", "HEAD");
+    if (branch !== "HEAD") commit.branch = branch;
+    return commit;
+  } catch {
+    return null;
+  }
+}
+
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -85,6 +113,7 @@ await Promise.all([
     plugins: sentryPlugins(),
     define: {
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
+      PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
       // the run answers to; see app-identity.ts.

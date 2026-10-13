@@ -218,17 +218,9 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
   return { actor: PLAN_ACTOR.AGENT, label: edit.label, at: edit.at, duringCall: false };
 }
 
-/**
- * The text the row's plan started as: a copy of the account's template as it
- * stood when the plan started, as its history reads, or the template it
- * holds now where it has no history.
- */
+/** The text the row's plan started as (`readStartedText`). */
 function startedText(row: PlanRow): PlanStoreEffect<string> {
-  return Effect.gen(function* () {
-    const held = yield* readTemplateAt(row.userId, row.createdAt);
-    const template = Option.isSome(held) ? held.value : yield* readPlanTemplate(row.userId);
-    return template ?? DEFAULT_PLAN_TEMPLATE;
-  });
+  return readStartedText(row.userId, row.createdAt.getTime());
 }
 
 /**
@@ -523,6 +515,20 @@ const setConversation = SqlSchema.findOneOption({
       )
       .returning({ id: plan.id }),
 });
+
+/**
+ * The text an account's plan started as at `createdAt`, epoch milliseconds:
+ * a copy of the account's template as it stood then, as its history reads,
+ * or the template it holds now where it has no history. A note reads it to
+ * tell a section still holding only its template's guidance.
+ */
+export function readStartedText(userId: string, createdAt: number): PlanStoreEffect<string> {
+  return Effect.gen(function* () {
+    const held = yield* readTemplateAt(userId, new Date(createdAt));
+    const template = Option.isSome(held) ? held.value : yield* readPlanTemplate(userId);
+    return template ?? DEFAULT_PLAN_TEMPLATE;
+  });
+}
 
 /**
  * Starts a plan under the account as one document, a copy of the account's

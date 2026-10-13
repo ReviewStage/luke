@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
+  AppWindowIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
@@ -18,6 +19,7 @@ import {
   GlobeIcon,
   HourglassIcon,
   InboxIcon,
+  LaptopIcon,
   ListIcon,
   ListTodoIcon,
   type LucideIcon,
@@ -68,7 +70,8 @@ import {
   CALL_WORDS,
   type CallKind,
   callLine,
-  groupSummary,
+  callPlace,
+  isCommandKind,
   TURN_ROW,
   type TurnRow,
 } from "./turn-rows";
@@ -145,12 +148,47 @@ const TRANSCRIPT_COMPONENTS: Components = {
   img: () => null,
 };
 
-/** A turn's words as markdown. */
-export function TranscriptWords({ text }: { text: string }): ReactNode {
+/**
+ * An element of the transcript's own the words are drawn with, as a skill
+ * named in a sent message is drawn as its chip (`skill-chip.tsx`): the words
+ * with the element written in where it stands, its tag and the attributes it
+ * carries, and what draws it. Its words are taken as they are, never as
+ * markdown.
+ */
+export interface TranscriptElement {
+  readonly markdown: string;
+  readonly tag: string;
+  readonly attributes: readonly string[];
+  readonly components: Components;
+}
+
+/** A turn's words as markdown, with an element of the transcript's own written in where one is given. */
+export function TranscriptWords({
+  text,
+  element,
+}: {
+  text: string;
+  element?: TranscriptElement | undefined;
+}): ReactNode {
+  if (element === undefined) {
+    return (
+      <TranscriptMarkdownSource markdown={text}>
+        <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
+          {text}
+        </MessageResponse>
+      </TranscriptMarkdownSource>
+    );
+  }
+  // Note that the source stays the words as written, because a code block's copy reads it.
   return (
     <TranscriptMarkdownSource markdown={text}>
-      <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
-        {text}
+      <MessageResponse
+        mode="static"
+        components={{ ...TRANSCRIPT_COMPONENTS, ...element.components }}
+        allowedTags={{ [element.tag]: [...element.attributes] }}
+        literalTagContent={[element.tag]}
+      >
+        {element.markdown}
       </MessageResponse>
     </TranscriptMarkdownSource>
   );
@@ -198,6 +236,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
 /** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
+  [CALL_KIND.MAC_COMMAND]: LaptopIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
   [CALL_KIND.WRITE_FILE]: FilePenIcon,
   [CALL_KIND.EDIT]: FilePenIcon,
@@ -223,6 +262,7 @@ const CALL_ICON = {
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
+  [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
@@ -256,7 +296,7 @@ export function TranscriptTool({
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
   const line = callLine(kind, subject, description);
-  const command = kind === CALL_KIND.COMMAND;
+  const command = isCommandKind(kind);
   return (
     <Tool {...props}>
       <ToolHeader
@@ -266,6 +306,7 @@ export function TranscriptTool({
         subject={line.subject}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
+        place={callPlace(kind)}
       />
       <ToolContent>
         <ToolInput block={input} />
@@ -600,12 +641,7 @@ function TurnRowView<B>({
       return children(row.block);
     case TURN_ROW.GROUP:
       return (
-        <TurnFold
-          icon={<WrenchIcon />}
-          summary={groupSummary(row.blocks.length)}
-          running={row.running}
-          open={row.open}
-        >
+        <TurnFold icon={<WrenchIcon />} summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}

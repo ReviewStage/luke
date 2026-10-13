@@ -1,4 +1,5 @@
 import { defineState } from "eve/context";
+import type { SandboxRecord } from "../server/hosted/agent-runtime/sandbox.js";
 import type { CoderSessionPromptRecord } from "../server/hosted/coder-host/host.js";
 import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/plan-edit.js";
 
@@ -11,19 +12,7 @@ import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/pla
  */
 export const sessionPrompt = defineState<CoderSessionPromptRecord>("luke.coder.prompt", () => ({}));
 
-/**
- * What the session's sandbox has been told, in eve's durable session state:
- * whether a sandbox tool has run, which is when a sandbox stands to be
- * stopped at the turn's end, and when the repository credential at its
- * firewall was last set, which is when it is next renewed.
- */
-export interface SandboxRecord {
-  /** The instant the first sandbox tool of the session was called, which is when the sandbox opened and the checkout set its credential. */
-  readonly openedAt?: number;
-  /** The instant the store hook last renewed the credential at the firewall. */
-  readonly credentialAt?: number;
-}
-
+/** What the session's sandbox has been told, in eve's durable session state (`server/hosted/agent-runtime/sandbox.ts`). */
 export const sandboxRecord = defineState<SandboxRecord>("luke.coder.sandbox", () => ({}));
 
 /**

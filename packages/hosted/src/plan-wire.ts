@@ -716,7 +716,7 @@ export const PLAN_SKILL_BOUNDS = {
   MAX_DESCRIPTION_CHARS: 1024,
 } as const;
 
-/** One skill of the plan's repository a developer may choose by name: the name its folder carries, and the description a model routes on. */
+/** One skill of the plan's repository a developer may choose by name: the name its folder carries, the description a model routes on, and its `SKILL.md`, named from the repository's root, which the File tab opens. */
 export const planSkillSchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -724,6 +724,10 @@ export const planSkillSchema = EffectSchema.Struct({
   ),
   description: EffectSchema.String.check(
     EffectSchema.isMaxLength(PLAN_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS),
+  ),
+  path: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
   ),
 });
 

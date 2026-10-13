@@ -9,6 +9,9 @@
     },
     "effort": {
       "type": "string"
+    },
+    "background": {
+      "type": "boolean"
     }
   },
   "required": [

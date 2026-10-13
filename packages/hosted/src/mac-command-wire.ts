@@ -13,9 +13,15 @@ import { wireUuidSchema } from "./service-wire.js";
  * refuses a key it does not name, as every request frame on this wire does.
  */
 
-const MAC_COMMAND_BOUNDS = {
-  /** The longest an agent may ask for, inside the minutes one eve step may run. */
-  MAX_TIMEOUT_SECONDS: 600,
+export const MAC_COMMAND_BOUNDS = {
+  /** How long a command runs before it is killed, when the agent names no time. */
+  DEFAULT_TIMEOUT_SECONDS: 60,
+  /**
+   * The longest an agent may ask for: inside the minutes one eve step may
+   * run, and short enough that the voice's ten-minute follow of a planning
+   * turn still hears the answer after the queue, the grace, and the model.
+   */
+  MAX_TIMEOUT_SECONDS: 480,
   /** The most characters of a command the service queues. */
   MAX_COMMAND_CHARS: 100_000,
   /** The most characters of stdout or stderr a result carries; the Mac cuts each to this. */
@@ -23,7 +29,7 @@ const MAC_COMMAND_BOUNDS = {
 } as const;
 
 /** One command waiting for the Mac: its id, the shell text, and how long it may run. */
-const macCommandSchema = EffectSchema.Struct({
+export const macCommandSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   command: EffectSchema.String.check(
     EffectSchema.isMinLength(1),
@@ -35,6 +41,11 @@ const macCommandSchema = EffectSchema.Struct({
 });
 
 export type MacCommand = typeof macCommandSchema.Type;
+
+/** The commands claimed for this Mac (GET), none where nothing came while the read was held. */
+export const macCommandsAnswerSchema = EffectSchema.Struct({
+  commands: EffectSchema.Array(macCommandSchema),
+});
 
 const output = EffectSchema.String.check(
   EffectSchema.isMaxLength(MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS),

@@ -4,7 +4,7 @@ import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
 import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
-import type { UpdateSnapshot } from "./update";
+import type { BuildCommit, UpdateSnapshot } from "./update";
 import type { VoiceView } from "./voice-view";
 
 /**
@@ -42,6 +42,8 @@ interface AppRunFacts {
   packaged: boolean;
   platform: string;
   appVersion: string;
+  /** The commit the build was cut from, for the Updates row to name. */
+  commit?: BuildCommit;
   captureMode: boolean;
   fixtureMode: boolean;
   accountRequired: boolean;

@@ -8,8 +8,7 @@ import { stampedEveEvent } from "./eve-events";
 /**
  * Whole turns as eve emits them, for the tests that drive one through the
  * relay into the store: a spoken ask's turn that reads the repository and
- * answers in two sentences, and a turn that hands work to the worker and
- * parks on the task until its findings come back. Synthetic throughout; one
+ * answers in two sentences. Synthetic throughout; one
  * spelling shared by every suite that plays a turn rather than a copy per
  * file.
  */

@@ -90,6 +90,19 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
+  macCommands: toggleSetting({
+    field: "macCommands",
+    id: APP_SETTING_ID.MAC_COMMANDS,
+    label: "Let agents run commands on this Mac",
+    detail:
+      "Luke and coding agents run any shell command here without asking, from your home folder, " +
+      "and what it prints goes to the model and is kept with the conversation.",
+    default: true,
+    page: SETTINGS_PAGE.ROOT,
+    order: 2,
+    // Nothing to run per write: the host reads the setting before each read for commands.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
   agentNotifications: toggleSetting({
     field: "agentNotifications",
     id: APP_SETTING_ID.AGENT_NOTIFICATIONS,

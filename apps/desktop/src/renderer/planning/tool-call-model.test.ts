@@ -44,6 +44,48 @@ test("a command the model described carries its description on one line for the 
   }
 });
 
+test("a command run on the Mac is the command it ran, described as a command is, and its answer says how it ended: its exit, its timeout, or why it was not run", () => {
+  const ran = (output: Record<string, string | number | boolean | null>) =>
+    toolCallView({
+      tool: "run_on_mac",
+      input: { command: "pnpm dev", description: "Start the dev server" },
+      output,
+    });
+  const killed = ran({
+    status: "ran",
+    exitCode: null,
+    stdout: "  ready on :3000\n",
+    stderr: "",
+    truncated: false,
+    timedOut: true,
+  });
+  assert.equal(killed.kind, CALL_KIND.MAC_COMMAND);
+  assert.equal(killed.subject, "pnpm dev");
+  assert.equal(killed.description, "Start the dev server");
+  assert.deepEqual(killed.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm dev" });
+  assert.deepEqual(killed.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "  ready on :3000\n(killed at its timeout)",
+  });
+  const failed = ran({
+    status: "ran",
+    exitCode: 1,
+    stdout: "",
+    stderr: "missing script: dev\n",
+    truncated: false,
+    timedOut: false,
+  });
+  assert.deepEqual(failed.output, { kind: TOOL_BLOCK.TEXT, text: "missing script: dev\nexit 1" });
+  const refused = ran({
+    status: "not-run",
+    reason: "Not run: Luke is not running on the developer's Mac.",
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not run: Luke is not running on the developer's Mac.",
+  });
+});
+
 test("a file read and a search say the path and the pattern, and answer with the words under them", () => {
   const read = toolCallView({
     tool: "read_file",
@@ -348,4 +390,49 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
     kind: TOOL_BLOCK.TEXT,
     text: "Invites expire.\n(output truncated)",
   });
+});
+
+test("the planning model's own calls draw from their parts as a coding agent's do: a repository command by its command and purpose, its answer or why it ran nothing, a shown range by its file and lines, a question by its words", () => {
+  const ran = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls src", description: "List the sources" },
+    output: { status: "ran", exitCode: 0, stdout: "queue.ts\n", stderr: "" },
+  });
+  assert.equal(ran.kind, CALL_KIND.COMMAND);
+  assert.equal(ran.subject, "ls src");
+  assert.equal(ran.description, "List the sources");
+  assert.deepEqual(ran.output, { kind: TOOL_BLOCK.TEXT, text: "queue.ts" });
+  const refused = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls" },
+    output: { status: "not-run", reason: "Not run: the plan names no repository." },
+  });
+  // The service's reason already says it was not run, so its words stand as they are.
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not run: the plan names no repository.",
+  });
+
+  const shown = toolCallView({
+    tool: "show_code",
+    input: { path: "src/invites.ts", startLine: 12, endLine: 30 },
+    output: undefined,
+  });
+  assert.deepEqual([shown.kind, shown.subject], [CALL_KIND.SHOW_CODE, "src/invites.ts:12-30"]);
+  const asked = toolCallView({
+    tool: "queue_question",
+    input: { question: "Who can invite?", recommendation: "Admins." },
+    output: undefined,
+  });
+  assert.deepEqual([asked.kind, asked.subject], [CALL_KIND.QUEUE_QUESTION, "Who can invite?"]);
+  const looked = toolCallView({ tool: "look_at_board", input: {}, output: { image: "…" } });
+  assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
+  const waited = toolCallView({ tool: "task_wait", input: {}, output: "1 task settled." });
+  assert.equal(waited.kind, CALL_KIND.WORKER_WAIT);
+  const stopped = toolCallView({
+    tool: "task_cancel",
+    input: { taskId: "delegate-7k2m9q" },
+    output: "Stopped delegate-7k2m9q.",
+  });
+  assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
 });

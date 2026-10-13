@@ -21,66 +21,33 @@ import { useFileViewSettings } from "./file-view-settings";
  * read only when it is asked for, raw and in one read, so what is copied
  * or saved is the file as it holds it, its long lines uncut, rather than
  * the lines the tab draws, which the service cuts.
+ *
+ * An agent's Changes tab hangs the same menu with its own actions over the
+ * same two settings (`LinesMenu`), so a diff's lines are numbered and
+ * wrapped as every File tab's are.
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
 const UNREAD = "Could not read the whole file.";
 const REFUSED = "This file is too large to copy whole. Open it on GitHub instead.";
 
-export function FileMenu({
-  path,
-  ready,
-  readText,
+/**
+ * The ⋯ at the end of a bar over lines: the actions given, then, under a
+ * rule, the File tabs' two settings as checks, which every run of lines
+ * drawn in the panel's code type follows.
+ */
+export function LinesMenu({
+  label,
+  actions,
 }: {
-  /** The file shown, from the repository's root. */
-  path: string;
-  /** Whether the file was read, so its text can be: a file refused or still loading offers its name alone. */
-  ready: boolean;
-  /** The file's whole text, read a window at a time, or why it is not at hand. */
-  readText: () => Promise<WholeText>;
+  /** What the ⋯ and its menu are called. */
+  label: string;
+  actions: readonly MenuAction[];
 }): React.JSX.Element {
   const menu = useActionMenu(true);
-  const { act } = useAct();
-  const copyWithToast = useCopyToast();
-  const show = useToast();
   const { settings, change } = useFileViewSettings();
-  const name = fileName(path);
-  const failed = (words: string) =>
-    show({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-
-  const withText = (use: (text: string) => void) =>
-    readText().then((whole) => {
-      if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
-      else failed(whole.kind === WHOLE_TEXT.REFUSED ? REFUSED : UNREAD);
-    });
-  const save = (text: string) =>
-    act(ACT_KIND.WINDOW_SAVE_FILE, { name, text }).then(
-      (saved) => {
-        if (saved) show({ words: "File saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
-      },
-      () => failed("Could not save the file."),
-    );
-
   const groups: readonly (readonly MenuAction[])[] = [
-    [
-      {
-        label: "Copy file name",
-        icon: <CopyIcon />,
-        onSelect: () => copyWithToast(name, "File name copied"),
-      },
-      {
-        label: "Copy file contents",
-        icon: <ClipboardCopyIcon aria-hidden="true" />,
-        disabled: !ready,
-        onSelect: () => withText((text) => copyWithToast(text, "File contents copied")),
-      },
-      {
-        label: "Download file",
-        icon: <DownloadIcon />,
-        disabled: !ready,
-        onSelect: () => withText(save),
-      },
-    ],
+    actions,
     [
       {
         label: "Line numbers",
@@ -99,11 +66,11 @@ export function FileMenu({
 
   return (
     <>
-      <Tooltip label="File actions">
+      <Tooltip label={label}>
         <button
           type="button"
           className="icon-button"
-          aria-label="File actions"
+          aria-label={label}
           aria-haspopup="menu"
           aria-expanded={menu.open !== undefined}
           onClick={(event) => {
@@ -118,8 +85,78 @@ export function FileMenu({
         </button>
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label="File actions" menu={menu.drawn} groups={groups} onClose={menu.close} />
+        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
     </>
+  );
+}
+
+/** Saves text where the system's save dialog chooses, as a file of the name given, the save or its failure said in a toast. */
+export function useSaveText(): (name: string, text: string) => Promise<void> {
+  const { act } = useAct();
+  const show = useToast();
+  return (name, text) =>
+    act(ACT_KIND.WINDOW_SAVE_FILE, { name, text }).then(
+      (saved) => {
+        if (saved) show({ words: "File saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      },
+      () =>
+        show({
+          words: "Could not save the file.",
+          tone: TOAST_TONE.FAILED,
+          hold: TOAST_HOLD.FAILED,
+        }),
+    );
+}
+
+export function FileMenu({
+  path,
+  ready,
+  readText,
+}: {
+  /** The file shown, from the repository's root. */
+  path: string;
+  /** Whether the file was read, so its text can be: a file refused or still loading offers its name alone. */
+  ready: boolean;
+  /** The file's whole text, read a window at a time, or why it is not at hand. */
+  readText: () => Promise<WholeText>;
+}): React.JSX.Element {
+  const copyWithToast = useCopyToast();
+  const show = useToast();
+  const saveText = useSaveText();
+  const name = fileName(path);
+
+  const withText = (use: (text: string) => void) =>
+    readText().then((whole) => {
+      if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
+      else {
+        const words = whole.kind === WHOLE_TEXT.REFUSED ? REFUSED : UNREAD;
+        show({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      }
+    });
+
+  return (
+    <LinesMenu
+      label="File actions"
+      actions={[
+        {
+          label: "Copy file name",
+          icon: <CopyIcon />,
+          onSelect: () => copyWithToast(name, "File name copied"),
+        },
+        {
+          label: "Copy file contents",
+          icon: <ClipboardCopyIcon aria-hidden="true" />,
+          disabled: !ready,
+          onSelect: () => withText((text) => copyWithToast(text, "File contents copied")),
+        },
+        {
+          label: "Download file",
+          icon: <DownloadIcon />,
+          disabled: !ready,
+          onSelect: () => withText((text) => saveText(name, text)),
+        },
+      ]}
+    />
   );
 }

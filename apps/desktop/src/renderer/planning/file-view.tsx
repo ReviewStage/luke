@@ -2,6 +2,7 @@ import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hos
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
 import {
   Fragment,
+  type ReactNode,
   type RefObject,
   useCallback,
   useLayoutEffect,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import { GitHubMark } from "../account-marks";
 import { paneTiming } from "../desktop/pane-motion";
+import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
@@ -28,7 +30,7 @@ import {
   wholeTextOf,
 } from "./file-tab-model";
 import { FileTreePane } from "./file-tree-pane";
-import { keptListings, type ListFolder } from "./folder-listings";
+import { keptListings, type ListFolder, listingOf } from "./folder-listings";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel";
 
 /**
@@ -57,6 +59,11 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * item's code or a snippet Luke read from his checkout opens it, is read at
  * that commit, its GitHub page and its copy too, the commit named quietly
  * beside the path, and drawn afresh when the same file is opened at another.
+ *
+ * The bar and the tree's slide are an agent's Changes tab's too
+ * (`agent-changes-tab.tsx`), so a diff stands under the same bar, its file's
+ * path as breadcrumbs, the pull request on GitHub, its ⋯, and the same
+ * toggle of the same tree.
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
@@ -85,7 +92,7 @@ function TreeToggle({
 }
 
 /** The tree as the view draws it: whether it is drawn, whether on its way out, and its box. */
-interface TreeSlide {
+export interface TreeSlide {
   drawn: boolean;
   leaving: boolean;
   pane: RefObject<HTMLElement | null>;
@@ -102,7 +109,7 @@ interface TreeSlide {
  * motion or a capture run, it is let go before the frame is drawn. The tree
  * a File tab opens with stands at once, since nothing was toggled.
  */
-function useTreeSlide(open: boolean): TreeSlide {
+export function useTreeSlide(open: boolean): TreeSlide {
   const pane = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(open);
   const [leaving, setLeaving] = useState(false);
@@ -178,6 +185,83 @@ function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Elemen
         </button>
       </Tooltip>
     </div>
+  );
+}
+
+/** The path the bar names, and the repository it browses, whose folders its breadcrumbs list; none names the path plain. */
+export interface BarPath {
+  readonly path: string;
+  readonly browse:
+    | {
+        readonly repository: string;
+        readonly listFolder: ReadFolder;
+        /** A file chosen in a crumb's tree, to show in the tab, or in a tab of its own where `newTab` asks. */
+        readonly onOpen: (path: string, newTab: boolean) => void;
+      }
+    | undefined;
+}
+
+/**
+ * The bar across a File tab and its tree, or a Changes tab and its own:
+ * Back and Forward where the tab keeps a history, the path as breadcrumbs,
+ * or plain where nothing is browsed, what stands quietly beside it, then
+ * the GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
+ * toggle where there is a tree.
+ */
+export function FileViewBar({
+  history,
+  path,
+  beside,
+  onGitHub,
+  menu,
+  tree,
+}: {
+  history?: FileHistory | undefined;
+  path: BarPath;
+  /** What stands quietly after the path: the commit a file is read at, or what became of a changed file. */
+  beside?: ReactNode;
+  /** Opens the page on GitHub; none dims the button. */
+  onGitHub: (() => void) | undefined;
+  /** The bar's ⋯. */
+  menu: ReactNode;
+  /** The tree's toggle, where there is a tree. */
+  tree?: { readonly open: boolean; readonly onToggle: () => void } | undefined;
+}): React.JSX.Element {
+  const { browse } = path;
+  return (
+    <header className="file-view-bar">
+      {history === undefined ? null : <HistoryButtons history={history} />}
+      {browse === undefined ? (
+        <Tooltip label={path.path}>
+          <span className="file-view-path">
+            <bdi>{path.path}</bdi>
+          </span>
+        </Tooltip>
+      ) : (
+        <FileBreadcrumbs
+          repository={browse.repository}
+          path={path.path}
+          listFolder={browse.listFolder}
+          onOpen={browse.onOpen}
+        />
+      )}
+      {beside}
+      <div className="file-view-actions">
+        <Tooltip label="Open on GitHub">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Open on GitHub"
+            disabled={onGitHub === undefined}
+            onClick={onGitHub}
+          >
+            <GitHubMark />
+          </button>
+        </Tooltip>
+        {menu}
+        {tree === undefined ? null : <TreeToggle open={tree.open} onToggle={tree.onToggle} />}
+      </div>
+    </header>
   );
 }
 
@@ -285,49 +369,36 @@ export function FileView({
       kind: WHOLE_TEXT.UNREAD,
     }));
 
+  // The tree and the breadcrumbs hear each folder in the tree's own words.
+  const readFolderListing: ReadFolder = useCallback(
+    (path) => listFolder(path).then(listingOf),
+    [listFolder],
+  );
   const browsing = repository !== null;
   const tree = useTreeSlide(browsing && treeOpen);
   return (
     <div className="file-view">
-      <header className="file-view-bar">
-        <HistoryButtons history={history} />
-        {browsing ? (
-          <FileBreadcrumbs
-            repository={repository}
-            path={file.path}
-            listFolder={listFolder}
-            onOpen={onBrowse}
-          />
-        ) : (
-          <Tooltip label={file.path}>
-            <span className="file-view-path">
-              <bdi>{file.path}</bdi>
-            </span>
-          </Tooltip>
-        )}
-        {commit === undefined ? null : (
-          <Tooltip label={`Read at commit ${commit}`}>
-            <span className="file-view-commit">{shortCommit(commit)}</span>
-          </Tooltip>
-        )}
-        <div className="file-view-actions">
-          <Tooltip label="Open on GitHub">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Open on GitHub"
-              disabled={read.kind !== FILE_READ.READY}
-              onClick={() => {
-                if (read.kind === FILE_READ.READY) openGitHub(fileUrl(read, file));
-              }}
-            >
-              <GitHubMark />
-            </button>
-          </Tooltip>
+      <FileViewBar
+        history={history}
+        path={{
+          path: file.path,
+          browse: browsing
+            ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
+            : undefined,
+        }}
+        beside={
+          commit === undefined ? null : (
+            <Tooltip label={`Read at commit ${commit}`}>
+              <span className="file-view-commit">{shortCommit(commit)}</span>
+            </Tooltip>
+          )
+        }
+        onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
+        menu={
           <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
-          {browsing ? <TreeToggle open={treeOpen} onToggle={onToggleTree} /> : null}
-        </div>
-      </header>
+        }
+        tree={browsing ? { open: treeOpen, onToggle: onToggleTree } : undefined}
+      />
       <div className="file-view-body">
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
@@ -345,7 +416,7 @@ export function FileView({
           <FileTreePane
             file={file.path}
             shown={shown}
-            listFolder={listFolder}
+            listFolder={readFolderListing}
             readWhole={listWhole}
             onOpen={onBrowse}
             pane={tree.pane}

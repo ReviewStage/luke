@@ -7,7 +7,7 @@ import {
 } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { openFenceAt, planSections } from "./plan-document.js";
+import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
 /**
@@ -35,8 +35,12 @@ import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./
  * into another. A note's words are contained where they land: a line that
  * would open a heading or an HTML block is escaped, and a code fence left
  * open is closed, so no note can open a section of its own or swallow the
- * ones after it. The schema guarantees shape only; whether a note is
- * understood or agreed is the model's judgment.
+ * ones after it. A point added to a section that still holds exactly what
+ * the plan's template put there, one paragraph of guidance, takes the place
+ * of that guidance, so a filled section never keeps its prompt above its
+ * answer. The schema
+ * guarantees shape only; whether a note is understood or agreed is the
+ * model's judgment.
  */
 
 /** The default template's headings, in the words the developer reads. */
@@ -404,6 +408,9 @@ export function withAgentEdit(
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 
+/** A line of a template's section that opens anything but prose: a list item, a fence, a quote, a table row, or a heading. */
+const STARTER_CONTENT_LINE = /^\s*(?:(?:[-*+]|\d{1,9}[.)])(?:\s|$)|`{3,}|~{3,}|>|\||#)/u;
+
 /** The list markers a list item's text opens with, which the formatter draws itself. */
 const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
 
@@ -483,14 +490,33 @@ function fenceClosed(words: string): string {
 }
 
 /**
+ * Whether a section still holds exactly what the plan's template put under
+ * its heading, and that is guidance: one paragraph of prose. Note that a
+ * template's list, code, quote, table, or deeper heading is never taken for
+ * guidance, because a template may start a section with content of its own,
+ * and that is kept with the point added after it. Never where the template
+ * the plan started from is not known.
+ */
+function guidanceOnly(section: PlanSection, started: string | undefined): boolean {
+  if (started === undefined) return false;
+  const was = planSections(started).find((each) => each.heading === section.heading);
+  if (was?.text !== section.text) return false;
+  const lines = section.text.split("\n").slice(1).join("\n").trim().split("\n");
+  return lines.every((line) => line.trim().length > 0 && !STARTER_CONTENT_LINE.test(line));
+}
+
+/**
  * The text with a point added at the end of the first section under the
  * note's heading, or, where the text has no such section, a new one at the
  * end of the text holding it; a fence the section or the text leaves open is
- * closed before it.
+ * closed before it. Note that a section still holding only its template's
+ * guidance takes the point in place of the guidance, because the guidance is
+ * the developer's prompt for the section and filled, it is no longer wanted.
  */
 function addedToText(
   text: string,
   note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
+  started: string | undefined,
 ): string {
   const heading = note.section;
   const added = contained(note.text);
@@ -498,6 +524,10 @@ function addedToText(
   if (section === undefined) {
     const head = fenceClosed(text.trimEnd());
     return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
+  }
+  if (guidanceOnly(section, started)) {
+    const headingLine = section.text.split("\n", 1)[0] ?? "";
+    return `${text.slice(0, section.from)}${headingLine}\n\n${added}${text.slice(section.to)}`;
   }
   const words = fenceClosed(section.text);
   const lines = words.split("\n");
@@ -530,14 +560,19 @@ function struckFromText(text: string, at: Span): string {
 
 /**
  * A document's text with one note taken, or nothing where the note cannot
- * be: an addition at the end of the first section under its heading, or as
+ * be: an addition at the end of the first section under its heading, in
+ * place of the template's guidance where the section holds only that, or as
  * a new section at the end of the text where it has none; a correction
  * or a strike names a phrase that must stand exactly once in the whole text
  * and touch no heading, since the headings are the developer's and a note
  * writes under them.
  */
-function applyNoteToText(text: string, note: PlanNote): string | undefined {
-  if (note.kind === NOTE_KIND.ADD) return addedToText(text, note);
+function applyNoteToText(
+  text: string,
+  note: PlanNote,
+  started: string | undefined,
+): string | undefined {
+  if (note.kind === NOTE_KIND.ADD) return addedToText(text, note, started);
   const searched = searchedSpan(text, note);
   if (searched === undefined) return undefined;
   const inside = located(text.slice(searched.from, searched.to), note.find);
@@ -558,12 +593,21 @@ export interface TextNotesTaken {
   readonly missed: readonly PlanNote[];
 }
 
-/** Every note taken over a document's text in order, and the notes that could not be. */
-export function applyNotesToText(text: string, notes: readonly PlanNote[]): TextNotesTaken {
+/**
+ * Every note taken over a document's text in order, and the notes that could
+ * not be. `started` is the template text the plan started as, where it is
+ * known, so a section still holding only its guidance takes its first point
+ * in place of it; without it every point is added after what stands.
+ */
+export function applyNotesToText(
+  text: string,
+  notes: readonly PlanNote[],
+  started?: string,
+): TextNotesTaken {
   let taken = text;
   const missed: PlanNote[] = [];
   for (const note of notes) {
-    const next = applyNoteToText(taken, note);
+    const next = applyNoteToText(taken, note, started);
     if (next === undefined) missed.push(note);
     else taken = next;
   }
@@ -621,8 +665,12 @@ export function readNotes(answer: UnparsedWireValue): NotesRead {
  * Markdown markers. Each draft therefore differs from the one before only
  * where the newest note lands.
  */
-export function textNotesInProgress(text: string, partial: UnparsedWireValue): string {
-  return applyNotesToText(text, notesSoFar(partial)).text;
+export function textNotesInProgress(
+  text: string,
+  partial: UnparsedWireValue,
+  started?: string,
+): string {
+  return applyNotesToText(text, notesSoFar(partial), started).text;
 }
 
 /** The notes an answer so far holds: every whole note that reads, then the last, while it adds a point, as written so far. */

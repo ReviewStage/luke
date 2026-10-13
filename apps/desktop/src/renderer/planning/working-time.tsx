@@ -24,8 +24,10 @@ import { TurnCard } from "./turn-card";
  * turn has finished, the count gives way to one quiet line at its end
  * saying how long it worked and when it ended, as Codex and Cursor end a
  * turn: "Worked for 1m 18s · Today, 3:42 PM", the day worded as a call's
- * header words it, and the turn's card on hover (`turn-card.tsx`). Both
- * lines are selectable, as the transcript around them is.
+ * header words it, and the turn's card on hover (`turn-card.tsx`). The two
+ * read as one line in two states, so they share a type, a colour, and the
+ * room above them, the finished line only without the shimmer. Both lines
+ * are selectable, as the transcript around them is.
  */
 
 /** How often a count moves: the finest unit it says. */
@@ -40,6 +42,9 @@ const WORKING_LINE = "Working…";
 
 /** What a finished turn's last line says before how long it worked. */
 const WORKED_WORDS = "Worked for ";
+
+/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour. */
+const STATUS_LINE_CLASS = "text-[12.5px] text-muted-foreground select-text";
 
 /** What separates how long a finished turn worked from when it ended. */
 export const WORKED_SEPARATOR = " · ";
@@ -100,7 +105,9 @@ export function WorkingTime({
  * (`turn-card.tsx`): what it ran on, when it began and ended in full, how
  * it ended, and its tokens, as far as its row recorded them. Note that the
  * line is only as wide as its words, so the card answers the words and not
- * the empty column beside them.
+ * the empty column beside them, and that it stands inside its message, so
+ * its margin and the message's gap together are the room a working line
+ * has above it.
  */
 export function WorkedFor({
   startedAt,
@@ -133,10 +140,7 @@ export function WorkedFor({
         />
       }
     >
-      <p
-        className="m-0 w-fit text-[11.5px] text-muted-foreground tabular-nums select-text"
-        data-worked=""
-      >
+      <p className={cn(STATUS_LINE_CLASS, "mt-2 mb-0 w-fit tabular-nums")} data-worked="">
         <span data-worked-length="">
           {WORKED_WORDS}
           {workingTime(endedAt - startedAt)}
@@ -157,8 +161,9 @@ export function WorkingLine({
   /** What the agent is doing, as far as its transcript shows it: "Working…" unless said otherwise. */
   words?: string;
 }): ReactNode {
+  // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
-    <p className="m-0 text-[12.5px] select-text" data-working="" aria-live="polite">
+    <p className={cn(STATUS_LINE_CLASS, "mt-0 last:mb-0")} data-working="" aria-live="polite">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>

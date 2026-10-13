@@ -17,7 +17,8 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { UnparsedWireValue } from "../../core.js";
+import type { UnparsedWireValue, WireRecord } from "../../core.js";
+import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
@@ -31,6 +32,7 @@ import {
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
+import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -133,11 +135,7 @@ type DelegationEffect = Effect.Effect<
   SqlClient.SqlClient | ModelCatalog
 >;
 
-export interface CoderHost {
-  /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */
-  admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The same admission for a session claiming the conversation as it starts, before its record stands. */
-  admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
+export interface CoderHost extends HostAdmission {
   /**
    * The admission the session's sandbox takes as it opens, claiming the
    * record as the start does: eve stages a message's files in the sandbox
@@ -146,8 +144,6 @@ export interface CoderHost {
    * record yet. A session that cannot claim it is refused as `admit` refuses.
    */
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The admission a worker's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
-  admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
   agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
   /** The model one step runs on, read from the agent's row now, with the window the catalog lists for it. */
@@ -205,8 +201,6 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
   ): Effect.Effect<void, never, SqlClient.SqlClient>;
-  /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
-  sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -250,6 +244,12 @@ export interface CoderHost {
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
+  /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
+  showPage(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, SqlClient.SqlClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -385,10 +385,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     });
 
   return {
-    admit: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
-    admitStarting: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
+    ...hostAdmission(seams.now),
     admitSandbox: (auth, sessionId) =>
       Effect.gen(function* () {
         const starting = yield* admitConversation(auth, {
@@ -402,9 +399,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           standing: SESSION_STANDING.CURRENT,
         });
       }),
-    admitDelegated: (auth, sessionId) =>
-      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.DELEGATED }),
-
     agent: agentOf,
 
     model: (admitted, scripted) =>
@@ -488,30 +482,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         ),
       ),
 
-    sessionStarted: (admitted, sessionId) =>
-      claimRuntimeSession(admitted.target, sessionId, new Date(seams.now())),
-
     relayChild: (event, session, state) =>
       Effect.gen(function* () {
-        const parent = session.parent;
-        if (parent === undefined) return;
-        // Admitted on ownership alone, as the worker's resolvers are: claiming the agent's record
-        // for the child's session would refuse every later call of the agent's own.
-        const admitted = yield* admitConversation(session.auth, {
-          id: session.id,
-          standing: SESSION_STANDING.DELEGATED,
-        });
-        if (Result.isFailure(admitted)) return;
-        const { target } = admitted.success;
-        const conversationId = childConversationId(target.conversationId, parent.callId);
-        const delegation = yield* readDelegation(target, conversationId);
+        const found = yield* delegatedChildOf(session);
+        if (Option.isNone(found)) return;
+        const { parent, child } = found.value;
+        const delegation = yield* readDelegation(parent, child.conversationId);
         if (Option.isNone(delegation)) return;
         const model = seams.scriptedModel()
           ? CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID
           : delegation.value.model;
         yield* relayEvent(event, {
           sessionId: session.id,
-          target: { userId: target.userId, conversationId },
+          target: child,
           turn: RELAY_TURN.CHILD,
           model,
           reasoningEffort: delegation.value.effort,
@@ -549,6 +532,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+      ),
+
+    showPage: (admitted, input, sandbox) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return showPageRejected(found.failure);
+        const binding = {
+          userId: admitted.target.userId,
+          planId: found.success.planId,
+          sandbox: { door: sandbox, checkout: CODER.CHECKOUT_PATH },
+        };
+        return yield* runShowPage(binding, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
       ),
 
     title: (admitted) =>

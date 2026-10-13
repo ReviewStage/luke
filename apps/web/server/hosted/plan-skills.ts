@@ -11,7 +11,8 @@
  * repository, used for the one read and going nowhere else; the read is of
  * the head of the repository's default branch, and names it. A skill whose
  * `SKILL.md` says the model alone loads it is left out, and what is
- * answered of each is its name and description, never its body.
+ * answered of each is its name, its description, and where its `SKILL.md`
+ * stands, which the File tab opens, never its body.
  */
 
 import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
@@ -22,7 +23,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { GitHubApp } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { reachPlanRepository, refused } from "./plan-file.js";
-import { readRepositorySkills } from "./repository-skills.js";
+import { readRepositorySkills, skillFilePath } from "./repository-skills.js";
 
 /** The skills read through the App's reach, or the refusal the reach answers. */
 const readSkills = /* @__PURE__ */ Effect.fn("web/planSkillsRead")(function* (
@@ -39,7 +40,11 @@ const readSkills = /* @__PURE__ */ Effect.fn("web/planSkillsRead")(function* (
       branch: confirmed.defaultBranch,
       skills: skills
         .filter((skill) => skill.userInvocable)
-        .map((skill) => ({ name: skill.name, description: skill.description })),
+        .map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          path: skillFilePath(skill),
+        })),
     },
   } satisfies PlanSkillsAnswer;
 });

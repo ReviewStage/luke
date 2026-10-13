@@ -1,5 +1,6 @@
 import { createFileTreeIconResolver, FileTree, getBuiltInSpriteSheet } from "@pierre/trees";
 import type {
+  FileMark,
   FileTreeHandle,
   FileTreeModule,
   FileTreeProps,
@@ -42,7 +43,9 @@ import {
  * entry, and over the folders listed so far until then. Its filter shows
  * only the files Luke showed, in a tree of those paths alone, every folder
  * open. Each stands in the repository's place while it is asked for, so the
- * folders opened there are as they were when it is let go.
+ * folders opened there are as they were when it is let go. A change set's
+ * tree marks each file's row with what became of it, through Pierre's own
+ * git status, in whichever of them stands.
  *
  * A breadcrumb's tree is this same tree, mounted under the crumb over the
  * folder the crumb stands in, with its rows counted out as they change so
@@ -210,6 +213,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let everything: readonly string[] | undefined;
   let query = "";
   let marked: string | undefined;
+  let marks: readonly FileMark[] = [];
   let taken = false;
   // The reveal asked before the tree is drawn.
   let waiting: { path: string; options: RevealOptions } | undefined;
@@ -235,6 +239,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   // A view made after the tree was drawn joins it, the tab's file marked.
   const framed = (view: View): View => {
     if (marked !== undefined) markAlone(view.tree, marked, false);
+    view.tree.setGitStatus(marks);
     empty.before(view.frame);
     return view;
   };
@@ -251,6 +256,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
 
   const draw = () => {
     browse = viewOf([], "closed");
+    browse.tree.setGitStatus(marks);
     empty.hidden = true;
     host.replaceChildren(browse.frame, empty);
     // Note that a search stands over folders still being listed, so whether
@@ -320,6 +326,10 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
       whole = undefined;
       everything = entries.map((entry) => treePath(entry.name, entry.folder));
       present();
+    },
+    mark: (asked) => {
+      marks = asked;
+      for (const view of [browse, shown, whole]) view?.tree.setGitStatus(marks);
     },
     unmount: () => {
       taken = true;

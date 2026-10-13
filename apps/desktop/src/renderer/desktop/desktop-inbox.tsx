@@ -1,16 +1,18 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ExternalLinkIcon, InboxIcon } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { InboxBoard } from "../planning/inbox-board";
+import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SidebarPlan } from "./plan-actions";
 
 /**
  * desktop-inbox.tsx -- the window's Inbox: every plan holding an inbox item in a column of its own, and the chosen plan's items beside it.
@@ -18,40 +20,39 @@ import type { PlansControl } from "../planning/use-plans-tab";
  * It stands in the plan's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The column lists each plan holding an item, waiting or settled,
- * the plan whose item changed latest first, one line each: a dot while an
- * item waits there the developer has not seen, the plan's name, in the
- * heavier weight then as an unread plan's is in the sidebar, and how many
- * items wait at its end, muted in even figures as a row's time is. Its
- * head names the Inbox and offers All and Unread, which lists only the
- * plans with an unread item; the plan chosen stays listed as it is read, so
- * what the developer reads does not slip away from under them.
+ * the plan whose item changed latest first, each on the sidebar's own plan
+ * row (`plan-actions.tsx`), its card, menu, and buttons with it: the name,
+ * in the heavier weight while an item waits on the developer, and how many
+ * wait in the time's place. Waiting is the Inbox's one word for an item not
+ * yet answered, and the sidebar's Inbox row counts the same items. Its head
+ * names the Inbox and offers All and Waiting, which lists only the plans
+ * with an item waiting; the plan chosen stays listed as its items are
+ * answered, so what the developer answers does not slip away from under
+ * them.
  *
  * The chosen plan's items stand beside the column, drawn by the per-plan
  * Inbox tab's own board (`inbox-board.tsx`), answered in place, under a
  * toolbar naming the plan with Open plan at its end. They are read on the
- * plan's own held read, whichever plan the host has open, and the waiting
- * ones on screen count as read once that read lands (`inbox-reads.ts`). An
+ * plan's own held read, whichever plan the host has open. An
  * agent's name opens the plan on its tab, and a code block's Open its
  * file, each leaving the Inbox. With nothing listed, it says so under the
  * Inbox's glyph (`empty-state.tsx`). Escape leaves it for the plan it
  * stood over, and so does any row of the sidebar.
  */
 
-/** What the Inbox says with no plan holding an item, or none unread under the filter. */
-const NOTHING_HELD = "Nothing is waiting on you.";
-const NOTHING_UNREAD = "No unread items.";
+/** What the Inbox says with no plan holding an item, or none waiting under the filter. */
+const NOTHING_WAITING = "Nothing is waiting on you.";
 
 /** The column's two lists, as its segments name them. */
 const INBOX_FILTER = {
   ALL: "All",
-  UNREAD: "Unread",
+  WAITING: "Waiting",
 } as const;
 
-/** One plan the column lists: the plan, how many of its items wait, and how many of those are unread. */
+/** One plan the column lists: the plan, and how many of its items wait on the developer. */
 interface InboxPlanRow {
   readonly plan: PlanSummary;
   readonly waiting: number;
-  readonly unread: number;
 }
 
 /**
@@ -65,72 +66,39 @@ function inboxRows(plans: PlansControl): InboxPlanRow[] {
     const plan = plans.plans.find((each) => each.id === holding.planId);
     if (plan === undefined) return [];
     const waiting = plans.inbox.find((each) => each.planId === holding.planId)?.items.length ?? 0;
-    return [{ plan, waiting, unread: plans.inboxReads.unread(plan.id) }];
+    return [{ plan, waiting }];
   });
 }
 
-/** One plan of the column, one line: its unread dot, its name, and how many of its items wait. */
-function InboxPlanItem({
-  row,
-  chosen,
-  onChoose,
-}: {
-  row: InboxPlanRow;
-  chosen: boolean;
-  onChoose: () => void;
-}): React.JSX.Element {
-  const { plan, waiting, unread } = row;
-  return (
-    <li className="sidebar-plan-item">
-      <button
-        type="button"
-        className="sidebar-plan inbox-plan"
-        aria-current={chosen ? "page" : undefined}
-        data-unread={String(unread > 0)}
-        onClick={onChoose}
-      >
-        <span className="sidebar-plan-line">
-          <span className="inbox-unread-dot" aria-hidden="true" />
-          <span className="sidebar-plan-name">{plan.name}</span>
-          {unread > 0 ? <span className="visually-hidden">, unread</span> : null}
-          {waiting === 0 ? null : (
-            <span className="sidebar-inbox-count">
-              {waiting}
-              <span className="visually-hidden"> waiting</span>
-            </span>
-          )}
-        </span>
-      </button>
-    </li>
-  );
-}
-
-/** The column: its head with the filter, then a line for each plan, or the filter's note where none is unread. */
+/** The column: its head with the filter, then a sidebar plan row for each plan, or the filter's note where none waits. */
 function InboxPlanList({
+  plans,
   rows,
   chosen,
-  unreadOnly,
+  waitingOnly,
   onChoose,
-  onUnreadOnly,
+  onWaitingOnly,
 }: {
+  plans: PlansControl;
   rows: readonly InboxPlanRow[];
   chosen: string | undefined;
-  unreadOnly: boolean;
+  waitingOnly: boolean;
   onChoose: (planId: string) => void;
-  onUnreadOnly: (unreadOnly: boolean) => void;
+  onWaitingOnly: (waitingOnly: boolean) => void;
 }): React.JSX.Element {
+  const now = useMinute();
   return (
     <nav className="inbox-plans" aria-label="Plans with inbox items">
       <header className="desktop-toolbar inbox-plans-bar">
         <h1 className="desktop-toolbar-title">Inbox</h1>
         <fieldset className="settings-segments" aria-label="Show">
-          {[INBOX_FILTER.ALL, INBOX_FILTER.UNREAD].map((filter) => (
+          {[INBOX_FILTER.ALL, INBOX_FILTER.WAITING].map((filter) => (
             <button
               key={filter}
               type="button"
               className="settings-segment"
-              aria-pressed={(filter === INBOX_FILTER.UNREAD) === unreadOnly}
-              onClick={() => onUnreadOnly(filter === INBOX_FILTER.UNREAD)}
+              aria-pressed={(filter === INBOX_FILTER.WAITING) === waitingOnly}
+              onClick={() => onWaitingOnly(filter === INBOX_FILTER.WAITING)}
             >
               {filter}
             </button>
@@ -138,14 +106,20 @@ function InboxPlanList({
         </fieldset>
       </header>
       <div className="inbox-plans-scroll">
-        {rows.length === 0 && unreadOnly ? <p className="sidebar-note">{NOTHING_UNREAD}</p> : null}
+        {rows.length === 0 && waitingOnly ? (
+          <p className="sidebar-note">{NOTHING_WAITING}</p>
+        ) : null}
         <ul className="sidebar-plans">
-          {rows.map((row) => (
-            <InboxPlanItem
-              key={row.plan.id}
-              row={row}
-              chosen={row.plan.id === chosen}
-              onChoose={() => onChoose(row.plan.id)}
+          {rows.map(({ plan, waiting }) => (
+            <SidebarPlan
+              key={plan.id}
+              plans={plans}
+              plan={plan}
+              current={plan.id === chosen}
+              unread={waiting > 0}
+              now={now}
+              onOpen={() => onChoose(plan.id)}
+              inbox={{ waiting, onOpenPlan: () => plans.onShowPlan(plan.id) }}
             />
           ))}
         </ul>
@@ -156,8 +130,7 @@ function InboxPlanList({
 
 /**
  * The chosen plan's items under a toolbar naming the plan, with Open plan
- * at its end, read on the plan's own held read and marked read as that
- * read lands with them on screen.
+ * at its end, read on the plan's own held read.
  */
 function InboxPlanItems({
   plans,
@@ -185,11 +158,6 @@ function InboxPlanItems({
     waiting: plans.inbox.some((each) => each.planId === planId),
     agents,
   });
-  const open = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
-  const { onSeen } = plans.inboxReads;
-  useEffect(() => {
-    if (plans.shown && inbox.read) onSeen(planId, open);
-  }, [plans.shown, inbox.read, planId, open, onSeen]);
   // Note that the models come from the open plan's agents where this plan's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? plans.agents.models };
   return (
@@ -228,11 +196,11 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
   const rows = inboxRows(plans);
   const asked = rows.find((row) => row.plan.id === view.planId);
-  // The plan chosen stays listed under Unread as it is read; with none chosen, the list's first stands in.
-  const listed = view.unreadOnly ? rows.filter((row) => row.unread > 0 || row === asked) : rows;
+  // The plan chosen stays listed under Waiting as it is answered; with none chosen, the list's first stands in.
+  const listed = view.waitingOnly ? rows.filter((row) => row.waiting > 0 || row === asked) : rows;
   const chosen = asked ?? listed[0];
-  // Note that the plan standing in is chosen outright, because one read under
-  // Unread would otherwise leave the list and hand its place to the next.
+  // Note that the plan standing in is chosen outright, because one answered under
+  // Waiting would otherwise leave the list and hand its place to the next.
   const { onChoose } = view;
   const standIn = chosen !== undefined && chosen !== asked ? chosen.plan.id : undefined;
   useEffect(() => {
@@ -241,18 +209,17 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   return (
     <div className="inbox-view">
       <InboxPlanList
+        plans={plans}
         rows={listed}
         chosen={chosen?.plan.id}
-        unreadOnly={view.unreadOnly}
+        waitingOnly={view.waitingOnly}
         onChoose={view.onChoose}
-        onUnreadOnly={view.onUnreadOnly}
+        onWaitingOnly={view.onWaitingOnly}
       />
       {chosen === undefined ? (
         <section className="inbox-view-items" aria-label="Inbox">
           <header className="desktop-toolbar" />
-          <EmptyState icon={<InboxIcon />}>
-            {rows.length === 0 ? NOTHING_HELD : NOTHING_UNREAD}
-          </EmptyState>
+          <EmptyState icon={<InboxIcon />}>{NOTHING_WAITING}</EmptyState>
         </section>
       ) : (
         <InboxPlanItems key={chosen.plan.id} plans={plans} plan={chosen.plan} />

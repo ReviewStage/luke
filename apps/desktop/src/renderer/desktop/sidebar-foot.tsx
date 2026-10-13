@@ -73,7 +73,7 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
       );
     case UPDATE_STATUS.DOWNLOADING:
       return (
-        <Tooltip label={updateRow(update).detail}>
+        <Tooltip label={updateRow(update, updates.build).detail}>
           <span className="sidebar-update sidebar-update-progress" role="status">
             <UpdateIcon />
             {update.progress ? `${Math.round(update.progress.percent)}%` : null}
@@ -82,7 +82,7 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
       );
     default:
       return (
-        <Tooltip label={updateRow(update).detail}>
+        <Tooltip label={updateRow(update, updates.build).detail}>
           <button type="button" className="sidebar-update" onClick={updates.onOpenLatest}>
             Download
           </button>
@@ -134,12 +134,12 @@ function accountMenuGroups(
     [
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
-        label: "Send feedback…",
+        label: "Send feedback",
         icon: <MessageSquareIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
-        label: "Suggest a feature…",
+        label: "Suggest a feature",
         icon: <LightbulbIcon />,
         onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
       },

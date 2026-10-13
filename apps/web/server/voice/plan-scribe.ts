@@ -1,4 +1,4 @@
-import { readPlan, type StoredPlan } from "@sidecar/database/models/plan-store";
+import { readPlan, readStartedText, type StoredPlan } from "@sidecar/database/models/plan-store";
 import { spendHostedMeter } from "@sidecar/database/models/quota";
 import {
   applyNotesToText,
@@ -136,17 +136,21 @@ interface NotedPlan {
   };
 }
 
-/** A plan that is one document: handed as its text, and drawn as its text with the notes so far taken. */
-function notedText(text: string): NotedPlan {
+/**
+ * A plan that is one document: handed as its text, and drawn as its text with
+ * the notes so far taken over the template it started as, exactly as the
+ * save takes them.
+ */
+function notedText(text: string, started: string): NotedPlan {
   return {
     marker: ASK_MARKER.DOCUMENT,
     asked: text,
     drafted: (partial) => {
-      const body = textNotesInProgress(text, partial);
+      const body = textNotesInProgress(text, partial, started);
       return body.length > PLAN_BOUNDS.MAX_BODY_CHARS ? undefined : { body, assumptions: [] };
     },
     taken: (notes) => {
-      const noted = applyNotesToText(text, notes);
+      const noted = applyNotesToText(text, notes, started);
       return { changed: noted.text !== text, missed: noted.missed };
     },
   };
@@ -236,7 +240,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       .slice(-PLAN_SCRIBE.CONTEXT_LINES);
     const { plan, text } = stored.value;
     const developerFields = developerWritten(stored.value);
-    const noted = notedText(text);
+    const noted = notedText(text, yield* readStartedText(options.userId, plan.createdAt));
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
 
     const draft = (partial: UnparsedWireValue) =>

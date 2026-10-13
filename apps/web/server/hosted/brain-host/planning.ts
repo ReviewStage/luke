@@ -38,7 +38,9 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import { INTEGRATION_NAMES_SAID } from "../integrations.js";
+import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import type { ModelCatalog } from "../model-catalog.js";
+import { runShowPage, SHOW_PAGE_TOOL } from "../page-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -197,9 +199,9 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 ### Working in parallel
 
-You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's repository. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find. The worker is your own help, never the agent the developer asks for: when they ask for an agent, start a coding agent as below.
+You can hand work to the worker with delegate: a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's repository. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find. The worker is your own help, never the agent the developer asks for: when they ask for an agent, start a coding agent as below.
 
-Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message. The developer reads the message too, so write it as short Markdown in complete sentences, never clipped notes: the objective as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its taskId and the new message; to stop one whose job no longer matters, use task_cancel.
+Each call starts a worker that knows nothing of this conversation, so say everything it needs in the task. The developer reads the task too, so write it as short Markdown in complete sentences, never clipped notes: the objective as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call delegate again with its taskId and the new task; to stop one whose job no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -221,12 +223,14 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - withdraw_question takes back a queued question an answer made moot, before Luke asks it.
 - show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window. Code is on screen only from a call in this turn, so when the developer asks to see code again or says they cannot see it, call show_code again rather than saying it is up.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do. ${COMMAND_DESCRIPTION_INSTRUCTION}
+- run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the plan's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the plan's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
-- worker does a job in the background, as above.
+- delegate hands a job to the worker in the background, as above.
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
+- show_page shows the developer an interactive HTML page in the plan's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
 - list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
@@ -270,7 +274,7 @@ You are the notetaker on a live voice call between Luke, a senior engineer, and 
 
 The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading, and replace or remove any template guidance text in a section once you fill it. Answer with the notes the latest lines call for, in the order they were said:
+You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or remove it. Answer with the notes the latest lines call for, in the order they were said:
 
 - add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown bullet, a line or two, added at the end of that section. A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
 - replace: a correction, where the developer corrected something the plan holds, or a section's template guidance you are filling. find is a phrase copied exactly from the saved text, as short as names one place; text is what it becomes.
@@ -423,7 +427,9 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`); the four
+ * hands back the board as the Mac draws it (`board-look.ts`); `show_page`
+ * writes an interactive page for the side panel, the coding agents' tool
+ * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
@@ -450,6 +456,11 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
       })),
   },
   {
+    ...RUN_ON_MAC_TOOL,
+    run: (call, input) =>
+      Effect.map(runOnMacTool(call.plan.userId, input), (result) => ({ ...result })),
+  },
+  {
     ...SEARCH_WEB_TOOL,
     run: (call, input) =>
       Effect.map(runSearchWeb(call.research, input), (result) => ({ ...result })),
@@ -466,6 +477,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LOOK_AT_BOARD_TOOL,
     run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
+  },
+  {
+    ...SHOW_PAGE_TOOL,
+    run: (call, input) => runShowPage(call.plan, input),
   },
   {
     ...LIST_CODING_AGENTS_TOOL,
@@ -513,7 +528,31 @@ const SUBAGENT_CALL_INPUT = Schema.Struct({
   taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
-/** What `task_wait` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
+/**
+ * The planning model's own delegation (`eve/tools/delegate.ts`): one job
+ * handed to the worker, which always runs in the background, because a
+ * foreground wait would hold the spoken turn silent for the worker's whole
+ * run; and what a stored call carries, the task and the id eve adds to a
+ * call that sends a running worker more.
+ */
+export const PLANNER_DELEGATE_TOOL = {
+  name: AGENT_TOOL.DELEGATE,
+  description:
+    "Hand one job to the worker, a subagent that runs in the background while you keep working: research on the public Internet, reading the plan's repository, or both. Returns a receipt at once; a short summary with its sources arrives later as a task result. Never wait for it.",
+  inputSchema: Schema.Struct({ task: Schema.String }),
+  storedInputSchema: Schema.Struct({
+    task: Schema.String,
+    taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+} as const;
+
+/** The planning model's delegations by every name one was made under: its own \`delegate\`, and eve's \`worker\` subagent tool, which earlier transcripts name. */
+export const PLANNER_DELEGATION_TOOLS: ReadonlySet<string> = new Set([
+  PLANNER_DELEGATE_TOOL.name,
+  EVE_DELEGATION_TOOL.WORKER,
+]);
+
+/** What \`task_wait\` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
 const TASK_WAIT_INPUT = Schema.Struct({
   timeoutSeconds: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
@@ -554,7 +593,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.PLANNER
 export const WORKER_INSTRUCTIONS = `
 You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
@@ -582,6 +621,10 @@ export function planningToolSet(): ToolSet {
     [
       EVE_SKILL_TOOL.NAME,
       wireValidatedTool(`eve's own ${EVE_SKILL_TOOL.NAME} tool`, EVE_SKILL_TOOL.INPUT),
+    ],
+    [
+      PLANNER_DELEGATE_TOOL.name,
+      wireValidatedTool(PLANNER_DELEGATE_TOOL.description, PLANNER_DELEGATE_TOOL.storedInputSchema),
     ],
     ...connectionToolEntries(),
   ]);

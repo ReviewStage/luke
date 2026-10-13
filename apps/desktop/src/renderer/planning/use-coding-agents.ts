@@ -8,6 +8,7 @@ import {
 import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
+  type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
@@ -37,7 +38,7 @@ import { keptSkills } from "./repository-skills";
 import type { SkillSource } from "./skill-picker";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
-import type { PullRequestReader } from "./use-agent-pull-request";
+import { type PullRequestReader, usePlanPullRequests } from "./use-agent-pull-request";
 import type { ServersWriter } from "./use-agent-servers";
 import type { TranscriptReader } from "./use-agent-transcript";
 import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-plan-inbox";
@@ -178,8 +179,10 @@ export interface CodingAgentsControl {
   onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
   readTranscript: TranscriptReader;
-  /** One read of what an agent published, as its tab asks it. */
+  /** One read of what an agent published, as its tab asks it, its answer kept in `pullRequests`. */
   readPullRequest: PullRequestReader;
+  /** Each of the plan's agents' pull requests, by agent, of those that have one (`usePlanPullRequests`). */
+  pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
@@ -660,10 +663,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readPullRequest = useCallback<PullRequestReader>(
+  const readPullRequestOnce = useCallback<PullRequestReader>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
+  const published = usePlanPullRequests(planId, agents, readPullRequestOnce);
 
   const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
     (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
@@ -731,7 +735,8 @@ export function useCodingAgents(input: {
     onStatus,
     onTitle,
     readTranscript,
-    readPullRequest,
+    readPullRequest: published.read,
+    pullRequests: published.pullRequests,
     readChanges,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,

@@ -1,9 +1,17 @@
 import {
   CHANGED_FILE_STATUS,
+  type ChangedFileStatus,
   type CodingAgentChangedFile,
   PATCH_OMITTED,
 } from "@sidecar/hosted/coding-agent-wire";
 import { parsePatch } from "diff";
+import {
+  FILE_MARK,
+  type FileMark,
+  type FileMarkStatus,
+  type FolderEntry,
+  type ReadFolder,
+} from "../file-tree/contract";
 
 /**
  * changes-model.ts -- an agent's changes as its Changes tab draws them: each file's patch as a unified diff's rows, numbered on both sides, or why it has none.
@@ -17,6 +25,13 @@ import { parsePatch } from "diff";
  * alone, and a line of context on both. A file with no patch is never drawn
  * as unchanged: it says it is binary, too large to show, or, with an empty
  * patch, that its contents did not change.
+ *
+ * The tab draws its files in a File tab's tree and breadcrumbs, which list
+ * a folder at a time: the folders here are listed from the changed paths
+ * alone (`changedFolders`), so either shows only what changed, each file
+ * marked as an editor's source control marks it (`changeMarks`). A file's
+ * patch is copied or saved as a whole unified diff (`filePatch`), headed
+ * as git writes one, so `git apply` takes it as it is.
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
@@ -74,6 +89,25 @@ export const STATUS_LETTER = {
   [CHANGED_FILE_STATUS.RENAMED]: "R",
 } as const;
 
+/** What each status marks a file's row in the tree with. */
+const STATUS_MARK = {
+  [CHANGED_FILE_STATUS.ADDED]: FILE_MARK.ADDED,
+  [CHANGED_FILE_STATUS.MODIFIED]: FILE_MARK.MODIFIED,
+  [CHANGED_FILE_STATUS.DELETED]: FILE_MARK.DELETED,
+  [CHANGED_FILE_STATUS.RENAMED]: FILE_MARK.RENAMED,
+} as const satisfies Record<ChangedFileStatus, FileMarkStatus>;
+
+/** What the letter a file wears says in words, in its hint. */
+export const STATUS_WORDS = {
+  [CHANGED_FILE_STATUS.ADDED]: "Added",
+  [CHANGED_FILE_STATUS.MODIFIED]: "Modified",
+  [CHANGED_FILE_STATUS.DELETED]: "Deleted",
+  [CHANGED_FILE_STATUS.RENAMED]: "Renamed",
+} as const satisfies Record<ChangedFileStatus, string>;
+
+/** Where git's diff names a side the file does not stand on: before it was added, or after it was deleted. */
+const NO_SIDE = "/dev/null";
+
 /** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
 function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
   let oldLine = oldStart;
@@ -121,4 +155,57 @@ export function fileNotice(file: CodingAgentChangedFile): string | undefined {
   return file.status === CHANGED_FILE_STATUS.RENAMED
     ? CHANGES_WORDS.UNCHANGED_CONTENTS
     : CHANGES_WORDS.NO_HUNKS;
+}
+
+/** Each changed file's row mark in the tree. */
+export function changeMarks(files: readonly CodingAgentChangedFile[]): readonly FileMark[] {
+  return files.map((file) => ({ path: file.path, status: STATUS_MARK[file.status] }));
+}
+
+/** The lines every file adds and removes, summed. */
+export function linesChanged(files: readonly CodingAgentChangedFile[]) {
+  return {
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+  };
+}
+
+/**
+ * The folders the changed paths stand in, each listed as the tree lists a
+ * folder of the repository: the entries of its own that hold a change, a
+ * folder for each one deeper, a file for each changed file; a folder
+ * holding no change lists nothing.
+ */
+export function changedFolders(paths: readonly string[]): ReadFolder {
+  const folders = new Map<string, Map<string, boolean>>();
+  for (const path of paths) {
+    const segments = path.split("/");
+    segments.forEach((name, at) => {
+      const folder = segments.slice(0, at).join("/");
+      const entries = folders.get(folder) ?? new Map<string, boolean>();
+      folders.set(folder, entries);
+      entries.set(name, entries.get(name) === true || at < segments.length - 1);
+    });
+  }
+  return (path) => {
+    const entries: FolderEntry[] = [...(folders.get(path) ?? [])].map(([name, folder]) => ({
+      name,
+      folder,
+    }));
+    return Promise.resolve({ entries, truncated: false });
+  };
+}
+
+/**
+ * A file's patch as a whole unified diff, headed as git writes one: the
+ * paths on each side, `/dev/null` for a side it does not stand on; none
+ * where the file carries no hunks to copy.
+ */
+export function filePatch(file: CodingAgentChangedFile): string | undefined {
+  if (file.patch === null || fileNotice(file) !== undefined) return undefined;
+  const from = file.previousPath ?? file.path;
+  const before = file.status === CHANGED_FILE_STATUS.ADDED ? NO_SIDE : `a/${from}`;
+  const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
+  const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
+  return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
 }

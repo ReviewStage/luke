@@ -17,6 +17,7 @@ export const APP_SETTING_ID = {
   SHOW_IN_DOCK: "show_in_dock",
   OPEN_AT_LOGIN: "open_at_login",
   AGENT_NOTIFICATIONS: "agent_notifications",
+  MAC_COMMANDS: "mac_commands",
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",
   WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",

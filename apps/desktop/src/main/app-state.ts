@@ -129,7 +129,10 @@ export function voiceWindowState<State extends Pick<AppState, "planning">>(held:
  * what fill the rest in.
  */
 export function initialAppState(
-  config: Pick<DesktopConfig, "launch" | "runMode" | "appVersion" | "packaged" | "platform">,
+  config: Pick<
+    DesktopConfig,
+    "launch" | "runMode" | "appVersion" | "commit" | "packaged" | "platform"
+  >,
   installSupported: boolean,
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
@@ -139,6 +142,7 @@ export function initialAppState(
       packaged: config.packaged,
       platform: config.platform,
       appVersion: config.appVersion,
+      ...(config.commit ? { commit: config.commit } : undefined),
       captureMode: launch.captureMode,
       fixtureMode: launch.fixtureMode,
       accountRequired: runMode.requiresAccount,

@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   type CodingAgentMessage,
   TURN_ENDING,
@@ -15,12 +16,13 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { AGENT_TOOL, cardTitle } from "./tool-call-model";
+import { cardTitle } from "./tool-call-model";
 import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
   commandDescription,
+  isCommandKind,
   pageName,
   type SaidCall,
 } from "./turn-rows";
@@ -92,6 +94,7 @@ export interface WorkTurnRow {
 /** Each of the planning model's tools as a kind of call. */
 const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.REPOSITORY]: CALL_KIND.COMMAND,
+  [PLAN_WORK_TOOL.MAC_COMMAND]: CALL_KIND.MAC_COMMAND,
   [PLAN_WORK_TOOL.SEARCH_WEB]: CALL_KIND.WEB_SEARCH,
   [PLAN_WORK_TOOL.READ_WEB_PAGE]: CALL_KIND.WEB_PAGE,
   [PLAN_WORK_TOOL.SHOW_CODE]: CALL_KIND.SHOW_CODE,
@@ -107,6 +110,7 @@ const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.MESSAGE_AGENT]: CALL_KIND.MESSAGE_AGENT,
   [PLAN_WORK_TOOL.START_AGENT]: CALL_KIND.START_AGENT,
   [PLAN_WORK_TOOL.END_CALL]: CALL_KIND.END_CALL,
+  [PLAN_WORK_TOOL.SHOW_PAGE]: CALL_KIND.SHOW_PAGE,
   [PLAN_WORK_TOOL.OTHER]: CALL_KIND.OTHER,
 } as const satisfies Record<PlanWorkTool, CallKind>;
 
@@ -257,10 +261,9 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
  */
 function toolPartOf(part: WorkToolPart, call: WorkCallRow, worker?: WorkWorkerBlock): WireValue {
   const input = wireValueOf(part.input);
-  const description =
-    call.kind === CALL_KIND.COMMAND
-      ? commandDescription(inputField(input, INPUT_FIELD.DESCRIPTION))
-      : undefined;
+  const description = isCommandKind(call.kind)
+    ? commandDescription(inputField(input, INPUT_FIELD.DESCRIPTION))
+    : undefined;
   const said: SaidCall = {
     kind: call.kind,
     ...(call.subject === undefined ? undefined : { subject: call.subject }),

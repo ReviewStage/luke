@@ -143,14 +143,19 @@ export function heardCalls(input: {
   return standing === undefined ? [...kept, live] : kept;
 }
 
-/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id, which names its row as a line on record does. */
+/**
+ * A heard call as a row of the list, or nothing where nothing was said on
+ * it: each line a message under the window's own row id, which names no row
+ * on record, so the line carries its span on the call instead, which is what
+ * a turn that took it as its ask names it by (`call-thread.ts`).
+ */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   const messages = heard.transcript.lines.flatMap((line) => {
     const message = settledMessage({
       id: line.rowId,
       role: line.speaker,
       parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
-      metadata: { rowIds: [line.rowId] },
+      metadata: { span: { startMs: line.startMs, endMs: line.endMs } },
     });
     return message === undefined ? [] : [message];
   });

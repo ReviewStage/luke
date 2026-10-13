@@ -714,138 +714,52 @@ button.code-card-path:hover {
   border: 0;
 }
 
-/* An agent's Changes tab (agent-changes-tab.tsx): a File tab's bar and its
-   tree to the right, the chosen file's unified diff in the file's place. */
-.changes-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.changes-count {
-  color: var(--text-primary);
-}
-
-.changes-truncated,
-.changes-notice {
-  margin: 0;
-  padding: var(--space-8) var(--space-12);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.changes-truncated {
-  border-bottom: 1px solid var(--hairline);
-}
-
-.changes-failed {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-8);
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.changes-diff {
-  min-width: 0;
-}
-
-.changes-diff-head {
-  display: flex;
-  min-width: 0;
+/* What became of a changed file, lettered quietly beside its path in a
+   Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
+   tree is. */
+.file-view-status {
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-4) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--code-text);
-  font-size: 12px;
-}
-
-.changes-diff-path {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  direction: rtl;
-  font-family: var(--font-mono);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* What became of the file, as an editor's source control letters it. */
-.changes-status {
-  flex: 0 0 auto;
-  color: var(--text-secondary);
+  color: var(--state-attention);
   font-family: var(--font-mono);
   font-weight: 600;
 }
 
-.changes-status[data-status="added"] {
+.file-view-status[data-status="added"] {
   color: var(--state-complete);
 }
 
-.changes-status[data-status="deleted"] {
+.file-view-status[data-status="deleted"] {
   color: var(--danger-text);
 }
 
-/* The diff's rows: the old side's number, the new side's, then the line,
-   added rows on a green ground and removed rows on a red one. */
-/* A diff selects and copies as `.code-lines` does, its numbers left out. */
-.diff-lines {
-  padding: 0 0 var(--space-6);
-  color: var(--code-text);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.6;
-  -webkit-user-select: text;
-  user-select: text;
+.file-view-status[data-status="renamed"] {
+  color: var(--state-working);
 }
 
-.diff-line,
-.diff-hunk-header {
-  display: flex;
+/* A diff drawn in a File tab's lines (agent-changes-tab.tsx), which keep
+   their gutter, selection, settings, and type; what is a diff's alone is
+   the tint of a line added or removed, its hunk's header on the lit
+   lines' ground, and git's note on a line. */
+.code-line[data-diff="added"] {
+  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
 }
 
-.diff-hunk-header {
-  margin-top: var(--space-6);
+.code-line[data-diff="removed"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.code-line[data-diff="hunk"] {
   background: var(--code-pointed);
   color: var(--code-line-number);
 }
 
-.diff-line[data-kind="added"] {
-  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
+.code-line[data-diff="hunk"]:not(:first-child) {
+  margin-top: var(--space-6);
 }
 
-.diff-line[data-kind="removed"] {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.diff-line[data-kind="note"] .diff-line-text {
+.code-line[data-diff="note"] .code-line-text {
   color: var(--code-line-number);
   font-style: italic;
-}
-
-.diff-line-number {
-  flex: 0 0 auto;
-  width: 40px;
-  padding: 0 var(--space-6) 0 0;
-  color: var(--code-line-number);
-  text-align: right;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.diff-line-text {
-  min-width: 0;
-  padding: 0 var(--content-inset) 0 var(--space-6);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the
@@ -910,6 +824,10 @@ button.code-card-path:hover {
   --trees-focus-ring-offset-override: calc(var(--focus-ring-width) * -1);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
+  --trees-git-added-color-override: var(--state-complete);
+  --trees-git-modified-color-override: var(--state-attention);
+  --trees-git-deleted-color-override: var(--danger-text);
+  --trees-git-renamed-color-override: var(--state-working);
   display: flex;
   min-height: 0;
   flex: 1;
@@ -947,6 +865,17 @@ button.code-card-path:hover {
 .file-tree-host > .file-tree-cut {
   flex: none;
   border-top: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
+/* The line under a change set's tree counting its files (file-tree-pane.tsx),
+   in the tree's own notice under it. */
+.file-tree-foot {
+  flex: none;
+  margin: 0;
+  padding: var(--space-6) var(--space-12);
+  border-top: 1px solid var(--hairline);
+  color: var(--text-secondary);
   font-size: 11.5px;
 }
 
@@ -1484,11 +1413,63 @@ button.code-card-path:hover {
   white-space: pre-wrap;
 }
 
+/* A chosen skill's pill, the composer's and a sent message's alike
+   (`skill-chip.tsx`): in the composer it lies under the field's words, so
+   its own are clear; in a message it is a button drawing its words in the
+   bubble's type, which opens the skill's file. */
 .skill-chip {
   border-radius: 4px;
   background: var(--raised-strong);
   box-shadow: 0 0 0 2px var(--raised-strong);
+}
+
+.skill-chips .skill-chip {
   color: transparent;
+}
+
+/* Note that the button keeps to its words' height, as the composer's mark
+   does, rather than standing the line's full height as a button would. */
+button.skill-chip {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.25;
+}
+
+button.skill-chip:hover {
+  background: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+
+/* A skill's hover card: its name, what it is for, and where its file stands. */
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skill-card > p {
+  margin: 0;
+}
+
+.skill-card-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.skill-card-description {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.skill-card-path {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 /* The list a `/` opens: the window's menu, standing over the caret's line

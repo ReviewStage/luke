@@ -76,6 +76,10 @@ export {
   webSocketOrigin,
 } from "./live-contract.js";
 export {
+  HostedMacCommandClient,
+  type HostedMacCommandClientOptions,
+} from "./mac-command-client.js";
+export {
   HostedPlanClient,
   type HostedPlanClientOptions,
   type PlanCallResult,

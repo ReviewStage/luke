@@ -341,6 +341,7 @@ function transcriptResponse(
     ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
     ...(page.delegations === undefined ? undefined : { delegations: page.delegations }),
     ...(page.subagentTitles === undefined ? undefined : { subagentTitles: page.subagentTitles }),
+    ...(page.subagents === undefined ? undefined : { subagents: page.subagents }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),

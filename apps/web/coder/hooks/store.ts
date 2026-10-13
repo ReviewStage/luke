@@ -1,18 +1,23 @@
-import { Duration, Effect, Redacted, Result } from "effect";
-import type { MessageStreamEvent } from "eve/client";
+import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
+import { AGENT_ROLE } from "../../server/hosted/agent-runtime/role.js";
+import {
+  endsTurn,
+  renewsCredential,
+  type SandboxRecord,
+  stopsAtTurnEnd,
+} from "../../server/hosted/agent-runtime/sandbox.js";
 import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
-import { CODER } from "../../server/hosted/coder-host/bounds.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
 import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
 import { environment } from "../sandbox.js";
-import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-prompt.js";
+import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store, and the two things the
@@ -26,9 +31,11 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * at the firewall, a step that starts past the credential's age renews it
  * there, and a turn's end, however it ended, writes the branch checked out
  * in the sandbox on the agent's row, which is where its pull request is
- * read from, then stops the sandbox at once
- * rather than waiting out its timeout, with its filesystem kept for a later
- * turn to resume. Note that the branch is written before the end is
+ * read from, then stops the sandbox at once rather than waiting out its
+ * timeout, with its filesystem kept for a later turn to resume. Whether a
+ * step renews the credential and whether a turn's end stops the sandbox are
+ * the coding agent's sandbox policy (`server/hosted/agent-runtime/sandbox.ts`),
+ * not this hook's. Note that the branch is written before the end is
  * relayed, because a tab reads the pull request the moment it hears the
  * agent ended and the service keeps that answer a while: an end relayed
  * first would be read against the row as it stood before the turn.
@@ -39,19 +46,6 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
-
-/** eve's event kinds for a turn's end, each of which stops the sandbox. */
-const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
-  "turn.completed",
-  "turn.failed",
-  "turn.cancelled",
-]);
-
-/** Whether the credential set at the firewall is old enough to renew: set when the sandbox opened, or when the hook last renewed it. */
-function credentialIsOld(record: SandboxRecord, now: number): boolean {
-  const setAt = record.credentialAt ?? record.openedAt;
-  return setAt !== undefined && now - setAt >= Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
-}
 
 /** A refusal as a log line carries it: the checkout's reason, or a store failure's kind. */
 function describeRefusal(failure: CheckoutFailure): string {
@@ -75,13 +69,12 @@ async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promi
   );
 }
 
-/** A fresh token set at the firewall, where the standing one is old; a renewal that fails is logged and the next step tries again. */
+/** A fresh token set at the firewall, in place of the aged one; a renewal that fails is logged and the next step tries again. */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
+  now: number,
 ): Promise<void> {
-  const now = seams.now();
-  if (!credentialIsOld(record.get(), now)) return;
   const minted = await runWeb(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
@@ -118,9 +111,10 @@ export default defineHook({
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         sandbox.update((held) => ({ ...held, openedAt: seams.now() }));
       }
-      // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay and it is stopped after.
+      // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay, and the policy decides whether it is stopped after.
+      const stops = stopsAtTurnEnd(AGENT_ROLE.CODER, event, sandbox.get());
       const ending =
-        TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined
+        endsTurn(event) && sandbox.get().openedAt !== undefined
           ? await ctx.getSandbox()
           : undefined;
       if (ending !== undefined) await recordBranch(ctx, ending);
@@ -140,10 +134,11 @@ export default defineHook({
           }
         }),
       );
-      if (event.type === "step.started" && sandbox.get().openedAt !== undefined) {
-        await renewCredential(ctx, sandbox);
+      const now = seams.now();
+      if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+        await renewCredential(ctx, sandbox, now);
       }
-      if (ending !== undefined) await ending.stop();
+      if (ending !== undefined && stops) await ending.stop();
     },
   },
 });

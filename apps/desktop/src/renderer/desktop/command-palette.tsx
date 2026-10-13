@@ -4,9 +4,9 @@
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
  * one kind each. All lists each kind's best few rows under its heading, and
- * a filter that kind's alone, as many as are worth reading; ⌘[ and ⌘]
- * step through the filters while the palette stands, where they mean Back
- * and Forward elsewhere, and a press on a filter chooses it. The palette
+ * a filter that kind's alone, as many as are worth reading; ← and → step
+ * through the filters where the caret can go no further that way, and a
+ * press on a filter chooses it. The palette
  * ranks the rows itself with cmdk's own scoring, so each kind keeps its own
  * best few however many rows the others hold.
  *
@@ -57,6 +57,7 @@ import {
 } from "#shared/shortcuts";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { changesLabelOf } from "../planning/agent-changes-tab";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
@@ -70,7 +71,7 @@ import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../s
 import type { SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { panelEntries, planWorkers, TAB_ICON } from "./side-panel";
+import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -149,7 +150,10 @@ const READING_LINE = "Reading the repository's files…";
 /** What the Files filter says under a listing cut short at the wire's bound. */
 const TRUNCATED_LINE = `Only the repository's first ${PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
 
-/** The footer's hints, each the chords it names and what they do; the list's own keys are bare. */
+/**
+ * The footer's hints, each the bare keys it names and what they do. Escape
+ * is not among them, because every dialog closes on it and saying so is noise.
+ */
 const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }[] = [
   {
     chords: [
@@ -160,10 +164,12 @@ const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }
   },
   { chords: [{ key: SHORTCUT_KEY.ENTER, bare: true }], label: "Open" },
   {
-    chords: [APP_SHORTCUTS[APP_COMMAND.BACK].chord, APP_SHORTCUTS[APP_COMMAND.FORWARD].chord],
-    label: "Change filter",
+    chords: [
+      { key: SHORTCUT_KEY.LEFT, bare: true },
+      { key: SHORTCUT_KEY.RIGHT, bare: true },
+    ],
+    label: "Filter",
   },
-  { chords: [{ key: SHORTCUT_KEY.ESCAPE, bare: true }], label: "Close" },
 ];
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
@@ -293,6 +299,24 @@ function fileRow(path: string, open: (path: string) => void): PaletteRow {
   };
 }
 
+/**
+ * How many filters a press steps, or none: ← or → alone, in the search field,
+ * where the caret can go no further that way — at the start for ←, at the end
+ * for →, either in an empty field. Anywhere else the arrow moves the caret, a
+ * selection included, which the arrow collapses first.
+ */
+function filterStep(event: React.KeyboardEvent): number {
+  const field = event.target;
+  if (!(field instanceof HTMLInputElement)) return 0;
+  if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return 0;
+  if (event.nativeEvent.isComposing || field.selectionStart !== field.selectionEnd) return 0;
+  if (event.key === SHORTCUT_KEY.LEFT.key) return field.selectionStart === 0 ? -1 : 0;
+  if (event.key === SHORTCUT_KEY.RIGHT.key) {
+    return field.selectionEnd === field.value.length ? 1 : 0;
+  }
+  return 0;
+}
+
 /** The filter `step` places from the one given, wrapping at either end. */
 function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   const at = PALETTE_FILTERS.indexOf(filter);
@@ -329,11 +353,13 @@ function shownOverHistory(plans: PlansControl, show: () => void): void {
 
 /**
  * The open plan's Inbox and coding agents, as the column's "+" lists them,
- * then its subagents, as the side panel's "+" lists them, each beside the
- * plan's name; none while no plan is open. An agent opens as its
- * notification's click opens it, the Inbox the same way, and a subagent's
- * tab as the "+" opens it, the version history giving way to each, so none
- * opens behind what covers it.
+ * then its subagents and its agents' Changes tabs, as the side panel's "+"
+ * lists them, each beside the plan's name; none while no plan is open. A
+ * Changes row is named as its tab is, since no heading here says what the
+ * agent's name stands for. An agent opens as its notification's click
+ * opens it, the Inbox the same way, and a subagent's or a Changes tab as
+ * the "+" opens it, the version history giving way to each, so none opens
+ * behind what covers it.
  */
 function agentRows(plans: PlansControl, show: (pick: () => void) => void): readonly PaletteRow[] {
   const planId = plans.activePlanId;
@@ -350,9 +376,14 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     kinds: [],
     workers,
     files: [],
+    changes: changesOffers(plans.agents),
     standing: true,
   }).map((entry) => ({
     ...entry,
+    row:
+      entry.row.section === ADD_SECTION.CHANGES
+        ? { ...entry.row, label: changesLabelOf(entry.row.label) }
+        : entry.row,
     onPick: () => shownOverHistory(plans, entry.onPick),
   }));
   const entries = [...inbox, ...agents, ...subagents];
@@ -480,9 +511,11 @@ function PaletteFooter(): React.JSX.Element {
     <div className="command-palette-footer" aria-hidden="true">
       {FOOTER_HINTS.map((hint) => (
         <span key={hint.label} className="command-palette-footer-hint">
-          {hint.chords.map((chord) => (
-            <Shortcut key={chord.key.accelerator} chord={chord} />
-          ))}
+          <span className="command-palette-footer-keys">
+            {hint.chords.map((chord) => (
+              <Shortcut key={chord.key.accelerator} chord={chord} />
+            ))}
+          </span>
           {hint.label}
         </span>
       ))}
@@ -603,16 +636,15 @@ export function CommandPalette({
     // change what stands behind the palette. Escape itself is the dialog's,
     // which closes the palette alone.
     event.stopPropagation();
-    const pressed = commandForKey(
-      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
-      event.nativeEvent,
-    );
-    if (pressed === undefined) return;
-    // The menu bar's Back and Forward are held off too, since the palette
-    // claims their chords for its filters while it stands.
+    const step = filterStep(event);
+    if (step !== 0) {
+      event.preventDefault();
+      changeFilter(steppedFilter(filter, step));
+      return;
+    }
+    if (commandForKey([APP_COMMAND.COMMAND_PALETTE], event.nativeEvent) === undefined) return;
     event.preventDefault();
-    if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    setOpen(false);
   };
 
   const tokens = searchTokens(query);

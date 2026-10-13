@@ -8,20 +8,24 @@ import {
 import {
   HostedCodingAgentClient,
   HostedIntegrationsClient,
+  HostedMacCommandClient,
   HostedPlanClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
 } from "@sidecar/hosted";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import type { ChildProcessSpawner } from "effect/unstable/process";
 import { composeAccount } from "./compose-account.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
+import { composeMacCommands } from "./compose-mac-commands.js";
 import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
@@ -39,7 +43,7 @@ import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
-/** The six concerns, by the name each is built under. */
+/** The seven concerns, by the name each is built under. */
 const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
@@ -47,6 +51,7 @@ const HOST_CONCERN = {
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
   INTEGRATIONS: "integrations",
+  MAC_COMMANDS: "macCommands",
 } as const;
 
 type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -62,6 +67,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.INTEGRATIONS,
+  HOST_CONCERN.MAC_COMMANDS,
 ];
 
 /**
@@ -82,6 +88,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | ShutdownSignal
   | FileSystem.FileSystem
   | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
 > = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {
@@ -144,6 +151,18 @@ export const hostAssemblyLayer: Layer.Layer<
           (result) => result.status === NODE_CAPABILITY_STATUS.OK,
         ),
     });
+    const macCommands = yield* composeMacCommands({
+      kernel,
+      account,
+      enabled: Effect.map(
+        Effect.orDie(settings.store.snapshot()),
+        (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
+      ),
+      client: new HostedMacCommandClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
@@ -192,6 +211,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
+      [HOST_CONCERN.MAC_COMMANDS]: macCommands,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

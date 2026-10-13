@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@sidecar/hosted/agent-tools";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -5,6 +6,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
+  type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
@@ -22,6 +24,7 @@ import {
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
+import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
@@ -54,11 +57,12 @@ import {
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
+  workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { SentWords, useSkillFile } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import {
-  AGENT_TOOL,
   cardTitle,
   delegationView,
   todoFocus,
@@ -105,7 +109,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
- * is the developer's bubble, as the Call tab draws one; and while
+ * is the developer's bubble, as the Call tab draws one, each skill it
+ * names the chip that opens the skill's file (`skill-chip.tsx`), as a
+ * "Loaded skill" row opens it too; and while
  * the agent may still write, a shimmering line stands at the end saying
  * what it is doing, "Starting…" until its turn opens, "Thinking…" until
  * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
@@ -188,6 +194,8 @@ export interface DelegationDoors {
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
   /** Opens a coding agent's tab, by the agent, which the row of a call that started one asks for; none where nothing opens one. */
   onOpenAgent?: ((agentId: string) => void) | undefined;
+  /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
+  standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
 }
 
 /** One tool call: its row, and its input and answer under it once opened. */
@@ -211,6 +219,28 @@ function ToolCallView({
   );
 }
 
+/** The workers their own session says still run. */
+function runningStandings(
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
+): readonly CodingAgentSubagentStanding[] {
+  return [...(standings?.values() ?? [])].filter(
+    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
+  );
+}
+
+/** When each running worker began: the newest turn's waits, and every worker its own session says still runs. */
+function workerStarts(
+  waits: ReadonlyMap<string, number>,
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
+): ReadonlyMap<string, number> {
+  return new Map([
+    ...waits,
+    ...runningStandings(standings).map(
+      (standing) => [standing.callId, standing.startedAt] as const,
+    ),
+  ]);
+}
+
 /** One delegation: a subagent's row saying the task and the pair, the one button into its tab. */
 function DelegationRow({
   part,
@@ -221,21 +251,20 @@ function DelegationRow({
 }): ReactNode {
   const view = delegationView(part, doors?.own);
   const onOpen = doors?.onOpen;
+  // The worker's own session says where it stands, since the call may settle the moment it is under way.
+  const standing = doors?.standings?.get(part.callId);
+  const choice =
+    standing === undefined ? view.choice : { model: standing.model, effort: standing.effort };
+  const status = standing?.status ?? workerStatusOf(part.state);
   return (
     <TranscriptSubagent
       callId={part.callId}
       job={cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb}
-      pair={
-        view.choice === undefined ? undefined : { choice: view.choice, models: doors?.models ?? [] }
-      }
-      state={part.state}
+      pair={choice === undefined ? undefined : { choice, models: doors?.models ?? [] }}
+      state={standing === undefined ? part.state : workerToolState(standing.status)}
       startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
-      onOpen={
-        onOpen === undefined
-          ? undefined
-          : () => onOpen(part.callId, view.task, workerStatusOf(part.state))
-      }
+      onOpen={onOpen === undefined ? undefined : () => onOpen(part.callId, view.task, status)}
     />
   );
 }
@@ -306,6 +335,24 @@ function TodosDock({
   );
 }
 
+/**
+ * A call that loaded a skill: the one button that opens the skill's
+ * `SKILL.md`, where it is one of the plan's skills, and a call's row
+ * otherwise. Note that a load that failed keeps the call's row, because the
+ * row is where its error is read.
+ */
+function LoadedSkillView({
+  part,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+}): ReactNode {
+  const onOpen = useSkillFile(toolCallView(part).subject);
+  if (onOpen === undefined || part.state === TOOL_STATE.OUTPUT_ERROR) {
+    return <ToolCallView part={part} />;
+  }
+  return <OpeningCallView part={part} onOpen={onOpen} />;
+}
+
 /** A call that started a coding agent, once it began: the one button that opens the agent's tab, saying what it did. */
 function OpeningCallView({
   part,
@@ -348,8 +395,11 @@ function AgentPartView({
       if (agent !== undefined && openAgent !== undefined) {
         return <OpeningCallView part={part} onOpen={() => openAgent(agent)} />;
       }
-      return part.tool === AGENT_TOOL.WRITE_TODOS ? (
-        <TodosRow part={part} open={part.callId === todos.open} />
+      if (part.tool === AGENT_TOOL.WRITE_TODOS) {
+        return <TodosRow part={part} open={part.callId === todos.open} />;
+      }
+      return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
+        <LoadedSkillView part={part} />
       ) : (
         <ToolCallView part={part} />
       );
@@ -399,6 +449,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
+  said = false,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -410,6 +461,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
+  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so the message holds none and folds all of its work once it has finished. */
+  said?: boolean;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
@@ -420,7 +473,7 @@ export function AgentMessage({
         {words === "" ? null : (
           <>
             <MessageContent>
-              <TranscriptWords text={words} />
+              <SentWords text={words} />
             </MessageContent>
             <CopyMessageAction words={words} />
           </>
@@ -429,10 +482,17 @@ export function AgentMessage({
     );
   }
   const { startedAt, finishedAt } = message;
+  const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
+        <TranscriptRows
+          rows={agentRows(message, moving, lead.grouped, {
+            newestTodos: todos.kept,
+            workers,
+            said,
+          })}
+        >
           {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
         </TranscriptRows>
       </MessageContent>
@@ -676,8 +736,9 @@ function AgentTabView({
         delegation={{
           models,
           own: { model: agent.model, effort: agent.effort },
-          starts: delegationStarts,
+          starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
           onOpen: onOpenSubagent,
+          standings: transcript.subagents,
         }}
         reading={transcript.reading}
         failed={transcript.failed}

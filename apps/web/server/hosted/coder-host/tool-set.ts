@@ -17,8 +17,9 @@ import { connectionToolEntries } from "../connection-tools.js";
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), and the load of one of its
- * repository's skills (`skills.ts`). The worker's own rows name
+ * developer's inbox it posts to (`inbox.ts`), the load of one of its
+ * repository's skills (`skills.ts`), and the pages it shows the developer
+ * (`../page-tool.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -49,6 +50,8 @@ export const CODER_TOOL = {
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
+  SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
+  RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
 } as const;
 
 /**
@@ -81,14 +84,18 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
- * a sandbox tool, or a message received with files, which eve stages in the
- * sandbox before the turn opens, opening it to do so.
+ * a sandbox tool, or for a page read from a file in the sandbox, or a
+ * message received with files, which eve stages in the sandbox before the
+ * turn opens, opening it to do so.
  */
 export function opensSandbox(event: MessageStreamEvent): boolean {
   switch (event.type) {
     case "actions.requested":
       return event.data.actions.some(
-        (action) => action.kind === "tool-call" && SANDBOX_TOOLS.has(action.toolName),
+        (action) =>
+          action.kind === "tool-call" &&
+          (SANDBOX_TOOLS.has(action.toolName) ||
+            (action.toolName === CODER_TOOL.SHOW_PAGE && "path" in action.input)),
       );
     case "message.received":
       return event.data.parts?.some((part) => part.type === "file") ?? false;
@@ -109,11 +116,22 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  * still names, and the Linear connection's calls beside them
  * (`../connection-tools.ts`), which the agent and its workers alike make.
  */
+/**
+ * The two task controls eve adds beside any task, which a coding agent's
+ * \`delegate\` is (\`coder/tools/delegate.ts\`): eve runs them, so they are no
+ * tool of Luke's, but a turn that waits on its worker or stops one names them.
+ */
+const CODER_TASK_TOOL = {
+  TASK_WAIT: "task_wait",
+  TASK_CANCEL: "task_cancel",
+} as const;
+
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
   ...[
     ...new Set([
       ...toolsOf(AGENT_ROLE.CODER),
       ...toolsOf(AGENT_ROLE.CODER_WORKER),
+      ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),

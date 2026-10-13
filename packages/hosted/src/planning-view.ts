@@ -135,6 +135,8 @@ export type PlanWorkState = (typeof PLAN_WORK_STATE)[keyof typeof PLAN_WORK_STAT
  */
 export const PLAN_WORK_TOOL = {
   REPOSITORY: "repository",
+  /** A command run on the developer's own Mac (`run_on_mac`). */
+  MAC_COMMAND: "mac-command",
   SEARCH_WEB: "search-web",
   READ_WEB_PAGE: "read-web-page",
   SHOW_CODE: "show-code",
@@ -150,6 +152,7 @@ export const PLAN_WORK_TOOL = {
   MESSAGE_AGENT: "message-agent",
   START_AGENT: "start-agent",
   END_CALL: "end-call",
+  SHOW_PAGE: "show-page",
   OTHER: "other",
 } as const;
 
@@ -278,13 +281,32 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   parts: EffectSchema.Array(planWorkPartSchema),
   /**
    * The developer's spoken lines the turn took as its ask, by the ids the
-   * Transcript names them by, in the order they were said; absent for a turn
-   * no spoken line opened, before its lines are taken into it, and from a
-   * service older than it.
+   * Transcript names them by, in the order they were said: those of the asks
+   * that opened it, never a follow-up the running turn was steered with;
+   * absent for a turn no spoken line opened, before its lines are taken into
+   * it, and from a service older than it.
    */
   asked: EffectSchema.optionalKey(
     EffectSchema.Array(
       EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS)),
+    ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
+  ),
+  /**
+   * Where each of those lines began: the store's id for the call it was said
+   * on, and the milliseconds into that call, as the Live API's transcript
+   * deltas count them. A line heard on the call standing now carries the
+   * voice window's own row id, which no turn names, and is matched by where
+   * it began instead. Absent where `asked` is, for a line written before it
+   * was recorded, and from a service older than it.
+   */
+  askedAt: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        voiceSessionId: EffectSchema.String.check(
+          EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.LINE_ID_CHARS),
+        ),
+        fromMs: EffectSchema.Finite,
+      }),
     ).check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.ASKED_LINES)),
   ),
   ...turnRecordFields,

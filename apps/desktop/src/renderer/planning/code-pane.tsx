@@ -87,6 +87,19 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
  */
 export const BLANK_LINE_TEXT = "\n";
 
+/**
+ * A line's number in the gutter, a File tab's, a card's, or either side of
+ * a diff's: left out of a selection and of the find, so neither a copy nor
+ * a search ever holds it; none draws the gutter empty.
+ */
+export function CodeLineNumber({ line }: { line: number | undefined }): React.JSX.Element {
+  return (
+    <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+      {line}
+    </span>
+  );
+}
+
 /** Whether a line holds no text to copy. */
 function isBlank(tokens: PlanCode["lines"][number]): boolean {
   return tokens.every((token) => token.text === "");
@@ -114,9 +127,7 @@ export function CodeLineRows({
           <Fragment key={line}>
             {before?.(line)}
             <div className="code-line" data-pointed={String(isPointed(pointed, line))}>
-              <span className="code-line-number" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                {line}
-              </span>
+              <CodeLineNumber line={line} />
               <code className="code-line-text">
                 {isBlank(tokens) ? BLANK_LINE_TEXT : null}
                 {tokens.map((token, at) => (

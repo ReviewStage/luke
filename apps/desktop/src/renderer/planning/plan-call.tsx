@@ -2,7 +2,7 @@ import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
-import { TranscriptIcon } from "@sidecar/panel";
+import { CallIcon } from "@sidecar/panel";
 import { isRecord, MESSAGE_ROLE } from "@sidecar/wire";
 import type { UIMessage } from "ai";
 import { AudioLinesIcon } from "lucide-react";
@@ -192,6 +192,7 @@ function TurnWork({
         lead={PLANNING_LEAD}
         moving={turn.moving}
         delegation={doors.delegation}
+        said={spoken}
       />
       {turn.moving ? <WorkingLine startedAt={doors.counting ? turn.startedAt : undefined} /> : null}
       {ended === undefined ? null : (
@@ -406,12 +407,16 @@ export function PlanCall({
   // Note that an ask is answered once the transcript has been read, whether or not it holds what was asked for.
   useRevealInLog(root, region.kind !== TRANSCRIPT_REGION.READING && !seeking, reveal?.onRevealed);
   const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
-  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => ({
-    key: row.key,
-    startedAt: row.startedAt,
-    asked: turns?.find((turn) => turn.turnId === row.key)?.asked ?? [],
-    turn: row,
-  }));
+  const placed: readonly CallTurn<WorkTurnRow>[] = rows.map((row) => {
+    const stored = turns?.find((turn) => turn.turnId === row.key);
+    return {
+      key: row.key,
+      startedAt: row.startedAt,
+      asked: stored?.asked ?? [],
+      askedAt: stored?.askedAt ?? [],
+      turn: row,
+    };
+  });
   const doors: WorkDoors = {
     delegation: {
       models,
@@ -463,7 +468,7 @@ export function PlanCall({
           <RetryButton onRetry={onRetry} />
         </ConversationEmptyState>
       ) : (
-        <EmptyState icon={<TranscriptIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
+        <EmptyState icon={<CallIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       )}
     </section>
   );

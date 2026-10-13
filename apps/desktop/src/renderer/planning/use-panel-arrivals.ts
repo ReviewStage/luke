@@ -1,10 +1,11 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { PageLine } from "@sidecar/hosted/page-wire";
 import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel";
 
 /**
- * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open plan's board and each snippet he shows on its call.
+ * use-panel-arrivals.ts -- shows the side panel's tab for each drawing Luke puts on the open plan's board, and each snippet and page he shows on its call.
  *
  * Luke tells the developer what he drew or showed is on screen as he does
  * it, so each arrival shows its tab: the panel opens where it was hidden,
@@ -20,7 +21,9 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  * stays on the plan past its call, so code is read only while a call
  * stands, and what a call starts with is what the plan already held. Two
  * arriving on one read show the code, Luke's latest pointing, and the
- * board's tab reads in semibold until it is shown. A fixture run draws
+ * board's tab reads in semibold until it is shown. A page arrives on a call
+ * the same way, as a page the call did not start with or a newer version of
+ * one it did, and its tab is shown over any other that arrived with it. A fixture run draws
  * staged plans and has nothing arriving.
  */
 
@@ -31,6 +34,8 @@ interface Visit {
   drawing: number | undefined;
   /** The snippets on screen as the call stands, by call id, or none while no call does. */
   code: Set<string> | undefined;
+  /** The newest version of each page read as the call stands, by page id, or none while no call does. */
+  pages: Map<string, number> | undefined;
 }
 
 /** The tabs with an arrival not yet shown, and the plan they arrived on. */
@@ -55,6 +60,17 @@ function readNewCode(read: Set<string>, code: readonly PlanCodeShowing[]): boole
   return fresh;
 }
 
+/** The newest page the visit has not read at the version listed, reading each as it goes; the list is newest written first. */
+function readNewPage(read: Map<string, number>, pages: readonly PageLine[]): string | undefined {
+  let fresh: string | undefined;
+  for (const page of pages) {
+    if ((read.get(page.id) ?? 0) >= page.version) continue;
+    read.set(page.id, page.version);
+    fresh ??= page.id;
+  }
+  return fresh;
+}
+
 /** The unread tabs with one more, the plan's alone: another plan's news is not this one's. */
 function withUnread(was: Unread, planId: string, tab: SidePanelTab): Unread {
   if (was.planId !== planId) return { planId, tabs: [tab] };
@@ -71,9 +87,11 @@ export function usePanelArrivals(input: {
   board: Board | undefined;
   /** The code shown on the plan, or nothing while no call about it stands, since only a call shows code. */
   code: readonly PlanCodeShowing[] | undefined;
+  /** The plan's pages, or nothing while no call about it stands, since a page shown on a call is what arrives. */
+  pages: readonly PageLine[] | undefined;
   panel: SidePanelControl;
 }): readonly SidePanelTab[] {
-  const { planId, code, panel } = input;
+  const { planId, code, pages, panel } = input;
   const visit = useRef<Visit | undefined>(undefined);
   const [unread, setUnread] = useState<Unread>({ planId: undefined, tabs: [] });
   // Note that a board not yet read is unknown rather than empty, because the
@@ -100,7 +118,7 @@ export function usePanelArrivals(input: {
       return;
     }
     if (visit.current?.planId !== planId)
-      visit.current = { planId, drawing: undefined, code: undefined };
+      visit.current = { planId, drawing: undefined, code: undefined, pages: undefined };
     const seen = visit.current;
     const arrived: SidePanelTab[] = [];
     // The first read of the board is what the plan already held.
@@ -113,13 +131,20 @@ export function usePanelArrivals(input: {
     if (code === undefined) seen.code = undefined;
     else if (seen.code === undefined) seen.code = new Set(code.map((showing) => showing.callId));
     else if (readNewCode(seen.code, code)) arrived.push(SIDE_PANEL_TAB.CODE);
+    if (pages === undefined) seen.pages = undefined;
+    else if (seen.pages === undefined)
+      seen.pages = new Map(pages.map((page) => [page.id, page.version]));
+    else {
+      const page = readNewPage(seen.pages, pages);
+      if (page !== undefined) arrived.push({ page });
+    }
     const shown = arrived.at(-1);
     if (shown === undefined) return;
     panel.onChoose(shown);
     for (const tab of arrived) {
       if (tab !== shown) setUnread((was) => withUnread(was, planId, tab));
     }
-  }, [planId, drawing, code, panel.onChoose]);
+  }, [planId, drawing, code, pages, panel.onChoose]);
 
   if (unread.planId !== planId) return [];
   return unread.tabs.filter((tab) => tab !== shownTab);

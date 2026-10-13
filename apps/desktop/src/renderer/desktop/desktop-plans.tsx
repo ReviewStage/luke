@@ -12,6 +12,7 @@ import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
+import { SkillFiles } from "../planning/skill-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
@@ -40,7 +41,7 @@ import { useTabViews } from "./strip-tabs";
  * rest stand. The toolbar is one row, the side panel's bar's height exactly;
  * the plan's repository is the sidebar's row's to name, so the toolbar draws
  * the repository chip only while the plan has none, and otherwise only the
- * chip's menu, which Change repository… opens.
+ * chip's menu, which Change repository opens.
  *
  * The column's summary stands at its right, under the toolbar and over the
  * call bar, listing what both "+" menus open, with its button last in the
@@ -60,6 +61,9 @@ import { useTabViews } from "./strip-tabs";
  * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
  * panel's once the pointer or the focus went into it, else this column's,
  * which a panel shut hands them back to.
+ *
+ * A skill named in a message to a coding agent, in either column, opens
+ * its `SKILL.md` in a File tab of the side panel (`../planning/skill-chip.tsx`).
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
@@ -172,12 +176,6 @@ function PlanDocument({
   useEffect(() => {
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
-  // What waits on the Inbox tab counts as read while the tab is on screen (`inbox-reads.ts`).
-  const inboxOnScreen = planId !== undefined && plans.inboxShown === planId;
-  const { onSeen } = plans.inboxReads;
-  useEffect(() => {
-    if (planId !== undefined && inboxOnScreen && inbox.read) onSeen(planId, waiting);
-  }, [planId, inboxOnScreen, inbox.read, waiting, onSeen]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
@@ -463,10 +461,15 @@ export function DesktopPlans({
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
       return (
-        <>
+        <SkillFiles
+          source={plans.agents.readSkills}
+          // Note that a skill's file is browsed to, as a file the palette finds is,
+          // so its tab stands on this plan though Luke never showed it.
+          onOpen={(skill) => plans.sidePanel.onBrowseFile(skill.path, skill.path, true)}
+        >
           <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />
           {secondCall}
-        </>
+        </SkillFiles>
       );
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:

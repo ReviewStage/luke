@@ -29,11 +29,13 @@ export interface LiveVoiceSurroundings {
   microphoneGranted: boolean;
 }
 
-/** One line said on the standing call, as its captions group it: the row it grows on, who said it, and the words so far. */
+/** One line said on the standing call, as its captions group it: the row it grows on, who said it, the words so far, and its span in milliseconds into the call, which is what a turn that took it as its ask names it by. */
 interface LiveCallLine {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
   readonly words: string;
+  readonly startMs: number;
+  readonly endMs: number;
 }
 
 /**
@@ -112,9 +114,6 @@ const LUKE_ENDING_BOUNDS = {
   START_MS: 1_500,
   PLAYBACK_MS: 15_000,
 } as const;
-
-/** The quiet line the strip says once Luke has hung up, so his end is not read as a drop. */
-const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
 
 /**
  * Luke ending the standing call, from the host's word until his goodbye has
@@ -551,9 +550,8 @@ export class LiveVoiceOrchestrator {
       if (this.#lukeEnding !== ending) return;
       this.#lukeEnding = undefined;
       if (Option.isNone(played) || !played.value || this.#call !== ending.call) return;
-      // Said before the stop, which lets the call go at once and reports the view with it.
+      // Set before the stop, which lets the call go at once and reports the view with it.
       this.#lukeEndedCall = this.#callTranscript?.voiceSessionId;
-      this.#strip.showNotice(LUKE_ENDED_CALL_NOTE);
       yield* this.stopCall();
     });
   }
@@ -863,6 +861,8 @@ function callTranscriptOf(rows: readonly LiveCaptionRow[]): LiveCallTranscript |
       rowId: row.rowId,
       speaker: SPEAKER_OF_KIND[row.entry.kind],
       words: row.entry.words,
+      startMs: row.startMs,
+      endMs: row.endMs,
     })),
   };
 }
@@ -881,7 +881,9 @@ function sameTranscript(
       other !== undefined &&
       line.rowId === other.rowId &&
       line.speaker === other.speaker &&
-      line.words === other.words
+      line.words === other.words &&
+      line.startMs === other.startMs &&
+      line.endMs === other.endMs
     );
   });
 }

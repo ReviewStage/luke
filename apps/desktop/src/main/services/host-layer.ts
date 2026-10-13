@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import type { HostSeams } from "@sidecar/host";
 import {
   AppIdentity,
@@ -63,8 +63,10 @@ export function hostAssemblyLayerFor(
     hostAssemblyLayer,
     Layer.mergeAll(
       Layer.provideMerge(hostKernelLayer, seams),
-      NodeFileSystem.layer,
-      NodePath.layer,
+      Layer.provideMerge(
+        NodeChildProcessSpawner.layer,
+        Layer.mergeAll(NodeFileSystem.layer, NodePath.layer),
+      ),
     ),
   );
 }

@@ -95,6 +95,7 @@
                     "type": "string",
                     "enum": [
                       "repository",
+                      "mac-command",
                       "search-web",
                       "read-web-page",
                       "show-code",
@@ -110,6 +111,7 @@
                       "message-agent",
                       "start-agent",
                       "end-call",
+                      "show-page",
                       "other"
                     ]
                   },
@@ -207,6 +209,7 @@
                                   "type": "string",
                                   "enum": [
                                     "repository",
+                                    "mac-command",
                                     "search-web",
                                     "read-web-page",
                                     "show-code",
@@ -222,6 +225,7 @@
                                     "message-agent",
                                     "start-agent",
                                     "end-call",
+                                    "show-page",
                                     "other"
                                   ]
                                 },
@@ -346,6 +350,27 @@
           "items": {
             "type": "string",
             "maxLength": 128
+          },
+          "maxItems": 20
+        },
+        "askedAt": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "voiceSessionId": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "fromMs": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "voiceSessionId",
+              "fromMs"
+            ],
+            "additionalProperties": false
           },
           "maxItems": 20
         },

@@ -31,6 +31,16 @@ const upsertListener = SqlSchema.void({
       .onConflictDoUpdate({ target: macCommandListener.userId, set: { seenAt: now } }),
 });
 
+const findListener = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: ({ userId, since }) =>
+    db
+      .select({ userId: macCommandListener.userId })
+      .from(macCommandListener)
+      .where(and(eq(macCommandListener.userId, userId), gte(macCommandListener.seenAt, since))),
+});
+
 const insertCommand = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
@@ -118,9 +128,20 @@ const findResult = SqlSchema.findOneOption({
       ),
 });
 
+const deleteCommand = SqlSchema.void({
+  Request: CommandKeySchema,
+  execute: ({ userId, id }) =>
+    db.delete(macCommand).where(and(eq(macCommand.id, id), eq(macCommand.userId, userId))),
+});
+
 /** Records that a Mac of the account is listening now. */
 export function markMacListening(userId: string): PlanStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => upsertListener({ userId, now }));
+}
+
+/** Whether a Mac of the account listened at or after the instant given. */
+export function macListeningSince(userId: string, since: Date): PlanStoreEffect<boolean> {
+  return Effect.map(findListener({ userId, since }), Option.isSome);
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */
@@ -159,4 +180,9 @@ export function macCommandResult(
     findResult({ userId, id }),
     Option.map((row) => row.result),
   );
+}
+
+/** Withdraws a command, settled or not, once its call stops waiting on it. */
+export function withdrawMacCommand(userId: string, id: string): PlanStoreEffect<void> {
+  return deleteCommand({ userId, id });
 }

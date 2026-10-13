@@ -1,6 +1,6 @@
 import type { ActionResult } from "@sidecar/wire";
 import type { MicrophoneStatus } from "#shared/messages/audio";
-import type { UpdateSnapshot } from "#shared/messages/update";
+import type { RunningBuild, UpdateSnapshot } from "#shared/messages/update";
 
 /**
  * Whether Luke may open the microphone, and the two things that can be done
@@ -36,6 +36,8 @@ export interface NotificationsControl {
  */
 export interface UpdateControl {
   update: UpdateSnapshot;
+  /** The running build, which a development build's row names instead of a release. */
+  build: RunningBuild;
   /** Asks the release manifest for the latest build, right now. */
   onCheck: () => Promise<void>;
   /** Restarts into the downloaded release. */

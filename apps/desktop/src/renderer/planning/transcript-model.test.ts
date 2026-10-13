@@ -48,7 +48,9 @@ function liveReport(voiceSessionId: string, words: string) {
     callPlanId: PLAN,
     callTranscript: {
       voiceSessionId,
-      lines: [{ rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words }],
+      lines: [
+        { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words, startMs: 0, endMs: 1_000 },
+      ],
     },
   };
 }

@@ -1,6 +1,11 @@
-import type { StoredMessageRecord, StoredTurnRecord } from "@sidecar/database/models/message-reads";
+import type {
+  SpokenAskRow,
+  StoredMessageRecord,
+  StoredTurnRecord,
+} from "@sidecar/database/models/message-reads";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -25,6 +30,8 @@ import {
   EVE_DELEGATION_INPUT,
   EVE_DELEGATION_TOOL,
   EVE_SKILL_TOOL,
+  PLANNER_DELEGATE_TOOL,
+  PLANNER_DELEGATION_TOOLS,
 } from "../hosted/brain-host/planning.js";
 import {
   LIST_CODING_AGENTS_TOOL,
@@ -33,6 +40,7 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../hosted/coding-agent-tools.js";
 import { END_CALL_TOOL } from "../hosted/end-call.js";
+import { MAC_COMMAND_STATUS, RUN_ON_MAC_TOOL } from "../hosted/mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -60,6 +68,7 @@ export const SUBAGENT_JOURNALS = 10;
 
 const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [RUN_IN_REPOSITORY_TOOL.name, PLAN_WORK_TOOL.REPOSITORY],
+  [RUN_ON_MAC_TOOL.name, PLAN_WORK_TOOL.MAC_COMMAND],
   [SEARCH_WEB_TOOL.name, PLAN_WORK_TOOL.SEARCH_WEB],
   [READ_WEB_PAGE_TOOL.name, PLAN_WORK_TOOL.READ_WEB_PAGE],
   [SHOW_CODE_TOOL.name, PLAN_WORK_TOOL.SHOW_CODE],
@@ -68,6 +77,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [QUEUE_QUESTION_TOOL.name, PLAN_WORK_TOOL.QUEUE_QUESTION],
   [WITHDRAW_QUESTION_TOOL.name, PLAN_WORK_TOOL.WITHDRAW_QUESTION],
   [EVE_DELEGATION_TOOL.WORKER, PLAN_WORK_TOOL.WORKER],
+  [PLANNER_DELEGATE_TOOL.name, PLAN_WORK_TOOL.WORKER],
   [EVE_DELEGATION_TOOL.TASK_WAIT, PLAN_WORK_TOOL.WORKER_WAIT],
   [EVE_DELEGATION_TOOL.TASK_CANCEL, PLAN_WORK_TOOL.WORKER_CANCEL],
   [LIST_CODING_AGENTS_TOOL.name, PLAN_WORK_TOOL.LIST_AGENTS],
@@ -75,21 +85,43 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
   [START_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.START_AGENT],
   [END_CALL_TOOL.name, PLAN_WORK_TOOL.END_CALL],
+  [SHOW_PAGE_TOOL_NAME, PLAN_WORK_TOOL.SHOW_PAGE],
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
+const isMacCommandInput = Schema.is(RUN_ON_MAC_TOOL.inputSchema);
 const isSearchInput = Schema.is(SEARCH_WEB_TOOL.inputSchema);
 const isPageInput = Schema.is(READ_WEB_PAGE_TOOL.inputSchema);
 const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWithdrawalInput = Schema.is(WITHDRAW_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
+const isDelegateInput = Schema.is(PLANNER_DELEGATE_TOOL.storedInputSchema);
+
+/** What a worker call carries, in the one shape the tab reads: the message the worker was handed, and the task a call sent more to. */
+type WorkerInput = { readonly message: string; readonly taskId?: string | null };
+
+/**
+ * A worker call's input in that shape, whichever name the call was made
+ * under: eve's own \`worker\` carries it as it is, and the planning model's
+ * \`delegate\` names the message its task, so every desktop reads the one
+ * field it always has.
+ */
+function workerInputOf(input: StoredToolPart["input"]): WorkerInput | undefined {
+  if (isWorkerInput(input)) return input;
+  if (!isDelegateInput(input)) return undefined;
+  return {
+    message: input.task,
+    ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
+  };
+}
 const isCancelInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.TASK_CANCEL]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
 const isText = Schema.is(Schema.String);
 const isSkillInput = Schema.is(EVE_SKILL_TOOL.INPUT);
+const isPageCall = Schema.is(Schema.Struct({ title: Schema.String }));
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -102,6 +134,23 @@ const isRepositoryOutput = Schema.is(
     }),
     Schema.Struct({
       status: Schema.Literal(REPOSITORY_SHELL_STATUS.NOT_RUN),
+      reason: Schema.String,
+    }),
+  ]),
+);
+
+/** What `run_on_mac` answers, as its call's output is journaled (`MacCommandAnswer`). */
+const isMacCommandOutput = Schema.is(
+  Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal(MAC_COMMAND_STATUS.RAN),
+      exitCode: Schema.NullOr(Schema.Number),
+      stdout: Schema.String,
+      stderr: Schema.String,
+      timedOut: Schema.Boolean,
+    }),
+    Schema.Struct({
+      status: Schema.Literal(MAC_COMMAND_STATUS.NOT_RUN),
       reason: Schema.String,
     }),
   ]),
@@ -122,11 +171,9 @@ function cut(text: string, max: number): string {
  * so the JSON the cut message makes stays within the bound.
  */
 function inputOf(tool: PlanWorkTool, part: StoredToolPart): string {
-  const { input } = part;
   const max = PLAN_WORK_BOUNDS.TEXT_CHARS;
-  if (tool !== PLAN_WORK_TOOL.WORKER || !isWorkerInput(input)) {
-    return cut(JSON.stringify(input ?? {}, null, 2), max);
-  }
+  const input = tool === PLAN_WORK_TOOL.WORKER ? workerInputOf(part.input) : undefined;
+  if (input === undefined) return cut(JSON.stringify(part.input ?? {}, null, 2), max);
   const { message } = input;
   const frame = JSON.stringify({ ...input, message: "" }, null, 2).length;
   const escapes = JSON.stringify(message).length - message.length - 2;
@@ -144,14 +191,16 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   const { input } = part;
   if (storedToolName(part) === EVE_SKILL_TOOL.NAME && isSkillInput(input)) return input.skill;
   if (tool === PLAN_WORK_TOOL.REPOSITORY && isRepositoryInput(input)) return input.command;
+  if (tool === PLAN_WORK_TOOL.MAC_COMMAND && isMacCommandInput(input)) return input.command;
   if (tool === PLAN_WORK_TOOL.SEARCH_WEB && isSearchInput(input)) return input.query;
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;
   if (tool === PLAN_WORK_TOOL.QUEUE_QUESTION && isQuestionInput(input)) return input.question;
   if (tool === PLAN_WORK_TOOL.WITHDRAW_QUESTION && isWithdrawalInput(input)) return input.question;
-  if (tool === PLAN_WORK_TOOL.WORKER && isWorkerInput(input)) return input.message;
+  if (tool === PLAN_WORK_TOOL.WORKER) return workerInputOf(input)?.message;
   if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
   if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
   if (tool === PLAN_WORK_TOOL.START_AGENT && isAgentStartInput(input)) return input.task;
+  if (tool === PLAN_WORK_TOOL.SHOW_PAGE && isPageCall(input)) return input.title;
   if (tool === PLAN_WORK_TOOL.SHOW_CODE && isCodeInput(input)) {
     if (input.startLine === undefined) return input.path;
     const end = input.endLine ?? input.startLine;
@@ -176,6 +225,14 @@ function outputOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined 
     if (output.status === REPOSITORY_SHELL_STATUS.NOT_RUN) return `Not run: ${output.reason}`;
     const text = [output.stdout, output.stderr].filter((stream) => stream !== "").join("\n");
     return output.exitCode === 0 ? text : `${text}\nExit code ${output.exitCode}`.trimStart();
+  }
+  if (tool === PLAN_WORK_TOOL.MAC_COMMAND && isMacCommandOutput(output)) {
+    if (output.status === MAC_COMMAND_STATUS.NOT_RUN) return output.reason;
+    const text = [output.stdout, output.stderr].filter((stream) => stream !== "").join("\n");
+    if (output.timedOut) return `${text}\nKilled at its timeout`.trimStart();
+    // Note that no exit code is a shell that never started, which its error says alone.
+    if (output.exitCode === null || output.exitCode === 0) return text;
+    return `${text}\nExit code ${output.exitCode}`.trimStart();
   }
   return JSON.stringify(output, null, 2);
 }
@@ -226,10 +283,23 @@ type ToolPart = Omit<Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>
 /** A part as the walk below draws it: words, reasoning, or a call with no session joined yet. */
 type WalkedPart = ToolPart | Exclude<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>;
 
+/**
+ * A `show_page` call as the tab reads it: its title and the page it
+ * revises, never the page's HTML, which only the frame drawing the page
+ * reads (`page-tool.ts`).
+ */
+function withoutPageHtml(part: StoredToolPart): StoredToolPart {
+  const { input } = part;
+  if (!(input instanceof Object) || !("html" in input)) return part;
+  const { html: _html, ...rest } = input;
+  return { ...part, input: rest };
+}
+
 /** One tool part as the tab draws it, a worker's state read off the turn's steps. */
-function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolean): ToolPart {
-  const name = storedToolName(part);
+function toolPartOf(stored: StoredToolPart, state: PlanWorkState, answered: boolean): ToolPart {
+  const name = storedToolName(stored);
   const tool = TOOL_OF_NAME.get(name) ?? PLAN_WORK_TOOL.OTHER;
+  const part = tool === PLAN_WORK_TOOL.SHOW_PAGE ? withoutPageHtml(stored) : stored;
   const called = callStateOf(part, state);
   const subject = subjectOf(tool, part);
   const task = taskOf(tool, part);
@@ -307,14 +377,14 @@ function workerCallsIn(journals: readonly (StoredUIMessage | undefined)[]): Stor
   return journals.flatMap((journal) =>
     (journal?.parts ?? [])
       .filter(isStoredToolPart)
-      .filter((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER),
+      .filter((part) => PLANNER_DELEGATION_TOOLS.has(storedToolName(part))),
   );
 }
 
 /** The task a worker call sent more work to, which its input names; nothing for a call that started one. */
 function sentTaskOf(part: StoredToolPart): string | undefined {
   const { input } = part;
-  return isWorkerInput(input) ? (input.taskId ?? undefined) : undefined;
+  return workerInputOf(input)?.taskId ?? undefined;
 }
 
 /** The task a worker call started, read off its receipt; nothing before it answered or where it started none. */
@@ -398,10 +468,23 @@ function sessionSpanOf(journals: readonly SubagentJournal[]) {
   };
 }
 
-/** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound; nothing where none stands. */
-function askedOf(asked: readonly string[]): Pick<PlanWorkTurn, "asked"> {
-  const ids = asked.filter((id) => id.length <= PLAN_WORK_BOUNDS.LINE_ID_CHARS);
-  return ids.length === 0 ? {} : { asked: ids.slice(-PLAN_WORK_BOUNDS.ASKED_LINES) };
+/** The spoken lines a turn took as its ask, as the wire holds them: the newest it carries, each id within its bound, and where each began where its row says; nothing where none stands. */
+function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "askedAt"> {
+  const rows = asked
+    .filter((row) => row.clientId.length <= PLAN_WORK_BOUNDS.LINE_ID_CHARS)
+    .slice(-PLAN_WORK_BOUNDS.ASKED_LINES);
+  if (rows.length === 0) return {};
+  const askedAt = rows.flatMap(({ voiceSessionId, fromMs }) =>
+    voiceSessionId === null ||
+    fromMs === null ||
+    voiceSessionId.length > PLAN_WORK_BOUNDS.LINE_ID_CHARS
+      ? []
+      : [{ voiceSessionId, fromMs }],
+  );
+  return {
+    asked: rows.map((row) => row.clientId),
+    ...(askedAt.length === 0 ? undefined : { askedAt }),
+  };
 }
 
 /**
@@ -417,7 +500,8 @@ function askedOf(asked: readonly string[]): Pick<PlanWorkTurn, "asked"> {
  * (`records`, by the call's id, `hosted/child-models.ts`). The turn carries
  * what it ran on and spent too, as its own row recorded them, and the
  * developer's spoken lines it took as its ask (`asked`, by the ids the
- * voice's ledger minted), the newest the wire carries, where it took any.
+ * voice's ledger minted, and `askedAt`, by where on its call each began),
+ * the newest the wire carries, where it took any.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
@@ -425,7 +509,7 @@ export function planWorkOf(
   subagents: ReadonlyMap<string, readonly SubagentJournal[]> = new Map(),
   titles: ReadonlyMap<string, string> = new Map(),
   records: ReadonlyMap<string, TurnRecord> = new Map(),
-  asked: readonly string[] = [],
+  asked: readonly SpokenAskRow[] = [],
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {

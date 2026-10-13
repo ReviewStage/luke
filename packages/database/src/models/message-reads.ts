@@ -36,7 +36,7 @@ import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
-import { conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
+import { asks, conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
@@ -791,16 +791,48 @@ export function turnsNamed(
 /** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
 const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
 
+/**
+ * Whether a spoken row of `messages` came into its turn with the ask that
+ * opened it rather than one made after the turn started: a follow-up the
+ * running turn was steered with (`brain-host/channel.ts`). The ask names
+ * the row by its client id or by the delegation it was attached to.
+ */
+const noSteeredAsk = () =>
+  notExists(
+    db
+      .select({ id: asks.id })
+      .from(asks)
+      .innerJoin(turns, eq(turns.id, asks.turnId))
+      .where(
+        and(
+          eq(asks.conversationId, messages.conversationId),
+          eq(asks.turnId, messages.turnId),
+          sql`${asks.clientId} in (${messages.clientId}, ${messages.metadata} ->> 'delegation_id')`,
+          gt(asks.createdAt, turns.startedAt),
+        ),
+      ),
+  );
+
 const findSpokenAskRows = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
     turnIds: Schema.Array(Schema.String),
   }),
-  Result: Schema.Struct({ turnId: Schema.String, clientId: Schema.String }),
+  Result: Schema.Struct({
+    turnId: Schema.String,
+    clientId: Schema.String,
+    voiceSessionId: Schema.NullOr(Schema.String),
+    fromMs: Schema.NullOr(Schema.Number),
+  }),
   execute: ({ userId, conversationId, turnIds }) =>
     db
-      .select({ turnId: messages.turnId, clientId: messages.clientId })
+      .select({
+        turnId: messages.turnId,
+        clientId: messages.clientId,
+        voiceSessionId: sql<string | null>`${messages.metadata}->>'voice_session_id'`,
+        fromMs: SPOKEN_FROM_MS,
+      })
       .from(messages)
       .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
       .where(
@@ -810,28 +842,43 @@ const findSpokenAskRows = SqlSchema.findAll({
           inArray(messages.turnId, [...turnIds]),
           eq(messages.role, MESSAGE_ROLE.USER),
           sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
+          noSteeredAsk(),
         ),
       )
       .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
 });
 
+/** One spoken line a turn took as its ask: the client id the voice's ledger minted for it, and, where its row says, the call it was said on and where on the call its words began. */
+export interface SpokenAskRow {
+  readonly clientId: string;
+  readonly voiceSessionId: string | null;
+  readonly fromMs: number | null;
+}
+
 /**
- * The developer's spoken lines each of the turns named took as its ask, by
- * the client id the voice's ledger minted for each line, in the order they
- * were said, which is where on the call each began rather than where the
- * conversation holds it, since a line taken into its turn moves there: the
- * rows a delegation's attach or the turn's receipt took into the turn. A
- * turn no spoken line opened names none.
+ * The developer's spoken lines each of the turns named took as its ask, in
+ * the order they were said, which is where on the call each began rather
+ * than where the conversation holds it, since a line taken into its turn
+ * moves there: the rows a delegation's attach or the turn's receipt took
+ * into the turn. A turn no spoken line opened names none. Note that a line
+ * of a follow-up the running turn was steered with is not its ask, because
+ * the ask is where the turn's work stands on the call, and a turn parked on
+ * its subagents for minutes takes every follow-up said meanwhile; its work
+ * stays under the lines that opened it, and the follow-ups stand below.
  */
 export function spokenAskRowsOf(
   userId: string,
   conversationId: string,
   turnIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, readonly string[]>, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<
+  ReadonlyMap<string, readonly SpokenAskRow[]>,
+  MessageReadFailure,
+  SqlClient.SqlClient
+> {
   if (turnIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
-    const asked = new Map<string, string[]>();
-    for (const row of rows) asked.set(row.turnId, [...(asked.get(row.turnId) ?? []), row.clientId]);
+    const asked = new Map<string, SpokenAskRow[]>();
+    for (const { turnId, ...row } of rows) asked.set(turnId, [...(asked.get(turnId) ?? []), row]);
     return asked;
   });
 }
