@@ -3,6 +3,10 @@ import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@sidecar/database/github-installation-vocabulary";
+import {
   type CodingAgent,
   createCodingAgent,
   listPublishedCodingAgents,
@@ -10,6 +14,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { listWorkspaces } from "@sidecar/database/models/workspace-store";
 import { account, user } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { getTestDB } from "@sidecar/database/testing";
 import {
   CHECK_SUMMARY,
@@ -18,13 +23,12 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { GITHUB_PROVIDER_ID } from "../server/github/github-app";
 import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { syncInstallations } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   type FakeGitHub,
@@ -340,12 +344,28 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         const installationId = 900_000 + Math.floor(Math.random() * 90_000);
         const login = `acme-${randomUUID()}`;
         const github = githubReaching([{ id: installationId, login, repositories: [] }]);
-        yield* syncInstallations(owner, yield* fakeWorkspaceSeams).pipe(
-          Effect.provide(github.layer),
-        );
+        const { id: workspaceId } = yield* (yield* fakeWorkspaceSeams).createOrganization({
+          name: "Acme",
+          slug: login,
+          userId: owner,
+          metadata: {},
+        });
+        const now = yield* DateTime.nowAsDate;
+        yield* db.insert(githubInstallation).values({
+          organizationId: workspaceId,
+          installationId,
+          accountId: installationId + 1,
+          accountLogin: login,
+          accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+          status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+          createdAt: now,
+          updatedAt: now,
+        });
         const names = () =>
           Effect.map(listWorkspaces(owner), (workspaces) =>
-            workspaces.map(({ name, active }) => ({ name, active })),
+            workspaces
+              .filter((workspace) => workspace.id === workspaceId)
+              .map(({ github: connected }) => connected),
           );
         const deliver = (action: string) =>
           answer(
@@ -353,7 +373,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
             SECRET,
             delivery("installation", { action, installation: { id: installationId } }),
           );
-        assert.deepEqual(yield* names(), [{ name: login, active: true }]);
+        assert.deepEqual(yield* names(), [{ login, active: true }]);
 
         yield* deliver("suspend");
         const suspended = yield* names();
@@ -362,9 +382,9 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         yield* deliver("deleted");
         const deleted = yield* names();
 
-        assert.deepEqual(suspended, [{ name: login, active: false }]);
-        assert.deepEqual(unsuspended, [{ name: login, active: true }]);
-        assert.deepEqual(deleted, [{ name: login, active: false }]);
+        assert.deepEqual(suspended, [{ login, active: false }]);
+        assert.deepEqual(unsuspended, [{ login, active: true }]);
+        assert.deepEqual(deleted, [{ login, active: false }]);
       }),
   );
 

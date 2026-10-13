@@ -25,6 +25,14 @@ export const GITHUB_INSTALL_STATUS = {
   NOT_FOUND: "not-found",
   /** The deployment has no App configured, or GitHub could not be asked. */
   UNAVAILABLE: "unavailable",
+  /** The installation, confirmed on the account's own GitHub token, is now the workspace's connected GitHub organization. */
+  CONNECTED: "connected",
+  /** The installation already stands for another workspace; nothing was linked. */
+  ALREADY_CONNECTED: "already-connected",
+  /** The connect was started too long ago, was already used, or is no longer the account's to finish; nothing was linked. */
+  EXPIRED: "expired",
+  /** The account has no GitHub token the service can read, so the installation could not be confirmed; nothing was linked. */
+  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
 } as const;
 
 export type GitHubInstallStatus =

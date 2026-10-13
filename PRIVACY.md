@@ -292,18 +292,16 @@ or run appears on it.
 
 Every account also has a personal workspace on our service, a record named
 with your name and holding you as its owner; it goes when you delete your
-account. When your GitHub account reaches an installation of the Luke
-GitHub App that has no workspace yet, the service makes one for it, named for
-the GitHub account it is installed on and holding you as its owner, and keeps
-beside it GitHub's ids for the installation and that account, its login,
-whether it is a user or an organization, and whether the installation is
-active, suspended, or removed. An installation another Luke account already
-has a workspace for is offered to you to join and never joined for you;
-before you join one, the service asks GitHub, on your own GitHub
-authorization, whether you still reach that installation. Every member of a
-workspace other than a personal one sees every other member's name, email
-address, and role in it, and an owner or an administrator of it can remove
-a member.
+account. A workspace you create is a record
+named as you name it, holding you as its owner; its members see each other in
+it, and an owner or an administrator of it can remove a member. When an owner or admin connects a GitHub organization to a workspace, the
+service keeps beside the workspace GitHub's ids for that installation and the
+account it is on, its login, whether it is a user or an organization, and
+whether the installation is active, suspended, or removed; to confirm the
+installation is one your GitHub account can see, it reads your installations
+on your own GitHub token once, and keeps nothing else of that read. While a
+connect is under way it keeps, for at most an hour, a one-way digest of the
+connect link's random code beside your account and the workspace.
 
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his

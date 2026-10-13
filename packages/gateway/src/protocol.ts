@@ -56,8 +56,12 @@ export const GATEWAY_METHOD = {
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
-  /** The workspace of a GitHub App installation the account reaches joined on the service; the view's workspaces and plans are read again. */
-  WORKSPACES_JOIN: "workspaces.join",
+  /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
+  WORKSPACES_CREATE: "workspaces.create",
+  /** A GitHub organization's connection to a workspace begun on the service: the Luke GitHub App's install address, for the caller to open. */
+  WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
+  /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
+  WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
