@@ -9,6 +9,7 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
+import { TerminalIcon } from "@sidecar/panel";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, AppSettingsView } from "@sidecar/settings/wire";
@@ -17,6 +18,7 @@ import { Effect } from "effect";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -292,6 +294,14 @@ test("Coding agents holds the default model, the API keys, and notifications as 
       (heading) => heading.textContent,
     );
   assert.ok(!pageList(container).includes("API keys"), "API keys is no page of its own");
+  const codingAgents = [...sidebar(container).querySelectorAll("li > button")].find(
+    (button) => button.textContent === "Coding agents",
+  );
+  assert.equal(
+    codingAgents?.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(TerminalIcon)),
+    "the page wears the terminal it always had",
+  );
   assert.ok(!headings().includes("Notifications"));
   assert.ok(!headings().includes("Feedback"), "feedback is the account menu's and Help's");
 

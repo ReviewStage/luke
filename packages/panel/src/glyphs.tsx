@@ -509,9 +509,20 @@ export function GearIcon(): React.JSX.Element {
   );
 }
 
+/** A terminal's prompt: the Settings page about the coding agents that run in one. Outline, like the other pages' glyphs. */
+export function TerminalIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.4" />
+      <path d="m7 9.2 3.2 2.8L7 14.8" />
+      <path d="M12.6 14.8h4.2" />
+    </Glyph>
+  );
+}
+
 /**
  * Two steps and the path between them, lucide's workflow: the coding agents
- * as a group, their settings page, and an agent whose harness is not known.
+ * as a group, and an agent whose harness is not known.
  * Note that it is no terminal, because a terminal stands for a shell
  * command alone, and that a transcript's row about the agents draws lucide's
  * own `WorkflowIcon`, the same paths. Outline, like the other pages' glyphs.
