@@ -82,7 +82,8 @@ conversation and Luke reads them while the plan is open, during a call within
 a moment of each step, the newest twenty first and older ones as you scroll.
 All of this is held in Luke's memory, never on disk, goes when you leave the
 plan or quit Luke, and is left out of the screen recording (see "Screen
-recordings"). Your default model, effort, and
+recordings"); the planning turns are never sent to Luke's voice window or his
+call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
 with.
