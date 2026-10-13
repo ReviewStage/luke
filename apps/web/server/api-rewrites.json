@@ -184,6 +184,10 @@
     "dest": "/api/default.js?route=inbox"
   },
   {
+    "src": "/api/mac-commands",
+    "dest": "/api/default.js?route=mac-commands"
+  },
+  {
     "src": "/api/maintenance/provider-keys-rewrap",
     "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
   },

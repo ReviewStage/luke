@@ -722,6 +722,13 @@
       "when": 1791895002008,
       "tag": "20261013123642_dead_tables_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1791900260861,
+      "tag": "20261013140420_mac_command",
+      "breakpoints": true
     }
   ]
 }
