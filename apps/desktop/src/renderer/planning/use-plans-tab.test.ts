@@ -55,6 +55,7 @@ const PLAN: Plan = {
 const OPEN: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.READY,
+  workspaces: [],
   activePlanId: PLAN.id,
   document: { status: PLANNING_READ.READY, plan: PLAN },
 };
