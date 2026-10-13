@@ -47,7 +47,7 @@ test("a refusal is said in the list's words and asked again next time; a read th
     ),
   );
   assert.deepEqual(await source(), {
-    unread: "Sign in with GitHub again to read this repository's skills.",
+    unread: "Connect GitHub in Settings to read this repository's skills.",
   });
   assert.deepEqual(await source(), { unread: "GitHub could not be read just now." });
   assert.deepEqual(await source(), { unread: "GitHub could not be read just now." });

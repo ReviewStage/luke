@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { CODING_AGENT_BOUNDS, turnRecordFields } from "./coding-agent-wire.js";
+import { githubConnectionSchema } from "./github-connection-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -396,6 +397,8 @@ export const planningViewSchema = EffectSchema.Struct({
   workspaces: EffectSchema.Array(workspaceSchema),
   /** The workspaces of GitHub App installations the account reaches and may join, as the last list read answered; none before the first lands. */
   available: EffectSchema.Array(availableWorkspaceSchema),
+  /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
+  github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -695,6 +698,8 @@ export const WORKSPACE_CALL_FAILURE = {
   NOT_PERMITTED: "not-permitted",
   /** The workspace or the member is not one the service shows the account: for a join, an installation GitHub no longer shows it. */
   NOT_FOUND: PLAN_CALL_FAILURE.NOT_FOUND,
+  /** The account has no GitHub connected, or its GitHub must be connected again, before the service can ask GitHub for it: a join. */
+  GITHUB_SIGN_IN_REQUIRED: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
 } as const;
 
 export type WorkspaceCallFailure =
@@ -765,3 +770,11 @@ export const planningWorkspaceLeaveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningWorkspaceLeaveAnswer = typeof planningWorkspaceLeaveAnswerSchema.Type;
+
+/** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
+export const planningGitHubPageAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ url: EffectSchema.String }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningGitHubPageAnswer = typeof planningGitHubPageAnswerSchema.Type;

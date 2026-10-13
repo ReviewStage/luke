@@ -1,4 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
@@ -11,7 +12,7 @@ import {
 import type { AvailableWorkspace, Workspace } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
+import { ACT_KIND, type ActResultFor, GITHUB_CONNECT_REFUSAL } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
@@ -41,10 +42,12 @@ import {
   archivedPlansNote,
   archivePlansFailedNote,
   type CallStatus,
+  CONNECT_GITHUB_LABEL,
   callStatus,
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
+  INSTALL_NEEDS_GITHUB_NOTE,
   MARK_FAILED_NOTES,
   MARK_UNDOS,
   MICROPHONE_PRESS,
@@ -181,6 +184,12 @@ export interface PlansControl {
   onLeftWorkspace: () => void;
   /** Opens the Luke GitHub App's installation page in the browser, read as the repository chip reads it. */
   onInstallApp: () => void;
+  /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
+  github: GitHubConnection | undefined;
+  /** Opens the page that connects the account's GitHub in the browser. */
+  onConnectGitHub: () => void;
+  /** Opens the page that disconnects the account's GitHub in the browser. */
+  onDisconnectGitHub: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -1011,15 +1020,36 @@ export function usePlansTab(input: {
       return answer;
     });
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A fixture's GitHub is connected nowhere. The page is the service's,
+  // opened by main, and the connection arrives on the view once the panel
+  // comes forward again; one that did not open says why in a toast.
+  const connectGitHub = () => {
+    if (fixture !== undefined) return;
+    act(ACT_KIND.GITHUB_CONNECT).catch((refused: Error) =>
+      toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    );
+  };
+  // A refusal for GitHub not connected offers the connect itself, since the
+  // menu or the press that asked has closed.
+  const toastConnectGitHub = (words: string) =>
+    toast({
+      words,
+      tone: TOAST_TONE.FAILED,
+      action: { label: CONNECT_GITHUB_LABEL, onPress: connectGitHub },
+    });
   // The installation page is the one the repository chip offers, read with
   // the account's repositories. Note that the page's address is the
   // deployment's own App, which only the service names, so a read that
   // fails opens the one an earlier read answered, and says why where none did.
   const installApp = () => {
-    readRepositories().then(() => {
+    readRepositories().then((answer) => {
       const url = installationUrl.current;
       if (url !== undefined) {
         openGitHub(url);
+        return;
+      }
+      if ("failure" in answer && answer.failure === PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED) {
+        toastConnectGitHub(INSTALL_NEEDS_GITHUB_NOTE);
         return;
       }
       toast({ words: INSTALL_UNREACHED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
@@ -1032,8 +1062,13 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return;
     act(ACT_KIND.WORKSPACE_JOIN, { installationId }).then(
       (joined) => workspace.choose(joined.id),
-      (refused: Error) =>
-        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+      (refused: Error) => {
+        if (refused.message === GITHUB_CONNECT_REFUSAL) {
+          toastConnectGitHub(refused.message);
+          return;
+        }
+        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      },
     );
   };
 
@@ -1202,6 +1237,11 @@ export function usePlansTab(input: {
       if (personal !== undefined) workspace.choose(personal.id);
     },
     onInstallApp: installApp,
+    github: viewed.github,
+    onConnectGitHub: connectGitHub,
+    onDisconnectGitHub: () => {
+      if (fixture === undefined) tell(ACT_KIND.GITHUB_DISCONNECT);
+    },
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -1335,6 +1375,7 @@ export function usePlansTab(input: {
       recent: recentRepositories(planning.plans),
       read: readRepositories,
       openGitHub,
+      connectGitHub,
       pictures: fixture === undefined,
     },
     repositoryMenu,

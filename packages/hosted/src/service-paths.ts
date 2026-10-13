@@ -97,6 +97,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_INSTALLED: "/api/github/installed",
   /**
+   * A page that links the account's GitHub, bound to the account for ten
+   * minutes and used once (POST); `github-connection-wire.ts` declares the
+   * answer.
+   */
+  GITHUB_CONNECT: "/api/github/connect",
+  /** Whether the account has GitHub connected, and its login (GET); no token is in the answer. */
+  GITHUB_CONNECTION: "/api/github/connection",
+  /**
    * The workspaces the account is a member of, its personal one first and
    * the rest by name, and the ones of a GitHub App installation it may join
    * (GET); a read makes the personal one and one per installation the

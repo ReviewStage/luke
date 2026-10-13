@@ -57,6 +57,7 @@ function mount(
 ) {
   const started: [string, string | null][] = [];
   const opened: string[] = [];
+  let connects = 0;
   let newPlan: NewPlan = {
     presses: 0,
     preset: undefined,
@@ -70,6 +71,9 @@ function mount(
     recent: [],
     read: () => Promise.resolve(LISTED),
     openGitHub: (url) => opened.push(url),
+    connectGitHub: () => {
+      connects += 1;
+    },
     pictures: true,
     ...chooser,
   };
@@ -90,6 +94,7 @@ function mount(
     container,
     started,
     opened,
+    connects: () => connects,
     find,
     nameField: () => find<HTMLTextAreaElement>("textarea[aria-label='Plan name']"),
     startButton: () => find<HTMLButtonElement>("button[aria-label='Start plan']"),
@@ -388,16 +393,14 @@ test("a list the host could not read says why in the menu and offers to try agai
     {
       read: () => {
         reads += 1;
-        return Promise.resolve(
-          reads === 1 ? { failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED } : LISTED,
-        );
+        return Promise.resolve(reads === 1 ? { failure: PLAN_CALL_FAILURE.UNANSWERED } : LISTED);
       },
     },
   );
   await settle();
 
   act(() => page.chip().click());
-  assert.match(page.find("[role=alert]").textContent ?? "", /Sign in with GitHub/u);
+  assert.match(page.find("[role=alert]").textContent ?? "", /could not be reached/u);
   assert.deepEqual(page.rows(), []);
   const again = [...page.container.querySelectorAll("button")].find(
     (button) => button.textContent === "Retry",
@@ -415,6 +418,31 @@ test("a list the host could not read says why in the menu and offers to try agai
     window.dispatchEvent(new Event("focus"));
   });
   assert.equal(reads, 3);
+});
+
+test("a list refused for GitHub not connected points to Settings, and the menu's Connect GitHub opens the connect page", async () => {
+  const page = mount(
+    {},
+    { read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }) },
+  );
+  await settle();
+
+  act(() => page.chip().click());
+  assert.equal(
+    page.find("[role=alert]").textContent,
+    "Connect GitHub in Settings to use a repository with Luke.",
+  );
+  const buttons = () => [...page.container.querySelectorAll("button")];
+  assert.equal(
+    buttons().find((button) => button.textContent === "Retry"),
+    undefined,
+  );
+  const connect = buttons().find((button) => button.textContent === "Connect GitHub");
+  assert.ok(connect, "the menu offers to connect GitHub");
+  act(() => connect.click());
+
+  assert.equal(page.connects(), 1);
+  assert.equal(page.menu(), null);
 });
 
 test("Escape closes the menu, goes no further than it, and hands focus back to the chip", async () => {

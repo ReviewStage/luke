@@ -183,6 +183,7 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   listStatus: PLANNING_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
   available: FIXTURE_AVAILABLE,
+  github: { connected: true, login: "ada" },
   document: { status: PLANNING_READ.IDLE },
 };
 

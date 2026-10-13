@@ -154,7 +154,7 @@ it.effect(
 );
 
 it.effect(
-  "tells a refusal the account's role earned, and one of a thing not shown it, apart from no answer at all",
+  "tells a refusal the account's role earned, one of a thing not shown it, and one of GitHub not connected apart from no answer at all",
   () =>
     Effect.gen(function* () {
       const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
@@ -167,6 +167,9 @@ it.effect(
         });
       const notPermitted = every(refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN));
       const notFound = every(refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND));
+      const signInRequired = every(
+        refusal(HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED, HTTP_STATUS.FORBIDDEN),
+      );
       const serverError = every({ answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR });
       const elsewhere = fakeCloudApi({
         "POST /api/workspaces/join": {
@@ -195,6 +198,13 @@ it.effect(
       const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
       assert.deepEqual(yield* all(notPermitted.layer), [refused, refused, refused, refused]);
       assert.deepEqual(yield* all(notFound.layer), [missed, missed, missed, missed]);
+      const disconnected = { ok: false, failure: WORKSPACE_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED };
+      assert.deepEqual(yield* all(signInRequired.layer), [
+        disconnected,
+        disconnected,
+        disconnected,
+        disconnected,
+      ]);
       assert.deepEqual(yield* all(serverError.layer), [
         unanswered,
         unanswered,

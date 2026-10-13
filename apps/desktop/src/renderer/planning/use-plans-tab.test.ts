@@ -28,7 +28,12 @@ import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
+import {
+  ACT_KIND,
+  type ActKind,
+  type ActResultFor,
+  GITHUB_CONNECT_REFUSAL,
+} from "#shared/messages/acts";
 import {
   type AppInboxPlan,
   type AppInboxPlanHolding,
@@ -768,7 +773,7 @@ test("a plan's repository is set through the host, and a refusal is answered as 
 
   assert.match(
     (await tab.control().onSetRepository(PLAN.id, "acme/relay")) ?? "",
-    /Sign in with GitHub/u,
+    /Connect GitHub in Settings/u,
   );
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SET_REPOSITORY);
 });
@@ -1440,6 +1445,62 @@ test("a join the service refuses says why in a toast and keeps the workspace lis
 
   assert.equal(toast(), "Could not join that workspace on this system.");
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a join refused for GitHub not connected points to Settings in a toast whose Connect GitHub asks for the connect page", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
+    {
+      [ACT_KIND.WORKSPACE_JOIN]: () => Promise.reject(new Error(GITHUB_CONNECT_REFUSAL)),
+      [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined),
+    },
+  );
+
+  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
+  await settle();
+  const said = toast();
+  const connect = newestToastAction();
+  act(() => connect?.click());
+  await settle();
+
+  assert.match(said ?? "", /^Connect GitHub in Settings to join this workspace\./u);
+  assert.equal(connect?.textContent, "Connect GitHub");
+  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_CONNECT);
+});
+
+test("Install Luke on GitHub refused for GitHub not connected points to Settings in a toast whose Connect GitHub asks for the connect page", async () => {
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
+      [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined),
+    },
+  );
+
+  act(() => tab.control().onInstallApp());
+  await settle();
+  const said = toast();
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.match(said ?? "", /^Connect GitHub in Settings to install Luke on GitHub\./u);
+  assert.equal(tab.told.includes(ACT_KIND.GITHUB_OPEN), false);
+  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_CONNECT);
+});
+
+test("Settings' GitHub row is the connection main's view holds, and its Connect and Disconnect ask main for their pages", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, github: { connected: true, login: "ada" } } },
+    { [ACT_KIND.GITHUB_CONNECT]: () => Promise.resolve(undefined) },
+  );
+
+  act(() => tab.control().onConnectGitHub());
+  act(() => tab.control().onDisconnectGitHub());
+  await settle();
+
+  assert.deepEqual(tab.control().github, { connected: true, login: "ada" });
+  assert.deepEqual(tab.told.slice(-2), [ACT_KIND.GITHUB_CONNECT, ACT_KIND.GITHUB_DISCONNECT]);
 });
 
 test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {

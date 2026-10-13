@@ -91,6 +91,7 @@ import {
   type PlanningEditParams,
   type PlanningFileAnswer,
   type PlanningFileParams,
+  type PlanningGitHubPageAnswer,
   type PlanningPageAnswer,
   type PlanningPageParams,
   type PlanningPinParams,
@@ -120,6 +121,7 @@ import {
   type PlanningWorkspaceMembersParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
+  planningGitHubPageAnswerSchema,
   planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
@@ -271,6 +273,10 @@ export interface HostOperator {
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
+  /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
+  githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+  /** The page that disconnects the account's GitHub; its address, or why there is none. */
+  githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
   /** The workspace of a GitHub App installation joined; the workspace, or why it was not. */
   workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
   /** One workspace's members; or why there are none. */
@@ -393,6 +399,17 @@ function workspaceAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Enc
 }
 
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
+
+/** A GitHub page's answer as its schema reads it; unanswered where the host refused or the shape is not read. */
+function githubPage(answer: GatewayCallResult): PlanningGitHubPageAnswer {
+  return (
+    (answer.ok
+      ? Result.getOrUndefined(
+          readEither(planningGitHubPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+        )
+      : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+  );
+}
 
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
@@ -709,6 +726,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
+    githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
+    githubDisconnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_DISCONNECT), githubPage),
     workspaceJoin: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_JOIN, { installationId: params.installationId }),

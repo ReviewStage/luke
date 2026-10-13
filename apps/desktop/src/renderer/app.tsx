@@ -503,6 +503,11 @@ export function App(): React.JSX.Element {
               onLeft: plans.onLeftWorkspace,
               onInstall: plans.onInstallApp,
             },
+            github: {
+              connection: plans.github,
+              onConnect: plans.onConnectGitHub,
+              onDisconnect: plans.onDisconnectGitHub,
+            },
           }}
         />
       </div>

@@ -45,6 +45,7 @@ const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as 
 const WORKSPACE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
   [HOSTED_API_ERROR.NOT_FOUND]: WORKSPACE_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: WORKSPACE_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
 } as const;
 
 /** The failure a refusal the service named answers with, where it is one of `named`; unanswered otherwise. */
@@ -64,7 +65,7 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
-/** One call whose answer the schema reads, a refusal the service named not-permitted or not-found told apart from every other end. */
+/** One call whose answer the schema reads, a refusal the service named not-permitted, not-found, or GitHub-sign-in-required told apart from every other end. */
 function refusable<Answer, Encoded>(
   call: AccountCallEffects,
   request: Parameters<AccountCallEffects["send"]>[0],

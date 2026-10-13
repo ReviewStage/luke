@@ -112,6 +112,8 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { url: "https://example.com/docs" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.GITHUB_CONNECT]: { kind: ACT_KIND.GITHUB_CONNECT },
+  [ACT_KIND.GITHUB_DISCONNECT]: { kind: ACT_KIND.GITHUB_DISCONNECT },
   [ACT_KIND.WORKSPACE_JOIN]: {
     kind: ACT_KIND.WORKSPACE_JOIN,
     payload: { installationId: 4_200_017 },

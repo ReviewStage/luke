@@ -213,6 +213,10 @@ export const ACT_KIND = {
   GITHUB_OPEN: "github.open",
   /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The page that disconnects the account's GitHub, opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_DISCONNECT: "github.disconnect",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -429,6 +433,13 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
+
+/**
+ * What an act that needs the account's GitHub is refused with where none is
+ * connected, or the one connected must be connected again: a join. A window
+ * that draws it offers Connect GitHub beside it.
+ */
+export const GITHUB_CONNECT_REFUSAL = "Connect GitHub in Settings to join this workspace." as const;
 
 /**
  * What a join is refused with where the service does not show the account
@@ -693,6 +704,8 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not open that link on this system.",
   },
+  [ACT_KIND.GITHUB_CONNECT]: press("Could not open GitHub's connection page on this system."),
+  [ACT_KIND.GITHUB_DISCONNECT]: press("Could not open GitHub's connection page on this system."),
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.WORKSPACE_JOIN]: {
     payload: actSchema(planningWorkspaceJoinParamsSchema),

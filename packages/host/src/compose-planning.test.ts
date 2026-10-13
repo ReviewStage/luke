@@ -8,6 +8,7 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import {
+  GITHUB_CONNECTION_FAILURE,
   type GitHubRepositoriesAnswer,
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
@@ -19,6 +20,7 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PageVersion } from "@sidecar/hosted/page-wire";
 import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
 import {
@@ -164,6 +166,10 @@ interface FakeService extends PlanningClient {
   members: Record<string, WorkspaceMember[]>;
   /** Whether a removal or a leave is refused as the account's role not allowing it. */
   notPermitted: boolean;
+  /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
+  connection: GitHubConnection | undefined;
+  /** The single-use pages the service hands out to connect GitHub, the newest last. */
+  connectPages: string[];
 }
 
 const PERSONAL: Workspace = {
@@ -267,6 +273,24 @@ function fakeService(plans: Plan[]): FakeService {
     workspacesGate: Effect.void,
     members: {},
     notPermitted: false,
+    connection: { connected: false, login: null },
+    connectPages: [],
+    // Each connect is a fresh page bound to the account, as the service mints one.
+    github: {
+      status: () =>
+        Effect.sync(() =>
+          service.connection === undefined
+            ? { ok: false as const, failure: GITHUB_CONNECTION_FAILURE.UNANSWERED }
+            : { ok: true as const, answer: service.connection },
+        ),
+      connect: () =>
+        Effect.sync(() => {
+          const url = `https://tryluke.dev/connect-github.html?intent=intent-${service.connectPages.length + 1}`;
+          service.connectPages.push(url);
+          return { ok: true as const, answer: { url } };
+        }),
+      disconnectUrl: () => "https://tryluke.dev/connect-github.html?disconnect=1",
+    },
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
       list: () =>
@@ -1482,6 +1506,77 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
       assert.equal(workspaceReads(), 3);
     }),
+);
+
+it.effect(
+  "the view carries whether GitHub is connected, read with the workspaces, and a read the service did not answer keeps it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.connection = { connected: true, login: "ada" };
+      const { call, last, planning } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+
+      service.connection = undefined;
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+      assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+
+      yield* planning.reset;
+      assert.equal(last()?.github, undefined);
+    }),
+);
+
+it.effect(
+  "connecting GitHub answers the service's page, and the panel coming forward then reads the connection again at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(last()?.github, { connected: false, login: null });
+
+      const page = yield* call(GATEWAY_METHOD.GITHUB_CONNECT);
+      service.connection = { connected: true, login: "ada" };
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+
+      assert.deepEqual(page, { url: service.connectPages[0] });
+      assert.deepEqual(last()?.github, { connected: true, login: "ada" });
+    }),
+);
+
+it.effect(
+  "disconnecting GitHub answers the page that disconnects it, and the panel coming forward then reads the connection again at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.connection = { connected: true, login: "ada" };
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      const page = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+      service.connection = { connected: false, login: null };
+      yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
+
+      assert.deepEqual(page, { url: "https://tryluke.dev/connect-github.html?disconnect=1" });
+      assert.deepEqual(last()?.github, { connected: false, login: null });
+    }),
+);
+
+it.effect("behind a closed account gate a GitHub page is never asked for", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call } = yield* subject(service, { signedIn: false });
+
+    const connect = yield* call(GATEWAY_METHOD.GITHUB_CONNECT);
+    const disconnect = yield* call(GATEWAY_METHOD.GITHUB_DISCONNECT);
+
+    assert.deepEqual(connect, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(disconnect, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(service.connectPages, []);
+  }),
 );
 
 it.effect("behind a closed account gate the panel coming forward reads no workspaces", () =>

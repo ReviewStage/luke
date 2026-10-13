@@ -5,6 +5,7 @@ import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
   type CodeLines,
   PLAN_CALL_FAILURE,
+  type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
   type PlanningWorkspaceJoinAnswer,
   WORKSPACE_CALL_FAILURE,
@@ -17,6 +18,7 @@ import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   COLOURED_CODE_MAX_CHARS,
+  GITHUB_CONNECT_REFUSAL,
   WORKSPACE_JOIN_NOT_FOUND_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "#shared/messages/acts";
@@ -45,6 +47,8 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
+const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=intent-1";
+const DISCONNECT_PAGE = "https://tryluke.dev/connect-github.html?disconnect=1";
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -64,8 +68,13 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  /** Whether the host refuses a workspace call: a write as the account's role not allowing it, a join as not found. */
-  const host = { notPermitted: false };
+  /**
+   * Whether the host refuses a workspace call: a write as the account's role
+   * not allowing it, a join as not found; and whether the account's GitHub
+   * is not connected, which a join is refused for and a connect page is not
+   * named under.
+   */
+  const host = { notPermitted: false, githubDisconnected: false, githubUnanswered: false };
   const refusal = () =>
     host.notPermitted
       ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
@@ -163,9 +172,24 @@ function fixture() {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
+      githubConnect: () =>
+        Effect.sync((): PlanningGitHubPageAnswer => {
+          asked.push("github-connect");
+          return host.githubUnanswered
+            ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+            : { url: CONNECT_PAGE };
+        }),
+      githubDisconnect: () =>
+        Effect.sync((): PlanningGitHubPageAnswer => {
+          asked.push("github-disconnect");
+          return { url: DISCONNECT_PAGE };
+        }),
       workspaceJoin: (params) =>
         Effect.sync((): PlanningWorkspaceJoinAnswer => {
           asked.push(`join:${params.installationId}`);
+          if (host.githubDisconnected) {
+            return { failure: WORKSPACE_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED } as const;
+          }
           if (params.installationId === RELAY.installationId) return { workspace: ACME };
           // The service answers a join it would not grant as not found.
           return host.notPermitted
@@ -584,6 +608,48 @@ it.effect(
         reason: ACT[ACT_KIND.PLANNING_COLOUR_CODE].refusal,
       });
       assert.notEqual(tooLong.status, ACT_OUTCOME_STATUS.DONE);
+    }),
+);
+
+it.effect(
+  "Connect GitHub opens the page the host named in the browser, Disconnect its own, and neither from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const connected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
+      const disconnected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL);
+      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, VOICE);
+      f.host.githubUnanswered = true;
+      const unanswered = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
+
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(unanswered, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
+      });
+      assert.deepEqual(f.opened, [CONNECT_PAGE, DISCONNECT_PAGE]);
+    }),
+);
+
+it.effect(
+  "a join refused for GitHub not connected is refused in words that point to Settings",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.host.githubDisconnected = true;
+
+      const joined = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: RELAY.installationId } },
+        PANEL,
+      );
+
+      assert.deepEqual(joined, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: GITHUB_CONNECT_REFUSAL,
+      });
     }),
 );
 

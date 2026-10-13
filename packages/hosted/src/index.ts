@@ -15,6 +15,13 @@ export {
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
 export {
+  GITHUB_CONNECTION_FAILURE,
+  type GitHubConnectionFailure,
+  type GitHubConnectionResult,
+  HostedGitHubConnectionClient,
+  type HostedGitHubConnectionClientOptions,
+} from "./github-connection-client.js";
+export {
   GITHUB_INSTALL_LANDING,
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
