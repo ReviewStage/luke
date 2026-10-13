@@ -40,6 +40,7 @@ import { type PinnedTab, SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
+import "../file-tree/index";
 
 const PHOTO = "https://avatars.githubusercontent.com/u/1?v=4";
 
@@ -1214,6 +1215,25 @@ test("on the open plan, a pinned agent its plan no longer holds stands dimmed wi
   act(() => rows[0]?.click());
   act(() => rows[1]?.click());
   assert.deepEqual(opened, [held]);
+});
+
+test("a pinned file wears its type's icon, as the file tree draws the file", async () => {
+  const billing = listedPlan("Billing");
+  const container = mount(DEAN, {
+    plans: withPins(
+      [{ plan: billing.id, tab: { file: "src/team/roles.ts" }, label: "roles.ts", at: 1 }],
+      { plans: [billing] },
+    ),
+  });
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+
+  const glyph = container.querySelector("nav[aria-label='Pinned'] .sidebar-pinned-tab-glyph");
+  assert.equal(
+    glyph?.querySelector(".file-type-icon")?.getAttribute("data-file-type"),
+    "typescript",
+  );
 });
 
 test("a pinned agent wears its harness's mark, never the generic terminal: on the open plan as its tab wears it, where it stands included, and on another plan the mark of the model it was pinned on", () => {

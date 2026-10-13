@@ -374,6 +374,13 @@ button.plan-unit-byline:focus-visible {
   font-size: 11.5px;
 }
 
+/* The file's type icon leads its path, at the size the file tree's rows draw it. */
+.code-card-header > svg:first-child {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
 /* The path is cut from its left, so the file's own name stays in sight;
    the `bdi` inside keeps the path itself reading left to right. On a card
    it is also the button that opens the file, drawn as the words alone. */

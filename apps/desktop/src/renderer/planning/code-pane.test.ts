@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, onTestFinished, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import "../file-tree/index";
 import { CodePane } from "./code-pane";
 import { type CodeFeedCallSource, rangeLabel } from "./code-pane-model";
 
@@ -369,6 +370,24 @@ test("a card's Open file and its path each open the whole file, its lines lit, a
     { ref, commit },
     { ref, commit: undefined },
   ]);
+});
+
+test("a card's header leads with its file's type icon, as the file tree draws the file", async () => {
+  const { container, draw } = mounted();
+  draw([
+    showing("a", 2_000, windowOf("src/invite.ts", 11, 12)),
+    showing("b", 3_000, windowOf("migrations/0042_roles.sql", 1, 2)),
+  ]);
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+
+  const icons = [...container.querySelectorAll(".code-card-header")].map((header) =>
+    header.firstElementChild?.matches(".file-type-icon")
+      ? header.firstElementChild.getAttribute("data-file-type")
+      : undefined,
+  );
+  assert.deepEqual(icons, ["typescript", "database"]);
 });
 
 test("the heading names one line, a range, or nothing for a whole file", () => {

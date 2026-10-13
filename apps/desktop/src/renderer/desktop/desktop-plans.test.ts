@@ -88,6 +88,7 @@ import {
 } from "../planning/use-side-panel";
 import { workerCallIds } from "../planning/work-model";
 import { ToastHost } from "../toast";
+import "../file-tree/index";
 import { DesktopPlans } from "./desktop-plans";
 import { SidePanelToggle } from "./side-panel";
 
@@ -3587,6 +3588,24 @@ test("while Start could not run, New coding agent says Start's reason and opens 
   );
 });
 
+test("a file's row in the side panel's + and its tab wear its type's icon, as the file tree draws the file", async () => {
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+    holds: { [SIDE_PANEL_TAB.CODE]: true },
+    shownCode: [{ callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE }],
+  });
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+  const typeOf = (element: Element | null | undefined) =>
+    element?.querySelector(".file-type-icon")?.getAttribute("data-file-type");
+
+  act(() => addButton(page).click());
+  assert.equal(typeOf(addRow("invite.ts")), "typescript");
+  act(() => addRow("invite.ts").click());
+  assert.equal(typeOf(tabNamed(page, "invite.ts")), "typescript");
+});
+
 test("a card's Open file opens its whole file in a tab named by the file, its lines lit, and opening it again from the + chooses that tab", async () => {
   const asked: unknown[] = [];
   Object.defineProperty(window, "sidecar", {
@@ -3594,8 +3613,9 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
     value: {
       onMenuCommand: () => () => undefined,
       // Main answers a File tab's read with the file as GitHub holds it now.
-      act: (request: { payload?: unknown }) => {
-        asked.push(request.payload);
+      act: (request: { kind: string; payload?: unknown }) => {
+        // The tree beside the file lists folders too, which this test does not count.
+        if (request.kind === ACT_KIND.PLANNING_FILE) asked.push(request.payload);
         return Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: {
