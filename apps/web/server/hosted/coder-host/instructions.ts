@@ -113,7 +113,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 
 For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.
 
-A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers.
+A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.
 
 ## The developer's inbox
 
