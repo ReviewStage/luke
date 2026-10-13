@@ -99,9 +99,8 @@ export const APP_SETTING_SCHEMA = {
       "Luke and coding agents run any shell command here without asking, from your home folder, " +
       "and what it prints goes to the model and is kept with the conversation.",
     default: true,
-    page: SETTINGS_PAGE.APPEARANCE,
-    order: 20,
-    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    page: SETTINGS_PAGE.ROOT,
+    order: 2,
     // Nothing to run per write: the host reads the setting before each read for commands.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),

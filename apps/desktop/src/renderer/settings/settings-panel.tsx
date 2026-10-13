@@ -21,6 +21,7 @@ import type {
   UpdateControl,
 } from "./controls";
 import { IntegrationsSection } from "./integrations-page";
+import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
@@ -193,6 +194,8 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
+          {panelView ? <MacCommandsSection view={panelView} writes={writes} /> : null}
+
           <UpdatesSection control={updates} />
 
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
