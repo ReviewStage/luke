@@ -783,6 +783,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
         codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
+      ),
     codingAgentInboxAttachment: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
