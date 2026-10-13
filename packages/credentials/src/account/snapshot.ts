@@ -1,12 +1,25 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 
+/**
+ * The providers an account on this Mac may have signed in with. Sign-in is
+ * GitHub's alone now, but an account stored before that still names Google,
+ * and its Luke tokens still work, so it is read rather than signed out.
+ */
 export const ACCOUNT_PROVIDER = {
+  GOOGLE: "google",
   GITHUB: "github",
 } as const;
 
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
 
+/** The one provider a sign-in may begin with. */
+export type SignInProvider = typeof ACCOUNT_PROVIDER.GITHUB;
+
 export function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
+  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
+
+export function isSignInProvider(value: UnparsedWireValue): value is SignInProvider {
   return value === ACCOUNT_PROVIDER.GITHUB;
 }
 

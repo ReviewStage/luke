@@ -2,7 +2,7 @@ import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  type AccountProvider,
+  type SignInProvider,
 } from "@sidecar/credentials/snapshot";
 import { WingFace } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
@@ -79,11 +79,11 @@ export function SignInGate({
   /** The introduction cycle the face walks while the gate stands. */
   face: { play: number; motion?: FaceMotion };
   /** Whose sign-in the gate is waiting on; absent while none was begun here. */
-  waiting?: AccountProvider;
+  waiting?: SignInProvider;
   /** Why the last attempt ended without landing, from the flow's owner. */
   failure?: string;
   /** Sends the browser to the provider; the gate then waits on it. */
-  onBegin: (provider: AccountProvider) => void;
+  onBegin: (provider: SignInProvider) => void;
   onCancel: () => void;
 }): React.JSX.Element {
   // A sign-in begun from no press of this gate still holds the button.

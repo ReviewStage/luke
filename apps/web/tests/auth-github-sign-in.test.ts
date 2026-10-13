@@ -3,7 +3,12 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  DISABLED_AUTH_PATHS,
+  GITHUB_SIGN_IN,
+  USER_PROFILE_HOOKS,
+} from "../server/auth-policy";
 import type { WireValue } from "../server/core";
 
 /**
@@ -51,6 +56,8 @@ const APP_GRANT = {
 /** Every token exchange GitHub was asked for, as the form it was sent. */
 const exchanges: URLSearchParams[] = [];
 let grant: Grant = APP_GRANT;
+/** The primary email GitHub answers for the user. */
+let githubEmail = GITHUB_EMAIL;
 
 function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
@@ -74,7 +81,7 @@ async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Pr
     });
   }
   if (url.href === "https://api.github.com/user/emails") {
-    return json([{ email: GITHUB_EMAIL, primary: true, verified: true }]);
+    return json([{ email: githubEmail, primary: true, verified: true }]);
   }
   throw new Error(`this test reaches no network: ${url.href}`);
 }
@@ -85,6 +92,7 @@ function authService() {
     secret: "fixture-session-secret-of-enough-length",
     database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
     account: ACCOUNT_TOKEN_STORAGE,
+    databaseHooks: USER_PROFILE_HOOKS,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     socialProviders: {
       github: { clientId: APP_CLIENT_ID, clientSecret: APP_CLIENT_SECRET, ...GITHUB_SIGN_IN },
@@ -141,6 +149,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fakeGitHub);
   exchanges.length = 0;
   grant = APP_GRANT;
+  githubEmail = GITHUB_EMAIL;
 });
 
 afterEach(() => {
@@ -223,4 +232,25 @@ test("an account first made with Google comes away from a GitHub sign-in wearing
   assert.equal(found?.user.id, created.id);
   assert.equal(found?.user.image, GITHUB_AVATAR);
   assert.equal(found?.user.name, "Octo Cat");
+});
+
+test("a GitHub sign-in leaves the account's email as it was, even one another account's primary GitHub email would collide with", async () => {
+  const auth = authService();
+  await signIn(auth);
+  const { userId } = await githubAccounts(auth);
+  const context = await auth.$context;
+  const elsewhere = await context.internalAdapter.createUser({
+    email: "octo@elsewhere.test",
+    emailVerified: true,
+    name: "Another account",
+  });
+
+  // GitHub's primary email has since become one another Luke account holds.
+  githubEmail = elsewhere.email;
+  await signIn(auth);
+
+  const kept = await context.internalAdapter.findUserById(userId);
+  assert.equal(kept?.email, GITHUB_EMAIL);
+  assert.equal(kept?.image, GITHUB_AVATAR);
+  assert.equal((await context.internalAdapter.findUserById(elsewhere.id))?.email, elsewhere.email);
 });

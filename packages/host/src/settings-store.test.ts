@@ -503,6 +503,25 @@ test("decrypts a stored account without asking whether storage is available", as
   assert.equal(cipher.calls.isAvailable, 0);
 });
 
+test("a stored account that signed in with Google still loads, though sign-in is GitHub's alone", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const signedInWithGoogle = {
+    ...TEST_ACCOUNT,
+    provider: "google",
+  } as const satisfies StoredAccount;
+  await writeSettingsFile(directory, { version: 2, account: persistedAccount(signedInWithGoogle) });
+
+  const store = storeIn(directory);
+
+  assert.deepEqual(await store.readAccount(), signedInWithGoogle);
+  assert.deepEqual(await store.accountSnapshot(), {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    email: signedInWithGoogle.email,
+    name: signedInWithGoogle.name,
+    provider: "google",
+  });
+});
+
 test("ignores a stored account that can no longer be decrypted", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   await writeSettingsFile(directory, {
