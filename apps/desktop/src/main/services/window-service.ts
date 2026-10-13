@@ -21,7 +21,7 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import { PAGE_SCHEME } from "#shared/page-frame";
 import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
-import { type AppStateStore, voiceWindowState } from "../app-state";
+import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
@@ -172,8 +172,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window replaced: ${reason}`);
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
-      // view at all.
-      state.update({ voice: {} });
+      // view at all, and keeps the avatar the call window reported.
+      state.update({ voice: voiceWindowGone(state.snapshot().voice) });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {
