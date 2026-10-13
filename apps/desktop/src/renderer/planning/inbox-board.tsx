@@ -31,11 +31,14 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { TOOL_LINE_CLASS } from "../ai-elements/tool";
+import { cn } from "../ai-elements/utils";
 import { EmptyState } from "../empty-state";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
+import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
-import { AgentGlyph, agentEndMark } from "./agent-tab";
+import { AgentGlyph, AgentMark, agentEndMark } from "./agent-tab";
 import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
@@ -90,7 +93,9 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * says so, since answering it messages nobody. What waits stands first;
  * what is settled, answered or taken back by its agent, folds under one
  * line as a finished turn's steps fold, each a closed card saying what came
- * of it. The tab's own label names it and counts what waits, so no head
+ * of it and when, or a line alone where nothing more was said. Every time
+ * shows its moment in the shared tooltip, and an agent this window does not
+ * list, one started on another Mac, still leads with a glyph. The tab's own label names it and counts what waits, so no head
  * repeats either. An inbox that holds nothing at all says so under the
  * tab's own glyph, drawn large (`empty-state.tsx`). The agent's name opens
  * its tab. Every card shows words an agent wrote, a code block the
@@ -155,6 +160,27 @@ function pressesOf(
   }
 }
 
+/**
+ * The mark of the agent that posted an item: its harness's, where this
+ * window lists it, else the mark an agent of no known harness wears, so an
+ * item an agent of another Mac posted keeps the glyph's column.
+ */
+function AuthorGlyph({ agent }: { agent: CodingAgentSummary | undefined }): React.JSX.Element {
+  if (agent !== undefined) return <AgentGlyph agent={agent} />;
+  return <StateGlyph glyph={<AgentMark provider={undefined} />} state={GLYPH_STATE.REST} />;
+}
+
+/** How long ago, muted in even figures, the moment itself in the shared tooltip, as a file note's time is. */
+function Moment({ at, now }: { at: number; now: number }): React.JSX.Element {
+  return (
+    <Tooltip label={momentText(at)}>
+      <time className="tab-card-time" dateTime={new Date(at).toISOString()}>
+        {sinceText(at, now)}
+      </time>
+    </Tooltip>
+  );
+}
+
 /** Who posted the item and when: the agent's mark, its name opening its tab, a failure's mark where it failed, and how long ago. */
 function Poster({
   item,
@@ -171,7 +197,7 @@ function Poster({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2 px-3 pt-2 text-muted-foreground">
-      {agent === undefined ? null : <AgentGlyph agent={agent} />}
+      <AuthorGlyph agent={agent} />
       <button
         type="button"
         className="plan-edit-link font-medium"
@@ -180,13 +206,7 @@ function Poster({
         {agent === undefined ? "Coding agent" : agentTabLabel(agent, models)}
       </button>
       {agent === undefined ? null : agentEndMark(agent, true)}
-      <time
-        className="tab-card-time"
-        dateTime={new Date(item.postedAt).toISOString()}
-        title={momentText(item.postedAt)}
-      >
-        {sinceText(item.postedAt, now)}
-      </time>
+      <Moment at={item.postedAt} now={now} />
     </div>
   );
 }
@@ -216,9 +236,11 @@ function LinkBlock({
     );
   }
   return (
-    <span className="agent-link-inert" title={url}>
-      {label} <span className="select-text text-muted-foreground">{url}</span>
-    </span>
+    <Tooltip label={url}>
+      <span className="agent-link-inert">
+        {label} <span className="select-text text-muted-foreground">{url}</span>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -540,7 +562,7 @@ function FormField({
         <label className="flex flex-col gap-1" data-inbox-field={field.type}>
           <FieldName field={field} />
           <input
-            className="settings-input"
+            className="settings-input inbox-field-input"
             type={number ? "number" : "text"}
             maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
             value={value === undefined ? "" : String(value)}
@@ -812,6 +834,7 @@ function OpenCard({
 function SettledCard({
   item,
   agent,
+  now,
   images,
   onImage,
   onRetryImage,
@@ -820,6 +843,7 @@ function SettledCard({
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
+  now: number;
   images: PlanInboxControl["images"];
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
@@ -827,13 +851,30 @@ function SettledCard({
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const words = settledWords(item);
+  const line = (
+    <>
+      <AuthorGlyph agent={agent} />
+      <PlanTitle label={words.lead}>{cardTitle(item.title)}</PlanTitle>
+      {agent === undefined ? null : agentEndMark(agent, true)}
+      <Moment at={item.updatedAt} now={now} />
+    </>
+  );
+  // Note that a card with nothing inside is a line rather than a fold, because a fold opening on nothing reads as broken.
+  if (words.note === undefined && item.blocks.length === 0) {
+    return (
+      <article
+        className="flex h-8 items-center gap-2 overflow-clip rounded-lg border border-border bg-muted px-3 text-[12.5px]"
+        data-item-id={item.id}
+        aria-label={cardTitle(item.title)}
+      >
+        <span className="size-4 shrink-0" aria-hidden="true" />
+        {line}
+      </article>
+    );
+  }
   return (
     <Plan data-item-id={item.id} aria-label={cardTitle(item.title)}>
-      <PlanHeader>
-        {agent === undefined ? null : <AgentGlyph agent={agent} />}
-        <PlanTitle label={words.lead}>{cardTitle(item.title)}</PlanTitle>
-        {agent === undefined ? null : agentEndMark(agent, true)}
-      </PlanHeader>
+      <PlanHeader>{line}</PlanHeader>
       <PlanContent className="flex flex-col gap-2">
         {words.note === undefined ? null : <p className="m-0 whitespace-pre-line">{words.note}</p>}
         {item.blocks.length === 0 ? null : (
@@ -916,7 +957,7 @@ export function InboxBoard({
       ))}
       {settled.length === 0 ? null : (
         <Fold className="text-[12.5px]" data-inbox-settled="">
-          <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+          <FoldSummary className={cn(TOOL_LINE_CLASS, "hover:text-foreground")}>
             <FoldChevron />
             <span>Settled · {settled.length}</span>
           </FoldSummary>
@@ -926,6 +967,7 @@ export function InboxBoard({
                 key={item.id}
                 item={item}
                 agent={agentOf(item)}
+                now={now}
                 images={control.images}
                 onImage={control.onImage}
                 onRetryImage={control.onRetryImage}
