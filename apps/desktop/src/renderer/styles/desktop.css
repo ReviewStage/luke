@@ -1280,6 +1280,47 @@ body,
   align-self: center;
 }
 
+/* The way off a thumbnail, on its corner: an attached file's chip or a
+   feedback screenshot. Note that the disc is 18px but the button is 24px,
+   because the corner of a thumbnail carries no more disc than that and the
+   pointer still needs the 24px target docs/DESIGN.md asks of a control
+   floating over one: a transparent border is hit like the rest of the button,
+   and the ground is clipped inside it. */
+.corner-dismiss {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background: var(--surface-popover) padding-box;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.corner-dismiss:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.corner-dismiss:disabled {
+  opacity: 0.5;
+}
+
+/* base.css draws the ring; it stands inside the target, close round the disc. */
+.corner-dismiss:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.corner-dismiss svg {
+  width: 8px;
+  height: 8px;
+}
+
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
    alert in one cell, only the state's own drawn, so a copy crossfades in
    place, the check in the success colour, and the button never moves. */
@@ -1799,7 +1840,7 @@ body,
 }
 
 .call-backend-action {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .call-controls {
@@ -2073,7 +2114,7 @@ body,
 }
 
 .plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
-  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+  background: var(--switch-on);
 }
 
 .plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
@@ -3907,7 +3948,7 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .tab-card-preview code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -4509,35 +4550,6 @@ body:has(.app-stage[data-capture="true"])
   border: 1px solid var(--hairline);
   border-radius: 6px;
   object-fit: cover;
-}
-
-.feedback-dialog-image-remove {
-  position: absolute;
-  top: calc(-1 * var(--space-6));
-  right: calc(-1 * var(--space-6));
-  display: flex;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 50%;
-  background: var(--surface-popover);
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.feedback-dialog-image-remove:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.feedback-dialog-image-remove:disabled {
-  opacity: 0.5;
-}
-
-.feedback-dialog-image-remove svg {
-  width: 8px;
-  height: 8px;
 }
 
 /* The signature as one quiet line: the choice at its start, and who the note

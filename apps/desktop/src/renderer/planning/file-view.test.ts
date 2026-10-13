@@ -405,14 +405,16 @@ test("the crumbs are in the window's own type, as a tab's name is, while the fil
   const style = await sheetStyle();
   const view = mounted();
   await view.draw(FILE);
+  // Code type is base.css's one stack, which the design check refuses spelled any other way.
+  const codeType = /var\(--font-mono\)/u;
   const crumbs = [...view.container.querySelectorAll(".file-breadcrumb")];
   assert.ok(crumbs.length > 0);
   for (const crumb of crumbs) {
-    assert.doesNotMatch(style(crumb, "font-family") ?? "", /monospace/u);
+    assert.doesNotMatch(style(crumb, "font-family") ?? "", codeType);
   }
   const line = view.container.querySelector(".code-lines");
   assert.ok(line);
-  assert.match(style(line, "font-family") ?? "", /monospace/u);
+  assert.match(style(line, "font-family") ?? "", codeType);
 });
 
 test("each crumb hangs the tree over the folder it stands in, through the view's listings, the tab's file revealed and taking the keyboard; the chevrons between are no controls; a file the tree opens is browsed to from the repository's root, and takes the tree down", async () => {

@@ -50,6 +50,16 @@ const MENU_TOKENS = [
     spend: { height: "var(--menu-row-height)", "border-radius": "var(--menu-row-radius)" },
   },
 ];
+// The one monospace stack is base.css's `--font-mono`; any other sheet, or
+// any other rule, spends the token rather than spelling a stack of its own.
+const MONOSPACE_STACK = /(?<![\w-])monospace(?![\w-])/u;
+const FONT_PROPERTY = /^(?:font(?:-family)?|--[\w-]*font[\w-]*)$/u;
+// A control floating over a thumbnail keeps a target of at least 24px
+// however small the disc it draws (docs/DESIGN.md), so no rule on the
+// control itself, a state or a placement of it included, sizes it smaller.
+const THUMBNAIL_CONTROLS = [".corner-dismiss"];
+const MINIMUM_TARGET = 24;
+const BOX_SIZE = /(?<![\w-])((?:min-|max-)?(?:width|height))\s*:\s*(\d*\.?\d+)px\b/gu;
 
 // A value less every calc that spends a token, which may adjust it by a pixel
 // as a border asks.
@@ -241,10 +251,44 @@ function checkWindowGrounds() {
 
 checkWindowGrounds();
 
+// Which thumbnail control a selector list sizes, if one of its selectors
+// ends on the control itself rather than on something inside it.
+function thumbnailControlOf(selector) {
+  return THUMBNAIL_CONTROLS.find((control) =>
+    selector.split(",").some((each) =>
+      each
+        .trim()
+        .replace(/(?::[\w-]+(?:\([^)]*\))?)+$/u, "")
+        .endsWith(control),
+    ),
+  );
+}
+
+// Every token whose value is a computation rather than a bare alias, keyed
+// by that value. A rule that spells the computation out keeps one
+// appearance's value when the other :root restates the token, as the compose
+// menu's switch once drew the dark --switch-on in light.
+function computedTokens(names) {
+  const tokens = new Map();
+  for (const name of names) {
+    const source = readFileSync(join(STYLE_ROOT, name), "utf8").replace(/\/\*[\s\S]*?\*\//gu, "");
+    for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/gsu)) {
+      if (selector.trim() !== ":root") continue;
+      for (const [, token, value] of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/gu)) {
+        const spelled = value.trim().replace(/\s+/gu, " ");
+        if (/\w\(/u.test(spelled) && !/^var\([^()]*\)$/u.test(spelled)) tokens.set(spelled, token);
+      }
+    }
+  }
+  return tokens;
+}
+
 const SHEETS = readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".css"));
 const KEYFRAMES = keyframesByName(
   SHEETS.map((name) => readFileSync(join(STYLE_ROOT, name), "utf8")),
 );
+const COMPUTED_TOKENS = computedTokens(SHEETS);
+const thumbnailControlSizes = new Map(THUMBNAIL_CONTROLS.map((control) => [control, new Map()]));
 
 for (const name of SHEETS) {
   const source = readFileSync(join(STYLE_ROOT, name), "utf8");
@@ -301,6 +345,37 @@ for (const name of SHEETS) {
       }
     }
 
+    const ownsMonospace = name === "base.css" && bare === ":root";
+    for (const declaration of body.replace(/\/\*[\s\S]*?\*\//gu, "").split(";")) {
+      const colon = declaration.indexOf(":");
+      if (colon < 0) continue;
+      const property = declaration.slice(0, colon).trim();
+      const value = declaration
+        .slice(colon + 1)
+        .trim()
+        .replace(/\s+/gu, " ");
+      if (!ownsMonospace && FONT_PROPERTY.test(property) && MONOSPACE_STACK.test(value)) {
+        failures.push(
+          `${name}: ${bare} spells a monospace stack in ${property}; use var(--font-mono)`,
+        );
+      }
+      if (bare !== ":root" && COMPUTED_TOKENS.has(value)) {
+        failures.push(
+          `${name}: ${bare} spells ${COMPUTED_TOKENS.get(value)}'s value in ${property}; use the token`,
+        );
+      }
+    }
+
+    const control = thumbnailControlOf(bare);
+    for (const [, property, pixels] of control ? body.matchAll(BOX_SIZE) : []) {
+      if (Number(pixels) < MINIMUM_TARGET) {
+        failures.push(
+          `${name}: ${bare} sizes a thumbnail control's ${property} to ${pixels}px; its target is at least ${MINIMUM_TARGET}px`,
+        );
+      }
+      if (bare === control) thumbnailControlSizes.get(control).set(property, Number(pixels));
+    }
+
     if (SPACED_SHEETS.has(name)) {
       for (const [, property, value, offScale] of body.matchAll(SPACING_DECLARATION)) {
         if (offScale || !/(?<![\w.])0*[1-9]\d*(?:\.\d+)?px\b/u.test(withoutTokenCalcs(value))) {
@@ -345,6 +420,16 @@ for (const name of SHEETS) {
           `${name}: ${selector.trim()} uses a literal motion time without a play-state token`,
         );
       }
+    }
+  }
+}
+
+for (const [control, sizes] of thumbnailControlSizes) {
+  for (const property of ["width", "height"]) {
+    if (!sizes.has(property)) {
+      failures.push(
+        `${control} declares no ${property} of its own; give its target at least ${MINIMUM_TARGET}px`,
+      );
     }
   }
 }

@@ -3,6 +3,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   font-synthesis: none;
   background: transparent;
+  /* The one monospace stack, for code, a path, a branch, or a command,
+     wherever it is drawn: a hand-written rule spends it, and so does
+     Tailwind's `font-mono` (styles/tailwind.css), whose own default this
+     outranks from outside its layers. */
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
   --state-working: #5cd5ff;
   /* A sent message is an action the developer already took, not a session
