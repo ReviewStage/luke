@@ -52,9 +52,27 @@ Fixture mode (`--fixture smoke`) signs in to nothing, answers every service
 read "unanswered", and stages only a few `--profile`s (`RUN_PROFILE` in
 `apps/desktop/src/shared/messages/app-state.ts`). Everything a picture needs
 beyond that is a throwaway patch, never committed, applied on the Mac to the
-release commit. `staging/0.12.0.patch` beside this file is 0.12.0's, applied
-to `6d47d20f`: start from it. Its `apps/desktop/src/renderer/shots/README.md`
-explains the design, which is, in short:
+release commit. Start from 0.12.0's, beside this file:
+
+- `WORLD.md` is the invented company every release's pictures happen in: its
+  name and mark, repositories, the plan everything is about, its coding agents
+  and pull requests, people, and how times are told. Reuse it, so the pictures
+  stay one continuing story; add new plans and work for what a release shows,
+  and record what is worth keeping there.
+- `assets/` holds acme's mark (`acme-mark.svg`) and Dean's photo
+  (`dean-stratakos.jpg`), the two images every picture carries.
+- `staging/shots/` is 0.12.0's `apps/desktop/src/renderer/shots/` module:
+  the shared world as data, one file per shot, and the machinery. Copy it into
+  the release's checkout and adapt it to that release's types.
+- `staging/hooks-0.12.0.patch` is the small set of hooks that module needs in
+  0.12.0's app files; it will not apply to another release as it stands, but
+  it says where each hook goes. Together on `6d47d20f` the two reproduce
+  0.12.0's staging exactly.
+
+Hand the Mac one patch: in a cloud worktree of the release commit, copy
+`staging/shots/` in, make the hooks, `git add -N .`, and `git diff` to
+`.context/shots/staging.patch`. The module's own `README.md` explains its
+design, which is, in short:
 
 - One `--profile shot-<name>` per picture, each a `ShotSpec` in its own file
   under `renderer/shots/`, so agents can fill shots in parallel without

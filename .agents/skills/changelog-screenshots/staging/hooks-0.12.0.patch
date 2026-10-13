@@ -1,0 +1,532 @@
+diff --git a/apps/desktop/bundle-budget.json b/apps/desktop/bundle-budget.json
+index ceb07287..8769f7f5 100644
+--- a/apps/desktop/bundle-budget.json
++++ b/apps/desktop/bundle-budget.json
+@@ -1,10 +1,10 @@
+ {
+   "slack": 0.05,
+   "gzipBytes": {
+-    "renderer/renderer.js": 709674,
+-    "renderer/whiteboard.js": 467697,
+-    "renderer/file-tree.js": 70635,
+-    "renderer/plan-editor.js": 161390,
++    "renderer/renderer.js": 787094,
++    "renderer/whiteboard.js": 468605,
++    "renderer/file-tree.js": 71587,
++    "renderer/plan-editor.js": 161414,
+     "renderer/session-recorder.js": 61872
+   }
+ }
+diff --git a/apps/desktop/src/main/services/window-service.ts b/apps/desktop/src/main/services/window-service.ts
+index 4d66da53..7b52a09a 100644
+--- a/apps/desktop/src/main/services/window-service.ts
++++ b/apps/desktop/src/main/services/window-service.ts
+@@ -27,6 +27,8 @@ import { CallWindowPresence } from "../window/call-window-presence";
+ import { followDockIcon } from "../window/dock-icon";
+ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
+ import { askForNotifications } from "../window/notice-doors";
++// Throwaway: shot H's canned pages (`renderer/shots/page-html.ts`).
++import { SHOT_PAGES_PROFILE, shotPageRead } from "../../renderer/shots/page-html";
+ import { pageResponse } from "../window/page-protocol";
+ import { PanelManager } from "../window/panel-manager";
+ import { VoiceWindow } from "../window/voice-window";
+@@ -440,8 +442,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
+       await hotkeys.reapply(HOTKEY_RANK.TALK);
+       if (!launchStanding()) return;
+       // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
++      // Throwaway: shot H answers its pages from canned HTML in a fixture run under `--profile shot-pages`.
++      const shotPages =
++        config.launch.fixtureMode && config.launch.profile === SHOT_PAGES_PROFILE;
+       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
+-        run(pageResponse(request.url, operator.host.planningPage)),
++        run(
++          pageResponse(
++            request.url,
++            shotPages
++              ? (params) => Effect.succeed(shotPageRead(params))
++              : operator.host.planningPage,
++          ),
++        ),
+       );
+       panels.reconcile();
+       raiseVoiceWindow();
+diff --git a/apps/desktop/src/renderer/act.ts b/apps/desktop/src/renderer/act.ts
+index c7b8f8a2..5a078244 100644
+--- a/apps/desktop/src/renderer/act.ts
++++ b/apps/desktop/src/renderer/act.ts
+@@ -12,6 +12,7 @@ import {
+   type ActResultFor,
+   type SettingUpdatePayload,
+ } from "#shared/messages/acts";
++import { cannedOutcome } from "./shots/canned-acts";
+ 
+ /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
+ type ActArguments<Kind extends ActKind> =
+@@ -54,7 +55,9 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome):
+  * transcript read is held open by the service for seconds, and any act sent
+  * meanwhile would have handed the reader its answer, and taken the reader's.
+  */
+-const send = (request: Act): Promise<ActOutcome> => window.sidecar.act(request);
++const send = (request: Act): Promise<ActOutcome> =>
++  // Throwaway: a changelog shot answers the acts it stages itself (`shots/canned-acts.ts`).
++  cannedOutcome(request) ?? window.sidecar.act(request);
+ 
+ async function performAct<Kind extends ActKind>(
+   send: (request: Act) => Promise<ActOutcome>,
+diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
+index 753a5e0c..8977be11 100644
+--- a/apps/desktop/src/renderer/app.tsx
++++ b/apps/desktop/src/renderer/app.tsx
+@@ -38,6 +38,9 @@ import { applySessionReplay } from "./session-replay";
+ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
+ import { settingsRowsInput } from "./settings/settings-panel";
+ import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
++import { shotAccount } from "./shots/account";
++import { shotSpec } from "./shots/shot-profiles";
++import { useShotStaging } from "./shots/use-shot-staging";
+ import { useSignInFaceCycle } from "./sign-in-gate";
+ import { ToastHost } from "./toast";
+ import { fixtureUpdate } from "./update-row";
+@@ -71,7 +74,9 @@ export function App(): React.JSX.Element {
+   // window's own facts beside it. There is no second reading to reconcile
+   // against: what arrives is the whole document at a version that only rises.
+   const state = useAppState();
+-  const account = state?.account;
++  // Throwaway: a changelog shot is signed in as Dean, and stages what main would hold (`shots/`).
++  const shot = shotSpec(state?.run);
++  const account = shot !== undefined ? shotAccount() : state?.account;
+   const outputAudio = state?.audio.outputAudio;
+   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
+   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+@@ -214,8 +219,8 @@ export function App(): React.JSX.Element {
+     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
+     shown: tab === PANEL_TAB.PLANS,
+     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
+-    inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
+-    inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
++    inboxWaiting: shot?.inbox?.waiting ?? state?.inbox.waiting ?? NOTHING_WAITING,
++    inboxPlans: shot?.inbox?.plans ?? state?.inbox.plans ?? NO_PLANS_HOLDING,
+     voice: { view: voiceView, listening, requestMicrophoneAccess },
+     // Arriving at Settings lands on its front page, so the page is turned after.
+     onOpenIntegrations: () => {
+@@ -305,6 +310,18 @@ export function App(): React.JSX.Element {
+   // The sidebar folds only where it is drawn: Settings keeps its page list,
+   // and the sign-in gate draws no sidebar at all.
+   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
++  // Throwaway: lays a changelog shot's window out, once (`shots/use-shot-staging.ts`).
++  useShotStaging(
++    {
++      plans,
++      sidebar,
++      openSettings: (view) => {
++        changeTab(PANEL_TAB.SETTINGS);
++        setSettingsView(view);
++      },
++    },
++    state !== undefined && !accountGated,
++  );
+ 
+   const caption = useCaptionPresentation({
+     lukeCaptions,
+@@ -476,7 +493,7 @@ export function App(): React.JSX.Element {
+             },
+           }}
+           settings={{
+-            account: state.account,
++            account: account ?? state.account,
+             onSignOut: async () => {
+               await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+             },
+@@ -526,7 +543,7 @@ export function App(): React.JSX.Element {
+         onTabChange={changeTab}
+         plans={plans}
+         settings={{
+-          rows: settingsRowsInput({ settings, microphone, account: state.account }),
++          rows: settingsRowsInput({ settings, microphone, account: account ?? state.account }),
+           onViewChange: setSettingsView,
+         }}
+         readFiles={(planId) => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
+diff --git a/apps/desktop/src/renderer/desktop/command-palette.tsx b/apps/desktop/src/renderer/desktop/command-palette.tsx
+index e2662b1d..dd653658 100644
+--- a/apps/desktop/src/renderer/desktop/command-palette.tsx
++++ b/apps/desktop/src/renderer/desktop/command-palette.tsx
+@@ -70,6 +70,7 @@ import { matchesTokens, searchTokens } from "../search-tokens";
+ import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
+ import type { SettingsView } from "../settings-views";
+ import { Shortcut } from "../shortcut";
++import { takePaletteQuery } from "../shots/palette-query";
+ import { agentEntries, inboxEntries } from "./main-tabs";
+ import { ADD_SECTION, changesOffers, panelEntries, planWorkers, TAB_ICON } from "./side-panel";
+ 
+@@ -573,7 +574,8 @@ export function CommandPalette({
+           invoker.current =
+             document.activeElement instanceof HTMLElement ? document.activeElement : null;
+           changeFilter(PALETTE_FILTER.ALL);
+-          setQuery("");
++          // Throwaway: a changelog shot opens the palette with its query typed (`shots/`).
++          setQuery(takePaletteQuery() ?? "");
+           // The files are read afresh by the first search of each opening,
+           // since the branch they are listed on moves, and a read still out
+           // from the last opening is not kept.
+diff --git a/apps/desktop/src/renderer/desktop/desktop-plans.tsx b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
+index f1e01a85..c845423b 100644
+--- a/apps/desktop/src/renderer/desktop/desktop-plans.tsx
++++ b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
+@@ -20,6 +20,7 @@ import type { PlanLooks } from "../planning/use-plan-looks";
+ import type { PlansControl } from "../planning/use-plans-tab";
+ import { RetryButton } from "../retry-button";
+ import { ConfirmDialog } from "../settings/confirm-dialog";
++import { currentShot } from "../shots/shot-profiles";
+ import { Skeleton } from "../skeleton";
+ import { SPINNER_SIZE, Spinner } from "../spinner";
+ import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
+@@ -403,7 +404,9 @@ function PlanDocument({
+         </div>
+         {/* Note that a call of the plan's own still stands, so it can be
+             ended, when only a race left one on a plan just archived. */}
+-        {archived && !plans.stop.shown ? null : (
++        {/* Throwaway: a changelog shot draws nothing at the column's foot but a staged call (`shots/`). */}
++        {(archived && !plans.stop.shown) ||
++        (currentShot() !== undefined && plans.status === undefined && !plans.stop.shown) ? null : (
+           <div className="desktop-call-bar">
+             {captions}
+             <CallBar
+diff --git a/apps/desktop/src/renderer/desktop/plan-actions.tsx b/apps/desktop/src/renderer/desktop/plan-actions.tsx
+index 42c1ddbe..f1fff42d 100644
+--- a/apps/desktop/src/renderer/desktop/plan-actions.tsx
++++ b/apps/desktop/src/renderer/desktop/plan-actions.tsx
+@@ -21,6 +21,7 @@ import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-
+ import type { PlansControl } from "../planning/use-plans-tab";
+ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
+ import { confirmAsked } from "../settings/confirm-state";
++import { currentShot } from "../shots/shot-profiles";
+ import { Tooltip } from "../tooltip";
+ import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
+ import { PlanCard, PlanStatusMark } from "./plan-card";
+@@ -369,6 +370,19 @@ export function SidebarPlan({
+   const row = useRef<HTMLButtonElement | null>(null);
+   const item = useRef<HTMLLIElement | null>(null);
+   const refocus = useRef(false);
++  // Throwaway: a changelog shot holds this row's hover card open (`shots/`), shown
++  // as a pointer resting on the row would show it, once the sidebar has settled.
++  const hoverPinned = inbox === undefined && currentShot()?.layout?.hoverPlanId === plan.id;
++  useEffect(() => {
++    if (!hoverPinned) return;
++    const timer = window.setTimeout(() => {
++      const Pointer = window.PointerEvent ?? window.MouseEvent;
++      row.current?.dispatchEvent(
++        new Pointer("pointerover", { bubbles: true, pointerType: "mouse" }),
++      );
++    }, 800);
++    return () => window.clearTimeout(timer);
++  }, [hoverPinned]);
+   useEffect(() => {
+     if (rename.editing || !refocus.current) return;
+     refocus.current = false;
+@@ -409,6 +423,7 @@ export function SidebarPlan({
+           }
+           cardBeside
+           cardRegion={item}
++          pinned={hoverPinned}
+         >
+           <button
+             ref={row}
+diff --git a/apps/desktop/src/renderer/desktop/plan-summary.tsx b/apps/desktop/src/renderer/desktop/plan-summary.tsx
+index 0a33f160..69cc2d90 100644
+--- a/apps/desktop/src/renderer/desktop/plan-summary.tsx
++++ b/apps/desktop/src/renderer/desktop/plan-summary.tsx
+@@ -12,6 +12,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
+ import { MAIN_TAB } from "../planning/use-main-tabs";
+ import type { PlansControl } from "../planning/use-plans-tab";
+ import { workRowsOf } from "../planning/work-model";
++import { currentShot } from "../shots/shot-profiles";
+ import { Tooltip } from "../tooltip";
+ import { useClipped } from "../use-clipped";
+ import { useDisclosure } from "../use-disclosure";
+@@ -160,7 +161,11 @@ function readPinned(): boolean {
+  */
+ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
+   const [kept, setKept] = useState(readPinned);
+-  const [staged, setStaged] = useState(true);
++  // Throwaway: a changelog shot keeps the summary folded to its rail unless it asks (`shots/`).
++  const [staged, setStaged] = useState(() => {
++    const shot = currentShot();
++    return shot === undefined ? true : (shot.layout?.summaryPinned ?? false);
++  });
+   const [wide, setWide] = useState(true);
+   const onToggle = useCallback(
+     () => (fixtureMode ? setStaged : setKept)((was) => !was),
+diff --git a/apps/desktop/src/renderer/planning/planning-fixture.ts b/apps/desktop/src/renderer/planning/planning-fixture.ts
+index f7e47624..4569e175 100644
+--- a/apps/desktop/src/renderer/planning/planning-fixture.ts
++++ b/apps/desktop/src/renderer/planning/planning-fixture.ts
+@@ -346,7 +346,8 @@ const FIXTURE_TRANSCRIPT: PlanTranscript = {
+  * while the notetaker writes, so the capture shows both of the status row's
+  * lines.
+  */
+-const FIXTURE_OPEN_PLAN: PlanningView = {
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_OPEN_PLAN: PlanningView = {
+   ...FIXTURE_PLAN_LIST,
+   activePlanId: FIXTURE_PLAN.id,
+   document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
+@@ -427,7 +428,8 @@ const FIXTURE_BOARD: Board = {
+ };
+ 
+ /** The open plan on its whiteboard, as the planning-board profile captures it. */
+-const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
+ 
+ /** A repository command of the fixture's turns, answered with `output`. */
+ function fixtureCommand(id: string, command: string, output: string) {
+@@ -543,18 +545,29 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
+ ];
+ 
+ /** The open plan mid-call on its work, as the planning-work profile captures it. */
+-const FIXTURE_OPEN_WORK: PlanningView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_OPEN_WORK: PlanningView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
+ 
+ /** The side panels the fixture profiles open their plan with. */
+-const FIXTURE_CODE_PANEL: SidePanelState = {
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_CODE_PANEL: SidePanelState = {
+   open: true,
+   tabs: SIDE_PANEL_TABS,
+   tab: SIDE_PANEL_TAB.CODE,
+   width: SIDE_PANEL_WIDTH.DEFAULT,
+ };
+-const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
+-const FIXTURE_CALL_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.CALL };
+-const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_BOARD_PANEL: SidePanelState = {
++  ...FIXTURE_CODE_PANEL,
++  tab: SIDE_PANEL_TAB.BOARD,
++};
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_CALL_PANEL: SidePanelState = {
++  ...FIXTURE_CODE_PANEL,
++  tab: SIDE_PANEL_TAB.CALL,
++};
++/** Throwaway: exported for the changelog shots (`renderer/shots/`). */
++export const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
+ 
+ /**
+  * The call a fixture run's status row and transcript read: listening, about
+diff --git a/apps/desktop/src/renderer/planning/use-plan-looks.ts b/apps/desktop/src/renderer/planning/use-plan-looks.ts
+index e0663301..935a1ac9 100644
+--- a/apps/desktop/src/renderer/planning/use-plan-looks.ts
++++ b/apps/desktop/src/renderer/planning/use-plan-looks.ts
+@@ -9,6 +9,7 @@ import { Duration, Effect, Option, Schema } from "effect";
+ import { AsyncResult, Atom } from "effect/unstable/reactivity";
+ import { useEffect, useState } from "react";
+ import { rendererRuntime } from "../renderer-runtime";
++import { currentShot } from "../shots/shot-profiles";
+ 
+ /**
+  * use-plan-looks.ts -- what changed since the developer last looked at a plan on this Mac: the open plan's sections, and the sidebar's unread plans.
+@@ -214,7 +215,8 @@ export function usePlanLooks(plan: Plan | undefined): PlanLooks {
+   }, [looked, planId, watch]);
+ 
+   return {
+-    changed: current.changed,
++    // Throwaway: a changelog shot never lights sections changed since a look (`shots/`).
++    changed: currentShot() === undefined ? current.changed : NOTHING_CHANGED,
+     dismiss: () => {
+       setVisit((held) => (held.planId === planId ? { ...held, changed: NOTHING_CHANGED } : held));
+       if (planId !== undefined && newest !== undefined)
+diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+index 5ce7d17f..6d7cdab2 100644
+--- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
++++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
+@@ -23,6 +23,7 @@ import {
+   type DialogQuestion,
+   useConfirmDialog,
+ } from "../settings/confirm-dialog";
++import { shotSpec } from "../shots/shot-profiles";
+ import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
+ import { shownFiles } from "./code-pane-model";
+ import { agentTabLabel } from "./coding-agent-model";
+@@ -459,7 +460,9 @@ export function usePlansTab(input: {
+ 
+   // A fixture run draws its synthetic plans in place of the account's,
+   // signed out as every fixture run is.
+-  const fixture = fixturePlanningView(input.run);
++  // Throwaway: a changelog shot draws its own plans, agents, and history (`shots/`).
++  const shot = shotSpec(input.run);
++  const fixture = shot?.planning ?? fixturePlanningView(input.run);
+   const viewed = fixture ?? input.planning;
+   // A name given here stands until main's view carries it, so a rename that
+   // landed never flickers back while main's copy of the view catches up.
+@@ -517,7 +520,7 @@ export function usePlansTab(input: {
+   // A fixture's plans have no agents, as they are read from nowhere.
+   const agents = useCodingAgents({
+     acts: input.acts,
+-    planId: fixture === undefined ? viewed.activePlanId : undefined,
++    planId: fixture === undefined || shot !== undefined ? viewed.activePlanId : undefined,
+     repository:
+       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+     // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
+@@ -533,7 +536,12 @@ export function usePlansTab(input: {
+   // The calls heard on the open plan, each held past its end until the
+   // record's copy catches up; a fixture's open plan is drawn with its own
+   // call's words.
+-  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
++  const reported =
++    fixture === undefined
++      ? voice.view
++      : shot !== undefined
++        ? (shot.call ?? voice.view)
++        : FIXTURE_PLANNING_CALL;
+   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
+   useEffect(() => {
+     setHeard((held) =>
+@@ -586,7 +594,7 @@ export function usePlansTab(input: {
+   // A page's tab is held to the pages agents wrote for the plan.
+   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
+   const sidePanel = useSidePanel(
+-    fixtureSidePanel(input.run),
++    shot?.sidePanel ?? fixtureSidePanel(input.run),
+     { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
+     mainTabs.openAgents,
+     workers,
+@@ -1001,7 +1009,9 @@ export function usePlansTab(input: {
+   const history = usePlanHistory({
+     source: historySource,
+     planId:
+-      fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
++      (fixture === undefined || shot !== undefined) && region.kind === DOCUMENT_REGION.READY
++        ? region.plan.id
++        : undefined,
+     editedAt: region.kind === DOCUMENT_REGION.READY ? region.plan.lastEdit?.at : undefined,
+     name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
+     shown: shown && historyOpen,
+@@ -1231,7 +1241,7 @@ export function usePlansTab(input: {
+       recent: recentRepositories(planning.plans),
+       read: readRepositories,
+       openGitHub,
+-      pictures: fixture === undefined,
++      pictures: fixture === undefined || shot !== undefined,
+     },
+     repositoryMenu,
+     onChangeRepository: changeRepository,
+diff --git a/apps/desktop/src/renderer/repository-picture.tsx b/apps/desktop/src/renderer/repository-picture.tsx
+index c67bcc47..7b68454d 100644
+--- a/apps/desktop/src/renderer/repository-picture.tsx
++++ b/apps/desktop/src/renderer/repository-picture.tsx
+@@ -1,5 +1,7 @@
+ import { useState } from "react";
+ import { repositoryOwnerPictureUrl } from "./planning/planning-model";
++import { shotOwnerPicture } from "./shots/owner-pictures";
++import { currentShot } from "./shots/shot-profiles";
+ 
+ /**
+  * repository-picture.tsx -- a repository drawn as its owner's picture on GitHub, wherever a repository is named or picked.
+@@ -31,7 +33,12 @@ export function RepositoryPicture({
+   fallback: React.ReactNode;
+ }): React.ReactNode {
+   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
+-  const url = pictures ? repositoryOwnerPictureUrl(repository) : undefined;
++  // Throwaway: a changelog shot draws its owners' pictures rather than fetching them (`shots/`).
++  const url = !pictures
++    ? undefined
++    : currentShot() !== undefined
++      ? shotOwnerPicture(repository)
++      : repositoryOwnerPictureUrl(repository);
+   if (url === undefined || url === failedUrl) return fallback;
+   return (
+     <img
+diff --git a/apps/desktop/src/renderer/styles/index.css b/apps/desktop/src/renderer/styles/index.css
+index c15c77c4..12c28d38 100644
+--- a/apps/desktop/src/renderer/styles/index.css
++++ b/apps/desktop/src/renderer/styles/index.css
+@@ -27,3 +27,5 @@
+ @import "./desktop.css";
+ /* The call card, and its floating window over the desktop's ground, which it must not have. */
+ @import "./call.css";
++/* Throwaway: the changelog shots (shots/README.md), last so they win. */
++@import "../shots/shots.css";
+diff --git a/apps/desktop/src/renderer/tooltip.tsx b/apps/desktop/src/renderer/tooltip.tsx
+index 34232a88..6bb2d5f4 100644
+--- a/apps/desktop/src/renderer/tooltip.tsx
++++ b/apps/desktop/src/renderer/tooltip.tsx
+@@ -322,6 +322,7 @@ export function Tooltip({
+   card,
+   cardBeside = false,
+   cardRegion,
++  pinned = false,
+   children,
+ }: {
+   label: string | undefined;
+@@ -329,6 +330,8 @@ export function Tooltip({
+   card?: ReactNode;
+   cardBeside?: boolean;
+   cardRegion?: RefObject<HTMLElement | null>;
++  /** Throwaway: a changelog shot's card, which nothing takes down once shown (`shots/`). */
++  pinned?: boolean;
+   children: ReactElement<AnchorProps>;
+ }): React.JSX.Element {
+   const id = useId();
+@@ -354,7 +357,10 @@ export function Tooltip({
+   const pill = useDisclosure(asked !== undefined);
+   // A pill that was on screen warms the window for the next; one still
+   // waiting leaves it as it was.
++  const pinnedNow = useRef(pinned);
++  pinnedNow.current = pinned;
+   const hide = useCallback(() => {
++    if (pinnedNow.current) return;
+     const standing = latest();
+     if (standing === undefined) return;
+     setSeen(visible(standing));
+diff --git a/apps/desktop/src/renderer/update-row.ts b/apps/desktop/src/renderer/update-row.ts
+index 913a0b89..469e6255 100644
+--- a/apps/desktop/src/renderer/update-row.ts
++++ b/apps/desktop/src/renderer/update-row.ts
+@@ -4,6 +4,7 @@ import {
+   UPDATE_STATUS,
+   type UpdateSnapshot,
+ } from "#shared/messages/update";
++import { currentShot } from "./shots/shot-profiles";
+ 
+ /** The one action the row's button offers in each state. */
+ export const UPDATE_ROW_ACTION = {
+@@ -70,6 +71,15 @@ export function fixtureUpdate(
+   update: UpdateSnapshot,
+ ): UpdateSnapshot {
+   if (!run.fixtureMode) return update;
++  // Throwaway: a changelog shot draws no Update pill (`shots/README.md`).
++  if (currentShot() !== undefined) {
++    return {
++      status: UPDATE_STATUS.IDLE,
++      currentVersion: update.currentVersion,
++      installSupported: true,
++      upToDate: true,
++    };
++  }
+   const [major = "0", minor = "0"] = update.currentVersion.split(".");
+   return {
+     status: UPDATE_STATUS.READY,
+diff --git a/apps/desktop/src/shared/messages/app-state.ts b/apps/desktop/src/shared/messages/app-state.ts
+index 516f490e..0ea1d094 100644
+--- a/apps/desktop/src/shared/messages/app-state.ts
++++ b/apps/desktop/src/shared/messages/app-state.ts
+@@ -27,6 +27,17 @@ export const RUN_PROFILE = {
+   PLANNING_TRANSCRIPT: "planning-transcript",
+   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
+   PLANNING_WORK: "planning-work",
++  /** Throwaway: the 0.12.0 changelog shots (`renderer/shots/`), one profile per shot. */
++  SHOT_CALL: "shot-call",
++  SHOT_DOCUMENT: "shot-document",
++  SHOT_HISTORY: "shot-history",
++  SHOT_INBOX: "shot-inbox",
++  SHOT_CHANGES: "shot-changes",
++  SHOT_SKILLS: "shot-skills",
++  SHOT_PAGES: "shot-pages",
++  SHOT_INTEGRATIONS: "shot-integrations",
++  SHOT_PLANS: "shot-plans",
++  SHOT_PALETTE: "shot-palette",
+ } as const;
+ 
+ export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
