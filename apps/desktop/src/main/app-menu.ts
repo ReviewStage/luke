@@ -25,7 +25,7 @@ const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
 /** The update item's one act in each state, as the Updates row words it. */
 export const UPDATE_MENU_ACT = {
-  /** Ask for the latest build, and open Settings, where the answer is drawn. */
+  /** Ask for the latest build, with Settings brought forward, where the answer is drawn. */
   CHECK: "check",
   /** Nothing to choose: a check is already out. */
   CHECKING: "checking",
@@ -163,24 +163,17 @@ export function updateMenuAct(
 }
 
 /**
- * The app menu's update item, under About as a Mac app keeps it. Note that a
- * check also opens Settings in the window it was chosen over, because the
- * answer is drawn on the Updates row there, and a check that answers
- * "nothing newer" would otherwise say nothing at all.
+ * The app menu's update item, under About as a Mac app keeps it. Its presses
+ * are main's own rather than the window's, because the menu stands while no
+ * window does; a check brings the window forward on Settings itself
+ * (`update-service-host.ts`), since a check that answers "nothing newer"
+ * would otherwise say nothing at all.
  */
 function updateItem(menu: UpdateMenu): MenuItemConstructorOptions {
   const label = UPDATE_MENU_LABELS[menu.act];
   switch (menu.act) {
-    case UPDATE_MENU_ACT.CHECK: {
-      const openSettings = sendCommand(APP_COMMAND.SETTINGS);
-      return {
-        label,
-        click: (item, window, event) => {
-          openSettings(item, window, event);
-          menu.onCheck();
-        },
-      };
-    }
+    case UPDATE_MENU_ACT.CHECK:
+      return { label, click: () => menu.onCheck() };
     case UPDATE_MENU_ACT.RESTART:
       return { label, click: () => menu.onInstall() };
     case UPDATE_MENU_ACT.GET:

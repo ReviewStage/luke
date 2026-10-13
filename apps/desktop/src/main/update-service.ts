@@ -165,6 +165,12 @@ export class UpdateService {
   readonly #scope: Scope.Scope;
   #snapshot: UpdateSnapshot;
   #latestVersion: string | undefined;
+  /**
+   * Whether the run under way began with a check the developer asked for,
+   * which stands through the download that check began, so a network failure
+   * anywhere in it is said rather than silent.
+   */
+  #asked = false;
   #installing = false;
   #started = false;
   #stopped = false;
@@ -214,7 +220,7 @@ export class UpdateService {
         this.#installing = false;
         if (isNetworkErrorMessage(message)) {
           this.#report(`Update check could not reach the feed: ${message}`);
-          this.#move(this.#idle(false));
+          this.#move(this.#idle(false, this.#asked));
           return;
         }
         this.#report(`Update failed: ${message}`);
@@ -249,6 +255,11 @@ export class UpdateService {
     ) {
       return this.#snapshot;
     }
+    // Note that a new run forgets the release the last one named, so a
+    // check that fails is not mistaken for the install of a release it never
+    // found.
+    this.#asked = asked;
+    this.#latestVersion = undefined;
     this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) });
     try {
       await engine.checkForUpdates();
@@ -256,7 +267,7 @@ export class UpdateService {
       const message = error instanceof Error ? error.message : String(error);
       if (isNetworkErrorMessage(message)) {
         this.#report(`Update check could not reach the feed: ${message}`);
-        this.#move(this.#idle(false, asked));
+        this.#move(this.#idle(false, this.#asked));
       } else {
         this.#report(`Update check failed: ${message}`);
         this.#move(this.#errorSnapshot());

@@ -19,6 +19,7 @@ import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import { PAGE_SCHEME } from "#shared/page-frame";
+import { APP_COMMAND } from "#shared/shortcuts";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
@@ -89,6 +90,8 @@ export interface WindowService extends DesktopService {
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
   showInbox: (planId: string) => void;
+  /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
+  showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
   toastInboxItem: (item: InboxItemToast) => void;
   /**
@@ -257,6 +260,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onShowInbox, { planId });
   }
 
+  function showSettings(): void {
+    panels.broadcast(channels.onMenuCommand, APP_COMMAND.SETTINGS);
+  }
+
   function toastInboxItem(item: InboxItemToast): void {
     panels.broadcast(channels.onInboxItemOpened, item);
   }
@@ -392,6 +399,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     sendToVoice,
     showAgent,
     showInbox,
+    showSettings,
     toastInboxItem,
     toastAgentEnd,
     onPanelFocusChanged,

@@ -42,6 +42,11 @@ interface UpdateServiceHostDependencies {
   beforeRestart: () => Promise<void>;
   /** Every state the row draws, written to the document the windows are told from. */
   state: AppStateStore;
+  /**
+   * Brings the window forward on Settings, where a check's answer is drawn:
+   * the menu bar's Check for Updates runs with no window of its own to say it.
+   */
+  showSettings: () => void;
 }
 
 /**
@@ -85,7 +90,10 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
           ? undefined
           : {
               act,
-              onCheck: () => void host.check(),
+              onCheck: () => {
+                dependencies.showSettings();
+                void host.check();
+              },
               onInstall: () => host.install(),
               onOpenLatest: () => host.openLatestRelease(),
             },
