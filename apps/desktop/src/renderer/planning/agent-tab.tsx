@@ -219,17 +219,25 @@ function ToolCallView({
   );
 }
 
+/** The workers their own session says still run. */
+function runningStandings(
+  standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
+): readonly CodingAgentSubagentStanding[] {
+  return [...(standings?.values() ?? [])].filter(
+    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
+  );
+}
+
 /** When each running worker began: the newest turn's waits, and every worker its own session says still runs. */
 function workerStarts(
   waits: ReadonlyMap<string, number>,
   standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
 ): ReadonlyMap<string, number> {
-  const running = [...standings.values()].filter(
-    (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
-  );
   return new Map([
     ...waits,
-    ...running.map((standing) => [standing.callId, standing.startedAt] as const),
+    ...runningStandings(standings).map(
+      (standing) => [standing.callId, standing.startedAt] as const,
+    ),
   ]);
 }
 
@@ -441,6 +449,7 @@ export function AgentMessage({
   delegation,
   todos = NO_TODOS,
   briefTitle,
+  said = false,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -452,6 +461,8 @@ export function AgentMessage({
   moving: boolean;
   delegation: DelegationDoors | undefined;
   todos?: TodosPlace;
+  /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so the message holds none and folds all of its work once it has finished. */
+  said?: boolean;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
@@ -471,10 +482,17 @@ export function AgentMessage({
     );
   }
   const { startedAt, finishedAt } = message;
+  const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
+        <TranscriptRows
+          rows={agentRows(message, moving, lead.grouped, {
+            newestTodos: todos.kept,
+            workers,
+            said,
+          })}
+        >
           {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
         </TranscriptRows>
       </MessageContent>

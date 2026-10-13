@@ -192,6 +192,7 @@ function TurnWork({
         lead={PLANNING_LEAD}
         moving={turn.moving}
         delegation={doors.delegation}
+        said={spoken}
       />
       {turn.moving ? <WorkingLine startedAt={doors.counting ? turn.startedAt : undefined} /> : null}
       {ended === undefined ? null : (

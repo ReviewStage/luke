@@ -305,7 +305,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with the mark of the harness its model's id names, listed in the catalog or not yet; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row, the workers and the thought beside them one group whose line counts the workers alone and which stays open while the turn works, each row saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with the mark of the harness its model's id names, listed in the catalog or not yet; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -333,7 +333,9 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
     rows.map((row) => row.getAttribute("data-call-id")),
     ["call_d1", "call_d2"],
   );
-  assert.equal(container.querySelector("[data-turn-fold]"), null, "each on a row of its own");
+  const group = container.querySelector<HTMLDetailsElement>("[data-turn-fold]");
+  assert.equal(group?.querySelector("summary")?.textContent, "2 subagents");
+  assert.equal(group?.open, true, "open while the turn works");
   const [done, running] = rows;
   assert.ok(done && running);
   assert.equal(done.textContent, "Count the routes.Sonnet 5.5 Medium");
@@ -359,7 +361,7 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(running.querySelector("svg.lucide-bot") === null, true, "no robot");
   for (const row of rows) {
     assert.equal(row.tagName, "BUTTON", "the whole row is the button");
-    assert.equal(row.closest("details"), null, "nothing to expand");
+    assert.ok(row.closest("details") === group, "nothing to expand but the group");
     assert.equal(row.querySelector("button, summary, details"), null, "no control inside it");
   }
   assert.equal(container.textContent?.includes("Three routes"), false, "the answer is the tab's");
@@ -1292,4 +1294,53 @@ test("a worker's row says where its own session stands over its call's state: ru
     ["call_s2", null, "Sonnet 5.5 Low"],
     ["call_s3", TOOL_STATE.OUTPUT_ERROR, "Sonnet 5.5 Low"],
   ]);
+});
+
+test("a run of calls holding a subagent its own session says still works shimmers on its line though the call that started it settled, and rests once the session completed", () => {
+  const turn: CodingAgentMessage = {
+    id: "m-background",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-bash",
+        toolCallId: "call_b1",
+        state: "output-available",
+        input: { command: "ls docs" },
+        output: { status: "completed", exitCode: 0, stdout: "queue.md\n", stderr: "" },
+      },
+      {
+        type: "tool-delegate",
+        toolCallId: "call_s1",
+        state: "output-available",
+        input: { task: "Read the queue's docs.", background: true },
+        output: "Started task delegate-4hd8sa.",
+      },
+      { type: "text", text: "A worker is reading the docs." },
+    ],
+  };
+  const line = (status: CodingAgentSubagentStanding["status"]) => {
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(
+      createElement(AgentTranscriptView, {
+        messages: [PLAN, turn],
+        delegation: {
+          models: [SONNET],
+          standings: new Map([
+            [
+              "call_s1",
+              { callId: "call_s1", status, model: SONNET.id, effort: "low", startedAt: 1 },
+            ],
+          ]),
+        },
+        reading: false,
+        failed: false,
+        working: true,
+        onRetry: ignore,
+      }),
+    );
+    const summary = container.querySelector("[data-turn-fold] summary");
+    return [summary?.textContent, summary?.querySelector(".animate-shimmer") !== null];
+  };
+  assert.deepEqual(line(CODING_AGENT_STATUS.RUNNING), ["1 tool called, 1 subagent", true]);
+  assert.deepEqual(line(CODING_AGENT_STATUS.COMPLETED), ["1 tool called, 1 subagent", false]);
 });

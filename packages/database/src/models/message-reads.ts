@@ -36,7 +36,7 @@ import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../core/query.js";
-import { conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
+import { asks, conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
@@ -791,6 +791,28 @@ export function turnsNamed(
 /** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
 const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
 
+/**
+ * Whether a spoken row of `messages` came into its turn with the ask that
+ * opened it rather than one made after the turn started: a follow-up the
+ * running turn was steered with (`brain-host/channel.ts`). The ask names
+ * the row by its client id or by the delegation it was attached to.
+ */
+const noSteeredAsk = () =>
+  notExists(
+    db
+      .select({ id: asks.id })
+      .from(asks)
+      .innerJoin(turns, eq(turns.id, asks.turnId))
+      .where(
+        and(
+          eq(asks.conversationId, messages.conversationId),
+          eq(asks.turnId, messages.turnId),
+          sql`${asks.clientId} in (${messages.clientId}, ${messages.metadata} ->> 'delegation_id')`,
+          gt(asks.createdAt, turns.startedAt),
+        ),
+      ),
+  );
+
 const findSpokenAskRows = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -820,6 +842,7 @@ const findSpokenAskRows = SqlSchema.findAll({
           inArray(messages.turnId, [...turnIds]),
           eq(messages.role, MESSAGE_ROLE.USER),
           sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
+          noSteeredAsk(),
         ),
       )
       .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
@@ -837,7 +860,11 @@ export interface SpokenAskRow {
  * the order they were said, which is where on the call each began rather
  * than where the conversation holds it, since a line taken into its turn
  * moves there: the rows a delegation's attach or the turn's receipt took
- * into the turn. A turn no spoken line opened names none.
+ * into the turn. A turn no spoken line opened names none. Note that a line
+ * of a follow-up the running turn was steered with is not its ask, because
+ * the ask is where the turn's work stands on the call, and a turn parked on
+ * its subagents for minutes takes every follow-up said meanwhile; its work
+ * stays under the lines that opened it, and the follow-ups stand below.
  */
 export function spokenAskRowsOf(
   userId: string,

@@ -281,9 +281,10 @@ export const planWorkTurnSchema = EffectSchema.Struct({
   parts: EffectSchema.Array(planWorkPartSchema),
   /**
    * The developer's spoken lines the turn took as its ask, by the ids the
-   * Transcript names them by, in the order they were said; absent for a turn
-   * no spoken line opened, before its lines are taken into it, and from a
-   * service older than it.
+   * Transcript names them by, in the order they were said: those of the asks
+   * that opened it, never a follow-up the running turn was steered with;
+   * absent for a turn no spoken line opened, before its lines are taken into
+   * it, and from a service older than it.
    */
   asked: EffectSchema.optionalKey(
     EffectSchema.Array(

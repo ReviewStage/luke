@@ -7,12 +7,15 @@
  * here, so the two never drift: a call is one of a few kinds, each with
  * the verb its row says and whether its subject is code; and a turn's
  * blocks fold the way the Call tab folds them (Stagent's walk, Stage's chat
- * panel): calls next to one another are one group that is open while it is
- * the turn's latest work on a turn that moves and folded once the model
- * moved on, and a finished turn folds everything ahead of its last words
- * into one line saying how much it holds, its subagents and the coding
- * agents it started named apart from its other calls, so it reads as its
- * answer. That
+ * panel): calls and subagents next to one another, and the reasoning
+ * between and beside them, are one group that is open while it is the
+ * turn's latest work on a turn that moves and folded once the model moved
+ * on, its line counting the calls and subagents and never the thoughts;
+ * and a finished turn folds everything ahead of its last words into one
+ * line saying how much it holds, its subagents and the coding agents it
+ * started named apart from its other calls, so it reads as its answer. A
+ * finished turn whose words were said aloud, as a spoken turn's on the
+ * Call tab are, folds all of it, since its answer stands after it. That
  * fold is the one grouping its calls get: a run of calls is folded once,
  * never a group inside the fold that already holds it. A lead with no call
  * is not folded: its reasoning and words stand as they did while it moved.
@@ -171,15 +174,15 @@ export function pageName(url: string): string {
 export const ROW_PART = {
   /** The model's words: they end a run of calls, and a finished turn folds down to its last. */
   WORDS: "words",
-  /** A call, which runs together with the calls beside it. */
+  /** A call, which runs together with the calls beside it, and which a group and a fold count. */
   CALL: "call",
   /** A call that stands on a row of its own, as an agent's to-do list does. */
   LONE_CALL: "lone-call",
-  /** A subagent, which stands on a row of its own because it runs on after its call, and which a fold counts apart from the calls. */
+  /** A subagent, which runs together with the calls beside it, and which a group and a fold count apart from the calls. */
   SUBAGENT: "subagent",
   /** A call that started a coding agent, which runs together with the calls beside it as a call does, and which a fold counts apart from them. */
   CODING_AGENT: "coding-agent",
-  /** Anything else, which ends a run and is not counted: reasoning. */
+  /** Reasoning, which runs with the calls beside it but is never counted, and stands on its own row where no call is beside it. */
   NOTE: "note",
 } as const;
 
@@ -208,6 +211,8 @@ export type TurnRow<B> =
       readonly kind: typeof TURN_ROW.GROUP;
       readonly key: string;
       readonly blocks: readonly B[];
+      /** What its line says it holds. */
+      readonly summary: string;
       /** Open while it is the turn's latest work and the turn still moves. */
       readonly open: boolean;
       readonly running: boolean;
@@ -221,11 +226,6 @@ export type TurnRow<B> =
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-/** What a group's line says it holds. */
-export function groupSummary(calls: number): string {
-  return `${calls} ${calls === 1 ? "tool called" : "tools called"}`;
 }
 
 /** What a lead's blocks hold, as its fold's line counts them. */
@@ -247,9 +247,24 @@ function foldedSummary({ calls, subagents, codingAgents, messages }: Held): stri
   return said.join(", ");
 }
 
-/** Whether a block runs together with the calls beside it. */
+/** What a group's line says it holds: its calls, a coding agent's start among them, then its subagents. */
+function groupSummary({ calls, subagents, codingAgents }: Held): string {
+  const tools = calls + codingAgents;
+  const said = [
+    ...(tools > 0 ? [plural(tools, "tool called", "tools called")] : []),
+    ...(subagents > 0 ? [plural(subagents, "subagent", "subagents")] : []),
+  ];
+  return said.join(", ");
+}
+
+/** Whether a block is work a group gathers: a call, a subagent, or a start of a coding agent. */
+function isWork(part: RowPart): boolean {
+  return part === ROW_PART.CALL || part === ROW_PART.SUBAGENT || part === ROW_PART.CODING_AGENT;
+}
+
+/** Whether a block runs together with the work beside it: that work, or a thought. */
 function runsWithCalls(part: RowPart): boolean {
-  return part === ROW_PART.CALL || part === ROW_PART.CODING_AGENT;
+  return isWork(part) || part === ROW_PART.NOTE;
 }
 
 /** A block with the key its row is drawn under. */
@@ -259,13 +274,14 @@ interface Keyed<B> {
 }
 
 /**
- * A turn's blocks as rows: the words, reasoning, and lone calls as they
- * are, and calls next to one another grouped, the group open while it is
- * the turn's latest work on a turn that moves. A lone call is its own row,
- * unless it is that latest work, which is drawn as a group so the calls
- * after it join it rather than redraw it. Not grouped, every call stands
- * on a row of its own, for a session read for its detail and for a lead
- * the fold already holds.
+ * A turn's blocks as rows: the words and lone calls as they are, and calls
+ * and subagents next to one another grouped with the thoughts between and
+ * beside them, the group open while it is the turn's latest work on a turn
+ * that moves. A run of thoughts with no work in it stands as its rows. A
+ * run of one call or subagent is its own row, unless it is that latest
+ * work, which is drawn as a group so the work after it joins it rather
+ * than redraw it. Not grouped, every block stands on a row of its own, for
+ * a session read for its detail and for a lead the fold already holds.
  */
 function groupedRows<B>(
   blocks: readonly Keyed<B>[],
@@ -279,11 +295,14 @@ function groupedRows<B>(
     const [first] = group;
     if (first === undefined) return;
     const open = trailing && moving;
-    if (grouped && (group.length > 1 || open)) {
+    const held = counted(group, read);
+    const work = held.calls + held.subagents + held.codingAgents;
+    if (grouped && work > 0 && (group.length > 1 || open)) {
       rows.push({
         kind: TURN_ROW.GROUP,
         key: first.key,
         blocks: group.map((each) => each.block),
+        summary: groupSummary(held),
         open,
         running: group.some((each) => read.running(each.block)),
       });
@@ -325,8 +344,9 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
 /**
  * A turn's blocks as the rows a tab draws, folded the Call tab's way:
  * calls grouped, and, once the turn is done, everything ahead of its last
- * words folded into one line saying what it holds, each call inside it on
- * a row of its own. A lead without a call has no work to fold away, so it
+ * words, or all of it where they were said aloud, folded into one line
+ * saying what it holds, each call inside it on a row of its own. A lead
+ * without a call has no work to fold away, so it
  * keeps its rows, its reasoning drawn at the top level as on a moving turn.
  * A block the reading keeps out of the fold, as an agent's newest to-do
  * list is, is drawn right after the fold, ahead of the last words, so it
@@ -342,10 +362,15 @@ export function turnRows<B>(
     /** Whether the turn ended as it meant to, which folds its lead; a turn cut off keeps its rows as they were. */
     readonly done: boolean;
     readonly grouped: boolean;
+    /** Whether its words were said aloud and stand after it, which folds all of a finished turn's blocks. */
+    readonly said?: boolean;
   },
 ): readonly TurnRow<B>[] {
   const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
-  const last = blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
+  const last =
+    turn.said === true
+      ? blocks.length
+      : blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
   if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, turn.grouped);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);

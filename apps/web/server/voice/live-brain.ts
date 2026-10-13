@@ -206,7 +206,7 @@ interface FollowTold {
   workers: ReadonlyMap<string, string>;
   /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
   seeking: boolean;
-  /** The spoken lines the turn has taken as its ask so far, read again on every look, since a later ask folded into the turn brings lines of its own. */
+  /** The spoken lines of the asks that opened the turn, read again on every look, since a line may be taken into the turn after the look that first found it. */
   asked: readonly SpokenAskRow[];
 }
 
