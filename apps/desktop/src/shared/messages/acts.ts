@@ -533,7 +533,7 @@ const press = (refusal: string): ActDeclaration<undefined, void> => ({
 export const ACT = {
   [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
     payload: record({
-      provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
+      provider: EffectSchema.Literal(ACCOUNT_PROVIDER.GITHUB),
     }),
     result: answersAccount,
     refusal: "Could not start signing in on this system.",

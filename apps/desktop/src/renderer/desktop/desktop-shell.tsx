@@ -1,4 +1,4 @@
-import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type SignInProvider } from "@sidecar/credentials/snapshot";
 import { ComposeIcon, SidebarIcon } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
@@ -31,9 +31,9 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 export interface DesktopGates {
   accountRequired: boolean;
   /** Whose sign-in the gate is waiting on in the browser. */
-  signInWait?: AccountProvider | undefined;
+  signInWait?: SignInProvider | undefined;
   signInFailure?: string | undefined;
-  onBeginSignIn: (provider: AccountProvider) => void;
+  onBeginSignIn: (provider: SignInProvider) => void;
   onCancelSignIn: () => void;
   /** The signed-out Luke's introduction cycle, walked over the sign-in. */
   signInFace: { play: number; motion?: FaceMotion };
