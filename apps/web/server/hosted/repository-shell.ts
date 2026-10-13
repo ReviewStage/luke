@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@sidecar/database/core/query";
-import { CODING_AGENT_CHECKOUT_PATH } from "@sidecar/hosted/coding-agent-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
@@ -100,7 +99,7 @@ const REPOSITORY_SHELL_BOUNDS = {
 export const REPOSITORY_SANDBOX_CONTRACT = {
   PATH: {
     WORKSPACE: "/workspace",
-    CHECKOUT: CODING_AGENT_CHECKOUT_PATH,
+    CHECKOUT: "/workspace/repository",
     CHECKOUT_RECORD: ".luke/repository",
   },
   VARIABLE: {

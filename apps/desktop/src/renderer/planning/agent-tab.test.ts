@@ -83,9 +83,10 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.BOARD },
   },
   {
-    name: "a look at the board opens the Board while it runs",
+    name: "a look at the board opens the Board",
     tool: "look_at_board",
     input: {},
+    output: { status: "looked", image: "data:image/png;base64,AA" },
     target: { kind: TOOL_TARGET.BOARD },
   },
   {
@@ -126,34 +127,6 @@ const OPENING_CALLS: readonly {
       call: "call-show_code",
       ref: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
     },
-  },
-  {
-    name: "a file read by a relative path opens it",
-    tool: "read_file",
-    input: { filePath: "./src/invoice.ts" },
-    output: { content: "export {}" },
-    target: { kind: TOOL_TARGET.FILE, path: "src/invoice.ts" },
-  },
-  {
-    name: "a file read by its path in the checkout opens it",
-    tool: "read_file",
-    input: { filePath: "/workspace/repository/src/invoice.ts" },
-    output: { content: "export {}" },
-    target: { kind: TOOL_TARGET.FILE, path: "src/invoice.ts" },
-  },
-  {
-    name: "a file written opens Changes",
-    tool: "write_file",
-    input: { filePath: "src/invoice.ts", content: "export {}" },
-    output: { path: "src/invoice.ts" },
-    target: { kind: TOOL_TARGET.CHANGES },
-  },
-  {
-    name: "a patch opens Changes",
-    tool: "apply_patch",
-    input: { patchText: "*** Begin Patch\n*** Update File: src/invoice.ts\n*** End Patch" },
-    output: { files: [] },
-    target: { kind: TOOL_TARGET.CHANGES },
   },
   {
     name: "a post to the inbox opens the Inbox",
@@ -226,8 +199,28 @@ const FOLDING_CALLS: readonly {
     part: toolPart("show_page", { title: "Pricing explorer" }),
   },
   {
-    name: "a file read outside the checkout",
-    part: toolPart("read_file", { filePath: "/etc/hosts" }, { content: "" }),
+    name: "a drawing the board refused",
+    part: toolPart(
+      "draw_on_board",
+      { elements: [] },
+      { status: "not-drawn", reason: "Not drawn: an arrow names an id the diagram does not hold." },
+    ),
+  },
+  {
+    name: "a plan edit still running",
+    part: toolPart("edit_plan", { notes: [{ kind: "add", section: "Goal", text: "Export" }] }),
+  },
+  {
+    name: "a file the agent read, which its checkout holds and GitHub may not",
+    part: toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+  },
+  {
+    name: "a file the agent wrote, which its pull request may not hold yet",
+    part: toolPart(
+      "write_file",
+      { filePath: "src/new.ts", content: "export {}" },
+      { path: "src/new.ts" },
+    ),
   },
 ];
 

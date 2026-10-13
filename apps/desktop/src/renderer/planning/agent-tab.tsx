@@ -112,7 +112,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
- * the board, an agent, a file, the plan, its Changes, or the Inbox, the one
+ * the board, an agent, code shown, the plan, or the Inbox, the one
  * button that opens that tab (`toolTarget`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
@@ -842,7 +842,7 @@ export function AgentTab({
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
-  /** Opens what one of its calls is about in the tab that draws it, its Changes this agent's. */
+  /** Opens what one of its calls is about in the tab that draws it. */
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
   onOpenChanges?: (() => void) | undefined;

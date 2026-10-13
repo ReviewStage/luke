@@ -1,6 +1,5 @@
 import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@sidecar/hosted/agent-tools";
 import {
-  CODING_AGENT_CHECKOUT_PATH,
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
@@ -16,13 +15,7 @@ import {
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type WireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
@@ -45,7 +38,7 @@ import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-r
  * row draws item by item, and an item posted to the developer's inbox
  * through it too, its row naming the item the Inbox tab draws. A call
  * about something the window opens elsewhere, a page, the board, an agent,
- * a file, names it as its target (`toolTarget`), which its row opens.
+ * code shown, names it as its target (`toolTarget`), which its row opens.
  * Nothing here draws.
  */
 
@@ -589,10 +582,6 @@ export const TOOL_TARGET = {
   PLAN: "plan",
   /** The File tab of a file Luke showed, its lines lit as the call showed them. */
   SHOWN_CODE: "shown-code",
-  /** The File tab of any file of the plan's repository, browsed to. */
-  FILE: "file",
-  /** The Changes tab of the agent whose transcript the row stands in. */
-  CHANGES: "changes",
   /** The plan's Inbox tab. */
   INBOX: "inbox",
 } as const;
@@ -603,8 +592,6 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
-  | { readonly kind: typeof TOOL_TARGET.FILE; readonly path: string }
-  | { readonly kind: typeof TOOL_TARGET.CHANGES }
   | { readonly kind: typeof TOOL_TARGET.INBOX };
 
 /** What the hover over a row says it opens, by its target's kind. */
@@ -614,8 +601,6 @@ export const TARGET_HINT = {
   [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
-  [TOOL_TARGET.FILE]: "Open the file",
-  [TOOL_TARGET.CHANGES]: "Open Changes",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
@@ -629,7 +614,6 @@ interface TargetedCall {
 
 const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const PLAN_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
-const CHANGES_TARGET: ToolTarget = { kind: TOOL_TARGET.CHANGES };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
 /** The agent a call names in its input, as a read of or a message to one does. */
@@ -666,30 +650,15 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
 }
 
 /**
- * A path a coding agent's file tool was handed, as the repository's own:
- * relative, as it is; absolute, only under the checkout, since a path
- * anywhere else in the sandbox is no file a File tab could read.
- */
-function repositoryPath(given: string): string | undefined {
-  const checkout = `${CODING_AGENT_CHECKOUT_PATH}/`;
-  if (given.startsWith(checkout)) return given.slice(checkout.length);
-  if (given.startsWith("/")) return undefined;
-  return given.replace(/^(?:\.\/)+/u, "");
-}
-
-/** The file of the repository a coding agent's read names. */
-function readFile(call: TargetedCall): ToolTarget | undefined {
-  const given = stringAt(call.input, "filePath");
-  const path = given === undefined ? undefined : repositoryPath(given);
-  return path === undefined || path === "" ? undefined : { kind: TOOL_TARGET.FILE, path };
-}
-
-/**
  * What each tool's call opens, read from the call alone; a tool not listed
  * opens nothing, and its row folds its input and answer open in place. A
  * worker's own delegation and a loaded skill open their tabs through their
  * own rows (`DelegationRow`, `LoadedSkillView`), and a command, a search, or
- * a web read is read in its row's body, so none is listed.
+ * a file's read, write, or patch, or a web read is read in its row's body,
+ * so none is listed. Note that a coding agent's file calls stay in their
+ * bodies, because a File tab and the Changes tab read the repository and
+ * the pull request on GitHub rather than the agent's checkout, so what the
+ * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
   AgentTool,
@@ -703,21 +672,30 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
-  [AGENT_TOOL.READ_FILE, readFile],
-  [AGENT_TOOL.WRITE_FILE, () => CHANGES_TARGET],
-  [AGENT_TOOL.APPLY_PATCH, () => CHANGES_TARGET],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
 ]);
 
 /**
+ * Whether a call's answer says it did nothing. Note that it is told by the
+ * reason it answers beside its status rather than by the status's word,
+ * because every refusal among these tools answers why (`rejected`, the
+ * board's `not-drawn` and `not-looked`), each tool in words of its own the
+ * renderer cannot reach, and no answer that did what was asked carries one.
+ */
+function refused(output: WireValue | undefined): boolean {
+  return stringAt(output, "reason") !== undefined;
+}
+
+/**
  * What a call's row opens, or nothing where it opens nothing. Note that a
- * call its tool refused opens nothing, because the refusal is read in its
- * row's body, which a row that opens elsewhere has none of.
+ * call opens nothing until it has answered, because until then what it is
+ * about has not changed, and its row's body is where its input is read; nor
+ * does one its tool refused, whose body is where the refusal is read.
  */
 export function toolTarget(call: TargetedCall): ToolTarget | undefined {
-  if (stringAt(call.output, "status") === ACTION_RESULT_STATUS.REJECTED) return undefined;
+  if (call.output === undefined || refused(call.output)) return undefined;
   return TOOL_TARGETS.get(call.tool)?.(call);
 }
 

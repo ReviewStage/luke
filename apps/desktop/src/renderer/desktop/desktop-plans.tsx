@@ -364,10 +364,8 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: the plan, an agent, or the Inbox in this
-  // column, the rest in the side panel. `agent` is the agent whose
-  // transcript the row stands in, whose Changes its writes open; none on the
-  // Call tab, whose model writes no file.
-  const openTarget = (agent: string | undefined, target: ToolTarget) => {
+  // column, the rest in the side panel.
+  const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
         return openColumnTab({ agent: target.agent });
@@ -384,11 +382,6 @@ function PlanDocument({
         const showing = plans.shownCode?.find((each) => each.callId === target.call);
         return sidePanel.onOpenFile(target.ref, showing?.code.commit);
       }
-      case TOOL_TARGET.FILE:
-        // Browsed to, as a skill's file is, so its tab stands on this plan though Luke never showed it.
-        return sidePanel.onBrowseFile(target.path, target.path, true);
-      case TOOL_TARGET.CHANGES:
-        return agent === undefined ? undefined : openChanges(agent);
     }
   };
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
@@ -559,7 +552,7 @@ function PlanDocument({
           views={views}
           shown={plans.shown}
           focused={sideFocused}
-          onOpenTarget={(target) => openTarget(undefined, target)}
+          onOpenTarget={openTarget}
         />
       ) : null}
     </div>

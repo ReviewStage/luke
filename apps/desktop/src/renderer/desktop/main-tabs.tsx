@@ -604,8 +604,8 @@ export function MainTabContent({
   ) => void;
   /** Opens the agent's changes in the side panel, by the agent. */
   onOpenChanges: (agentId: string) => void;
-  /** Opens what a call in the agent's transcript is about in the tab that draws it, by the agent whose transcript it stands in. */
-  onOpenTarget: (agentId: string, target: ToolTarget) => void;
+  /** Opens what a call in the agent's transcript is about in the tab that draws it. */
+  onOpenTarget: (target: ToolTarget) => void;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -629,7 +629,7 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
-      onOpenTarget={(target) => onOpenTarget(agent.id, target)}
+      onOpenTarget={onOpenTarget}
       onHeld={views.onAgentHeld}
     />
   );
