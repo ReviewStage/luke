@@ -425,6 +425,8 @@ body,
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  margin: calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
   overflow-y: auto;
 }
 
@@ -653,11 +655,6 @@ body,
   opacity: 0.45;
 }
 
-/* The sidebar clips at its edges, so its rows' rings are drawn inside them. */
-.sidebar-plan-mark:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
-}
-
 .sidebar-plan-mark svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -667,6 +664,13 @@ body,
 .sidebar-plan-item:hover > .sidebar-plan-marks,
 .sidebar-plan-item:has(:focus-visible) > .sidebar-plan-marks {
   opacity: 1;
+}
+
+/* Note that the row holding the keyboard stands over its neighbours, because
+   its ring reaches past the list's gap and the next row's fill would
+   otherwise paint over the ring's foot. */
+.sidebar-plan-item:has(:focus-visible) {
+  z-index: 1;
 }
 
 .sidebar-plan-item:hover .sidebar-plan-time,
@@ -717,7 +721,7 @@ body,
   flex: 1;
   align-items: center;
   gap: var(--glyph-gap);
-  padding: var(--space-6) var(--row-inset);
+  padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
   color: var(--text-secondary);
@@ -732,7 +736,15 @@ body,
 }
 
 .sidebar-repository-toggle:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  outline: none; /* no ring: the header around it rings, as a plan row does */
+}
+
+/* The keyboard on the fold rings the whole header, its ⋯ and + included,
+   as a plan row's ring takes in its Pin and Archive. */
+:root[data-keyboard="true"]
+.sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .sidebar-repository-name {
@@ -852,10 +864,6 @@ body,
 .sidebar-repository-action:hover,
 .sidebar-repository-action[aria-expanded="true"] {
   color: var(--text-primary);
-}
-
-.sidebar-repository-action:focus-visible {
-  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .sidebar-repository-action svg {
@@ -2886,6 +2894,12 @@ body:has(.app-stage[data-capture="true"])
   opacity: 1;
 }
 
+/* The row holding the keyboard stands over its neighbours, as a sidebar
+   plan's does, so the next row's fill leaves its ring's foot. */
+.version-item:has(:focus-visible) {
+  z-index: 1;
+}
+
 .version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(.version-row-actions)
   .version-row-time {
   visibility: hidden;
@@ -2893,14 +2907,19 @@ body:has(.app-stage[data-capture="true"])
 
 /* The versions and the sections of the one opened stand side by side in a
    track as wide as the column, the sections slid in over the column's own
-   edge the way a nested page of System Settings is, on transform alone. */
+   edge the way a nested page of System Settings is, on transform alone. The
+   track reaches the keyboard ring's width past the column's content on
+   either side, each pane giving it back as padding, so it clips what slides
+   past it and not a row's ring; it clips across alone, since its panes
+   scroll their own height. */
 .version-log-track {
   display: grid;
   min-height: 0;
   flex: 1;
   grid-template-columns: 100% 100%;
   grid-template-rows: minmax(0, 1fr);
-  overflow: clip;
+  margin-inline: calc(-1 * var(--focus-ring-reach));
+  overflow-x: clip;
 }
 
 /* The view's title heads the versions' pane rather than the column, so it
@@ -2910,7 +2929,14 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  padding-inline: var(--focus-ring-reach);
   transition: transform var(--duration-pane) var(--motion-pane);
+}
+
+/* The sections' pane is a scroller of the sidebar's kind, its reach already
+   the track's, so it fills its cell rather than standing past it. */
+.version-log-track > .sidebar-section {
+  margin-inline: 0;
 }
 
 .version-log-track[data-opened="true"] > .version-log-pane {
@@ -3220,7 +3246,9 @@ body:has(.app-stage[data-capture="true"])
   --button-ground: var(--desktop-ground);
   position: sticky;
   z-index: 1;
-  top: 0;
+  /* Held off the scroller's edge by the keyboard ring's reach, so its ring
+     stands whole once the column is scrolled under it. */
+  top: var(--focus-ring-reach);
   flex: none;
   align-self: flex-end;
   margin-bottom: calc(-1 * (var(--control-height) + var(--section-gap)));
@@ -3730,9 +3758,10 @@ body:has(.app-stage[data-capture="true"])
   scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
-     under a tab being dragged, which the strip's scrolling would clip. */
-  margin-block: calc(-1 * var(--space-8));
-  padding-block: var(--space-8);
+     under a tab being dragged, which the strip's scrolling would clip, and
+     at either end for the keyboard's ring on the first tab and the last. */
+  margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
+  padding: var(--space-8) var(--focus-ring-reach);
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -3796,6 +3825,12 @@ body:has(.app-stage[data-capture="true"])
 .tab:hover {
   background: var(--raised);
   color: var(--text-primary);
+}
+
+/* The tab holding the keyboard stands over its neighbours, so the chosen
+   tab's fill beside it leaves its ring whole. */
+.tab:has(:focus-visible) {
+  z-index: 1;
 }
 
 .tab[data-selected="true"] {
@@ -4894,7 +4929,8 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   transition: background-color var(--duration-hover) ease;
 }
 
-:is(button.plan-card-detail, button.plan-card-line):hover {
+:is(button.plan-card-detail, button.plan-card-line):is(:hover, :focus-visible) {
+  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
   background: var(--raised-strong);
 }
 

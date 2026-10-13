@@ -866,7 +866,9 @@ button.code-card-path:hover {
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
-   the panel's own list, beside a File tab and under a crumb alike. */
+   the panel's own list, beside a File tab and under a crumb alike. The ring
+   is the window's width drawn inside the row, because the tree's scroller
+   lays its rows edge to edge with no room for one outside. */
 .file-tree-host {
   --trees-bg-override: transparent;
   --trees-bg-muted-override: var(--raised);
@@ -877,12 +879,22 @@ button.code-card-path:hover {
   --trees-selected-focused-border-color-override: var(--focus-ring);
   --trees-border-color-override: var(--hairline);
   --trees-focus-ring-color-override: var(--focus-ring);
+  --trees-focus-ring-width-override: var(--focus-ring-width);
+  --trees-focus-ring-offset-override: calc(var(--focus-ring-width) * -1);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* The tree rings whichever row holds focus, a pressed one too, so until the
+   keyboard has moved focus its ring is drawn in no colour at all, as every
+   other control's is drawn not at all (base.css). */
+:root:not([data-keyboard="true"]) .file-tree-host {
+  --trees-focus-ring-color-override: transparent;
+  --trees-selected-focused-border-color-override: transparent;
 }
 
 .file-tree-host > *,
@@ -951,6 +963,11 @@ button.code-card-path:hover {
   color: var(--text-secondary);
 }
 
+/* The edges run the lines' whole width, so their ring is drawn inside them. */
+.file-tab-edge:focus-visible {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+}
+
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
    card in the window's own type between the lines, as a review comment
    stands in a diff. Lines unwrapped scroll sideways under it while it
@@ -1001,6 +1018,11 @@ button.code-card-path:hover {
 
 .file-note-fold:hover {
   background: var(--raised);
+}
+
+/* The note's card clips what it holds, so its fold's ring is drawn inside. */
+.file-note-fold:focus-visible {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .file-note-fold > svg:first-child {

@@ -197,19 +197,30 @@ export function ownDeclarations(
 /**
  * What the built sheet gives an element for a property. jsdom computes no
  * cascade and hovers nothing, so the sheet's last rule for the element wins,
- * with an element marked `data-hovered` where the sheet says :hover.
+ * an unlayered one over any in a layer, with an element marked
+ * `data-hovered` where the sheet says :hover, and one marked
+ * `data-focus-visible` where it says :focus-visible, since jsdom's selector
+ * cache goes on answering :focus-visible for whatever held focus first.
  */
 export async function sheetStyle(): Promise<
   (element: Element, property: string) => string | undefined
 > {
-  const rules = cssRules(await builtStylesheet());
+  // An unlayered rule outranks every layered one, wherever it stands in the
+  // sheet, so the layered rules are read first and the last match wins.
+  const rules = cssRules(await builtStylesheet()).toSorted(
+    (one, other) => Number(one.layer === undefined) - Number(other.layer === undefined),
+  );
   return (element, property) =>
     rules
       .filter((rule) => rule.declarations.has(property))
       .filter((rule) =>
         rule.selectors.some((selector) => {
           try {
-            return element.matches(selector.replaceAll(":hover", "[data-hovered]"));
+            return element.matches(
+              selector
+                .replaceAll(":hover", "[data-hovered]")
+                .replaceAll(":focus-visible", "[data-focus-visible]"),
+            );
           } catch {
             return false;
           }
@@ -244,4 +255,83 @@ export function selectedText(style: SheetStyle, element: Element): string {
     if (selectable(style, node)) text += node.nodeValue ?? "";
   }
   return text;
+}
+
+const CLIPPING_OVERFLOW = /^(?:auto|hidden|scroll|clip)$/u;
+const OVERFLOW_PROPERTIES = ["overflow", "overflow-x", "overflow-y"] as const;
+
+/** The nearest declaration of a custom property, from the element up, as inheritance reads it. */
+function inherited(style: SheetStyle, element: Element, property: string): string | undefined {
+  for (let at: Element | null = element; at; at = at.parentElement) {
+    const value = style(at, property);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/** The element wearing the keyboard's ring while it is on the control: the control, or the row around it that rings for it. */
+function ringWearer(style: SheetStyle, control: Element): Element | undefined {
+  for (let at: Element | null = control; at; at = at.parentElement) {
+    if ((style(at, "outline") ?? "").includes("var(--focus-ring)")) return at;
+  }
+  return undefined;
+}
+
+/** Whether the element draws the keyboard's ring inside its own edge, its offset less the ring's width. */
+function drawsRingInside(style: SheetStyle, element: Element): boolean {
+  return (inherited(style, element, "--focus-ring-offset") ?? "").includes("-1");
+}
+
+/** Why the ring stands clipped, read off the element wearing it: none where it is drawn inside that element, or the box that clips it pads by the ring's reach. */
+function clippedBy(style: SheetStyle, wearer: Element): string | undefined {
+  if (drawsRingInside(style, wearer)) return undefined;
+  for (let at = wearer.parentElement; at; at = at.parentElement) {
+    const clips = OVERFLOW_PROPERTIES.some((property) =>
+      CLIPPING_OVERFLOW.test(style(at, property) ?? ""),
+    );
+    if (!clips) continue;
+    if ((style(at, "padding") ?? "").includes("var(--focus-ring-reach)")) return undefined;
+    return `.${[...at.classList].join(".")} clips the ring of .${[...wearer.classList].join(".")}`;
+  }
+  return undefined;
+}
+
+/**
+ * What a read of the sheet answers as the window stands once the keyboard
+ * has moved focus to the control: the root marked `data-keyboard` and the
+ * control `data-focus-visible` (`sheetStyle`) for the read alone.
+ */
+export function withKeyboardOn<A>(control: HTMLElement, read: () => A): A {
+  const root = control.ownerDocument.documentElement;
+  const keyboard = root.dataset.keyboard;
+  root.dataset.keyboard = "true";
+  control.dataset.focusVisible = "";
+  const answer = read();
+  delete control.dataset.focusVisible;
+  if (keyboard === undefined) delete root.dataset.keyboard;
+  else root.dataset.keyboard = keyboard;
+  return answer;
+}
+
+/**
+ * Whether the keyboard's ring on a control is drawn whole: the element
+ * wearing it either draws it inside itself, or the nearest box that clips
+ * pads by the ring's reach, so a row laid edge to edge in a scroller keeps
+ * the ring's sides. Answers why not, or nothing.
+ */
+export function ringClipping(style: SheetStyle, control: HTMLElement): string | undefined {
+  return withKeyboardOn(control, () => {
+    const wearer = ringWearer(style, control);
+    return wearer === undefined
+      ? "nothing around the control wears the ring"
+      : clippedBy(style, wearer);
+  });
+}
+
+/** Whether the keyboard's ring on a control is drawn inside its edge, as one with no room around it draws it. */
+export function ringInside(style: SheetStyle, control: HTMLElement): boolean {
+  return withKeyboardOn(control, () => {
+    const wearer = ringWearer(style, control);
+    return wearer !== undefined && drawsRingInside(style, wearer);
+  });
 }

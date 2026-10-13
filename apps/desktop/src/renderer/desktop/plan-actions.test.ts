@@ -6,7 +6,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { sheetStyle } from "#testing/css-rules";
+import { sheetStyle, withKeyboardOn } from "#testing/css-rules";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
@@ -418,12 +418,7 @@ test("hovered or reached from the keyboard, a sidebar plan's time steps out and 
   item.dataset.hovered = "true";
   const hovered = shown();
   delete item.dataset.hovered;
-  // Tab reaches the row, as the keyboard would.
-  act(() => {
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    row.focus();
-  });
-  const focused = shown();
+  const focused = withKeyboardOn(row, shown);
 
   assert.deepEqual(resting, ["visible", "0"]);
   assert.deepEqual(hovered, ["hidden", "1"]);

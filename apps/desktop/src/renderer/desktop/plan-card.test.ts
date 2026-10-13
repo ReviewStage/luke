@@ -15,6 +15,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { sheetStyle, withKeyboardOn } from "#testing/css-rules";
 import { rendererRuntime } from "../renderer-runtime";
 import { PlanCard } from "./plan-card";
 
@@ -187,6 +188,24 @@ it.effect(
       assert.deepEqual(card.agents, ["Invite flow", "GPT 6.1 Sol", "Fix the tests", "1 more"]);
       for (const row of card.agents) {
         assert.doesNotMatch(row ?? "", /Working|Done|Failed|Stopped|ago/u);
+      }
+      card.unmount();
+    }),
+);
+
+it.effect(
+  "a card's rows mark the keyboard as a menu's rows do, with the row's fill and no ring around it",
+  () =>
+    Effect.gen(function* () {
+      const styled = yield* Effect.promise(() => sheetStyle());
+      const card = yield* drawnCard(PLAN);
+      const rows = card.buttons();
+      const marks = (row: HTMLElement) =>
+        withKeyboardOn(row, () => [styled(row, "outline"), styled(row, "background")]);
+
+      assert.ok(rows.length > 0);
+      for (const row of rows) {
+        assert.deepEqual(marks(row), ["none", "var(--raised-strong)"], row.textContent ?? "");
       }
       card.unmount();
     }),

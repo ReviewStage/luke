@@ -152,6 +152,11 @@ switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
 `--focus-ring-offset` off its edge, and only once the keyboard has moved focus
 (`keyboard-modality.ts`), so a press never rings a control. One that clips what
 it holds sets the offset to less the width, so the ring is drawn inside it. A
+scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
+back as a negative margin, so a row's ring is never cut off at its sides, and a
+row holding the keyboard stands over its neighbours, so the next row's fill
+leaves its ring whole. A row that runs the scroller's width by design, a line of
+code or Pierre's tree, draws the ring inside it instead. A
 field holding the caret wears the same ring centred on its edge however the
 caret arrived, and a field set borderless in a well, a search's or the
 composer's, rings the well (`.field-well`). A rule that takes the ring away

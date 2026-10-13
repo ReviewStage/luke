@@ -486,6 +486,9 @@
 }
 
 .settings-segment {
+  /* Note that a segment draws the ring inside itself, because its trough
+     leaves it no room for one outside. */
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
   height: calc(var(--control-height) - 2 * var(--space-2));
   padding: 0 var(--space-12);
   border-radius: calc(var(--control-radius) - var(--space-2));
@@ -656,6 +659,10 @@
 
 .shortcut-field:hover:not(:disabled) {
   background: var(--raised);
+}
+
+.shortcut-field[aria-pressed="true"]:focus-visible {
+  outline: none; /* no ring: the recording field inside it rings */
 }
 
 .shortcut-name {

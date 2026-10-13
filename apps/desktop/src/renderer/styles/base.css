@@ -55,10 +55,13 @@
   /* The keyboard's ring around whatever control it is on, in the system's
      own default accent, and how thick it is and how far it stands off the
      control's edge. A control that clips what it holds sets the offset to
-     less the width, so the ring is drawn inside it. */
+     less the width, so the ring is drawn inside it. The reach is how far the
+     ring stands past the control's edge: a scroller pads by it, so the ring
+     of a row laid edge to edge in it is not clipped. */
   --focus-ring: var(--message-sent);
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
+  --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
   --hairline: rgba(255, 255, 255, 0.08);
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */
