@@ -618,7 +618,9 @@ button.code-card-path:hover {
 }
 
 .file-crumb-tree[data-placed="true"] {
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 /* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
@@ -1550,7 +1552,9 @@ button.attached-file-face:hover img {
   background: var(--surface-popover);
   box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .attachment-viewer:focus {
@@ -1800,7 +1804,9 @@ button.attached-file-face:hover img {
   box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-size: 12.5px;
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .agent-context-popover:focus-visible {

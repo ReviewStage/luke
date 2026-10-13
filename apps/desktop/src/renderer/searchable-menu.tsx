@@ -1,5 +1,5 @@
 import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs, Tooltip } from "./tooltip";
 import { useClipped } from "./use-clipped";
@@ -36,6 +36,8 @@ import { useClipped } from "./use-clipped";
  * holding focus, naming the highlight, and reading the same keys. The owner says
  * what to list, what to say in the list's place while there is nothing to
  * list, and what a pick does; the menu decides nothing about either.
+ * Its owner holds it drawn through its exit (`useDisclosure`), handing it
+ * `leaving`, which leaves it inert and fading, focus already handed back.
  */
 
 /** One row the menu lists. */
@@ -274,8 +276,13 @@ export function SearchableMenu(props: {
   /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
   footNote?: string | undefined;
   className?: string;
+  /** The menu is on its way out: drawn fading, and taking nothing. */
+  leaving?: boolean | undefined;
+  /** Hands the menu's element to the hold its owner draws it through its exit with. */
+  ref?: ((element: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
   const { rows, value, onPick } = props;
+  const leaving = props.leaving === true;
   const [query, setQuery] = useState("");
   const matches = matchingRows(rows, query);
   const foot = props.foot ?? [];
@@ -298,6 +305,16 @@ export function SearchableMenu(props: {
   // The submenu open under the highlighted pinned row, and the highlight inside it.
   const [submenu, setSubmenu] = useState<{ moved: number | undefined } | undefined>(undefined);
   const [place, setPlace] = useState<SubmenuPlace>(SUBMENU_FIRST_PLACE);
+  // Opened again while it was leaving, the menu starts afresh, as one opened anew does.
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) {
+      setQuery("");
+      setHighlight(undefined);
+      setSubmenu(undefined);
+    }
+  }
   const open = branch !== undefined && submenu !== undefined ? branch : undefined;
   const subChosen = open?.rows.findIndex((row) => row.id === open.value) ?? -1;
   const subAt = highlightOver({
@@ -314,12 +331,22 @@ export function SearchableMenu(props: {
   const list = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  // The menu's element is its own and also its owner's, whose hold waits on its exit.
+  const hold = props.ref;
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      menu.current = node;
+      hold?.(node);
+    },
+    [hold],
+  );
   const searching = props.placeholder !== undefined;
 
-  // The field takes focus as the menu opens, and keeps it; with no field, the list does.
+  // The field takes focus as the menu opens, and keeps it; with no field, the
+  // list does. A menu opened again while it was leaving takes it back too.
   useEffect(() => {
-    (field.current ?? list.current)?.focus();
-  }, []);
+    if (!leaving) (field.current ?? list.current)?.focus();
+  }, [leaving]);
 
   // Note that the field, or the list where there is none, names the
   // highlighted row after every render, because focus stays there and a
@@ -436,11 +463,13 @@ export function SearchableMenu(props: {
       : `plan-compose-menu searchable-menu ${props.className}`;
   return (
     <div
-      ref={menu}
+      ref={drawn}
       id={props.id}
       className={root}
       role="dialog"
       aria-label={props.label}
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >

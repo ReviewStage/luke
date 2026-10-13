@@ -26,6 +26,10 @@
  * stands in the window at a time: the next to show takes a lingering card
  * down at once.
  *
+ * Taken down once it has shown, a pill or a card is held drawn through its
+ * exit, inert, and only then taken out; one taken down while it still
+ * waited was never seen, and goes at once.
+ *
  * Its words are text like any other, so the session recording masks them
  * with the rest; nothing of it rides an attribute, and a card is left out
  * of the recording whole.
@@ -51,6 +55,7 @@ import {
 import { createPortal } from "react-dom";
 import { APP_SHORTCUTS, type KeyedCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
+import { useDisclosure } from "./use-disclosure";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
@@ -125,6 +130,20 @@ interface Shown {
   instant: boolean;
   describes: boolean;
 }
+
+/** A pill drawn: what it stands for, and the words it says, kept through its exit. */
+interface Drawn {
+  shown: Shown;
+  label: string;
+}
+
+/** How a pill is on its way out: fading, having been seen, or at once, having never been. */
+const PILL_LEAVING = {
+  SEEN: "seen",
+  UNSEEN: "unseen",
+} as const;
+
+type PillLeaving = (typeof PILL_LEAVING)[keyof typeof PILL_LEAVING];
 
 interface PillPlace {
   left: number;
@@ -204,6 +223,8 @@ function TooltipPill({
   command,
   card,
   cardBeside,
+  leaving,
+  ref: hold,
   onCard,
   onCardPress,
   onCardChoice,
@@ -214,6 +235,10 @@ function TooltipPill({
   command: KeyedCommand | undefined;
   card: ReactNode;
   cardBeside: boolean;
+  /** How it is on its way out, while it is: inert, and fading or already hidden. */
+  leaving: PillLeaving | undefined;
+  /** Hands its element to the hold that draws it through its exit. */
+  ref: (element: HTMLElement | null) => void;
   /** The pointer arriving on the card, or leaving it. */
   onCard: (over: boolean) => void;
   /** A press begun on the card. */
@@ -222,6 +247,13 @@ function TooltipPill({
   onCardChoice: () => void;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      element.current = node;
+      hold(node);
+    },
+    [hold],
+  );
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
   const carded = card !== undefined;
 
@@ -237,13 +269,15 @@ function TooltipPill({
   return createPortal(
     // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a card's own button's or link's, bubbled up, which its keys press as well.
     <div
-      ref={element}
+      ref={drawn}
       id={id}
       role="tooltip"
       className={carded ? "tooltip tooltip-card ph-no-capture" : "tooltip"}
       data-placed={String(at !== undefined)}
       data-side={at?.side ?? TOOLTIP_SIDE.BELOW}
       data-instant={String(shown.instant)}
+      data-leaving={leaving}
+      inert={leaving !== undefined}
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
       onPointerEnter={carded ? () => onCard(true) : undefined}
       onPointerLeave={carded ? () => onCard(false) : undefined}
@@ -298,11 +332,20 @@ export function Tooltip({
   // which no render stands between.
   const overCard = useRef(false);
   const pressingCard = useRef(false);
+  // The pill is drawn through its exit as it last stood, and as seen or not.
+  const asked = shown === undefined || label === undefined ? undefined : { shown, label };
+  const [drawn, setDrawn] = useState<Drawn | undefined>(asked);
+  if (asked !== undefined && (asked.shown !== drawn?.shown || asked.label !== drawn.label)) {
+    setDrawn(asked);
+  }
+  const [seen, setSeen] = useState(false);
+  const pill = useDisclosure(asked !== undefined);
   // A pill that was on screen warms the window for the next; one still
   // waiting leaves it as it was.
   const hide = useCallback(() => {
     const standing = latest();
     if (standing === undefined) return;
+    setSeen(visible(standing));
     if (visible(standing)) warmUntil = performance.now() + WARM_MS;
     if (standingHide === hide) standingHide = undefined;
     overCard.current = false;
@@ -367,9 +410,9 @@ export function Tooltip({
   // the window's: the pill is no layer of its own to take one. Only a card
   // the pointer is on lets a key other than Escape pass, since that key is
   // most likely the copy of what was selected on it.
-  const standing = shown !== undefined;
+  const up = shown !== undefined;
   useEffect(() => {
-    if (!standing) return;
+    if (!up) return;
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" || !overCard.current) hide();
     };
@@ -381,7 +424,7 @@ export function Tooltip({
       window.removeEventListener("scroll", hide, true);
       window.removeEventListener("blur", hide);
     };
-  }, [standing, hide]);
+  }, [up, hide]);
 
   const own = children.props;
   const anchor = cloneElement(children, {
@@ -417,14 +460,16 @@ export function Tooltip({
   return (
     <>
       {anchor}
-      {shown === undefined || label === undefined ? null : (
+      {!pill.mounted || drawn === undefined ? null : (
         <TooltipPill
           id={id}
-          shown={shown}
-          label={label}
+          shown={drawn.shown}
+          label={drawn.label}
           command={command}
           card={card}
           cardBeside={cardBeside}
+          leaving={pill.leaving ? (seen ? PILL_LEAVING.SEEN : PILL_LEAVING.UNSEEN) : undefined}
+          ref={pill.ref}
           onCard={onCard}
           onCardPress={onCardPress}
           onCardChoice={hide}

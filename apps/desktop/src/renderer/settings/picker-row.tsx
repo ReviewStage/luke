@@ -3,6 +3,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { searchAnchorProps } from "../settings-anchors";
+import { useDisclosure } from "../use-disclosure";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
@@ -106,6 +107,7 @@ export function PickerRow({
   onPick: (id: string) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
   const menuId = useId();
   const row = useRef<HTMLSpanElement>(null);
@@ -168,8 +170,10 @@ export function PickerRow({
           <span className="plan-compose-chip-name">{valueLabel}</span>
           <ChevronDownIcon />
         </button>
-        {open ? (
+        {drawn.mounted ? (
           <SearchableMenu
+            leaving={drawn.leaving}
+            ref={drawn.ref}
             id={menuId}
             label={label}
             className="settings-picker-menu"

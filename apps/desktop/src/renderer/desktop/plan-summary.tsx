@@ -9,6 +9,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
@@ -357,10 +358,10 @@ function AgentSummaryRow({
           menu.show(atPointer(event), event.currentTarget);
         }}
       />
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Agent actions"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={[[archive.action]]}
           onClose={menu.close}
         />
@@ -442,7 +443,8 @@ function SummaryList({
  * as it hangs, so the keys reach its rows, and gives it to the control that
  * hung it when Escape or its chevron takes it down. A press anywhere
  * outside it takes it down too, and still lands where it was pressed, but
- * one on a control that hangs it is that control's to answer.
+ * one on a control that hangs it is that control's to answer. Taken down,
+ * it is held drawn through its exit, `leaving`, inert and hearing nothing.
  */
 function SummaryCard({
   id,
@@ -450,26 +452,41 @@ function SummaryCard({
   sections,
   agents,
   onDismiss,
+  leaving,
+  ref: hold,
 }: {
   id: string;
   from: CardFrom;
   sections: readonly SummarySection[];
   agents: CodingAgentsControl;
   onDismiss: () => void;
+  leaving: boolean;
+  /** Hands the card's element to the hold that draws it through its exit. */
+  ref: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   const card = useRef<HTMLDivElement>(null);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      card.current = node;
+      hold(node);
+    },
+    [hold],
+  );
+  // Hung again while it was leaving, it takes the focus again.
   useLayoutEffect(() => {
+    if (leaving) return;
     const element = card.current;
     (element?.querySelector<HTMLElement>(".plan-summary-row") ?? element)?.focus({
       preventScroll: true,
     });
-  }, []);
+  }, [leaving]);
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
     opener?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   useEffect(() => {
+    if (leaving) return;
     const press = (event: PointerEvent) => {
       const { target } = event;
       if (!(target instanceof Element) || card.current?.contains(target)) return;
@@ -494,15 +511,17 @@ function SummaryCard({
       window.removeEventListener("pointerdown", press, true);
       window.removeEventListener("keydown", key, true);
     };
-  }, [collapse, onDismiss]);
+  }, [collapse, onDismiss, leaving]);
   return (
     <div
-      ref={card}
+      ref={drawn}
       id={id}
       className="plan-summary-card"
       role="dialog"
       aria-label="Summary"
       tabIndex={-1}
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
     >
       <Tooltip label="Collapse summary">
         <button
@@ -578,6 +597,10 @@ export function PlanSummary({
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,
   );
+  // The card is drawn through its exit, from the control that last hung it.
+  const [hungFrom, setHungFrom] = useState(layout.card);
+  if (layout.card !== undefined && layout.card !== hungFrom) setHungFrom(layout.card);
+  const card = useDisclosure(layout.card !== undefined);
   return (
     <>
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
@@ -592,13 +615,15 @@ export function PlanSummary({
           </ul>
         )}
       </aside>
-      {layout.card === undefined ? null : (
+      {!card.mounted || hungFrom === undefined ? null : (
         <SummaryCard
           id={cardId}
-          from={layout.card}
+          from={hungFrom}
           sections={sections}
           agents={plans.agents}
           onDismiss={layout.onDismiss}
+          leaving={card.leaving}
+          ref={card.ref}
         />
       )}
     </>

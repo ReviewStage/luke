@@ -6,6 +6,7 @@ import { ModelMenu, settledChoice } from "../planning/model-menu";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { useDisclosure } from "../use-disclosure";
 
 /**
  * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
@@ -26,6 +27,7 @@ import { Tooltip } from "../tooltip";
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -135,8 +137,10 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           <ChevronDownIcon />
         </button>
       </div>
-      {open ? (
+      {drawn.mounted ? (
         <ModelMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
           id={menuId}
           className="start-agent-menu"
           models={models}

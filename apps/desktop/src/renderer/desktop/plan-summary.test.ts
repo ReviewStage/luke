@@ -20,6 +20,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { installExits, uninstallExits } from "#testing/exits";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -242,11 +243,15 @@ function quit(): void {
   document.body.innerHTML = "";
 }
 
+/** The exit a leaving card runs, as desktop.css plays it. */
+const LEAVING_CARD = '.plan-summary-card[data-leaving="true"]';
+
 afterEach(() => {
   quit();
   archives.length = 0;
   vi.restoreAllMocks();
   window.localStorage.clear();
+  uninstallExits();
 });
 
 /** Lays the plan's column out this wide, the summary beside the document included and the side panel not; jsdom lays out nothing. */
@@ -673,6 +678,39 @@ test("the rail's chevron hangs the whole summary as a card, which Escape takes d
   assert.equal(card(), null);
   assert.equal(escapeKey.defaultPrevented, true, "the window does not step back a layer too");
   assert.ok(document.activeElement === chevron, "the chevron takes the focus back");
+});
+
+test("the card Escape takes down hands focus back at once, and fades out inert before it goes", () => {
+  const exits = installExits(LEAVING_CARD);
+  const page = mount();
+  layOutColumn(900);
+  const chevron = press(page, '[aria-label="Expand summary"]');
+
+  pressEscape();
+  assert.ok(document.activeElement === chevron, "the chevron has focus back before the exit");
+  assert.equal(chevron.getAttribute("aria-expanded"), "false");
+  const leaving = card();
+  assert.ok(leaving, "the card is drawn through its exit");
+  assert.equal(leaving.dataset.leaving, "true");
+  assert.equal(leaving.hasAttribute("inert"), true, "nothing reaches the card on its way out");
+  assert.equal(pressEscape().defaultPrevented, false, "a card leaving takes no more keys");
+
+  act(() => exits[0]?.finish());
+  assert.equal(card(), null);
+});
+
+test("the card hung again while it leaves stands again and takes the focus", () => {
+  installExits(LEAVING_CARD);
+  const page = mount();
+  layOutColumn(900);
+  const chevron = press(page, '[aria-label="Expand summary"]');
+  pressEscape();
+
+  act(() => chevron.click());
+  const hung = card();
+  assert.ok(hung, "the card hangs");
+  assert.equal(hung.dataset.leaving, undefined);
+  assert.ok(document.activeElement === rowNamed(hung, "Board"), "its first row takes the focus");
 });
 
 test("the card's own chevron collapses it back to the rail", () => {

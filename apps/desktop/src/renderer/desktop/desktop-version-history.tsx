@@ -258,8 +258,8 @@ function RevisionRow({
           </Tooltip>
         </span>
       ) : null}
-      {menu.open === undefined ? null : (
-        <ActionMenu label={ACTIONS_LABEL} menu={menu.open} groups={groups} onClose={menu.close} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
     </li>
   );
@@ -340,10 +340,10 @@ function SectionRow({
         <span className="version-section-name">{sectionName(section.heading)}</span>
         {word === undefined ? null : <span className="version-section-change">{word}</span>}
       </button>
-      {menu.open === undefined || source === undefined ? null : (
+      {menu.drawn === undefined || source === undefined ? null : (
         <ActionMenu
           label="Section actions"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={[[sourceItem(source)]]}
           onClose={menu.close}
         />

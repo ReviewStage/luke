@@ -1301,6 +1301,9 @@ body,
   /* A long menu, as a folder's entries may be, scrolls within the window. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
   -webkit-app-region: no-drag;
 }
 
@@ -2049,7 +2052,9 @@ body,
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
   box-shadow: var(--menu-shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .plan-compose-submenu[data-side="left"] {
@@ -2149,7 +2154,9 @@ body,
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
   box-shadow: var(--menu-shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 /* A popover hung from its own button (`anchored-popover.tsx`): the layer
@@ -2174,11 +2181,47 @@ body,
   width: auto;
 }
 
-@keyframes menu-enter {
+/* What pops up arrives on the pair every arriving element rides, its
+   opacity over `--duration-quick` and its travel on the spring, and leaves
+   first, fading over `--duration-exit` while its owner holds it drawn and
+   inert (`use-disclosure.ts`; the palette's Radix dialog holds its own on
+   `data-state`). A menu drops from where it hangs. */
+@keyframes popup-fade {
   from {
     opacity: 0;
-    transform: translateY(-4px);
   }
+}
+
+@keyframes menu-drop {
+  from {
+    transform: translateY(calc(-1 * var(--space-4)));
+  }
+}
+
+@keyframes popup-leave {
+  to {
+    opacity: 0;
+  }
+}
+
+:is(.plan-menu, .plan-compose-menu, .plan-summary-card)[data-leaving="true"],
+:is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
+  pointer-events: none;
+  animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+  /* Note that the hold waits on every motion the element runs, and losing
+     focus would start the scrollbar's own fade (above), so the exit is the
+     one motion it has. */
+  transition: none;
+}
+
+/* A capture run zeroes the motion tokens on its stage, which a menu or the
+   palette drawn at the body's end does not stand under, so they are held
+   still here too. */
+body:has(.app-stage[data-capture="true"])
+:is(.plan-menu, .command-palette, .command-palette-backdrop) {
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
 }
 
 /* A row is one fixed height and flexes in no column it stands in. */
@@ -2387,7 +2430,9 @@ body,
   border-radius: var(--menu-radius);
   background: var(--surface-popover);
   box-shadow: var(--menu-shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
   -webkit-app-region: no-drag;
 }
 
@@ -2957,7 +3002,9 @@ body,
   box-shadow: 0 16px 40px var(--shadow);
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
-  animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    summary-card-grow var(--duration-fast) var(--spring-fast) both;
 }
 
 /* The pinned summary's chevron and the card's stand on the rail's own, and
@@ -3016,9 +3063,8 @@ body,
 
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
-@keyframes summary-card-enter {
+@keyframes summary-card-grow {
   from {
-    opacity: 0;
     transform: scale(0.97);
   }
 }
@@ -3916,7 +3962,9 @@ body,
   box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
   font-size: 13px;
-  animation: confirm-dialog-rise var(--duration-fast) var(--spring-fast);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit),
+    confirm-dialog-rise var(--duration-fast) var(--spring-fast);
 }
 
 .confirm-dialog:focus {
@@ -3963,7 +4011,6 @@ body,
 
 @keyframes confirm-dialog-rise {
   from {
-    opacity: 0;
     transform: scale(0.96);
   }
 }
@@ -4000,7 +4047,9 @@ body,
   color: var(--text-primary);
   overflow: clip;
   transform: translateX(-50%);
-  animation: command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
   -webkit-app-region: no-drag;
 }
 
@@ -4216,7 +4265,6 @@ body,
 
 @keyframes command-palette-rise {
   from {
-    opacity: 0;
     transform: translateX(-50%) scale(0.96);
   }
 }
