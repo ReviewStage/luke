@@ -7,17 +7,43 @@ what we collect, who we send it to, and how to turn it off.
 
 ## What we collect
 
-**On your Mac.** Nothing in Luke reads a coding agent session, message
-history, file contents, or command output from your Mac's disk or from any
-other app, except a file you hand it to attach to a coding agent's message
-(see "Files you attach to a coding agent"). The only coding agents it lists
-are the ones started on a plan from Luke — its Start button, New coding
-agent, or Luke on a planning call — which our service runs in sandboxes of
-their own (see "Who we send it to"), and the one transcript it shows is such
-an agent's, read from our service. The planning model reads a plan's code in
-a sandbox on our service, never on your Mac. No part of Luke's judgment runs
-on this Mac, so no transcript, working memory, or inbox of his is held here
-on disk, and in memory only the tabs described next.
+**On your Mac.** Luke and coding agents can run any shell command on your
+Mac without asking you, and what it prints leaves your Mac (see "Commands
+agents run on your Mac"). Apart from that, nothing in Luke reads a coding
+agent session, message history, file contents, or command output from your
+Mac's disk or from any other app, except a file you hand it to attach to a
+coding agent's message (see "Files you attach to a coding agent"). The only
+coding agents it lists are the ones started on a plan from Luke — its Start
+button, New coding agent, or Luke on a planning call — which our service runs
+in sandboxes of their own (see "Who we send it to"), and the one transcript
+it shows is such an agent's, read from our service. The planning model reads
+a plan's repository in a sandbox on our service. No part of Luke's judgment
+runs on this Mac, so no transcript, working memory, or inbox of his is held
+here on disk, and in memory only the tabs described next.
+
+**Commands agents run on your Mac.** Luke's planning model, the research
+worker it hands work to, every coding agent, and the workers a coding agent
+hands work to can each run any shell command on your Mac, at once and without
+asking you. This holds whenever Luke is open on the Mac and signed in to your
+account with Settings › General › "Let agents run commands on this Mac" on,
+which it is by default. A command runs in your login shell, from your home
+folder, as your macOS user, so it reaches everything you can: your files and
+checkouts, your installed tools, and the network.
+Nothing is read into it, and it is killed after 60 seconds, or after up to
+eight minutes when the agent asks for longer. While it is on, Luke on your Mac keeps
+a read open to our service for the commands your agents queue, and our
+service records when a Mac of your account last read. Our service holds a
+command until your Mac has answered it, then deletes it. The command, the few
+words the agent gave to describe it, its exit code, and up to 20,000
+characters each of what it printed to its output and its error are returned
+to the agent and stored with the planning conversation or the coding agent's
+transcript, under its terms, and are sent to the model provider that agent
+runs on (see "Who we send it to"). Nothing is redacted: if a command prints a
+password, a token, a key, or a file's contents, all of that goes too, and our
+operators can read it there like the rest of the conversation. When two of
+your Macs are open, whichever takes a command first runs it, and only that
+one. Turning the switch off stops your Mac from taking commands at once, and
+an agent is told that no Mac is listening.
 
 **Your conversation with Luke.** Nothing on your Mac writes what you said or
 what Luke spoke to disk, and no record of what he did is kept there. While a
@@ -621,6 +647,9 @@ reports by Sentry.
 ## Your choices
 
 - Sign out of your Luke account to turn voice off.
+- Turn off Settings › General › "Let agents run commands on this Mac" to stop
+  Luke and coding agents running commands on that Mac; signing out stops it
+  too.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.

@@ -135,6 +135,8 @@ export type PlanWorkState = (typeof PLAN_WORK_STATE)[keyof typeof PLAN_WORK_STAT
  */
 export const PLAN_WORK_TOOL = {
   REPOSITORY: "repository",
+  /** A command run on the developer's own Mac (`run_on_mac`). */
+  MAC_COMMAND: "mac-command",
   SEARCH_WEB: "search-web",
   READ_WEB_PAGE: "read-web-page",
   SHOW_CODE: "show-code",

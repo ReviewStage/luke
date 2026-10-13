@@ -95,6 +95,7 @@
                     "type": "string",
                     "enum": [
                       "repository",
+                      "mac-command",
                       "search-web",
                       "read-web-page",
                       "show-code",
@@ -208,6 +209,7 @@
                                   "type": "string",
                                   "enum": [
                                     "repository",
+                                    "mac-command",
                                     "search-web",
                                     "read-web-page",
                                     "show-code",

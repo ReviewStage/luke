@@ -1,6 +1,7 @@
 import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
+import { RUN_ON_MAC_TOOL } from "../server/hosted/mac-command";
 import { SHOW_PAGE_TOOL } from "../server/hosted/page-tool";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
@@ -60,5 +61,13 @@ test("run_in_repository offers exactly one command and the plain words it is for
     ROOT,
     "run-in-repository-tool-input",
     jsonSchemaOf(RUN_IN_REPOSITORY_TOOL.inputSchema),
+  );
+});
+
+test("run_on_mac offers exactly one command, the plain words it is for, and how long it may run, with no directory or environment to set", async () => {
+  await settleJsonSchemaGolden(
+    ROOT,
+    "run-on-mac-tool-input",
+    jsonSchemaOf(RUN_ON_MAC_TOOL.inputSchema),
   );
 });

@@ -16,8 +16,12 @@ import { wireUuidSchema } from "./service-wire.js";
 export const MAC_COMMAND_BOUNDS = {
   /** How long a command runs before it is killed, when the agent names no time. */
   DEFAULT_TIMEOUT_SECONDS: 60,
-  /** The longest an agent may ask for, inside the minutes one eve step may run. */
-  MAX_TIMEOUT_SECONDS: 600,
+  /**
+   * The longest an agent may ask for: inside the minutes one eve step may
+   * run, and short enough that the voice's ten-minute follow of a planning
+   * turn still hears the answer after the queue, the grace, and the model.
+   */
+  MAX_TIMEOUT_SECONDS: 480,
   /** The most characters of a command the service queues. */
   MAX_COMMAND_CHARS: 100_000,
   /** The most characters of stdout or stderr a result carries; the Mac cuts each to this. */
