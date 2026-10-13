@@ -384,6 +384,13 @@ it.effect(
             updatedAt: 1_800_000_060_000,
           },
         ],
+        plans: [
+          {
+            planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+            items: 3,
+            updatedAt: 1_800_000_060_000,
+          },
+        ],
         cursor: "9",
         readAt: 1_800_000_120_000,
       };

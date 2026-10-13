@@ -768,10 +768,12 @@ it.effect(
       const reading = yield* Effect.forkChild(Effect.provide(client().accountInbox("7"), held));
       assert.equal(yield* Deferred.await(asked), "https://tryluke.dev/api/inbox?after=7");
       yield* TestClock.adjust(Duration.seconds(20));
-      answer(jsonResponse({ items: [WAITING], cursor: "8", readAt: 1_800_000_120_000 }));
+      const plans = [{ planId: PLAN_ID, items: 4, updatedAt: 1_800_000_060_000 }];
+      answer(jsonResponse({ items: [WAITING], plans, cursor: "8", readAt: 1_800_000_120_000 }));
 
       assert.deepEqual(yield* Fiber.join(reading), {
         items: [WAITING],
+        plans,
         cursor: "8",
         readAt: 1_800_000_120_000,
       });

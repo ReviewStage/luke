@@ -252,7 +252,7 @@ function fakeService() {
     accountInbox: (after) =>
       Effect.sync(() => {
         asked.push(`account-inbox:${after}`);
-        return { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt };
+        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
   };
   return { client, asked };
@@ -398,7 +398,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-      { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt },
+      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
 
     assert.deepEqual(asked, [

@@ -40,6 +40,7 @@ const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 const EFFECT_MODULE_SCHEMAS = {
   "account-inbox-wire": {
     accountInboxEntrySchema: accountInboxWire.accountInboxEntrySchema,
+    accountInboxPlanSchema: accountInboxWire.accountInboxPlanSchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {

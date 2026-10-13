@@ -241,7 +241,7 @@ export function composeDesktop(
         },
         readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
         accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
-        onWaitingChanged: (waiting) => state.update({ inbox: { waiting } }),
+        onInboxChanged: (inbox) => state.update({ inbox }),
         openInbox: (planId) => {
           windows.panels.focusExpanded();
           windows.showInbox(planId);

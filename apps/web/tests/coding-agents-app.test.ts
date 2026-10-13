@@ -3873,6 +3873,64 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "the account's inbox lists every plan holding an item, waiting or settled, the plan whose item changed latest first, with how many it holds, and leaves out an archived plan's and another account's",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask, post, waiting } = yield* openInbox();
+        const second = yield* createPlan(owner, {
+          name: "Billing export",
+          repository: RELAY_FULL_NAME,
+        });
+        yield* savePlanText(owner, second.id, SAVED);
+        const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
+        const third = yield* createPlan(owner, { name: "Audit log", repository: RELAY_FULL_NAME });
+        yield* savePlanText(owner, third.id, SAVED);
+        const thirdAgent = (yield* startedAgent(owner, third.id, ask)).agent;
+        assert.deepEqual((yield* waiting()).plans, [], "no plan holds an item yet");
+
+        yield* post(QUESTION);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* post({ ...QUESTION, key: "second", title: "And a second?" });
+        yield* TestClock.adjust(Duration.seconds(1));
+        const settled = yield* postInboxItem(
+          { userId: owner, planId: second.id, agentId: secondAgent.id },
+          { ...QUESTION, key: "export-format", title: "CSV or JSON?" },
+        );
+        assert.ok(Result.isSuccess(settled));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* answerInboxItem(
+          owner,
+          settled.success.id,
+          settled.success.revision,
+          { reply: INBOX_REPLY.ANSWERED, note: "CSV." },
+          randomUUID(),
+        );
+        yield* postInboxItem(
+          { userId: owner, planId: third.id, agentId: thirdAgent.id },
+          { ...QUESTION, key: "retention", title: "Keep logs how long?" },
+        );
+        yield* updatePlan(owner, third.id, { archived: true });
+
+        const all = yield* waiting();
+        assert.deepEqual(
+          all.plans.map((each) => [each.planId, each.items]),
+          [
+            [second.id, 1],
+            [plan.id, 2],
+          ],
+          "the settled plan, changed latest, first; the archived plan nowhere",
+        );
+        assert.ok((all.plans[0]?.updatedAt ?? 0) > (all.plans[1]?.updatedAt ?? 0));
+        assert.deepEqual(
+          all.items.map((item) => item.planId),
+          [plan.id, plan.id],
+          "only the waiting items",
+        );
+        assert.deepEqual((yield* waiting(undefined, other)).plans, []);
+      }),
+  );
+
+  it.effect(
     "a read of the account's inbox holds while nothing changed past its cursor, and answers once an item opens or one waiting is answered",
     () =>
       Effect.gen(function* () {
