@@ -1097,6 +1097,20 @@ calls are written and read back under the same list it was offered.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 
+**One tool registry** (`server/hosted/agent-runtime/tools.ts`). Every tool
+Luke offers any of its four agents is named once there, with the roles it
+serves: the planner, the planning worker, the coding agent, and its worker.
+What each is offered is derived from it: the planning root's hosted resolver
+offers the planner's (`PLANNER_TOOL_NAMES`), the planning worker its own
+(`WORKER_TOOL_NAMES`), the coding agent's files under `coder/tools/` and its
+worker's are held to their roles by `coder-agent.test.ts`, and the planning
+root's resolver and files by `agent-tools.test.ts`, which also holds each
+role's rows to a stored set that names every tool the role is offered. A tool's
+module takes its name from the registry, so the registry imports none and
+every module may import it. eve's own injected tools (`task_wait`,
+`task_cancel`, `connection_search`, `connection_execute`) are eve's, not
+listed.
+
 The planning session is offered the skills the plan's repository keeps
 (`eve/skills/repository.ts`, `server/hosted/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which

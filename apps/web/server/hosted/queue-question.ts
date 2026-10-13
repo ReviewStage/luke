@@ -7,6 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../core.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * queue-question.ts -- the planning model's `queue_question` tool: one question handed to the voice the moment it is ready.
@@ -59,7 +60,7 @@ const readWithdrawnQuestion = Schema.decodeUnknownResult(WITHDRAW_QUESTION_INPUT
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const QUEUE_QUESTION_TOOL = {
-  name: "queue_question",
+  name: AGENT_TOOL.QUEUE_QUESTION,
   description:
     "Hand Luke one question for the developer the moment you have it, with your recommended " +
     "answer. Luke asks queued questions one at a time, in the order you queued them, the next " +
@@ -87,7 +88,7 @@ export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const WITHDRAW_QUESTION_TOOL = {
-  name: "withdraw_question",
+  name: AGENT_TOOL.WITHDRAW_QUESTION,
   description:
     "Take back a question you queued that an answer has made moot, in the words you queued it, " +
     "so Luke never asks it. A question Luke has already asked is not taken back. Answers " +
