@@ -1,18 +1,17 @@
 import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
-import { McpIcon } from "@sidecar/panel";
+import { GearIcon, McpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { IntegrationMark } from "../integration-marks";
-import { useIntegrationStatuses } from "../integration-statuses";
+import type { IntegrationStatuses } from "../integration-statuses";
 import { type IntegrationTool, useIntegrationTools } from "../integration-tools";
 import { Tooltip } from "../tooltip";
 import {
   SERVER_ACTION,
   SERVER_ROW,
   SERVERS_LABEL,
-  SERVERS_NOTE,
   type ServerRow,
   serverRows,
   switchedServers,
@@ -31,10 +30,11 @@ import {
  * hover or focus, and ends with this agent's switch. One not connected ends
  * with Connect, which sends the browser to sign in there and then, as
  * Settings does, and becomes the switch once the sign-in settles; Settings
- * is one press away at the foot for everything else. Where every connection
- * stands is read as the popover opens and again when the window is focused,
- * which is how the developer comes back from the browser, so the popover
- * stays open while the window is away. A draft agent keeps its choice until
+ * is one press away at the gear beside the title for everything else. Where
+ * every connection stands is the composer's read (`../integration-statuses.ts`),
+ * taken as it is drawn and again when the window is focused, which is how
+ * the developer comes back from the browser, so the popover stays open while
+ * the window is away. A draft agent keeps its choice until
  * its first message starts it. The popover closes on Escape, which stops
  * there so the panel behind stays open, on a second press of the button,
  * and on focus leaving it for another part of the window.
@@ -50,7 +50,7 @@ export interface AgentServersControl {
   readonly onOpenSettings: () => void;
 }
 
-/** What the popover's foot offers besides its note. */
+/** What the gear beside the popover's title is named, which opens Settings › Integrations. */
 const SERVERS_SETTINGS = "Manage in Settings";
 
 /**
@@ -103,11 +103,13 @@ function ToolsCount({
 function ServersPopover({
   id,
   servers,
+  statuses,
   onClose,
   onLeave,
 }: {
   id: string;
   servers: AgentServersControl;
+  statuses: IntegrationStatuses;
   /** Closes the popover and hands focus back to the button. */
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
@@ -115,7 +117,6 @@ function ServersPopover({
 }): React.JSX.Element {
   const box = useRef<HTMLDivElement>(null);
   const { act } = useAct();
-  const statuses = useIntegrationStatuses();
   const rows = serverRows({
     statusOf: statuses.statusOf,
     readFailed: statuses.readFailed,
@@ -211,7 +212,22 @@ function ServersPopover({
       onKeyDown={onKey}
       onBlur={(event) => onLeave(event.relatedTarget)}
     >
-      <div className="plan-compose-menu-section">{SERVERS_LABEL}</div>
+      <div className="plan-compose-menu-section agent-servers-head">
+        {SERVERS_LABEL}
+        <Tooltip label={SERVERS_SETTINGS}>
+          <button
+            type="button"
+            className="icon-button agent-servers-settings"
+            aria-label={SERVERS_SETTINGS}
+            onClick={() => {
+              onClose();
+              servers.onOpenSettings();
+            }}
+          >
+            <GearIcon />
+          </button>
+        </Tooltip>
+      </div>
       <div className="agent-servers-list">
         {rows.map((row) => (
           <div
@@ -225,27 +241,17 @@ function ServersPopover({
           </div>
         ))}
       </div>
-      <div className="agent-servers-foot">
-        <p className="plan-compose-menu-foot-note">{SERVERS_NOTE}</p>
-        <button
-          type="button"
-          className="agent-servers-settings"
-          onClick={() => {
-            onClose();
-            servers.onOpenSettings();
-          }}
-        >
-          {SERVERS_SETTINGS}
-        </button>
-      </div>
     </div>
   );
 }
 
 export function AgentServersButton({
   servers,
+  statuses,
 }: {
   servers: AgentServersControl;
+  /** Where every connection stands, as the composer around the button reads it. */
+  statuses: IntegrationStatuses;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
@@ -280,6 +286,7 @@ export function AgentServersButton({
           <ServersPopover
             id={popoverId}
             servers={servers}
+            statuses={statuses}
             onClose={close}
             onLeave={(left) => {
               // The window losing focus is the browser opened for a sign-in, whose outcome the popover waits to read.

@@ -17,6 +17,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
+import { FAILURE_REASON, type Failure } from "../failure-remedy";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import {
   type AgentRun,
@@ -137,7 +138,7 @@ export interface CodingAgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly IntegrationProvider[],
-  ) => Promise<string | undefined>;
+  ) => Promise<Failure | undefined>;
   /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
   start: {
@@ -148,7 +149,7 @@ export interface CodingAgentsControl {
     /** Whether a Start is out. */
     busy: boolean;
     /** Why the last Start did not start, or the last change of model did not take, said beside the button until the next. */
-    note: string | undefined;
+    note: Failure | undefined;
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
   };
@@ -162,6 +163,8 @@ export interface CodingAgentsControl {
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
+  /** Opens Settings on its Coding agents page, where the developer's API keys are. */
+  onOpenApiKeys: () => void;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
@@ -246,6 +249,8 @@ export function useCodingAgents(input: {
   onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
+  /** Opens Settings on its Coding agents page. */
+  onOpenApiKeys: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
   /** The words a dictation into an agent's box is likely to say; none where nothing is open. */
@@ -266,7 +271,7 @@ export function useCodingAgents(input: {
   // Each plan's draft, by the plan's id.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, AgentDraft>>(new Map());
   const draft = planId === undefined ? undefined : drafts.get(planId);
-  const [note, setNote] = useState<{ planId: string; note: string } | undefined>(undefined);
+  const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
   const toast = useToast();
@@ -342,7 +347,7 @@ export function useCodingAgents(input: {
       .catch((): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         if ("failure" in answer && planId !== undefined)
-          setNote({ planId, note: MODEL_CHANGE_FAILED });
+          setNote({ planId, note: { reason: FAILURE_REASON.OTHER, text: MODEL_CHANGE_FAILED } });
         return answer;
       });
   };
@@ -458,9 +463,10 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly IntegrationProvider[] = [],
-  ): Promise<string | undefined> => {
-    if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
-    if (archived) return START_ARCHIVED;
+  ): Promise<Failure | undefined> => {
+    if (planId === undefined || repository === null)
+      return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
+    if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,
@@ -729,6 +735,7 @@ export function useCodingAgents(input: {
     onChoose,
     onSwitchServers,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
+    onOpenApiKeys: () => latest.current.onOpenApiKeys(),
     onRename,
     onArchive,
     readAgent,

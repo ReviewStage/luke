@@ -50,7 +50,9 @@ function versionHistoryControl(
 }
 
 /** A plan with no agents and no repository, every press ignored. */
-function codingAgentsControl(overrides: Partial<CodingAgentsControl> = {}): CodingAgentsControl {
+export function codingAgentsControl(
+  overrides: Partial<CodingAgentsControl> = {},
+): CodingAgentsControl {
   return {
     agents: [],
     archived: [],
@@ -78,6 +80,7 @@ function codingAgentsControl(overrides: Partial<CodingAgentsControl> = {}): Codi
     onChoose: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onSwitchServers: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onOpenIntegrations: ignore,
+    onOpenApiKeys: ignore,
     onRename: () => Promise.resolve(false),
     onArchive: () => Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Ignored." }),
     // An agent read again stands as the control's list has it.

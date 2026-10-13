@@ -45,9 +45,6 @@ export const SERVER_ACTION = {
   RETRY: "Try again",
 } as const;
 
-/** The quiet line under the rows: a turn under way keeps what it was handed. */
-export const SERVERS_NOTE = "Changes apply from the agent's next turn.";
-
 /** What the popover and its button are called. */
 export const SERVERS_LABEL = "MCP servers";
 
@@ -97,6 +94,17 @@ export function serverRows(input: {
     kind: kindOf(input.statusOf(provider), input.readFailed),
     on: !input.disabled.includes(provider),
   }));
+}
+
+/** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
+export function lapsedServer(input: {
+  statusOf: (provider: IntegrationProvider) => IntegrationStatus | undefined;
+  disabled: readonly IntegrationProvider[];
+}): IntegrationProvider | undefined {
+  return INTEGRATION_PROVIDER_LIST.find(
+    (provider) =>
+      input.statusOf(provider) === INTEGRATION_STATUS.EXPIRED && !input.disabled.includes(provider),
+  );
 }
 
 /** The servers off once one is switched, in the provider list's order, each once. */

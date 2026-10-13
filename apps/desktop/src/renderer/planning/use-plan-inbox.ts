@@ -281,7 +281,7 @@ export function usePlanInbox(input: {
             return next;
           });
           if ("failure" in answer) {
-            note(item.id, messageFailureNote(answer.failure));
+            note(item.id, messageFailureNote(answer.failure).text);
             return;
           }
           // An answer landing after the window moved to another plan is that plan's no longer.
