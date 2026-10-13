@@ -5,6 +5,7 @@ import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import { PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { TURN_ORIGIN } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -163,4 +164,63 @@ test("a finished spoken turn is one folded line under the line that asked for it
     at("Let's end the call") < at("1 tool call") && at("1 tool call") < at("Alright, take care"),
     `the fold stands under its ask and before Luke's goodbye: ${order.join(" | ")}`,
   );
+});
+
+test("the look around a call opens with, a spoken turn no line asked for, stands at the top of the call standing by time, one folded line with its words and how long it worked inside the fold and nothing of them outside", () => {
+  const region: TranscriptRegion = {
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: [
+      {
+        key: "call-1",
+        startedAt: 100_000,
+        live: true,
+        lukeEnded: false,
+        messages: [
+          {
+            id: "r1",
+            role: TRANSCRIPT_SPEAKER.USER,
+            metadata: { span: { startMs: 5_000, endMs: 6_000 } },
+            parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Hello there." }],
+          },
+          {
+            id: "r2",
+            role: TRANSCRIPT_SPEAKER.ASSISTANT,
+            metadata: { span: { startMs: 7_000, endMs: 8_000 } },
+            parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Hi, what are we planning?" }],
+          },
+        ],
+      },
+    ],
+  };
+  const explore = workTurn(
+    PLAN_WORK_STATE.DONE,
+    [
+      toolCall(AGENT_TOOL.RUN_IN_REPOSITORY, "c1", { command: "ls" }, { output: "README.md" }),
+      words("This is Luke, a macOS voice-planning app."),
+    ],
+    { startedAt: 95_000, endedAt: 103_000, origin: TURN_ORIGIN.SPOKEN },
+  );
+
+  const container = mounted(
+    callTab({ region, conversation: conversationOf([explore]), callLive: true }),
+  );
+  const fold = container.querySelector("[data-turn-fold]");
+  assert.ok(fold);
+  assert.equal(fold.textContent, "1 tool call");
+  const outside = (container.textContent ?? "").replace(fold.textContent ?? "", "");
+  assert.doesNotMatch(outside, /This is Luke|Worked for/u);
+  const order = [...container.querySelectorAll("[data-turn-fold], p")].map(
+    (each) => each.textContent ?? "",
+  );
+  const at = (start: string) => order.findIndex((text) => text.startsWith(start));
+  assert.ok(
+    at("1 tool call") < at("Hello there") && at("Hello there") < at("Hi, what are we"),
+    `the look around stands at the call's top, before every line: ${order.join(" | ")}`,
+  );
+  const summary = fold.querySelector("summary");
+  assert.ok(summary);
+  act(() => summary.click());
+  assert.match(fold.textContent ?? "", /This is Luke, a macOS voice-planning app\./u);
+  assert.ok(fold.querySelector("[data-worked]"), "how long the turn worked stands inside its fold");
 });

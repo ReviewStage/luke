@@ -26,7 +26,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import { MESSAGE_ROLE, TURN_STATUS } from "../core.js";
+import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -89,8 +89,8 @@ const STATUS_OF_WORK_STATE = {
   [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
 } as const;
 
-/** A turn's journal as the agent tab reads a message: its projected parts and whether older ones were left out, the turn it is and the lines that asked for it, and its span and record. */
-function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
+/** A turn's journal as the agent tab reads a message: its projected parts and whether older ones were left out, the turn it is, what opened it and the lines that asked for it, and its span and record. */
+function messageOf(id: string, work: PlanWorkTurn, origin: TurnOrigin): CodingAgentMessage {
   const { turnId, journal, asked, askedAt, startedAt, endedAt } = work;
   const { model, effort, tokens, ending } = work;
   return {
@@ -98,6 +98,7 @@ function messageOf(id: string, work: PlanWorkTurn): CodingAgentMessage {
     role: MESSAGE_ROLE.ASSISTANT,
     parts: journal ?? [],
     turnId,
+    origin,
     ...(work.earlierOmitted ? { earlierOmitted: true } : undefined),
     ...(asked === undefined ? undefined : { asked }),
     ...(askedAt === undefined ? undefined : { askedAt }),
@@ -122,6 +123,7 @@ const worksOf = (userId: string, conversationId: string, turns: readonly StoredT
     );
     return journaled.map((each) => ({
       id: each.message.id,
+      origin: each.turn.origin,
       work: planWorkOf(
         each.turn,
         each.message,
@@ -236,7 +238,7 @@ export function plannerTurnsPage(
     return yield* withStandings(
       target,
       {
-        messages: works.map((each) => messageOf(each.id, each.work)),
+        messages: works.map((each) => messageOf(each.id, each.work, each.origin)),
         cursor,
         status,
         ...(page.earlier && oldest !== undefined ? { earlier: oldest.id } : undefined),
@@ -328,7 +330,7 @@ export function plannerPagePast(
       : yield* pagePast(target, after);
     return yield* withStandings(
       target,
-      { messages: works.map((each) => messageOf(each.id, each.work)), cursor, status },
+      { messages: works.map((each) => messageOf(each.id, each.work, each.origin)), cursor, status },
       works.map((each) => each.work),
     );
   });

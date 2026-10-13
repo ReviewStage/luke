@@ -314,9 +314,20 @@ const callAbout = (
     return row.id;
   });
 
-/** One line as the transcript answers it: its place on the call, the speaker as the role, the words as one text part. */
-function spoken(index: number, role: TranscriptMessage["role"], text: string): TranscriptMessage {
-  return { id: String(index), role, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+/** One line as the transcript answers it: its place on the call, the speaker as the role, the words as one text part, and where on the call it began and ended. */
+function spoken(
+  index: number,
+  role: TranscriptMessage["role"],
+  text: string,
+  span: readonly [startMs: number, endMs: number],
+): TranscriptMessage {
+  const [startMs, endMs] = span;
+  return {
+    id: String(index),
+    role,
+    parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+    metadata: { span: { startMs, endMs } },
+  };
 }
 
 /** Luke's drawing of one labelled box. */
@@ -589,15 +600,15 @@ it.layer(getTestDB())("the plan routes", (it) => {
               id: first,
               startedAt: 1_000_000,
               messages: [
-                spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
-                spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm."),
-                spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"),
+                spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 1_200]),
+                spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm.", [600, 1_100]),
+                spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?", [9_000, 9_500]),
               ],
             },
             {
               id: second,
               startedAt: 2_000_000,
-              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.")],
+              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.", [0, 500])],
             },
           ],
           earlierOmitted: false,

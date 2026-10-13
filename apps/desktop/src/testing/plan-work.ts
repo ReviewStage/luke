@@ -21,7 +21,7 @@ import {
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
-import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@sidecar/wire";
+import { MESSAGE_ROLE, type TurnOrigin, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../renderer/ai-elements/tool";
 
 /** The model's words, as a journal stores them. */
@@ -94,12 +94,17 @@ export function workerCall(started: PlanWorkWorker): WireRecord {
   );
 }
 
+/** A planning turn as a test builds it: the frame's shape, and what opened the turn where the test says, which the planner page carries and the frame does not. */
+export interface TestPlanWorkTurn extends PlanWorkTurn {
+  readonly origin?: TurnOrigin;
+}
+
 /** A turn of `state` whose journal holds `journal`, with the workers and anything else `rest` gives it. */
 export function workTurn(
   state: PlanWorkState,
   journal: readonly WireValue[],
-  rest: Partial<Omit<PlanWorkTurn, "state" | "journal">> = {},
-): PlanWorkTurn {
+  rest: Partial<Omit<TestPlanWorkTurn, "state" | "journal">> = {},
+): TestPlanWorkTurn {
   return {
     turnId: "turn-1",
     startedAt: 0,
@@ -118,8 +123,8 @@ const STATUS_OF_STATE = {
   [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
 } as const satisfies Record<PlanWorkState, CodingAgentStatus>;
 
-/** A turn's journal as a planner page carries it: its parts, its turn and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
-function messageOfTurn(turn: PlanWorkTurn): CodingAgentMessage {
+/** A turn's journal as a planner page carries it: its parts, its turn, what opened it and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
+function messageOfTurn(turn: TestPlanWorkTurn): CodingAgentMessage {
   const { model, effort, tokens } = turn;
   const ending =
     turn.state === PLAN_WORK_STATE.FAILED ? (turn.ending ?? TURN_ENDING.STOPPED) : turn.ending;
@@ -129,6 +134,7 @@ function messageOfTurn(turn: PlanWorkTurn): CodingAgentMessage {
     // SAFETY: a test's journal holds the stored parts the builders above make, JSON objects each.
     parts: turn.journal as CodingAgentMessage["parts"],
     turnId: turn.turnId,
+    ...(turn.origin === undefined ? undefined : { origin: turn.origin }),
     ...(turn.earlierOmitted ? { earlierOmitted: true } : undefined),
     ...(turn.asked === undefined ? undefined : { asked: turn.asked }),
     ...(turn.askedAt === undefined ? undefined : { askedAt: turn.askedAt }),
@@ -150,7 +156,7 @@ function messageOfTurn(turn: PlanWorkTurn): CodingAgentMessage {
  * say them; with the turn the page before is read before, where one is.
  */
 export function conversationOf(
-  turns: readonly PlanWorkTurn[],
+  turns: readonly TestPlanWorkTurn[],
   earlier?: string,
 ): CodingAgentMessagesAnswer {
   const workers = turns.flatMap((turn) => turn.workers.map((worker) => ({ turn, worker })));

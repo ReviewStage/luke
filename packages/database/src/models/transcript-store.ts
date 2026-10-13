@@ -175,7 +175,7 @@ function callsOf(newestFirst: readonly SegmentRow[]): readonly CallRead[] {
   return calls;
 }
 
-/** The calls read, each with its lines, the row each line was written as, and what its record holds of it. */
+/** The calls read, each with its lines, where on the call each began and ended, the row each was written as, and what its record holds of it. */
 function transcriptOf(
   calls: readonly CallRead[],
   records: ReadonlyMap<string, CallRecordRow>,
@@ -192,7 +192,10 @@ function transcriptOf(
           id: String(index),
           role: line.speaker,
           parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.text }],
-          ...(rowIds.length === 0 ? undefined : { metadata: { rowIds: [...rowIds] } }),
+          metadata: {
+            span: { startMs: line.startMs, endMs: line.endMs },
+            ...(rowIds.length === 0 ? undefined : { rowIds: [...rowIds] }),
+          },
         };
       }),
       ...recordOf(records.get(first.voiceSessionId)),

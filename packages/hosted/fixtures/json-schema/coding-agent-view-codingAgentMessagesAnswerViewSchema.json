@@ -43,6 +43,16 @@
                 },
                 "maxItems": 20
               },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "typed",
+                  "spoken",
+                  "transcript_change",
+                  "child",
+                  "child_completion"
+                ]
+              },
               "earlierOmitted": {
                 "type": "boolean"
               },

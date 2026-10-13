@@ -46,7 +46,7 @@ export type CallRecord = Pick<TranscriptCall, "endedAt" | "ending" | "usage" | "
 /** One call as the tab draws it: when it started, whether it stands now, its lines, each a message with its words settled, and its record. */
 export interface TranscriptCallRow {
   readonly key: string;
-  /** Epoch milliseconds the call started; for the call standing, when this window first heard it. */
+  /** Epoch milliseconds the call started; for the call standing, when this window first heard it, less how far into the call its first line began. */
   readonly startedAt: number;
   readonly live: boolean;
   /** Whether Luke ended the call himself, as far as this window saw it end. */
@@ -147,7 +147,11 @@ export function heardCalls(input: {
  * A heard call as a row of the list, or nothing where nothing was said on
  * it: each line a message under the window's own row id, which names no row
  * on record, so the line carries its span on the call instead, which is what
- * a turn that took it as its ask names it by (`call-thread.ts`).
+ * a turn that took it as its ask names it by (`call-thread.ts`). The call
+ * is taken to have started as far before it was first heard as its first
+ * line began into it, since the window hears a call at its first line,
+ * which puts each line's start on the call near where it was and a turn
+ * that began before any line ahead of them all.
  */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   const messages = heard.transcript.lines.flatMap((line) => {
@@ -163,7 +167,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   if (first === undefined) return undefined;
   return {
     key: heard.transcript.voiceSessionId ?? first.id,
-    startedAt: heard.heardAt,
+    startedAt: heard.heardAt - (heard.transcript.lines[0]?.startMs ?? 0),
     live: heard.live,
     lukeEnded: false,
     messages,

@@ -15,11 +15,20 @@
  * and stays there however many lines are said after it. A turn no line on
  * screen asked for, one typed, one whose lines are not read yet, or one
  * whose lines are past what the transcript holds, stands where it started:
- * inside the call it started on, after its lines, while that call stands or
- * before its recorded end; between calls once it had ended, or where its
- * end is not on record; or ahead of every call.
- * Nothing here draws or knows what a turn is beyond its key, start, and
- * ask, so the thread takes a turn in whatever shape its wire reads it.
+ * inside the call it started on, by time among its lines, after the last
+ * line that began before it and at the call's top where none had, while
+ * that call stands or before its recorded end; between calls once it had
+ * ended, or where its end is not on record; or ahead of every call. The
+ * look around that opens every call, which the voice asks before the
+ * developer has said anything, is such a turn, and stands at the call's
+ * top. A line that says no time keeps the turn after it, as every line
+ * read from a service older than the span does, so such a transcript
+ * reads as it did. A turn's words are Luke's to say where the voice asked
+ * for the turn, whether a line on screen did or not, so they are folded
+ * with its work either way (`spoken`).
+ * Nothing here draws or knows what a turn is beyond its key, start, ask,
+ * and whether the voice asked for it, so the thread takes a turn in
+ * whatever shape its wire reads it.
  */
 
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
@@ -40,16 +49,18 @@ interface AskedAt {
   readonly fromMs: number;
 }
 
-/** A planning turn as the thread places it: its key, when it started, the rows of the lines it took as its ask and where each began, and the turn itself. */
+/** A planning turn as the thread places it: its key, when it started, the rows of the lines it took as its ask and where each began, whether the voice asked for it, and the turn itself. */
 export interface CallTurn<T> {
   readonly key: string;
   readonly startedAt: number;
   readonly asked: readonly string[];
   readonly askedAt: readonly AskedAt[];
+  /** Whether the voice asked for the turn, so Luke says its words aloud though no line on screen asked for it. */
+  readonly spoken: boolean;
   readonly turn: T;
 }
 
-/** A turn's work as the thread draws it, and whether a line on screen asked for it, which is when Luke said its words aloud. */
+/** A turn's work as the thread draws it, and whether Luke says its words aloud: the voice asked for it, or a line on screen did. */
 interface ThreadWork<T> {
   readonly kind: typeof THREAD_ITEM.WORK;
   readonly turn: CallTurn<T>;
@@ -155,6 +166,26 @@ function slotOf<T>(calls: readonly TranscriptCallRow[], turn: CallTurn<T>): Slot
   return { call: index, after: call !== undefined && !inside };
 }
 
+/** When a line began, in epoch milliseconds, as the call's start and the line's span on it say; nothing for a line that says no span. */
+function lineStart(call: TranscriptCallRow, line: UIMessage): number | undefined {
+  const { span } = lineTies(line);
+  return span === undefined ? undefined : call.startedAt + span.startMs;
+}
+
+/**
+ * The last of the call's lines that began before the turn started, which a
+ * turn no line asked for stands after; none where no line had, which puts
+ * the turn at the call's top. Note that a line that says no time counts as
+ * begun before, because a transcript from a service older than the span
+ * then reads as it did, the turn after its lines.
+ */
+function lineBefore<T>(call: TranscriptCallRow, turn: CallTurn<T>): UIMessage | undefined {
+  return call.messages.findLast((line) => {
+    const began = lineStart(call, line);
+    return began === undefined || began <= turn.startedAt;
+  });
+}
+
 /** The thread: each call with its lines and the work under them, and the work that stands between calls, oldest first. */
 export function callThread<T>(
   calls: readonly TranscriptCallRow[],
@@ -166,7 +197,7 @@ export function callThread<T>(
   const work = (turn: CallTurn<T>): ThreadWork<T> => ({
     kind: THREAD_ITEM.WORK,
     turn,
-    spoken: anchors.has(turn.key),
+    spoken: turn.spoken || anchors.has(turn.key),
   });
   const between = (call: number, after: boolean) =>
     placed.filter((turn) => {
@@ -175,13 +206,22 @@ export function callThread<T>(
     });
   const sections: ThreadSection<T>[] = between(-1, false).map(work);
   for (const [index, call] of calls.entries()) {
-    const entries: CallEntry<T>[] = [];
+    // A turn no line asked for stands by time among the lines: after the last that began before it, at the top where none had.
+    const after = new Map<UIMessage | undefined, CallTurn<T>[]>();
+    for (const turn of between(index, false)) {
+      const line = lineBefore(call, turn);
+      after.set(line, [...(after.get(line) ?? []), turn]);
+    }
+    const entries: CallEntry<T>[] = (after.get(undefined) ?? []).map(work);
     for (const line of call.messages) {
       entries.push({ kind: THREAD_ITEM.LINE, line });
-      const under = byStart.filter((turn) => anchors.get(turn.key) === line);
+      // Under one line stand the turns it asked for and those that fall after it by time, in the order they started.
+      const under = [
+        ...byStart.filter((turn) => anchors.get(turn.key) === line),
+        ...(after.get(line) ?? []),
+      ].toSorted((left, right) => left.startedAt - right.startedAt);
       entries.push(...under.map(work));
     }
-    entries.push(...between(index, false).map(work));
     sections.push({ kind: THREAD_ITEM.CALL, call, entries });
     sections.push(...between(index, true).map(work));
   }

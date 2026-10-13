@@ -660,6 +660,11 @@ test("a plan's conversation reads on the agent tab's own wire: its newest turns'
   assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
   assert.equal(page.earlier, undefined);
   assert.doesNotMatch(JSON.stringify(page.messages), /page body/u);
+  // Each turn says what opened it, which is how the Call tab tells a spoken turn no line asked for, as the look around a call opens with is.
+  assert.deepEqual(
+    page.messages.map((message) => message.origin),
+    [TURN_ORIGIN.SPOKEN, TURN_ORIGIN.SPOKEN],
+  );
 
   const third = standingFor(target);
   await play(

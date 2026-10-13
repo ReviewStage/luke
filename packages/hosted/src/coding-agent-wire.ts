@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE, WireValueSchema } from "@sidecar/wire";
+import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import {
@@ -728,6 +728,14 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
       }),
     ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ASKED_LINES)),
   ),
+  /**
+   * What opened a planning turn, as its row recorded it, on the turn's
+   * journal: a spoken turn is the voice's, whose words Luke says aloud
+   * whether or not a line on screen asked for it, as the look around a
+   * call opens with is. Absent on a coding agent's page, on any other row,
+   * and from a service older than it.
+   */
+  origin: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(TURN_ORIGIN))),
   /** Whether older parts of a planning turn's journal than these were left out, which the turn says above its parts; absent where none were, on a coding agent's page, and from a service older than it. */
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
