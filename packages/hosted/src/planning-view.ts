@@ -23,6 +23,8 @@ import {
   planFileRefusalSchema,
   planFileRequestSchema,
   planFileTextSchema,
+  planMessageAnswerSchema,
+  planMessageRequestSchema,
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
@@ -604,6 +606,35 @@ export const planningEditAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningEditAnswer = typeof planningEditAnswerSchema.Type;
+
+/** A developer's typed line to Luke on a plan, as the window asks it sent: the plan, the words, and the key the window made for this one line, which a retry carries again. */
+export const planningMessageParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...planMessageRequestSchema.fields,
+});
+
+export type PlanningMessageParams = typeof planningMessageParamsSchema.Type;
+
+/** Why a typed line reached no one: the service did not answer, or the plan is gone or archived. */
+const MESSAGE_FAILURES = [
+  PLAN_CALL_FAILURE.UNANSWERED,
+  PLAN_CALL_FAILURE.NOT_FOUND,
+  PLAN_CALL_FAILURE.PLAN_ARCHIVED,
+] as const;
+
+export type PlanningMessageFailure = (typeof MESSAGE_FAILURES)[number];
+
+/**
+ * A typed line as the window hears it: the ask Luke took it as, the same
+ * for a retry of one key, so the window mints a new key only once a line
+ * was taken; or why it was not. Luke's reply lands on the plan's work.
+ */
+export const planningMessageAnswerSchema = EffectSchema.Union([
+  planMessageAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literals(MESSAGE_FAILURES) }),
+]);
+
+export type PlanningMessageAnswer = typeof planningMessageAnswerSchema.Type;
 
 /** A window of a file of a plan's repository, as the File tab asks the host for it: the plan, the path, and the window's first and last line. */
 export const planningFileParamsSchema = EffectSchema.Struct({

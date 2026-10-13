@@ -7,11 +7,13 @@ import type { JsonValue } from "./json.js";
 
 /**
  * Statuses a fake answers with, plus the ones product code names, so a test
- * never restates 401. `OK` and `SERVER_ERROR` are what a route table returns;
+ * never restates 401. `OK`, `ACCEPTED`, and `SERVER_ERROR` are what a route table returns;
  * the rest are the failures the boundary already branches on.
  */
 export const HTTP_STATUS = {
   OK: 200,
+  /** A write the service took to act on later, as a typed line to Luke is. */
+  ACCEPTED: 202,
   ...BOUNDARY_HTTP_STATUS,
   // What a production route answers a request missing a header it demands,
   // reproduced by a provider fake so a forgotten header cannot pass.
