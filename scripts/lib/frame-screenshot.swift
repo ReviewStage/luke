@@ -1,11 +1,19 @@
 // frame-screenshot.swift -- frames a macOS window capture on the Golden Gate Sunset aerial for CHANGELOG.md.
 //
-//   frame-screenshot <capture.png> <out.png> <wallpaper-cache.png>
+//   frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height [zoom]]
 //
 // The capture is a window as macOS's own window capture takes it: the window
 // body opaque, its shadow fading to transparent around it. The window body is
 // found from the alpha channel, wallpaper is laid around it by MARGIN capture
-// pixels, and the whole is scaled to OUTPUT_WIDTH. The wallpaper is the first
+// pixels, and the whole is scaled to OUTPUT_WIDTH. Given a crop, in the
+// window's points from its top-left corner (negative, or past the window, to
+// take in wallpaper), the same picture is cut to that part and scaled to the
+// height the whole one would have, so a close-up stands beside the full
+// windows at their height, narrower and nearer. It is composed at the
+// capture's own resolution, so a crop at least 800 points tall is never
+// enlarged past its pixels, and a capture taken zoomed (the window that many
+// times larger, its page zoomed to match) holds that many times the pixels
+// for a crop of the same points. The wallpaper is the first
 // frame of macOS's Golden Gate Sunset aerial (Marshall's Beach), read once from
 // Apple's servers and cached, since macOS keeps the aerial as a video, not a
 // still.
@@ -28,6 +36,10 @@ let MARGIN = 180
 let OUTPUT_WIDTH = 2400
 /// A pixel this opaque belongs to the window body rather than its shadow.
 let BODY_ALPHA: UInt8 = 250
+/// The largest zoom a capture is taken at; past it the window's pixels outgrow what a Mac will draw.
+let MAX_ZOOM: CGFloat = 4
+/// The resolution macOS records for a point when it does not say, as on a Retina display.
+let DEFAULT_DPI: CGFloat = 144
 
 struct FrameError: Error, CustomStringConvertible {
     let description: String
@@ -38,6 +50,45 @@ func loadImage(_ url: URL) throws -> CGImage {
         let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else { throw FrameError(description: "cannot read an image at \(url.path)") }
     return image
+}
+
+/// Capture pixels per window point, from the resolution macOS wrote into the capture.
+func pixelsPerPoint(_ url: URL) -> CGFloat {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        let dpi = properties[kCGImagePropertyDPIWidth] as? NSNumber
+    else { return DEFAULT_DPI / 72 }
+    return CGFloat(dpi.doubleValue) / 72
+}
+
+/// A crop as `x,y,width,height` in window points: exactly four finite numbers, its size positive.
+func parseCrop(_ text: String) throws -> CGRect {
+    let fields = text.split(separator: ",", omittingEmptySubsequences: false)
+    let parts = fields.compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+    guard fields.count == 4, parts.count == 4, parts.allSatisfy({ $0.isFinite }), parts[2] > 0, parts[3] > 0
+    else {
+        throw FrameError(description: "a crop is x,y,width,height in points, got \(text)")
+    }
+    return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
+}
+
+/// A canvas with the wallpaper scaled to cover it and centred.
+func wallpaperCanvas(width: Int, height: Int, wallpaper: CGImage) throws -> CGContext {
+    guard
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { throw FrameError(description: "cannot make the output canvas") }
+    context.interpolationQuality = .high
+    let cover = max(CGFloat(width) / CGFloat(wallpaper.width), CGFloat(height) / CGFloat(wallpaper.height))
+    let size = CGSize(width: CGFloat(wallpaper.width) * cover, height: CGFloat(wallpaper.height) * cover)
+    context.draw(
+        wallpaper,
+        in: CGRect(
+            x: (CGFloat(width) - size.width) / 2, y: (CGFloat(height) - size.height) / 2,
+            width: size.width, height: size.height))
+    return context
 }
 
 func writePNG(_ image: CGImage, to url: URL) throws {
@@ -125,35 +176,21 @@ func windowBody(_ image: CGImage) throws -> CGRect {
 }
 
 /// The window on the wallpaper: the wallpaper scaled to cover the canvas and centred, the window drawn shadow and all.
-func frame(capture: CGImage, wallpaper: CGImage) throws -> CGImage {
+func frame(
+    capture: CGImage, wallpaper: CGImage, width outputWidth: Int = OUTPUT_WIDTH, margin: Int = MARGIN
+) throws -> CGImage {
     let body = try windowBody(capture)
-    let canvasWidth = body.width + CGFloat(2 * MARGIN)
-    let canvasHeight = body.height + CGFloat(2 * MARGIN)
-    let scale = CGFloat(OUTPUT_WIDTH) / canvasWidth
+    let canvasWidth = body.width + CGFloat(2 * margin)
+    let canvasHeight = body.height + CGFloat(2 * margin)
+    let scale = CGFloat(outputWidth) / canvasWidth
     let outputHeight = Int((canvasHeight * scale).rounded())
-    guard
-        let context = CGContext(
-            data: nil, width: OUTPUT_WIDTH, height: outputHeight, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
-    else { throw FrameError(description: "cannot make the output canvas") }
-    context.interpolationQuality = .high
-
-    let cover = max(
-        CGFloat(OUTPUT_WIDTH) / CGFloat(wallpaper.width), CGFloat(outputHeight) / CGFloat(wallpaper.height))
-    let wallpaperSize = CGSize(width: CGFloat(wallpaper.width) * cover, height: CGFloat(wallpaper.height) * cover)
-    context.draw(
-        wallpaper,
-        in: CGRect(
-            x: (CGFloat(OUTPUT_WIDTH) - wallpaperSize.width) / 2,
-            y: (CGFloat(outputHeight) - wallpaperSize.height) / 2,
-            width: wallpaperSize.width, height: wallpaperSize.height))
+    let context = try wallpaperCanvas(width: outputWidth, height: outputHeight, wallpaper: wallpaper)
 
     // Note that we place the capture from the top, because the body was measured top-down and Core Graphics draws bottom-up.
     let captureWidth = CGFloat(capture.width) * scale
     let captureHeight = CGFloat(capture.height) * scale
-    let left = (CGFloat(MARGIN) - body.minX) * scale
-    let top = (CGFloat(MARGIN) - body.minY) * scale
+    let left = (CGFloat(margin) - body.minX) * scale
+    let top = (CGFloat(margin) - body.minY) * scale
     context.draw(
         capture,
         in: CGRect(
@@ -163,15 +200,65 @@ func frame(capture: CGImage, wallpaper: CGImage) throws -> CGImage {
     return output
 }
 
+/// Part of the framed picture: the window on the wallpaper composed at the capture's resolution, cut to the crop, and scaled to the height a whole unzoomed picture has.
+///
+/// Note that the margin grows with the zoom, because it is wallpaper in the window's points, not the capture's pixels.
+func frameCrop(capture: CGImage, crop: CGRect, scale: CGFloat, zoom: CGFloat, wallpaper: CGImage) throws -> CGImage {
+    let body = try windowBody(capture)
+    let margin = Int((CGFloat(MARGIN) * zoom).rounded())
+    let nativeWidth = Int(body.width) + 2 * margin
+    let whole = try frame(capture: capture, wallpaper: wallpaper, width: nativeWidth, margin: margin)
+    let outputHeight = Int(
+        ((body.height / zoom + CGFloat(2 * MARGIN)) * CGFloat(OUTPUT_WIDTH) / (body.width / zoom + CGFloat(2 * MARGIN)))
+            .rounded())
+    let cut = CGRect(
+        x: CGFloat(margin) + crop.minX * scale, y: CGFloat(margin) + crop.minY * scale,
+        width: crop.width * scale, height: crop.height * scale
+    ).integral
+    let scaledWidth = (cut.width * CGFloat(outputHeight) / cut.height).rounded()
+    guard scaledWidth <= CGFloat(OUTPUT_WIDTH) else {
+        throw FrameError(description: "the crop \(crop) is wider than a whole picture at its height; make it taller")
+    }
+    let outputWidth = Int(scaledWidth)
+    guard CGRect(x: 0, y: 0, width: whole.width, height: whole.height).contains(cut),
+        let piece = whole.cropping(to: cut)
+    else {
+        throw FrameError(description: "the crop \(crop) reaches past the wallpaper around the window")
+    }
+    guard
+        let context = CGContext(
+            data: nil, width: outputWidth, height: outputHeight, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { throw FrameError(description: "cannot make the output canvas") }
+    context.interpolationQuality = .high
+    context.draw(piece, in: CGRect(x: 0, y: 0, width: outputWidth, height: outputHeight))
+    guard let output = context.makeImage() else { throw FrameError(description: "cannot finish the image") }
+    return output
+}
+
 let arguments = CommandLine.arguments
-guard arguments.count == 4 else {
-    FileHandle.standardError.write("usage: frame-screenshot <capture.png> <out.png> <wallpaper-cache.png>\n".data(using: .utf8)!)
+guard (4...6).contains(arguments.count) else {
+    FileHandle.standardError.write(
+        "usage: frame-screenshot <capture.png> <out.png> <wallpaper-cache.png> [x,y,width,height [zoom]]\n".data(
+            using: .utf8)!)
     exit(2)
 }
 do {
-    let capture = try loadImage(URL(fileURLWithPath: arguments[1]))
+    let captureURL = URL(fileURLWithPath: arguments[1])
+    let capture = try loadImage(captureURL)
     let backdrop = try await wallpaper(cache: URL(fileURLWithPath: arguments[3]))
-    try writePNG(try frame(capture: capture, wallpaper: backdrop), to: URL(fileURLWithPath: arguments[2]))
+    let zoom = arguments.count == 6 ? CGFloat(Double(arguments[5]) ?? 0) : 1
+    guard zoom.isFinite, zoom >= 1, zoom <= MAX_ZOOM else {
+        throw FrameError(description: "a zoom is a number from 1 to \(Int(MAX_ZOOM))")
+    }
+    let framed =
+        arguments.count >= 5
+        ? try frameCrop(
+            capture: capture, crop: try parseCrop(arguments[4]), scale: pixelsPerPoint(captureURL) * zoom,
+            zoom: zoom, wallpaper: backdrop)
+        : try frame(capture: capture, wallpaper: backdrop)
+    try writePNG(framed, to: URL(fileURLWithPath: arguments[2]))
 } catch {
     FileHandle.standardError.write("error: \(error)\n".data(using: .utf8)!)
     exit(1)

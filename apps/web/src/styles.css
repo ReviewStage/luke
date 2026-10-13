@@ -293,13 +293,22 @@
 }
 
 /* Screenshots arrive through the generated markup, so their frame is drawn
-   here: full measure, on the hairline card the rest of the site puts artwork
-   on. Each is a link to its own full-size file, and the cursor is what says
-   so. */
+   here, on the hairline card the rest of the site puts artwork on. Every one
+   stands as tall as a whole-window screenshot at full measure (2400 by 1591),
+   so a close-up cut from one is the same height, only narrower, and centred
+   in the column. Each is a link to its own full-size file, and the cursor is
+   what says so. */
+.document:has(img) {
+  container-type: inline-size;
+}
+
 .document img {
   display: block;
-  width: 100%;
-  margin: var(--space-5) 0;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(100cqi * 1591 / 2400);
+  margin: var(--space-5) auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
 }
