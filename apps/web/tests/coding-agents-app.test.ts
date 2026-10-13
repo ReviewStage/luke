@@ -436,6 +436,35 @@ const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps =
     return yield* Fiber.join(fiber);
   });
 
+/** The steps a read held while its agent starts is driven by: past its hold, and under the grace an agent with no turn reads as starting within. */
+const STARTING_READ_STEPS =
+  Math.floor(
+    (Duration.toMillis(CODER.STARTING_GRACE) - Duration.toMillis(CODER.MESSAGES_HOLD)) /
+      Duration.toMillis(CODER.MESSAGES_POLL),
+  ) - 1;
+
+/**
+ * A held read of a starting agent driven to its answer, each step taken
+ * only after a round trip to the test's database. Note that the steps are
+ * paced by the database rather than by the loop, because the read reaches
+ * its hold only after queries of its own: steps the loop races ahead with
+ * either pass the hold before the read waits on it, leaving its join
+ * waiting on a clock nothing moves, or, unbounded, carry the clock past the
+ * grace so the page reads the agent failed. A round trip queued behind the
+ * read's own keeps the two in step, and the bound keeps the clock inside
+ * the grace whatever the database's pace.
+ */
+const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < STARTING_READ_STEPS; attempt += 1) {
+      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
+      yield* Effect.orDie(db.select({ id: conversations.id }).from(conversations).limit(1));
+      yield* TestClock.adjust(CODER.MESSAGES_POLL);
+      yield* Effect.yieldNow;
+    }
+    return yield* Fiber.join(fiber);
+  });
+
 /**
  * An owner who signed in with GitHub and holds one plan on the repository,
  * another account beside them, and the group over a GitHub reaching the
@@ -871,12 +900,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(starting.pollUnsafe(), undefined);
         yield* TestClock.adjust(CODER.MESSAGES_HOLD);
-        // The steps are bounded well inside the starting grace, so a read whose queries are slow to
-        // land is joined at a clock that still reads it starting rather than failed.
         const empty = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(starting, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
+          yield* drivenWhileStarting(starting),
         );
         assert.deepEqual(empty.messages, []);
         assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
