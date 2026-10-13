@@ -67,7 +67,11 @@ async function mount(answer: string | undefined = undefined) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(NewPlanForm, { newPlan, repositories })));
+  const render = (presses: number) =>
+    act(() =>
+      root.render(createElement(NewPlanForm, { newPlan: { ...newPlan, presses }, repositories })),
+    );
+  render(0);
   await settle();
   const field = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Plan name"]');
   assert.ok(field, "the name is drawn");
@@ -78,6 +82,11 @@ async function mount(answer: string | undefined = undefined) {
   return {
     starts,
     field,
+    /** A press of New plan while the page stands, which reads the template again. */
+    pressNewPlan: async (presses: number) => {
+      render(presses);
+      await settle();
+    },
     create,
     type: (words: string) => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -113,6 +122,14 @@ test("a template the host cannot read leaves the page without sections, and the 
   page.type("Dark mode");
   await page.pressReturn();
   assert.deepEqual(page.starts, [["Dark mode", "acme/web"]]);
+});
+
+test("a later read that fails takes the sections away rather than keep ones the plan may no longer start as", async () => {
+  const page = await mount();
+  assert.deepEqual(page.sections(), ["Why", "Risks"]);
+  template = undefined;
+  await page.pressNewPlan(1);
+  assert.deepEqual(page.sections(), []);
 });
 
 test("Return creates the plan under the name as typed, trimmed, about the repository last used", async () => {

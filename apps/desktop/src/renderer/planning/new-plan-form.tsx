@@ -33,8 +33,9 @@ import type { PlansControl } from "./use-plans-tab";
  * The name can be dictated with the agent composer's own microphone and
  * strip (`dictation-strip.tsx`), the repository's name among the words to
  * listen for. The template is read as the page opens and on each press of
- * New plan, so an edit in Settings shows on the next visit; until it is
- * read, or where it cannot be, the page draws no sections.
+ * New plan, so an edit in Settings or on another Mac shows on the next
+ * visit; until it is read, or where the last read failed, the page draws no
+ * sections.
  */
 
 /** The longest name the field takes. */
@@ -202,15 +203,19 @@ export function NewPlanForm({
   const [note, setNote] = useState<string | undefined>(undefined);
   const repository = chosen ?? repositories.recent[0] ?? null;
 
-  // The template is read on arrival and on each press of New plan; a read
-  // that fails keeps what was drawn, since the preview is a courtesy.
+  // The template is read on arrival and on each press of New plan. Note that
+  // a read that fails takes the sections away rather than keep the last ones,
+  // because the template may have changed since and the plan starts as the
+  // service's copy, never as this preview.
   useEffect(() => {
     let live = true;
     act(ACT_KIND.PLAN_TEMPLATE_READ).then(
       (answer) => {
-        if (live && "template" in answer) setTemplate(answer.template);
+        if (live) setTemplate("template" in answer ? answer.template : "");
       },
-      () => undefined,
+      () => {
+        if (live) setTemplate("");
+      },
     );
     return () => {
       live = false;
