@@ -5,7 +5,7 @@ import {
   type DrawingElement,
   drawingElementsSchema,
 } from "@sidecar/hosted/board-wire";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { db } from "../core/query.js";
