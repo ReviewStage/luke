@@ -1959,7 +1959,7 @@ fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` needs no service; the `postgres` CI job runs the same migrations,
-and no tests, against a Postgres container. Every one of those is
+then `test:store`, against a Postgres container. Every one of those is
 Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
 embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
 any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
