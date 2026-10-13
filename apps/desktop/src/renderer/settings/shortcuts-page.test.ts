@@ -117,6 +117,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 test("the page stands in sections that follow the menu bar, each row a name and its chord", () => {
@@ -235,7 +236,6 @@ test("the talk row's ⋯ stands drawn at rest, not only under the pointer, so th
   const style = getComputedStyle(more);
   assert.notEqual(style.opacity, "0");
   assert.notEqual(style.visibility, "hidden");
-  document.head.innerHTML = "";
 });
 
 test("the talk row's ⋯ offers Change shortcut, which records in the chord's own field", () => {
