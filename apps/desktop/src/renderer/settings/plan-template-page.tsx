@@ -185,7 +185,9 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
+    // Each read names the newest edit afresh: the page is not drawn while it is out, and an earlier attempt's may be stale.
     setRead(TEMPLATE_READ.READING);
+    setLastEdit(undefined);
     act(ACT_KIND.PLAN_TEMPLATE_READ)
       .catch((): PlanTemplateAnswerView | undefined => undefined)
       .then((answer) => {
