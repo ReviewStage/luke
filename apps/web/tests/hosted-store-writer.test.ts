@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
 import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
+import {
+  STORE_WRITE_REFUSAL,
+  type StoreWriteResult,
+  TURN_FAILURE_DETAIL,
+} from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { VOICE_DELEGATION_MODE } from "@sidecar/database/voice-vocabulary";
@@ -49,11 +54,6 @@ import {
 } from "../server/core";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import {
-  STORE_WRITE_REFUSAL,
-  type StoreWriteResult,
-  TURN_FAILURE_DETAIL,
-} from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

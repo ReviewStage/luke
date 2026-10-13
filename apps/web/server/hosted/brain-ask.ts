@@ -1,4 +1,5 @@
 import { hostTurnId } from "@sidecar/database/models/ids";
+import type { StoreWriter } from "@sidecar/database/models/writer";
 import {
   Cause,
   Clock,
@@ -24,7 +25,6 @@ import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/record
 import { HOSTED_HTTP_STATUS } from "./http.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
-import type { StoreWriter } from "./store/writer.js";
 
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import { STORE_WRITE_REFUSAL } from "@sidecar/database/models/writer";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
@@ -41,7 +42,6 @@ import {
   type AskRow,
   newestSession,
 } from "../server/hosted/store/asks";
-import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**

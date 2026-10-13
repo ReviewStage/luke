@@ -47,7 +47,7 @@ const DATABASE_PACKAGE = "@sidecar/database/";
 
 const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "events"]);
 
-const WRITER = "server/hosted/store/writer.ts";
+const WRITER = `${DATABASE_SOURCES}/models/writer.ts`;
 
 /** What the writer writes: every guarded table but `events`, which nothing on the server writes now. */
 const WRITER_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);

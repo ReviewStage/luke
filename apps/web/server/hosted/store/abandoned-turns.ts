@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { STORE_WRITE_EFFECT, type StoreWriter } from "@sidecar/database/models/writer";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
@@ -13,7 +14,6 @@ import {
   sessionKey,
   TURN_STATUS,
 } from "../../core.js";
-import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
  * The sweep over turns whose end was never heard. A turn moves to running
