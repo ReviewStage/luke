@@ -20,7 +20,7 @@ import { testSqlClient } from "./support/sql-client";
  * happens to sit in.
  */
 
-const MIGRATIONS = fileURLToPath(new URL("../drizzle", import.meta.url));
+const MIGRATIONS = fileURLToPath(new URL("../../../packages/database/migrations", import.meta.url));
 const INSTANTS_MIGRATION = "0026_instants_timestamptz";
 const SESSION_ZONE = "Asia/Tokyo";
 const COLUMN_TYPE = {

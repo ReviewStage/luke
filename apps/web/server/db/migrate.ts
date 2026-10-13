@@ -1,10 +1,10 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
+import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { Config, Effect, Layer, Redacted } from "effect";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { Client } from "pg";
-import { runWebMigrations } from "./effect-migrator.js";
 import { POOL_LIMITS } from "./index.js";
 
 const MIGRATION_LOCK = {

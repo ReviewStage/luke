@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -17,7 +18,6 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";

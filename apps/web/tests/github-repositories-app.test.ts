@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -8,8 +10,6 @@ import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { GitHubApp } from "../server/github/github-app";
 import { githubRepositoriesApp } from "../server/github-repositories-app";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";

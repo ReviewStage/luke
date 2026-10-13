@@ -10,12 +10,12 @@
  * is an effect over the ambient `SqlClient`.
  */
 
+import { db } from "@sidecar/database/core/query";
+import { linearConnection } from "@sidecar/database/schemas/linear";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { linearConnection } from "../db/linear-schema.js";
-import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /** What a row's status may say. No row is a disconnected account. */

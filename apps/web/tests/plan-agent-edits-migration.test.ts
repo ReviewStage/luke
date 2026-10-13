@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { readPlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
 
@@ -27,7 +27,12 @@ import { testSqlClient } from "./support/sql-client";
  */
 
 const MIGRATION_SQL = readFileSync(
-  fileURLToPath(new URL("../drizzle/0084_plan_agent_edits_teammate.sql", import.meta.url)),
+  fileURLToPath(
+    new URL(
+      "../../../packages/database/migrations/0084_plan_agent_edits_teammate.sql",
+      import.meta.url,
+    ),
+  ),
   "utf8",
 );
 

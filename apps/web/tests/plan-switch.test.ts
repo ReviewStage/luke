@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { Effect, Option } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { writePlanTemplate } from "../server/hosted/account-store";
 import { createPlan, readPlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";

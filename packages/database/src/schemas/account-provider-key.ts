@@ -1,7 +1,7 @@
 import type { ProviderKeyProvider, ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * One of an account's own provider API keys, at most one per provider,
@@ -26,8 +26,8 @@ export const accountProviderKey = pgTable(
     sealedKey: text("sealed_key").notNull(),
     hint: text("hint").notNull(),
     status: text("status").$type<ProviderKeyStatus>().notNull(),
-    statusAt: instant("status_at").notNull(),
-    createdAt: instant("created_at").notNull(),
+    statusAt: timestamptz("status_at").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.provider] })],
 );

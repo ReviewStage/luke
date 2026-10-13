@@ -2,10 +2,10 @@ import type { InboxImageType } from "@sidecar/hosted/inbox-wire";
 import { INBOX_BOUNDS } from "@sidecar/hosted/inbox-wire";
 import { sql } from "drizzle-orm";
 import { check, customType, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { inboxItem } from "./inbox-schema.js";
-import { instant } from "./instant.js";
-import { plan } from "./plan-schema.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
+import { inboxItem } from "./inbox.js";
+import { plan } from "./plan.js";
 
 /**
  * inbox-attachment-schema.ts -- one picture of an inbox item's: the bytes of an image block, kept beside the item it belongs to.
@@ -48,7 +48,7 @@ export const inboxAttachment = pgTable(
     /** How many bytes the picture is, read off the row without the bytes. */
     byteCount: integer("byte_count").notNull(),
     bytes: bytea("bytes").notNull(),
-    createdAt: instant("created_at").notNull(),
+    createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
     // An item's attachments are read and deleted by the item.

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { account, user } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
-import { account, user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import {
   CI_READ_PERMISSIONS,
   GITHUB_FAILURE,

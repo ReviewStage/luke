@@ -1,3 +1,6 @@
+import { db } from "@sidecar/database/core/query";
+import { conversations, turns } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -10,9 +13,6 @@ import {
   sessionKey,
   TURN_STATUS,
 } from "../../core.js";
-import { db } from "../../db/query.js";
-import { conversations, turns } from "../../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**

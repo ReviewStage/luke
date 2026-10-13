@@ -1,3 +1,7 @@
+import { db } from "@sidecar/database/core/query";
+import { account, session, user } from "@sidecar/database/schemas/auth";
+import { adminFavorite } from "@sidecar/database/schemas/favorite";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
 import {
   and,
   asc,
@@ -19,10 +23,6 @@ import {
 import { Duration, Effect, Option, Result, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { account, session, user } from "../db/auth-schema.js";
-import { adminFavorite } from "../db/favorite-schema.js";
-import { db } from "../db/query.js";
-import { hostedUsage } from "../db/usage-schema.js";
 import { utcDayKey } from "../hosted/quota.js";
 import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";

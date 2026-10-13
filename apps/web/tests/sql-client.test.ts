@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { testSqlClient } from "./support/sql-client.js";
+import { testSqlClient } from "./support/sql-client";
 
 /**
  * What the client answers, on whichever dialect this run stands over. The store

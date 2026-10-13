@@ -1,5 +1,5 @@
 import { bigint, doublePrecision, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
+import { user } from "./auth.js";
 
 /**
  * How much hosted use one signed-in user made on one UTC day. The hosted

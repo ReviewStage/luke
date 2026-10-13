@@ -1,5 +1,5 @@
 import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
+import { user } from "./auth.js";
 
 /**
  * One admin's own star on one account, purely a marker for the admin who set

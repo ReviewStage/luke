@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import { listRevisions } from "../server/hosted/plan-revisions";
 import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";

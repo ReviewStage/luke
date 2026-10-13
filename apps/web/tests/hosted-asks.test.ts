@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, acceptAsk, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {

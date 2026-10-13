@@ -1,0 +1,49 @@
+{
+  "name": "@sidecar/database",
+  "version": "0.11.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./core/drizzle": "./src/core/drizzle.js",
+    "./core/migrator": "./src/core/migrator.js",
+    "./core/query": "./src/core/query.js",
+    "./schemas": "./src/schemas/index.js",
+    "./schemas/_helpers": "./src/schemas/_helpers.js",
+    "./schemas/account-provider-key": "./src/schemas/account-provider-key.js",
+    "./schemas/auth": "./src/schemas/auth.js",
+    "./schemas/coding-agent": "./src/schemas/coding-agent.js",
+    "./schemas/devices": "./src/schemas/devices.js",
+    "./schemas/favorite": "./src/schemas/favorite.js",
+    "./schemas/inbox": "./src/schemas/inbox.js",
+    "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",
+    "./schemas/linear": "./src/schemas/linear.js",
+    "./schemas/plan": "./src/schemas/plan.js",
+    "./schemas/plan-revision": "./src/schemas/plan-revision.js",
+    "./schemas/preferences": "./src/schemas/preferences.js",
+    "./schemas/repository-pin": "./src/schemas/repository-pin.js",
+    "./schemas/roster": "./src/schemas/roster.js",
+    "./schemas/storage": "./src/schemas/storage.js",
+    "./schemas/usage": "./src/schemas/usage.js",
+    "./schemas/vault": "./src/schemas/vault.js",
+    "./schemas/voice": "./src/schemas/voice.js",
+    "./schemas/workspace": "./src/schemas/workspace.js",
+    "./storage-vocabulary": "./src/storage-vocabulary.js",
+    "./voice-vocabulary": "./src/voice-vocabulary.js"
+  },
+  "types": "./src/schemas/index.ts",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@sidecar/brain": "workspace:*",
+    "@sidecar/hosted": "workspace:*",
+    "@sidecar/session": "workspace:*",
+    "@sidecar/wire": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

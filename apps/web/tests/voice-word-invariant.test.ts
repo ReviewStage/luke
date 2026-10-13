@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -30,7 +31,6 @@ import {
   sessionKey,
   UI_PART_TYPE,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../server/db/voice-vocabulary";
 import {
   type ConversationTarget,
   storeWriter,

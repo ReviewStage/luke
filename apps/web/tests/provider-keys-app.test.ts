@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
+import { user } from "@sidecar/database/schemas/auth";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -17,9 +20,6 @@ import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result } from "e
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { accountProviderKey } from "../server/db/account-provider-key-schema";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { providerKeysApp } from "../server/provider-keys-app";

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { conversations, turns } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, PartitionedSemaphore, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, test } from "vitest";
-import { db } from "../server/db/query";
-import { conversations, turns } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_DISPATCH_DEADLINE,
   ASK_REFUSAL,

@@ -9,7 +9,7 @@ import { drizzleOverSqlClient } from "./drizzle.js";
  * yields a statement, so one handle serves every request and every dialect
  * at once and two callers have nothing to contend over. No `schema` config,
  * because nothing reaches Drizzle's relational queries: the tables a
- * statement names are imported from their own `db/*-schema.ts` module, which
+ * statement names are imported from their own `schemas/*.ts` module, which
  * is the import the store-writer boundary reads.
  */
 export const db = drizzleOverSqlClient();

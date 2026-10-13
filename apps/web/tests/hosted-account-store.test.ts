@@ -1,22 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { accountPreference } from "@sidecar/database/schemas/preferences";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { accountPreference } from "../server/db/preferences-schema";
-import { db } from "../server/db/query";
-import { hostedUsage } from "../server/db/usage-schema";
 import {
   deleteAccount,
   readAccountPreferences,
   writeAccountPreferences,
 } from "../server/hosted/account-store";
 import { CODING_AGENT_DEFAULT_CHOICE } from "../server/hosted/model-catalog";
-
 import { testSqlClient } from "./support/sql-client";
 
 /**

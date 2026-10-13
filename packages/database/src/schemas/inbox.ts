@@ -14,10 +14,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { codingAgent } from "./coding-agent-schema.js";
-import { instant } from "./instant.js";
-import { plan } from "./plan-schema.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
+import { codingAgent } from "./coding-agent.js";
+import { plan } from "./plan.js";
 
 /**
  * inbox-schema.ts -- one item of the developer's inbox: something a coding agent needs of the developer, posted under a key of the agent's own.
@@ -72,8 +72,8 @@ export const inboxItem = pgTable(
     answerKey: text("answer_key"),
     /** Why the agent took the item back; null until it does. */
     closedReason: text("closed_reason"),
-    postedAt: instant("posted_at").notNull(),
-    updatedAt: instant("updated_at").notNull(),
+    postedAt: timestamptz("posted_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
   },
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -12,8 +14,6 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   agentInboxItems,

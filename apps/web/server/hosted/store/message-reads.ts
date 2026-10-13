@@ -1,3 +1,11 @@
+import { db } from "@sidecar/database/core/query";
+import {
+  conversations,
+  messages,
+  type StoredTurnUsage,
+  turns,
+} from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import type { ToolSet } from "ai";
 import {
   and,
@@ -32,9 +40,6 @@ import {
   type WireBoundaryInput,
   WireValueSchema,
 } from "../../core.js";
-import { db } from "../../db/query.js";
-import { conversations, messages, type StoredTurnUsage, turns } from "../../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
