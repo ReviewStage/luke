@@ -1,7 +1,7 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { jwt, lastLoginMethod, oAuthProxy } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
@@ -13,7 +13,6 @@ import {
   GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
-import { authProxy } from "./auth-proxy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
 const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
@@ -76,9 +75,10 @@ export const auth = betterAuth({
     github: { ...socialProvider(secrets.github), ...GITHUB_SIGN_IN },
   },
   plugins: [
-    // Ahead of the social sign-in it rewrites, and of the provider plugin whose
-    // desktop authorization resumes on the session it lands.
-    authProxy(deployment),
+    // Better Auth's OAuth proxy as its docs configure it: a Preview signs in
+    // through production's registered callback, and the provider plugin resumes
+    // the desktop's authorization on the session the proxy lands.
+    oAuthProxy({ productionURL: deployment.productionURL, secret: deployment.proxySecret }),
     jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({

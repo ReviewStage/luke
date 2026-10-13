@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
+import { jwt, oAuthProxy } from "better-auth/plugins";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AuthDeployment, authDeployment } from "../server/auth-deployment";
-import { ACCOUNT_TOKEN_STORAGE } from "../server/auth-policy";
-import { authProxy } from "../server/auth-proxy";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  denyOAuthClientPrivileges,
+  JWT_KEY_STORAGE,
+} from "../server/auth-policy";
 import type { WireValue } from "../server/core";
+import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 
 /**
  * A Preview's GitHub sign-in, carried end to end across the proxy's two
@@ -48,12 +54,35 @@ function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
     baseURL: deployment.baseURL,
     trustedOrigins: deployment.trustedOrigins,
     secret,
-    database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
+    database: memoryAdapter({
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+      jwks: [],
+      oauthClient: [oauthClientRecord(DESKTOP_OAUTH_CLIENT, NOW)],
+      oauthAccessToken: [],
+      oauthRefreshToken: [],
+      oauthConsent: [],
+      oauthClientResource: [],
+      oauthResource: [],
+    }),
     account: ACCOUNT_TOKEN_STORAGE,
     socialProviders: {
       github: { clientId: "luke-github", clientSecret: "github-secret", scope: ["read:user"] },
     },
-    plugins: [authProxy(deployment)],
+    // The plugins `auth.ts` installs, in its order.
+    plugins: [
+      oAuthProxy({ productionURL: deployment.productionURL, secret: deployment.proxySecret }),
+      jwt(JWT_KEY_STORAGE),
+      oauthProvider({
+        loginPage: "/sign-in.html",
+        consentPage: "/consent.html",
+        allowDynamicClientRegistration: false,
+        clientPrivileges: denyOAuthClientPrivileges,
+        cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT.id]),
+      }),
+    ],
     logger: {
       level: "debug",
       log: (_level, message, ...details) => {
@@ -70,7 +99,6 @@ function ends() {
       VERCEL_ENV: "production",
       BETTER_AUTH_URL: PRODUCTION_URL,
       BETTER_AUTH_PROXY_SECRET: PROXY_SECRET,
-      BETTER_AUTH_PROXY_TRUSTED_ORIGINS: "https://luke-*-stage-review.vercel.app",
     }),
     "production-session-secret-of-enough-length",
     trail,
@@ -144,9 +172,13 @@ async function githubReturns(ends: Ends, authorize: URL, query: string) {
   return location(await ends.production.handler(new Request(callback)), ends.trail);
 }
 
+/** The browser navigating to a Preview URL, as a top-level navigation sends it. */
 async function land(ends: Ends, relayed: string, cookie?: string) {
+  const navigation = { accept: "text/html", "sec-fetch-mode": "navigate" };
   return ends.preview.handler(
-    new Request(relayed, { headers: cookie === undefined ? {} : { cookie } }),
+    new Request(relayed, {
+      headers: cookie === undefined ? navigation : { ...navigation, cookie },
+    }),
   );
 }
 
@@ -193,4 +225,48 @@ test("a Preview's proxied GitHub sign-in still signs the GitHub user in on the P
   assert.ok(user);
   assert.equal((await githubAccounts(both.preview, user.id)).length, 1);
   assert.equal(await githubUser(both.production), null);
+});
+
+test("the desktop's sign-in on a Preview, proxied through production, hands the desktop its code", async () => {
+  const both = ends();
+  const loopback = "http://127.0.0.1:54698/callback";
+  const authorizeQuery = new URLSearchParams({
+    response_type: "code",
+    client_id: DESKTOP_OAUTH_CLIENT.id,
+    redirect_uri: loopback,
+    scope: "openid profile email offline_access",
+    state: "desktop-state",
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+  });
+  const toLogin = await both.preview.handler(
+    new Request(`${PREVIEW_URL}/api/auth/oauth2/authorize?${authorizeQuery}`, {
+      headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+    }),
+  );
+  const loginPage = new URL(location(toLogin, both.trail), PREVIEW_URL);
+  assert.equal(loginPage.pathname, "/sign-in.html");
+
+  // What the sign-in page's provider client sends: the login page's own signed query.
+  const started = await both.preview.handler(
+    new Request(`${PREVIEW_URL}/api/auth/sign-in/social`, {
+      method: "POST",
+      headers: { origin: PREVIEW_URL, "content-type": "application/json" },
+      body: JSON.stringify({ provider: "github", oauth_query: loginPage.search.slice(1) }),
+    }),
+  );
+  const authorize = new URL(decodeStarted(await started.json()).url);
+  const relayed = await githubReturns(both, authorize, `code=${GITHUB_CODE}`);
+  const landed = await land(both, relayed, cookiesFrom(started));
+
+  // The browser follows the Preview's own redirects, carrying the session it was just given, until one leaves it.
+  let next = new URL(location(landed, both.trail), PREVIEW_URL);
+  const session = cookiesFrom(landed);
+  for (let hop = 0; next.origin === PREVIEW_URL && hop < 3; hop += 1) {
+    next = new URL(location(await land(both, next.href, session), both.trail), PREVIEW_URL);
+  }
+  const desktop = next;
+  assert.equal(`${desktop.origin}${desktop.pathname}`, loopback);
+  assert.equal(desktop.searchParams.get("state"), "desktop-state");
+  assert.ok(desktop.searchParams.get("code"));
 });

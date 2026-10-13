@@ -1293,25 +1293,16 @@ all — Better Auth trusts the origin of its own base URL, and the browser on a
 preview sends the preview's, which is the 403 behind the admin dashboard's
 "Sign-in could not start. Try again."
 
-On a Preview the desktop's pending authorization also has to be resumed by
-hand: production's provider plugin resumes it from the state it stored at
-sign-in, but a Preview's state is consumed by the proxy callback, which then
-redirects to the sign-in's `callbackURL`, and the page sends none. So a
-Preview's `authProxy` adds one sign-in hook ahead of the plugin's that names
-the authorize request itself as that callback (`resumeAuthorizeURL`), and the
-plugin issues the code to the desktop's loopback from there.
+On a Preview the desktop's pending authorization resumes on its own: the
+provider plugin stores the desktop's signed authorize request with the sign-in's
+OAuth state, the proxy restores that state when the profile lands, and the
+provider plugin then issues the code to the desktop's loopback.
 
-Better Auth's `oAuthProxy` plugin carries the rest: the preview hands the
-provider production's registered redirect URI, production exchanges the code and
-redirects the profile back to the preview encrypted, and the preview creates the
-session in its own Neon branch database. Production keeps the plugin's callback
-hooks because it is the relay that exchanges the provider code, but drops the
-plugin's `/oauth-proxy-callback` endpoint. That endpoint creates a session from
-any profile encrypted with the shared proxy key; leaving it on production would
-turn a Preview-held credential into authority over production sessions. A
-preview therefore signs in only against a production deployment that already
-carries the relay hooks, while only a positively identified Preview accepts the
-returned profile.
+Better Auth's `oAuthProxy` plugin carries the rest, installed on every
+deployment exactly as its docs configure it (`productionURL` and the shared
+`secret`): the preview hands the provider production's registered redirect URI,
+production exchanges the code and redirects the profile back to the preview
+encrypted, and the preview creates the session in its own Neon branch database.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
 `BETTER_AUTH_PROXY_SECRET`, Google's `GOOGLE_CLIENT_ID` and
@@ -1324,23 +1315,26 @@ authorization URL without a client secret, so a Preview without
 leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
 the provider secrets in every environment, and Charles chose on 2026-09-18 to
 follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
-ends, or the profile arrives undecryptable. A Preview without it does not expose
-the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
-would require putting production's session-signing and provider-token key into
-Preview. The dedicated key does not make the shared credential harmless. A
-profile encrypted with the proxy secret is what a Preview's
-`/api/auth/oauth-proxy-callback` trusts, so a leak can hijack a proxied OAuth
-flow and mint sessions on deployments that accept proxy profiles. Production
-deliberately does not. Treat the proxy secret as sensitive everywhere it is
-stored, especially in Preview.
+ends, or the profile arrives undecryptable; without it Better Auth derives the
+proxy's keys from `BETTER_AUTH_SECRET`, which differs per deployment, so a
+proxied sign-in cannot complete.
 
-Production also needs `BETTER_AUTH_PROXY_TRUSTED_ORIGINS`, a comma-separated
-allowlist of this project's protected Preview origins. A single `*` may stand
-for characters within one hostname label; for this Vercel project that is
-`https://luke-web-*-stage-review.vercel.app`. Before production spends a
-provider code, it decrypts the proxy state and requires both the profile-return
-endpoint and its final page to match that allowlist. A Preview-held key therefore
-cannot turn production into a token relay to an origin outside the project.
+The proxy secret is an authentication credential for every deployment that
+holds it, production included, as Better Auth's own model says: the plugin
+treats every holder of the secret as trusted. Every deployment, production too,
+answers the plugin's profile-return endpoint (`/callback/:id/oauth-proxy`),
+which creates a session from any profile encrypted with that secret, so the
+secret every Preview holds can mint production sessions; and production relays
+a profile and its provider tokens to whatever return the encrypted proxy state
+names. Both were accepted for the MVP on 2026-10-13 in favour of running the
+plugin as Better Auth prescribes. Treat the proxy secret as sensitive everywhere
+it is stored, especially in Preview.
+
+Every participant in the relay runs one Better Auth version. Better Auth 1.7
+derives the proxy's keys from the secret per purpose and keys OAuth state rows
+differently from 1.6, so a Preview on one cannot sign in through a production on
+the other, and a sign-in begun before production's own upgrade must be started
+again.
 
 Vercel Deployment Protection sits in front of all of this. The redirect back
 from production lands on the protected preview like any other request, so the
