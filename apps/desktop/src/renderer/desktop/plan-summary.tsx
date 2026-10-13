@@ -109,6 +109,7 @@ const SECTION_ORDER = [
   AGENTS_SECTION,
   ADD_SECTION.SUBAGENTS,
   ADD_SECTION.FILES,
+  ADD_SECTION.PAGES,
 ] as const;
 
 /** What the summary says on a plan that holds nothing yet to list. */
@@ -392,7 +393,14 @@ function summarySections(
       : [];
   const rows = [
     ...inboxRow,
-    ...panelEntries({ panel: sidePanel, kinds: sidePanel.used, workers, files, standing: true }),
+    ...panelEntries({
+      panel: sidePanel,
+      kinds: sidePanel.used,
+      workers,
+      files,
+      pages: plans.pages ?? [],
+      standing: true,
+    }),
     ...agentEntries(mainTabs, agents, true),
   ];
   const paths = files.map((ref) => ref.path);

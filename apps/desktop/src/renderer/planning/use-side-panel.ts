@@ -10,9 +10,11 @@ import {
   isAgentTab,
   isChangesTab,
   isFileTab,
+  isPageTab,
   isSubagentTab,
   movedOrder,
   openedOrder,
+  type PageStripTab,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -55,7 +57,9 @@ import { MAIN_TAB } from "./use-main-tabs";
  * terms, one per agent, and is pinned nowhere. A file's tab, opened from a
  * snippet in the Code tab or from the "+", is the one kind that stands many
  * times, one per file: it is held to the files Luke showed on the open plan
- * the same way, closes, and is kept nowhere. Opening a file
+ * the same way, closes, and is kept nowhere. A page's tab, opened from the
+ * "+", stands once per page an agent wrote for the open plan, held to the
+ * plan's pages and kept nowhere on the same terms. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -147,8 +151,13 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, or one agent's Changes. */
-export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab | ChangesStripTab;
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes, or one page's. */
+export type SidePanelTab =
+  | FixedSidePanelTab
+  | SubagentStripTab
+  | FileStripTab
+  | ChangesStripTab
+  | PageStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -350,6 +359,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly files: readonly OpenFile[];
   /** The open Changes tabs, by agent, in the order opened. */
   readonly changes: readonly ChangesStripTab[];
+  /** The open page tabs, by page, in the order opened. */
+  readonly pages: readonly PageStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -404,6 +415,8 @@ export interface SidePanelControl {
   files: readonly OpenFile[];
   /** The open Changes tabs in the order opened, after the file tabs; only those whose agent's tab stands open are drawn. */
   changes: readonly ChangesStripTab[];
+  /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
+  pages: readonly PageStripTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -478,12 +491,17 @@ export interface DrawnTabs {
   subagents: readonly string[];
   /** The files shown on the plan, by path, whose open tabs the strip draws. */
   files: readonly string[];
+  /** The plan's pages, by id, whose open tabs the strip draws. */
+  pages: readonly string[];
 }
 
 /** The developer's own choices of fixed tab on the plan. */
 function planTabs(held: HeldState, planId: string | undefined): PlanTabs {
   return planId === undefined ? NO_CHOICES : (held.plans[planId] ?? NO_CHOICES);
 }
+
+/** A plan with no page, the same array every render. */
+const NO_PAGES: readonly string[] = [];
 
 /** A plan no tab was opened or moved on. */
 const NO_ORDER: readonly SidePanelTab[] = [];
@@ -642,14 +660,19 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isChangesTab(tab) && !held.changes.some((each) => sameTab(each, tab))
       ? [...held.changes, tab]
       : held.changes;
+  const pages =
+    isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
+      ? [...held.pages, tab]
+      : held.pages;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
     changes === held.changes &&
+    pages === held.pages &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, changes, tab: chosen };
+    : { ...opened, subagents, files, changes, pages, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -813,6 +836,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
     ...held.changes.filter((each) => drawsChanges(each, drawn)),
+    ...held.pages.filter((each) => drawn.pages.includes(each.page)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -836,7 +860,7 @@ function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[
 
 /** The tab the panel shows on the plan: the chosen one as `shownTab` holds it to the plan. */
 function shownIn(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
-  return shownTab(held.tab, fallbackTabs(held, drawn), drawn.agents, drawn.subagents, drawn.files);
+  return shownTab(held.tab, fallbackTabs(held, drawn), drawn);
 }
 
 /**
@@ -868,7 +892,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
         : undefined
       : isChangesTab(tab)
         ? { ...held, changes: held.changes.filter((each) => !sameTab(each, tab)) }
-        : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+        : isPageTab(tab)
+          ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
+          : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1035,6 +1061,7 @@ function settled(state: SidePanelState): HeldState {
     subagents: [],
     files: [],
     changes: [],
+    pages: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1116,15 +1143,14 @@ function readStored(): HeldState {
 function shownTab(
   kept: SidePanelTab | undefined,
   tabs: readonly SidePanelTab[],
-  agents: readonly string[] | undefined,
-  subagents: readonly string[] = [],
-  files: readonly string[] = [],
+  drawn: Omit<DrawnTabs, "plan">,
 ): SidePanelTab | undefined {
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
-  if (isFileTab(kept)) return files.includes(kept.file) ? kept : tabs[0];
-  if (isChangesTab(kept)) return drawsChanges(kept, { agents }) ? kept : tabs[0];
-  return drawsSubagent(kept, { agents, subagents }) ? kept : tabs[0];
+  if (isFileTab(kept)) return drawn.files.includes(kept.file) ? kept : tabs[0];
+  if (isChangesTab(kept)) return drawsChanges(kept, drawn) ? kept : tabs[0];
+  if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
+  return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
 /** Whether two reads of what a plan holds say the same of every kind. */
@@ -1162,8 +1188,9 @@ function firstHeld(was: PlanHolds, now: PlanHolds): readonly FixedSidePanelTab[]
  * column, by agent id, or nothing while they have not been read,
  * `subagents` the planning workers its work holds, by the call that started
  * each, none where the work has none or is unread, and `files` the files
- * Luke showed on it, by path; the tabs drawn and the tab shown are held to
- * them, a delegated worker's to the open agent tabs.
+ * Luke showed on it, by path, and `pages` the pages agents wrote for it, by
+ * id; the tabs drawn and the tab shown are held to them, a delegated
+ * worker's to the open agent tabs.
  */
 export function useSidePanel(
   staged: SidePanelState | undefined,
@@ -1171,6 +1198,7 @@ export function useSidePanel(
   agents?: readonly string[] | undefined,
   subagents: readonly string[] = [],
   files: readonly string[] = [],
+  pages: readonly string[] = NO_PAGES,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -1200,7 +1228,7 @@ export function useSidePanel(
     [stage],
   );
   const shownFor = (holds: PlanHolds) =>
-    shownIn(state, { plan: { id: planId, holds }, agents, subagents, files: planFiles });
+    shownIn(state, { plan: { id: planId, holds }, agents, subagents, files: planFiles, pages });
 
   // Note that something arriving on the plan adds its tab without taking
   // the shown one's place, because a tab ahead of it in the strip would
@@ -1225,7 +1253,7 @@ export function useSidePanel(
     }
     const arrivals = seen.id === planId ? firstHeld(seen.holds, plan.holds) : [];
     if (arrivals.length > 0) {
-      const was = { plan: seen, agents, subagents, files: planFiles };
+      const was = { plan: seen, agents, subagents, files: planFiles, pages };
       update((held) => withArrived(held, arrivals, was));
     }
   }
@@ -1238,8 +1266,8 @@ export function useSidePanel(
     [tabs, seen],
   );
   const drawn = useMemo(
-    () => ({ plan: seen, agents, subagents, files: planFiles }),
-    [seen, agents, subagents, planFiles],
+    () => ({ plan: seen, agents, subagents, files: planFiles, pages }),
+    [seen, agents, subagents, planFiles, pages],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -1381,6 +1409,7 @@ export function useSidePanel(
     pins: state.pins,
     subagents: state.subagents,
     changes: state.changes,
+    pages: state.pages,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

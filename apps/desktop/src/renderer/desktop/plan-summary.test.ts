@@ -124,6 +124,14 @@ const SHOWN: PlansControl["shownCode"] = [
   { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
 
+/** The one page an agent wrote for the plan. */
+const FUNNEL = {
+  id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
+  title: "Invite funnel",
+  version: 1,
+  at: 1,
+};
+
 /** Each archive and unarchive the page asked of its agents, in order. */
 const archives: [string, boolean][] = [];
 
@@ -172,6 +180,7 @@ function Page({
     mainTabs.openAgents,
     workerCallIds(work.turns),
     (shownCode ?? []).map((showing) => showing.code.ref.path),
+    [FUNNEL.id],
   );
   const summary = useSummaryPin(false);
   return createElement(
@@ -189,6 +198,7 @@ function Page({
         agents,
         work,
         shownCode,
+        pages: [FUNNEL],
       }),
     }),
     createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
@@ -356,6 +366,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     ["Coding agents", [AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
+    ["Pages", [FUNNEL.title]],
   ]);
   // An agent and a worker wear where they stand, as their tabs do.
   for (const label of [AGENT.title ?? "", JOB]) {
@@ -494,7 +505,7 @@ test("a panel's row opens the panel on its tab, and a column with room still hol
   assert.equal(hover(summaryButton(page)), "Toggle pinned summary");
 });
 
-test("an agent's row chooses its tab in the column, and a file's opens the file in the panel", () => {
+test("an agent's row chooses its tab in the column, and a file's or a page's opens it in the panel", () => {
   const page = mount();
 
   act(() => rowNamed(summaryOf(page), AGENT.title ?? "").click());
@@ -505,6 +516,12 @@ test("an agent's row chooses its tab in the column, and a file's opens the file 
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
     "invite.ts",
+  );
+
+  act(() => rowNamed(summaryOf(page), FUNNEL.title).click());
+  assert.equal(
+    page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
+    FUNNEL.title,
   );
 });
 

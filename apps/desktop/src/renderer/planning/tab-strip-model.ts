@@ -5,7 +5,7 @@
  * open plan (`use-main-tabs.ts`, `use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
- * started, one subagent, one file, or one agent's changes. Two tabs are the
+ * started, one subagent, one file, one agent's changes, or one page. Two tabs are the
  * same where they name the same thing, so a tab rebuilt on every render is
  * still the tab it was.
  *
@@ -53,6 +53,11 @@ export interface ChangesStripTab {
   readonly changes: string;
 }
 
+/** One page's tab, named by the page an agent wrote for the plan. */
+export interface PageStripTab {
+  readonly page: string;
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -60,7 +65,8 @@ export type StripTab =
   | DraftStripTab
   | SubagentStripTab
   | FileStripTab
-  | ChangesStripTab;
+  | ChangesStripTab
+  | PageStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -90,6 +96,11 @@ export function isChangesTab(tab: StripTab): tab is ChangesStripTab {
   return tab instanceof Object && "changes" in tab;
 }
 
+/** Whether a tab is one page's. */
+export function isPageTab(tab: StripTab): tab is PageStripTab {
+  return tab instanceof Object && "page" in tab;
+}
+
 /** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
 export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
@@ -101,6 +112,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
+  if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   return a === b;
 }
 
@@ -108,13 +120,15 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by.
+ * of the side panel, the one strip it stands in, is keyed by, and a page's
+ * by the page's own id.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;
+  if (isPageTab(tab)) return tab.page;
   return isSubagentTab(tab) ? tab.subagent : tab;
 }
 

@@ -4,6 +4,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { PageLine } from "@sidecar/hosted/page-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_STATE,
@@ -19,7 +20,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { FileDiffIcon, InboxIcon } from "lucide-react";
+import { AppWindowIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -43,6 +44,7 @@ import { agentGlyphState, agentStateWords, providerOf } from "../planning/coding
 import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
+import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -52,7 +54,9 @@ import {
   isAgentTab,
   isChangesTab,
   isFileTab,
+  isPageTab,
   isSubagentTab,
+  type PageStripTab,
   type StripTab,
   type SubagentStripTab,
   sameTab,
@@ -208,10 +212,14 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
+/** A plan with no page, the same array every render. */
+const NO_PAGES: readonly PageLine[] = [];
+
 /** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
 export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
+  PAGES: "Pages",
 } as const;
 
 /** The empty panel's row that opens a tab of the kind. */
@@ -256,9 +264,11 @@ export function panelEntries(input: {
   kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
   files: readonly ShownFile[];
+  /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
+  pages?: readonly PageLine[];
   standing: boolean;
 }): AddEntry[] {
-  const { panel, workers, files, standing } = input;
+  const { panel, workers, files, pages = [], standing } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind),
     onPick: () => panel.onChoose(kind),
@@ -296,7 +306,16 @@ export function panelEntries(input: {
       onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref, ref.commit)),
     };
   });
-  return [...kinds, ...subagentRows, ...fileRows];
+  const pageRows = pages.map((page) => ({
+    row: {
+      id: page.id,
+      label: page.title,
+      icon: <AppWindowIcon />,
+      section: ADD_SECTION.PAGES,
+    },
+    onPick: () => panel.onChoose({ page: page.id }),
+  }));
+  return [...kinds, ...subagentRows, ...fileRows, ...pageRows];
 }
 
 /** Every subagent the plan's work holds, with its session, in the order started. */
@@ -354,10 +373,11 @@ function stripTabs(input: {
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
+  pages: readonly DrawnPage[];
   held: HeldTranscripts;
   copied: TranscriptCopier;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, held, copied } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, held, copied } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -453,7 +473,12 @@ function stripTabs(input: {
     look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(tab.changes, agents) }),
     close: () => panel.onClose(tab),
   }));
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs];
+  const pageTabs = pages.map(({ tab, line }) => ({
+    tab,
+    look: look(tab, { icon: <AppWindowIcon />, label: line.title }),
+    close: () => panel.onClose(tab),
+  }));
+  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs];
 }
 
 /**
@@ -486,7 +511,9 @@ function PanelTabs({
   workers,
   files,
   changes,
+  pages,
   shownFiles,
+  offeredPages,
   held,
 }: {
   panel: SidePanelControl;
@@ -504,13 +531,27 @@ function PanelTabs({
   files: readonly OpenFile[];
   /** The open Changes tabs of agents whose tabs stand open, in the order opened. */
   changes: readonly ChangesStripTab[];
+  /** The open page tabs of the plan's pages, in the order opened. */
+  pages: readonly DrawnPage[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
+  /** The plan's pages, which the "+" offers. */
+  offeredPages: readonly PageLine[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const kinds = stripTabs({ panel, unread, agents, subagents, files, changes, held, copied });
+  const kinds = stripTabs({
+    panel,
+    unread,
+    agents,
+    subagents,
+    files,
+    changes,
+    pages,
+    held,
+    copied,
+  });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
@@ -562,6 +603,7 @@ function PanelTabs({
           kinds: SIDE_PANEL_TABS,
           workers,
           files: shownFiles,
+          pages: offeredPages,
           standing: false,
         })}
         onOpen={undefined}
@@ -602,6 +644,12 @@ interface SidePanelWork {
   onLoadEarlier: () => Promise<void>;
   /** The moment whose turn a version's Open asked to bring into view. */
   reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
+}
+
+/** An open page tab the plan draws, with the page as the plan lists it. */
+interface DrawnPage {
+  tab: PageStripTab;
+  line: PageLine;
 }
 
 /** An open subagent tab the plan draws: its tab, what the strip calls it, where its glyph says it stands, and the planning worker's block where it is one. */
@@ -705,6 +753,7 @@ function TabContent({
   board,
   shownCode,
   files,
+  pages,
   transcript,
   work,
   workRows,
@@ -732,6 +781,8 @@ function TabContent({
   shownCode: readonly PlanCodeShowing[] | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
+  /** The plan's pages, which a page's tab draws its newest version of. */
+  pages: readonly PageLine[];
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   /** The plan's work as rows, which a subagent's tab reads its session from. */
@@ -766,6 +817,15 @@ function TabContent({
   onRevealed: () => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isPageTab(tab)) {
+    const page = pages.find((each) => each.id === tab.page);
+    // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
+    return page === undefined ? (
+      <SpinnerRegion label="Loading page" />
+    ) : (
+      <PagePane key={page.id} planId={planId} page={page} />
+    );
+  }
   if (isChangesTab(tab)) {
     return (
       <AgentChangesTab key={tab.changes} agentId={tab.changes} control={agents} shown={shown} />
@@ -1080,6 +1140,7 @@ export function SidePanel({
   repository,
   board,
   shownCode,
+  pages,
   transcript,
   work,
   agents,
@@ -1098,6 +1159,8 @@ export function SidePanel({
   board: Board | undefined;
   /** Every code Luke showed on the plan, oldest first. */
   shownCode: readonly PlanCodeShowing[] | undefined;
+  /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
+  pages: readonly PageLine[] | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
@@ -1139,6 +1202,12 @@ export function SidePanel({
   );
   // An agent's Changes tab stands while the agent's own tab does.
   const changes = panel.changes.filter((each) => drawsChanges(each, { agents: openAgents }));
+  // A page's tab stands while the plan lists the page.
+  const planPages = pages ?? NO_PAGES;
+  const pageTabs = panel.pages.flatMap((tab) => {
+    const line = planPages.find((each) => each.id === tab.page);
+    return line === undefined ? [] : [{ tab, line }];
+  });
   const label =
     tab === undefined
       ? undefined
@@ -1148,7 +1217,9 @@ export function SidePanel({
           ? tab.file
           : isChangesTab(tab)
             ? changesTabLabel(tab.changes, agents)
-            : SIDE_PANEL_TAB_KIND[tab].label;
+            : isPageTab(tab)
+              ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
+              : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1199,7 +1270,9 @@ export function SidePanel({
             workers={workers}
             files={files}
             changes={changes}
+            pages={pageTabs}
             shownFiles={offered}
+            offeredPages={planPages}
             held={drawnTranscripts}
           />
           <FullScreenToggle
@@ -1220,12 +1293,13 @@ export function SidePanel({
             )}
           </div>
         ) : (
-          // The Board is drawn on a canvas, which keeps a find of its own.
+          // The Board is drawn on a canvas, which keeps a find of its own, and
+          // a page's words stand in a sandboxed frame no find of the window reaches.
           <FindScope
             className="side-panel-content"
             role="tabpanel"
             aria-label={label}
-            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD}
+            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
             subject={{ plan: planId, tab }}
           >
             <TabContent
@@ -1235,6 +1309,7 @@ export function SidePanel({
               board={board}
               shownCode={shownCode}
               files={files}
+              pages={planPages}
               transcript={transcript}
               work={work}
               workRows={workRows}

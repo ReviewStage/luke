@@ -92,6 +92,9 @@ import type { RunMode } from "./run-mode.js";
  * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
+ * The pages agents wrote for the open plan are listed with its document, by
+ * title and newest version alone; a page's HTML is answered to the frame
+ * that draws it and held nowhere here.
  */
 
 /**
@@ -129,6 +132,7 @@ export type PlanningClient = Pick<
   | "readSkills"
   | "readRevisions"
   | "readRevision"
+  | "readPages"
   | "readPageVersion"
   | "restore"
   | "repositories"
@@ -226,7 +230,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, no board, no transcript, no code, and no work read or told, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, no code, no work, and no pages read or told, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
@@ -234,6 +238,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     shownCode: _shownCode,
     work: _work,
     workEarlier: _workEarlier,
+    pages: _pages,
     ...rest
   }: PlanningView): PlanningView {
     return rest;
@@ -452,6 +457,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   /**
+   * Reads the active plan's pages, each by its newest version. A failed read
+   * keeps the pages held, as a failed board read keeps the board.
+   */
+  function readPages(planId: string) {
+    return Effect.gen(function* () {
+      const pages = yield* Effect.provide(client.readPages(planId), FetchHttpClient.layer);
+      if (pages === undefined || view.activePlanId !== planId) return;
+      const { pages: _held, ...rest } = view;
+      view = pages.length === 0 ? rest : { ...rest, pages };
+      publish();
+    });
+  }
+
+  /**
    * Reads the newest page of the active plan's work, and every code shown
    * on it, as the service keeps them. Older pages already read stay, with
    * the place the next one is read from; a plan read for the first time
@@ -619,6 +638,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (planId !== undefined) yield* readBoard(planId);
             if (planId !== undefined) yield* readTranscript(planId);
             if (planId !== undefined) yield* readWork(planId);
+            if (planId !== undefined) yield* readPages(planId);
           }),
         );
         return {};
@@ -646,6 +666,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* readBoard(planId);
             yield* readTranscript(planId);
             yield* readWork(planId);
+            yield* readPages(planId);
           }),
         );
         return { opened: true };

@@ -612,7 +612,7 @@ it.effect(
 );
 
 it.effect(
-  "reads one version of a page with its HTML, and nothing for a version the service does not hold",
+  "lists a plan's pages, reads one version of a page with its HTML, and nothing for a version the service does not hold",
   () =>
     Effect.gen(function* () {
       const pageId = "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f";
@@ -623,7 +623,9 @@ it.effect(
         at: 1_800_000_000_000,
         html: "<p>v2</p>",
       };
+      const { html: _html, ...line } = page;
       const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/pages`]: { answer: () => ({ pages: [line] }) },
         [`GET /api/plans/${PLAN_ID}/pages/${pageId}/versions/2`]: { answer: () => ({ page }) },
         [`GET /api/plans/${PLAN_ID}/pages/${pageId}/versions/3`]: {
           answer: () => ({ error: "not-found" }),
@@ -631,6 +633,7 @@ it.effect(
         },
       });
 
+      assert.deepEqual(yield* Effect.provide(client().readPages(PLAN_ID), api.layer), [line]);
       assert.deepEqual(
         yield* Effect.provide(client().readPageVersion(PLAN_ID, pageId, 2), api.layer),
         page,

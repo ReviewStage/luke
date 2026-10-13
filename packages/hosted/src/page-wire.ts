@@ -53,7 +53,7 @@ export type PageWrite = typeof pageWriteSchema.Type;
  * when that version was written, in epoch milliseconds. Every version from
  * one to `version` stands, so the number alone names each earlier one.
  */
-const pageLineSchema = EffectSchema.Struct({
+export const pageLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   title: pageTitleSchema,
   version: pageVersionNumberSchema,
