@@ -30,6 +30,7 @@ import {
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
+import { isGitHubAddress } from "#shared/messages/acts";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { AGENT_TOOL, todosView } from "./tool-call-model";
@@ -1050,12 +1051,14 @@ export function agentLines(
   return [...messages, ...sent.map(sentLineMessage)];
 }
 
-/** Where a pull request lives: GitHub's own pages, which are the one address the tab opens in the browser. */
-const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
-
-/** Whether a link in the transcript is one the tab opens: a page on GitHub, such as the pull request the agent opened. */
+/**
+ * Whether a link in the transcript is one the tab opens: a page on GitHub,
+ * such as the pull request the agent opened. Note that it asks the
+ * `github.open` act's own schema, because an address the act refuses would
+ * be drawn as a press that opens nothing.
+ */
 export function opensOnGitHub(href: string): boolean {
-  return GITHUB_ADDRESS.test(href);
+  return isGitHubAddress(href);
 }
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row. */
