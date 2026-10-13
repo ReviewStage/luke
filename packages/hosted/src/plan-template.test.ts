@@ -109,6 +109,75 @@ test("a note lands at the end of the section under its heading, as written: a bu
   );
 });
 
+/** A template whose sections each hold one line of guidance, as the default's do. */
+const TEMPLATE = [
+  "## Context",
+  "",
+  "Why this work exists.",
+  "",
+  "## Goal",
+  "",
+  "What is true once it ships.",
+  "",
+].join("\n");
+
+test("a point added to a section still holding only its template's guidance takes the guidance's place, and the next point is added after it", () => {
+  const notes = [
+    add(PLAN_HEADING.CONTEXT, "- Only an admin can add someone."),
+    add(PLAN_HEADING.CONTEXT, "- It came up in support."),
+  ];
+  const { text, missed } = applyNotesToText(TEMPLATE, notes, TEMPLATE);
+
+  assert.deepEqual(missed, []);
+  assert.equal(
+    text,
+    [
+      "## Context",
+      "",
+      "- Only an admin can add someone.",
+      "- It came up in support.",
+      "",
+      "## Goal",
+      "",
+      "What is true once it ships.",
+      "",
+    ].join("\n"),
+  );
+  // The draft drawn while the notes stream lands them as the save does.
+  const partial = valueFromJsonText(JSON.stringify({ notes }));
+  assert.equal(textNotesInProgress(TEMPLATE, partial, TEMPLATE), text);
+});
+
+test("a section whose guidance the developer wrote over keeps every word, the point added after them", () => {
+  const edited = TEMPLATE.replace("Why this work exists.", "Why this work exists. Support asked.");
+  const { text } = applyNotesToText(
+    edited,
+    [add(PLAN_HEADING.CONTEXT, "It came up twice.")],
+    TEMPLATE,
+  );
+
+  assert.ok(
+    text.startsWith("## Context\n\nWhy this work exists. Support asked.\n\nIt came up twice.\n"),
+  );
+});
+
+test("a section a template started with a list keeps it, the point added after it", () => {
+  const template = "## Testing\n\n- Run the smoke test.\n";
+  const { text } = applyNotesToText(
+    template,
+    [add(PLAN_HEADING.TESTING, "- Check invite expiry.")],
+    template,
+  );
+
+  assert.equal(text, "## Testing\n\n- Run the smoke test.\n- Check invite expiry.\n");
+});
+
+test("a plan whose template is not known has a point added after the guidance", () => {
+  const { text } = applyNotesToText(TEMPLATE, [add(PLAN_HEADING.GOAL, "Members invite by email.")]);
+
+  assert.ok(text.endsWith("## Goal\n\nWhat is true once it ships.\n\nMembers invite by email.\n"));
+});
+
 test("a note under a heading the document does not hold opens that section at the end, and a heading in a note's words is written as words", () => {
   const { text } = applyNotesToText(DOCUMENT, [
     add(PLAN_HEADING.TESTING, "- When an invite expires, then its link says so.\n## Not a heading"),

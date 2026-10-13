@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
-import { deleteAccount } from "@sidecar/database/models/account-store";
+import { deleteAccount, writePlanTemplate } from "@sidecar/database/models/account-store";
 import {
   attachPlanConversation,
   createPlan,
@@ -20,13 +20,14 @@ import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import type { PlanDocument } from "@sidecar/hosted/plan-wire";
-import { Effect, Option } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   type PlanDocumentBinding,
   type PlanSaveResult,
+  saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { noDatabase } from "./support/no-database";
@@ -174,6 +175,58 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       }),
   );
 
+  it.effect(
+    "a note fills a section still holding the account's template's guidance in place of it, and the next is added after it",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        yield* writePlanTemplate(userId, "## Why\n\nSay why.\n\n## How\n\nSay how.\n");
+        yield* TestClock.adjust(Duration.minutes(1));
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust(Duration.hours(1));
+        // The template changing after the plan started leaves the guidance the plan holds its template's.
+        yield* writePlanTemplate(userId, "## Why\n\nSay why, briefly.\n");
+
+        yield* saveNotes(bound(userId, planId), [added("Why", "- Invites are manual.")]);
+        const { body } = savedDocument(
+          yield* saveNotes(bound(userId, planId), [added("Why", "- Support asked twice.")]),
+        );
+
+        assert.equal(
+          body,
+          "## Why\n\n- Invites are manual.\n- Support asked twice.\n\n## How\n\nSay how.\n",
+        );
+      }),
+  );
+
+  it.effect(
+    "a note on a default plan replaces a section's guidance nobody wrote over, and is added after the developer's words",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const binding = bound(userId, planId);
+        const base = DEFAULT_PLAN_TEMPLATE;
+        const guidance = sectionText(base, "Context").split("\n").at(-1) ?? "";
+        yield* saveDeveloperEdit(binding, {
+          document: { base, value: base.replace(guidance, `${guidance} Invites are manual.`) },
+        });
+
+        const { body } = savedDocument(
+          yield* saveNotes(binding, [
+            added(PLAN_HEADING.CONTEXT, INVITATIONS_CONTEXT),
+            added(PLAN_HEADING.GOAL, "- Members invite by email."),
+          ]),
+        );
+
+        assert.equal(
+          sectionText(body, "Context"),
+          `## Context\n\n${guidance} Invites are manual.\n\n${INVITATIONS_CONTEXT}`,
+        );
+        assert.equal(sectionText(body, "Goal"), "## Goal\n\n- Members invite by email.");
+      }),
+  );
+
   it.effect("a note under a heading the text does not hold opens that section at its end", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
@@ -221,10 +274,8 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
       );
       assert.ok(sectionText(settled.body, "Hard parts").endsWith(`\n\n${adminsOnly}`));
       assert.ok(!settled.body.includes(everyMember));
-      assert.equal(
-        sectionText(settled.body, "Assumptions"),
-        sectionText(DEFAULT_PLAN_TEMPLATE, "Assumptions"),
-      );
+      // The assumption took the guidance's place, so striking it leaves the section empty.
+      assert.equal(sectionText(settled.body, "Assumptions"), "## Assumptions");
       assert.ok(sectionText(settled.body, "Interfaces").endsWith(`\n\n${noContract}`));
     }),
   );

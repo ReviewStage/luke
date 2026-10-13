@@ -5,6 +5,7 @@ import {
 } from "@sidecar/database/models/plan-revisions";
 import {
   readPlanForUpdate,
+  readStartedText,
   type StoredPlan,
   savePlanText,
 } from "@sidecar/database/models/plan-store";
@@ -164,8 +165,9 @@ interface PlanConflict {
 }
 
 /**
- * The plan read under its row's lock, the change taken into its text, and
- * saved, all in one transaction. A text past the plan's bound is refused. A
+ * The plan read under its row's lock, the change taken into its text, read
+ * under the same lock where it reads more of the plan, and saved, all in one
+ * transaction. A text past the plan's bound is refused. A
  * change that moved the text is kept as a revision under its writer, which
  * names the writer as the last of each section it moved; one that moved
  * nothing saves the text as it stood. A change that refuses the plan as it
@@ -174,7 +176,10 @@ interface PlanConflict {
 function savedUnderLock<T extends TextTaken, F>(
   binding: PlanDocumentBinding,
   writer: PlanWriter,
-  take: (stored: StoredPlan, now: number) => Result.Result<T, F>,
+  take: (
+    stored: StoredPlan,
+    now: number,
+  ) => Effect.Effect<Result.Result<T, F>, StoreFailure, SqlClient.SqlClient>,
 ): Effect.Effect<LockedSave<T> | F, StoreFailure, SqlClient.SqlClient> {
   const locked = Effect.gen(function* (): Effect.fn.Return<
     LockedSave<T> | F,
@@ -184,7 +189,7 @@ function savedUnderLock<T extends TextTaken, F>(
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
     const now = yield* Clock.currentTimeMillis;
-    const outcome = take(stored.value, now);
+    const outcome = yield* take(stored.value, now);
     if (Result.isFailure(outcome)) return outcome.failure;
     const taken = outcome.success;
     const before = stored.value.text;
@@ -242,22 +247,23 @@ export function saveNotes(
   notes: readonly PlanNote[],
   writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
-  const take = (stored: StoredPlan, now: number) => {
-    const noted = applyNotesToText(stored.text, notes);
-    const taken = notes.filter((note) => !noted.missed.includes(note));
-    // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
-    const journaled =
-      writer.actor === PLAN_ACTOR.AGENT && taken.length > 0
-        ? {
-            agentEdits: withAgentEdit(stored.agentEdits, {
-              agentId: writer.agentId,
-              at: now,
-              notes: taken,
-            }),
-          }
-        : undefined;
-    return Result.succeed({ ...noted, changes: taken.length, ...journaled });
-  };
+  const take = (stored: StoredPlan, now: number) =>
+    Effect.map(readStartedText(binding.userId, stored.plan.createdAt), (started) => {
+      const noted = applyNotesToText(stored.text, notes, started);
+      const taken = notes.filter((note) => !noted.missed.includes(note));
+      // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
+      const journaled =
+        writer.actor === PLAN_ACTOR.AGENT && taken.length > 0
+          ? {
+              agentEdits: withAgentEdit(stored.agentEdits, {
+                agentId: writer.agentId,
+                at: now,
+                notes: taken,
+              }),
+            }
+          : undefined;
+      return Result.succeed({ ...noted, changes: taken.length, ...journaled });
+    });
   // Notes never refuse the plan they find: one naming a phrase the plan does not hold is passed over.
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
     if (result.status === PLAN_SAVE_STATUS.NOT_SAVED) return result;
@@ -303,10 +309,10 @@ export function saveDeveloperEdit(
   binding: PlanDocumentBinding,
   edit: PlanEditRequest,
 ): Effect.Effect<PlanEditSaveResult, never, SqlClient.SqlClient> {
-  const take = (stored: StoredPlan): Result.Result<TextTaken, PlanConflict | PlanNotSaved> => {
-    if (archived(stored)) return Result.fail(ARCHIVED_RESULT);
-    return takeDocumentEdit(stored, edit);
-  };
+  const take = (stored: StoredPlan) =>
+    Effect.succeed<Result.Result<TextTaken, PlanConflict | PlanNotSaved>>(
+      archived(stored) ? Result.fail(ARCHIVED_RESULT) : takeDocumentEdit(stored, edit),
+    );
   const saved = Effect.map(
     savedUnderLock(binding, DEVELOPER, take),
     (result): PlanEditSaveResult =>
@@ -345,10 +351,12 @@ export function restoreRevision(
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.NO_REVISION } as const;
     }
     const text = content.value;
-    const take = (stored: StoredPlan): Result.Result<TextTaken, PlanNotSaved> =>
-      archived(stored)
-        ? Result.fail(ARCHIVED_RESULT)
-        : Result.succeed({ text, changes: changedSections(stored.text, text).length });
+    const take = (stored: StoredPlan) =>
+      Effect.succeed<Result.Result<TextTaken, PlanNotSaved>>(
+        archived(stored)
+          ? Result.fail(ARCHIVED_RESULT)
+          : Result.succeed({ text, changes: changedSections(stored.text, text).length }),
+      );
     const saved = yield* savedUnderLock(
       binding,
       { actor: PLAN_ACTOR.DEVELOPER, restoredFrom: seq },
