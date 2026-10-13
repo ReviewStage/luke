@@ -1255,9 +1255,21 @@ body,
   font-size: 12px;
 }
 
-/* A row or page action drawn with the edge Start's split button draws. */
+/* A labelled toolbar button inside a hairline, the edge Start's split button
+   draws: the act a settings row offers, which stands on a card rather than in
+   a toolbar and so needs its edge to read as a button at rest. A destructive
+   one keeps the same face and says so in red, as a destructive menu item
+   does; the red fill is the confirm dialog's alone. */
 .bordered-button {
   border: 1px solid var(--hairline);
+}
+
+.bordered-button[data-danger="true"] {
+  color: var(--danger-text);
+}
+
+.bordered-button[data-danger="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .quiet-button svg {
@@ -2627,45 +2639,58 @@ body:has(.app-stage[data-capture="true"])
   animation-range: 0 var(--scroll-fade);
 }
 
+/* The measure a Settings page's head and rows read at, and a row's height. */
+.settings-page {
+  --settings-width: 640px;
+  --settings-row-height: 52px;
+}
+
+/* A Settings page has no top bar: the page names itself at the head of its
+   column, so the title-bar row above it is only the window's drag strip, and
+   the column scrolls beneath it. The page's top margin is wider than the
+   fade, so nothing at rest is faded; a row scrolled up dissolves into the
+   strip rather than being sliced off at its edge. */
 .settings-page-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--page-inset);
+  padding: 0 var(--page-inset) var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
      column's own top margin above it. */
   scroll-padding-top: var(--page-inset);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
 }
 
-/* The page scrolls with the column rather than inside a scroller of its own.
-   Its rows are drawn at a size the window reads at by zooming them, which
-   would zoom the controls among them past every other button in the window,
-   so the controls take the zoom back off and stand at the window's own size. */
+/* The page's name and what acts on the whole page, its reset, on one line. */
+.settings-page-head {
+  display: flex;
+  max-width: var(--settings-width);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin: 0 auto var(--space-24);
+  padding-top: var(--space-32);
+}
+
+/* A quiet act ends the line flush with the card's edge, its words rather than
+   its hover's pill standing in the column. */
+.settings-page-head .quiet-button {
+  margin-right: calc(-1 * var(--space-8));
+}
+
+/* The page scrolls with the column rather than inside a scroller of its own,
+   at the width its rows read at, its groups a section apart and more. */
 .settings-page-scroll .settings {
-  --settings-zoom: 1.15;
-  max-width: 600px;
+  max-width: var(--settings-width);
+  gap: var(--space-32);
   margin: 0 auto;
   overflow: visible;
   animation: none;
-  zoom: var(--settings-zoom);
 }
 
-.settings-page-scroll
-  .settings
-  :is(.toolbar-button, .icon-button, .primary-button, .danger-button) {
-  zoom: calc(1 / var(--settings-zoom));
-}
-
-/* Note that the ring is restated at the zoom it is drawn under, because the
-   engine rounds an outline's width at the control's own zoom and would draw
-   the ring a pixel thin. */
-.settings-page-scroll .settings :focus-visible {
-  outline-width: calc(var(--focus-ring-width) * var(--settings-zoom));
-}
-
-/* The list on the left is the way between pages and the toolbar names the
-   page and carries its reset, so the panel's own index and page head are not
-   drawn. */
+/* The list on the left is the way between pages and the page names itself,
+   so the panel's own index and page head are not drawn. */
 .settings-page-scroll .settings-index,
 .settings-page-scroll .settings-header {
   display: none;

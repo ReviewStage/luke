@@ -81,9 +81,10 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * The one control that returns a whole page to its defaults, drawn only
  * while the page holds something to return — until then it could only offer
  * to change nothing, the same reason a shortcut's own reset waits for a
- * chord. It stands in the window's toolbar beside the page's title, which is
- * what names the group it resets. One press is one ask of the store; the
- * control rests until the store answers, and a refusal is worded beside it.
+ * chord. It ends the page's title line, quiet as a note's own act is, since
+ * the title is what names the group it resets. One press is one ask of the
+ * store; the control rests until the store answers, and a refusal is worded
+ * beside it.
  * A reset that landed takes the control away with what it reset, so it is
  * said in a toast with an Undo, which writes back what the page held.
  */
@@ -119,11 +120,16 @@ function ResetPageButton({
   return (
     <>
       {rejection ? (
-        <p className="desktop-toolbar-note" role="alert">
+        <p className="error-message" role="alert">
           {rejection}
         </p>
       ) : null}
-      <button type="button" className="toolbar-button" disabled={busy} onClick={() => run(scope)}>
+      <button
+        type="button"
+        className="toolbar-button quiet-button"
+        disabled={busy}
+        onClick={() => run(scope)}
+      >
         <ResetIcon />
         Reset to defaults
       </button>
@@ -143,7 +149,7 @@ const PAGE_RESET = {
   [SETTINGS_VIEW.SHORTCUTS]: SETTINGS_RESET_SCOPE.SHORTCUTS,
 } satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
-/** The reset the toolbar carries for a page, absent while the page stands at its defaults. */
+/** The reset a page's title line carries, absent while the page stands at its defaults. */
 export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,

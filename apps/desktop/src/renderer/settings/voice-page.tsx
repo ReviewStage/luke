@@ -1,4 +1,4 @@
-import { CheckIcon, ExternalIcon, KeyIcon, ShieldIcon } from "@sidecar/panel";
+import { CheckIcon, ExternalIcon } from "@sidecar/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -14,6 +14,7 @@ import { Tooltip } from "../tooltip";
 import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
+import { SettingsGroup } from "./settings-group";
 import type { SettingsWrites } from "./writes";
 
 /**
@@ -49,24 +50,23 @@ export function VoiceSection({
       {/* While voice cannot run, the one section says how to turn it on rather
           than drawing settings for a feature two steps from working. */}
       {settings.voiceAvailable ? null : (
-        <section className="settings-section">
-          <h2>
-            <KeyIcon />
-            Voice
-            <AttentionMark note={VOICE_KEYLESS_NOTE} />
-          </h2>
-          <p className="settings-note">{VOICE_KEYLESS_NOTE}</p>
-        </section>
+        <SettingsGroup>
+          <div className="settings-row">
+            <span className="settings-copy">
+              <span className="settings-name">
+                <strong>Voice</strong>
+                <AttentionMark note={VOICE_KEYLESS_NOTE} />
+              </span>
+              <small>{VOICE_KEYLESS_NOTE}</small>
+            </span>
+          </div>
+        </SettingsGroup>
       )}
       {/* Drawn only once there is a voice for the microphone to reach: until
           then, the permission guards a feature that cannot run, and the page
           holds the one thing to do next rather than a queue of them. */}
       {settings.voiceAvailable ? (
-        <section className="settings-section">
-          <h2>
-            <ShieldIcon />
-            Permissions
-          </h2>
+        <SettingsGroup title="Permissions">
           {/* Access, not use. The talk key is what opens the microphone, so a
               button here could only ever repeat what the key already does — the
               line answers the one question it can: whether Luke is allowed. It
@@ -103,13 +103,17 @@ export function VoiceSection({
                 </Tooltip>
               ) : null}
               {microphoneRow.offerAccess ? (
-                <button type="button" className="toolbar-button" onClick={microphone.onRequest}>
+                <button
+                  type="button"
+                  className="toolbar-button bordered-button"
+                  onClick={microphone.onRequest}
+                >
                   Allow
                 </button>
               ) : null}
             </span>
           </div>
-        </section>
+        </SettingsGroup>
       ) : null}
       {/* `ready` already folds the account in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
@@ -128,13 +132,13 @@ function VoiceControlsSection({
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
-    <section className="settings-section settings-plain">
+    <SettingsGroup title="Conversation">
       <SchemaSettingRows
         page={SCHEMA_SETTINGS_PAGE.VOICE}
         section={SETTING_SECTION.CONTROLS}
         view={view}
         writes={writes}
       />
-    </section>
+    </SettingsGroup>
   );
 }
