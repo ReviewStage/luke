@@ -88,7 +88,7 @@ const openAgent = Effect.gen(function* () {
   const planId = randomUUID();
   const sql = yield* SqlClient.SqlClient;
   // The plan is written by hand too, since the store's own Start names the workspace a later migration added.
-  yield* sql`insert into plan (id, user_id, name) values (${planId}, ${userId}, ${"Teammate invitations"})`;
+  yield* sql`insert into plan (id, user_id, name, document) values (${planId}, ${userId}, ${"Teammate invitations"}, ${""})`;
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)

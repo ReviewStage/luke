@@ -439,7 +439,13 @@ it.effect(
         const members = yield* ask(seams, github, ada, membersAt(acme));
         const graces = answerOf(yield* ask(seams, github, grace));
 
-        const workspace = { id: acme, name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+        const workspace = {
+          id: acme,
+          name: "acme",
+          personal: false,
+          role: WORKSPACE_ROLE.MEMBER,
+          active: true,
+        };
         assert.deepEqual(joined, { status: HOSTED_HTTP_STATUS.OK, body: { workspace } });
         assert.deepEqual(again, joined);
         assert.deepEqual(members, {

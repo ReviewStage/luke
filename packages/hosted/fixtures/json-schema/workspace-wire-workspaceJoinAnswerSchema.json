@@ -22,13 +22,17 @@
             "admin",
             "member"
           ]
+        },
+        "active": {
+          "type": "boolean"
         }
       },
       "required": [
         "id",
         "name",
         "personal",
-        "role"
+        "role",
+        "active"
       ],
       "additionalProperties": false
     }

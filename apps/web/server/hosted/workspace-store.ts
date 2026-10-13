@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@sidecar/hosted/workspace-wire";
-import { and, asc, eq, exists, inArray, isNull, or, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, or, type SQL, type SQLWrapper } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
