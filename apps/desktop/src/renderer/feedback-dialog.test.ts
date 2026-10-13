@@ -102,7 +102,7 @@ function mount(account: AccountSnapshot = SIGNED_IN): void {
 
 function button(name: string, within: ParentNode = document): HTMLButtonElement {
   const found = [...within.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => (each.getAttribute("aria-label") ?? each.textContent?.replace(/⌘↩$/u, "")) === name,
+    (each) => (each.getAttribute("aria-label") ?? each.textContent?.replace(/⌘⏎$/u, "")) === name,
   );
   assert.ok(found, `a button named ${name}`);
   return found;

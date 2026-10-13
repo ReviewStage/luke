@@ -125,7 +125,10 @@ export const SHORTCUT_KEY = {
   },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
   SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash" },
-  ENTER: { accelerator: "Enter", glyph: "↩", key: "Enter", code: "Enter" },
+  // Note that Return is ⏎ rather than ↩, because the system face draws ⏎ as
+  // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
+  // a ↩ is borrowed from another face and sits off the line beside it.
+  ENTER: { accelerator: "Enter", glyph: "⏎", key: "Enter", code: "Enter" },
   ESCAPE: { accelerator: "Escape", glyph: "Esc", key: "Escape", code: "Escape" },
   OPEN_BRACKET: { accelerator: "[", glyph: "[", key: "[", code: "BracketLeft" },
   CLOSE_BRACKET: { accelerator: "]", glyph: "]", key: "]", code: "BracketRight" },
@@ -191,7 +194,7 @@ export interface AppShortcut {
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
- * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
+ * Safari have them, ⇧⌘⏎ to fill the window with a pane as iTerm and Warp
  * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
  * to close the tab chosen, and ⇧⌘W to close the window as Chrome and VS
@@ -409,22 +412,26 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
 }
 
 /**
- * Any chord as the window draws it: the modifiers in the order macOS writes
- * them, ⌃⌥⇧⌘, then the key, set tight as a menu prints a key equivalent —
- * ⇧⌘I, ⌥Space, Esc. It reads Electron's accelerator, the one spelling the
- * window's chords (`shortcutAccelerator`) and the system-wide keys Settings
- * stores share, so the two are drawn by one rule: a key the window's table
- * names takes its glyph, ↩ for Return and ⌫ for Delete, and any other, Space
- * or a letter, its name.
+ * Any chord's glyphs as the window draws them, one per key: the modifiers in
+ * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
+ * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
+ * and the system-wide keys Settings stores share, so the two are drawn by one
+ * rule: a key the window's table names takes its glyph, ⏎ for Return and ⌫
+ * for Delete, and any other, Space or a letter, its name.
  */
-export function shortcutLabel(accelerator: string): string {
+export function shortcutGlyphs(accelerator: string): readonly string[] {
   const parts = accelerator.split("+");
   const key = parts.at(-1) ?? "";
   const held = new Set(parts.slice(0, -1).map(modifierGlyph));
   // A name no modifier answers to is kept, ahead of the ones that do, rather than dropped.
   const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
   const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
-  return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key].join("");
+  return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
+}
+
+/** Any chord as words, its glyphs set tight as a menu prints a key equivalent: ⇧⌘I, ⌥Space, Esc. */
+export function shortcutLabel(accelerator: string): string {
+  return shortcutGlyphs(accelerator).join("");
 }
 
 /** The chord as `aria-keyshortcuts` spells it. */

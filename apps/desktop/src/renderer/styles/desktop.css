@@ -4485,6 +4485,13 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-4);
 }
 
+/* A hint's keys set as one chord, ↑↓ and ←→, a step apart from their word. */
+.command-palette-footer-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.04em;
+}
+
 .command-palette-footer .shortcut {
   --shortcut-ink: var(--text-secondary);
 }
