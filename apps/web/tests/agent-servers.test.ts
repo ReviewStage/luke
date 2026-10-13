@@ -39,8 +39,8 @@ const codingHost = Effect.gen(function* () {
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+      reachesSession: () => Promise.resolve(false),
+      reachesConversation: () => Promise.resolve(false),
     },
     deploymentSecret: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),

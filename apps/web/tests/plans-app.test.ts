@@ -1612,7 +1612,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
           [VOICE_SEGMENT_ROLE.USER, "should expire.", 700],
           [VOICE_SEGMENT_ROLE.ASSISTANT, "After how many days?", 9_000],
         ]);
-        const conversationId = Option.getOrThrow(yield* openPlanConversation(owner, planId));
+        const conversationId = Option.getOrThrow(
+          yield* openPlanConversation(owner, planId),
+        ).conversationId;
         const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
         const target = { userId: owner, conversationId };
         const span = { channel: MESSAGE_CHANNEL.VOICE, voice_session_id: call } as const;

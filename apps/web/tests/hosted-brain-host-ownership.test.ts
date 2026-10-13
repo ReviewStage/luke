@@ -596,7 +596,10 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
   const seat = ownSeat(userA, conversationId);
   const spent: string[] = [];
   const { host } = hostOverTestDatabase({
-    openAi: () => ({ apiKey: Redacted.make("sk-test-ownership"), modelId: "gpt-test" }),
+    openAi: () => ({
+      apiKey: Redacted.make("sk-test-ownership"),
+      choice: { model: "openai/gpt-6.1-sol", effort: "medium" },
+    }),
     spend: async (userId) => {
       spent.push(userId);
     },
@@ -625,11 +628,16 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
   assert.ok(Result.isSuccess(admitted));
   assert.equal(admitted.success.caller, teammate);
   assert.deepEqual(admitted.success.target, target);
-  const model = host.model(admitted.success);
-  assert.ok(model !== undefined);
+  const selection = host.model(admitted.success);
+  assert.ok(Result.isSuccess(selection));
   // The inference is refused before it leaves the process: the meter in front of it counts first.
   await assert.rejects(
-    generateText({ model, prompt: "hello", abortSignal: AbortSignal.abort(), maxRetries: 0 }),
+    generateText({
+      model: selection.success.model,
+      prompt: "hello",
+      abortSignal: AbortSignal.abort(),
+      maxRetries: 0,
+    }),
   );
   assert.deepEqual(spent, [teammate]);
 

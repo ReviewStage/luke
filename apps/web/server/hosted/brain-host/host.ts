@@ -501,10 +501,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     skills: (admitted) =>
       Effect.gen(function* () {
-        const plan = yield* planOf(admitted.target);
+        const plan = yield* planOf(admitted);
         const repository = plan?.plan.repository ?? null;
         if (repository === null) return [];
-        return yield* repositorySkills(admitted.target, repository, planningSkillMarkdown);
+        // The repository is read on the caller's own App token, as every planning read of it is.
+        return yield* repositorySkills(
+          { userId: admitted.caller, conversationId: admitted.target.conversationId },
+          repository,
+          planningSkillMarkdown,
+        );
       }),
 
     titleChild: (session) =>

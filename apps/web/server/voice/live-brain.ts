@@ -4,7 +4,7 @@ import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { listJournals, listJournalsCalling } from "@sidecar/database/models/message-reads";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
@@ -588,9 +588,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     // The start of a task the last look's calls steered is looked for ahead of the journal too.
     const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
     // So are the lines the turn has taken as its ask.
-    const asked = yield* options.store.messages.spokenAskRows(options.userId, turn.conversationId, [
-      turn.id,
-    ]);
+    const asked = yield* options.store.messages.spokenAskRows(
+      options.conversation.userId,
+      turn.conversationId,
+      [turn.id],
+    );
     told.asked = asked.get(turn.id) ?? [];
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.

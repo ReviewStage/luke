@@ -1213,7 +1213,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );

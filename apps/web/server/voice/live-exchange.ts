@@ -5,7 +5,7 @@ import {
   type VoiceWriteResult,
   voiceWriter,
 } from "@sidecar/database/models/voice-writer";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
