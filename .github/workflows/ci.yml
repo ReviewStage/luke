@@ -43,17 +43,20 @@ jobs:
 
   # The generated migrations meet a real Postgres here, the major production
   # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is
-  # caught before a deployment's `db:migrate` finds it. The job keeps its old
-  # name because the ruleset requires it. The image comes from whichever of
-  # three registries answers first, because each one rate-limits anonymous
-  # pulls; it starts before the checkout so it boots while the workspace
-  # installs.
+  # caught before a deployment's `db:migrate` finds it, and the store tests
+  # run against what it migrated: each file clones the `luke` database as a
+  # template into one of its own (`@sidecar/database/testing`), so
+  # `db:migrate` goes first. The job keeps its old name because the ruleset
+  # requires it. The image comes from whichever of three registries answers
+  # first, because each one rate-limits anonymous pulls; it starts before the
+  # checkout so it boots while the workspace installs.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
+      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
       - name: Start Postgres
         run: |
@@ -95,3 +98,4 @@ jobs:
           echo "::error::Postgres did not become healthy"
           exit 1
       - run: pnpm --filter @luke/web db:migrate
+      - run: pnpm --filter @luke/web test:store
