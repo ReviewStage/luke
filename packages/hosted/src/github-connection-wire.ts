@@ -23,10 +23,8 @@ export const githubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
 });
 
-export type GitHubConnectAnswer = typeof githubConnectAnswerSchema.Type;
-
 /** The browser page that connects GitHub, and the word that asks it to disconnect instead. */
-export const GITHUB_CONNECT_PAGE = {
+const GITHUB_CONNECT_PAGE = {
   PATH: "/connect-github.html",
   DISCONNECT_PARAM: "disconnect",
   DISCONNECT_VALUE: "1",
