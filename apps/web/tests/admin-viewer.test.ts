@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { Effect } from "effect";
+import { Cause, Effect, Layer, Logger } from "effect";
 import { HttpEffect } from "effect/unstable/http";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { adminViewerGate } from "../server/admin/gate";
 import { ADMIN_ERROR } from "../server/admin/http";
+import { unavailableSeam } from "../server/admin/seam";
 import { noDatabase } from "./support/no-database";
 
 const ADMIN_VIEWER: AdminViewer = { userId: "admin-1", role: "admin" };
@@ -13,16 +14,29 @@ function adminRequest(method = "GET"): Request {
   return new Request("https://luke.test/api/admin/metrics", { method });
 }
 
-/** The gate as one function answers it, which is the web handler an `HttpApp` builds. */
-function gate(overrides: Partial<Parameters<typeof adminViewerGate>[0]> = {}) {
+/**
+ * The gate as one function answers it, which is the web handler an `HttpApp`
+ * builds, with every line it logs kept in `logged`.
+ */
+function gate(
+  overrides: Partial<Parameters<typeof adminViewerGate>[0]> = {},
+  logged: string[] = [],
+) {
   const app = adminViewerGate({
     methods: ["GET"],
     resolveViewer: () => Effect.succeed(ADMIN_VIEWER),
     handler: () => Effect.succeed(new Response("{}", { status: 200 })),
     ...overrides,
   });
-  return { fetch: HttpEffect.toWebHandler(Effect.provide(app, noDatabase)) };
+  const capture = Logger.make((options) => {
+    logged.push(JSON.stringify(options.message), String(options.cause));
+  });
+  const services = Layer.merge(noDatabase, Logger.layer([capture]));
+  return { fetch: HttpEffect.toWebHandler(Effect.provide(app, services)) };
 }
+
+/** Words an outage's error may carry that no log line may: a credential and an account's own. */
+const SECRET = "sk-admin-leaked-0123456789abcdef and the developer said ship it";
 
 test("the gate answers 405, 503, 401, 403, and the handler as distinct outcomes", async () => {
   const wrongMethod = await gate().fetch(adminRequest("POST"));
@@ -49,6 +63,29 @@ test("the gate answers 405, 503, 401, 403, and the handler as distinct outcomes"
   assert.equal((await forbidden.json()).error, ADMIN_ERROR.NOT_AUTHORIZED);
 
   assert.equal((await gate().fetch(adminRequest())).status, 200);
+});
+
+test("an auth seam or a read that died is logged by its kind, and nothing its error said", async () => {
+  const logged: string[] = [];
+  const auth = await gate({ resolveViewer: () => Effect.die(new TypeError(SECRET)) }, logged).fetch(
+    adminRequest(),
+  );
+  assert.equal(auth.status, 503);
+  const read = await gate(
+    { handler: () => unavailableSeam("an admin read failed", Cause.die(new RangeError(SECRET))) },
+    logged,
+  ).fetch(adminRequest());
+  assert.equal(read.status, 503);
+
+  assert.ok(
+    logged.some((line) => line.includes("TypeError")),
+    logged.join("\n"),
+  );
+  assert.ok(
+    logged.some((line) => line.includes("RangeError")),
+    logged.join("\n"),
+  );
+  for (const line of logged) assert.ok(!line.includes(SECRET), line);
 });
 
 test("nothing behind the gate runs for a request the gate refuses", async () => {

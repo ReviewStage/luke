@@ -5,6 +5,7 @@ import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
+  describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
@@ -312,5 +313,19 @@ it.effect(
         assert.equal(failure.cause.reason._tag, "TransportError");
       }
       assert.equal(down.seen.length, 3);
+    }),
+);
+
+it.effect(
+  "a call the transport never answered is described by its kind alone, never by its address or the platform's words",
+  () =>
+    Effect.gen(function* () {
+      const down = answeringEach([undefined]);
+      const eve = yield* down.sessions;
+      const failure = yield* Effect.flip(eve.send(SESSION, MESSAGE));
+      const described = describeUnreachable(failure);
+      assert.equal(described, "HttpClientError: TransportError");
+      assert.ok(!described.includes(SESSION), described);
+      assert.ok(!described.includes("connection refused"), described);
     }),
 );
