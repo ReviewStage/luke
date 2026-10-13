@@ -21,6 +21,7 @@
     "./models/plan-store": "./src/models/plan-store.js",
     "./models/quota": "./src/models/quota.js",
     "./models/recorded-session": "./src/models/recorded-session.js",
+    "./models/repository-pin-store": "./src/models/repository-pin-store.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
     "./models/voice-writer": "./src/models/voice-writer.js",
     "./models/writer": "./src/models/writer.js",
