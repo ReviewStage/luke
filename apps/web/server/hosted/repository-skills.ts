@@ -10,15 +10,17 @@
  * root, so a link standing in a root, as `.claude/skills/<name>` linking
  * to `.agents/skills/<name>` does, is no skill of its own (git holds it as
  * a blob): the skill it links to is read from where it stands. Where two
- * roots hold a skill of one name, the first root's is the one read.
+ * roots hold a skill of one name, the first root's is the one offered, and
+ * the next root's where the first root's breaks the convention.
  *
  * Every read is bounded, so a repository holding hundreds of skills or a
  * huge `SKILL.md` costs a fixed number of requests and bytes: past the
- * bound the rest are left out. A skill is named by its folder, as eve
- * names one by its path, so a frontmatter `name` that says otherwise is
- * not read; a folder whose name breaks the convention's rule (lowercase
- * letters, digits, and single hyphens) or whose `SKILL.md` carries no
- * description is left out, since the convention refuses both.
+ * bound the rest are left out. The bound on reads is wider than the bound
+ * on skills, so folders that hold no skill do not crowd out ones that do.
+ * A skill is named by its folder, as eve names one by its path; a folder
+ * whose name breaks the convention's rule (lowercase letters, digits, and
+ * single hyphens), whose `SKILL.md` names another, or which carries no
+ * description is left out, since the convention refuses all three.
  *
  * The frontmatter is read for the few keys the convention names, as the
  * YAML a `SKILL.md` actually holds spells them: a plain, quoted, or block
@@ -44,6 +46,8 @@ type SkillRoot = (typeof SKILL_ROOT)[keyof typeof SKILL_ROOT];
 export const REPOSITORY_SKILLS = {
   /** The most skills read, across every root. */
   MAX_SKILLS: 64,
+  /** The most `SKILL.md` files read, across every root: a skill's in each root, twice the skills. */
+  MAX_READS: 128,
   /** The largest `SKILL.md` read; a larger one is left out. */
   MAX_FILE_BYTES: 64 * 1024,
   /** The convention's bound on a description, past which it is cut. */
@@ -69,6 +73,7 @@ const readJsonString = Schema.decodeUnknownOption(Schema.String);
 
 /** The frontmatter keys this reader reads. */
 const SKILL_KEY = {
+  NAME: "name",
   DESCRIPTION: "description",
   USER_INVOCABLE: "user-invocable",
 } as const;
@@ -146,7 +151,7 @@ function scalarOf(rest: string, continuation: readonly string[]): string {
 
 /** A `SKILL.md` read for its frontmatter's top-level keys and its body; nothing where it opens with no frontmatter. */
 function readSkillFile(text: string): SkillFile | undefined {
-  const fenced = FRONTMATTER.exec(text.replace(/^﻿/u, ""));
+  const fenced = FRONTMATTER.exec(text.replace(/^\uFEFF/u, ""));
   if (fenced === null) return undefined;
   const lines = (fenced[1] ?? "").split(/\r?\n/u);
   const keys = new Map<string, string>();
@@ -157,13 +162,21 @@ function readSkillFile(text: string): SkillFile | undefined {
     keys.set(key[1] ?? "", scalarOf(key[2] ?? "", continuation));
     at += continuation.length;
   }
-  return { keys, body: text.replace(/^﻿/u, "").slice(fenced[0].length).trim() };
+  return {
+    keys,
+    body: text
+      .replace(/^\uFEFF/u, "")
+      .slice(fenced[0].length)
+      .trim(),
+  };
 }
 
 /** The skill a `SKILL.md` in the folder named describes, or nothing where it breaks the convention. */
 function skillOf(root: SkillRoot, name: string, text: string): RepositorySkill | undefined {
   const file = readSkillFile(text);
   if (file === undefined) return undefined;
+  const declared = file.keys.get(SKILL_KEY.NAME)?.trim();
+  if (declared !== undefined && declared !== name) return undefined;
   const description = file.keys.get(SKILL_KEY.DESCRIPTION)?.trim() ?? "";
   if (description === "") return undefined;
   return {
@@ -220,7 +233,8 @@ function readSkill(
 /**
  * The skills the repository keeps on its default branch as GitHub holds it
  * now, read on a token minted for that one repository, in name order: the
- * first root's where two roots name one skill, and no more than the bound.
+ * first root's where two roots name one skill, the next root's where the
+ * first's breaks the convention, and no more than the bounds.
  */
 export function readRepositorySkills(
   token: Redacted.Redacted,
@@ -230,20 +244,18 @@ export function readRepositorySkills(
     const listed = yield* Effect.forEach(Object.values(SKILL_ROOT), (root) =>
       rootFolders(token, repository, root),
     );
-    const byName = new Map<string, SkillFolder>();
-    for (const folder of listed.flat()) {
-      if (!byName.has(folder.name)) byName.set(folder.name, folder);
-    }
-    const folders = [...byName.values()]
+    // Note that the sort is stable, so a name's folders stay in root order.
+    const folders = listed
+      .flat()
       .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, REPOSITORY_SKILLS.MAX_SKILLS);
-    const skills = yield* Effect.forEach(
-      folders,
-      (folder) => readSkill(token, repository, folder),
-      {
-        concurrency: REPOSITORY_SKILLS.READ_CONCURRENCY,
-      },
-    );
-    return skills.filter((skill) => skill !== undefined);
+      .slice(0, REPOSITORY_SKILLS.MAX_READS);
+    const read = yield* Effect.forEach(folders, (folder) => readSkill(token, repository, folder), {
+      concurrency: REPOSITORY_SKILLS.READ_CONCURRENCY,
+    });
+    const byName = new Map<string, RepositorySkill>();
+    for (const skill of read) {
+      if (skill !== undefined && !byName.has(skill.name)) byName.set(skill.name, skill);
+    }
+    return [...byName.values()].slice(0, REPOSITORY_SKILLS.MAX_SKILLS);
   });
 }

@@ -44,10 +44,12 @@ const SKILLS: SkillsRepositoryFixture = {
       huge: SKILL_ENTRY.FOLDER,
       empty: SKILL_ENTRY.FOLDER,
       plain: SKILL_ENTRY.FOLDER,
+      misnamed: SKILL_ENTRY.FOLDER,
     },
     ".claude/skills": {
       testing: SKILL_ENTRY.LINK,
       drizzle: SKILL_ENTRY.FOLDER,
+      empty: SKILL_ENTRY.FOLDER,
       "claude-only": SKILL_ENTRY.FOLDER,
     },
   },
@@ -65,6 +67,10 @@ const SKILLS: SkillsRepositoryFixture = {
     ".agents/skills/plain/SKILL.md":
       "---\nname: plain\ndescription: Use when a plain scalar\n  runs on to a second line.\n---\nPlain.",
     ".agents/skills/Bad_Name/SKILL.md": "---\ndescription: Breaks the naming rule.\n---\nNo.",
+    ".agents/skills/misnamed/SKILL.md":
+      "---\nname: other-name\ndescription: Names another.\n---\nNo.",
+    ".claude/skills/empty/SKILL.md":
+      "---\ndescription: Kept in the Claude root where the first root's folder holds no file.\n---\nFallback.",
     ".agents/skills/undescribed/SKILL.md": "---\nname: undescribed\n---\nNo description.",
     ".agents/skills/huge/SKILL.md": "---\ndescription: Too large to read.\n---\n",
     ".claude/skills/claude-only/SKILL.md":
@@ -74,7 +80,7 @@ const SKILLS: SkillsRepositoryFixture = {
 };
 
 it.effect(
-  "the skills of both roots are read from their frontmatter in name order, the first root's where two name one, and a link, a misnamed folder, a file past the bound, a missing file, and one with no description are left out",
+  "the skills of both roots are read from their frontmatter in name order, the first root's where two name one and the next root's where the first's holds none, and a link, a misnamed folder, a file naming another skill, a file past the bound, a missing file, and one with no description are left out",
   () =>
     Effect.gen(function* () {
       const skills = yield* readSkillsOf(SKILLS);
@@ -103,6 +109,12 @@ it.effect(
             description: "Use for Drizzle schemas: tables, 'indexes', joins.",
             folder: ".agents/skills/drizzle",
             userInvocable: false,
+          },
+          {
+            name: "empty",
+            description: "Kept in the Claude root where the first root's folder holds no file.",
+            folder: ".claude/skills/empty",
+            userInvocable: true,
           },
           {
             name: "plain",
@@ -172,6 +184,31 @@ it.effect(
         names.slice(0, REPOSITORY_SKILLS.MAX_SKILLS),
       );
     }),
+);
+
+it.effect("folders that hold no skill do not crowd out a skill past the bound on skills", () =>
+  Effect.gen(function* () {
+    const hollow = Array.from(
+      { length: REPOSITORY_SKILLS.MAX_SKILLS },
+      (_, at) => `hollow-${String(at).padStart(3, "0")}`,
+    );
+    const skills = yield* readSkillsOf({
+      fullName: "Acme/Relay",
+      branch: "main",
+      roots: {
+        ".agents/skills": Object.fromEntries(
+          [...hollow, "zz-release"].map((name) => [name, SKILL_ENTRY.FOLDER]),
+        ),
+      },
+      files: {
+        ".agents/skills/zz-release/SKILL.md": "---\ndescription: Use to release.\n---\nRelease.",
+      },
+    });
+    assert.deepEqual(
+      skills.map((skill) => skill.name),
+      ["zz-release"],
+    );
+  }),
 );
 
 it.effect("a description longer than the convention's bound is cut at it", () =>
