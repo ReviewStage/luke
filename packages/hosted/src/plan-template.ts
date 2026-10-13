@@ -8,54 +8,38 @@ import {
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { openFenceAt, planSections } from "./plan-document.js";
-import {
-  PLAN_BOUNDS,
-  PLAN_FIELD,
-  PLAN_SECTION_BOUNDS,
-  type PlanAssumption,
-  type PlanField,
-  type PlanFields,
-} from "./plan-wire.js";
+import { PLAN_BOUNDS, PLAN_FIELD, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
 /**
- * plan-template.ts -- the one fixed template every feature plan is written in: the notes the notetaker takes, the fields they land in, and the canonical Markdown body those become.
+ * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
  *
- * Every plan has the same sections in the same order (`docs/PLANNING.md`,
- * "The fixed template"). The service keeps the plan's fields as they stand,
- * and the notetaker changes them only by taking notes: a point added under a
- * field, a phrase corrected, or a line struck.
- * Each note lands in one place and touches nothing else, so a plan is written
- * the way a person takes notes on a call, and a draft drawn while the notes
- * stream differs from the one before only where the newest note lands
- * (`notesInProgress`). A note naming a phrase the field does not hold is
- * passed over rather than guessed into another. A core field reads
- * "Unanswered" while it holds nothing; an optional field is left out of the
- * body until it holds something. The fields are formatted here into the
- * document's Markdown `body`, and the document the window and the model read
- * stays `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back
- * into fields.
+ * A plan is one Markdown text started from its account's own template
+ * (`plan-document.ts`, `docs/PLANNING.md`). The default template is the
+ * design doc two engineering teammates would write after talking a task
+ * through: why it matters, what done looks like, how they will build it and
+ * what they weighed against it, the hard parts, what they leave out, how the
+ * work lands, and how they will know it works. Each section is a question a
+ * good teammate asks, so the sections are what the planning model asks
+ * about, and each is described once here: its heading, what it holds
+ * (`PLAN_FIELD_PURPOSE`), and when it is good enough for a coding agent to
+ * build from (`PLAN_FIELD_BAR`). The sections keep the keys the fixed
+ * template once named its fields by (`PLAN_FIELD`), which is also what a note
+ * an older agent takes names.
  *
- * The template is the design doc two engineering teammates would write
- * after talking a task through: why it matters, what done looks like, how
- * they will build it and what they weighed against it, the hard parts, what
- * they leave out, how the work lands, and how they will know it works. Each
- * section is a question a good teammate asks, so the sections are what the
- * planning model asks about. The same document is the whole spec a coding
- * agent builds from, so the sections an agent needs exactly (the
- * interfaces, how each hard case behaves, and the test cases) each carry a
- * bar a plan must meet before it is done (`PLAN_FIELD_BAR`). The agent
- * explores the code itself, so the plan carries pointers into the code
- * rather than a description of it.
- *
- * The formatter owns every heading and its order. Field text is Markdown the
- * model wrote, contained where it stands: a line that would open a heading or
- * an HTML block is escaped, and a code fence left open is closed at the end of
- * its field, so no answer can impersonate a section or swallow the ones after
- * it. The schema guarantees shape only; whether a note is understood or
- * agreed is the model's judgment.
+ * Luke changes the text only by taking notes: a point added under a heading,
+ * a phrase corrected, or a line struck. Each note lands in one place and
+ * touches nothing else, so a plan is written the way a person takes notes on
+ * a call, and a draft drawn while the notes stream differs from the one
+ * before only where the newest note lands (`textNotesInProgress`). A note
+ * naming a phrase the text does not hold is passed over rather than guessed
+ * into another. A note's words are contained where they land: a line that
+ * would open a heading or an HTML block is escaped, and a code fence left
+ * open is closed, so no note can open a section of its own or swallow the
+ * ones after it. The schema guarantees shape only; whether a note is
+ * understood or agreed is the model's judgment.
  */
 
-/** Every heading the formatter writes, in the words the developer reads. */
+/** The default template's headings, in the words the developer reads. */
 export const PLAN_HEADING = {
   CONTEXT: "Context",
   GOAL: "Goal",
@@ -70,45 +54,10 @@ export const PLAN_HEADING = {
   ASSUMPTIONS: "Assumptions",
 } as const;
 
-/** What stands in a field's place while it holds nothing; each is the only rendering of its empty state. */
-export const PLAN_EMPTY_TEXT = {
-  UNANSWERED: "_Unanswered_",
-  NO_QUESTIONS: "_No additional questions recorded_",
-  NO_ASSUMPTIONS: "_None recorded_",
-} as const;
-
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
-
-/** What the document's header names: the plan, the service's and never the model's. */
-export interface PlanHeader {
-  readonly name: string;
-}
-
-/** A plan's whole content as the notetaker writes it: the template's fields and the assumptions beside them. */
-export interface PlanContent {
-  readonly fields: PlanFields;
-  readonly assumptions: readonly PlanAssumption[];
-}
-
-/** A new plan's fields: every answer unanswered and no questions. */
-export const EMPTY_PLAN_FIELDS: PlanFields = {
-  context: null,
-  goal: null,
-  approach: null,
-  interfaces: null,
-  alternatives: null,
-  hardParts: null,
-  notDoing: null,
-  planOfAttack: null,
-  testing: null,
-  openQuestions: [],
-};
-
-/** A new plan's content: every answer unanswered, no questions, and no assumptions. */
-export const EMPTY_PLAN_CONTENT: PlanContent = { fields: EMPTY_PLAN_FIELDS, assumptions: [] };
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
@@ -183,18 +132,6 @@ function contained(text: string): string {
 }
 
 /** Text a heading carries on its one line. */
-function oneLine(text: string): string {
-  return text.replace(/\s+/gu, " ").trim();
-}
-
-function answerBlock(value: string | null): string {
-  return value === null ? PLAN_EMPTY_TEXT.UNANSWERED : contained(value);
-}
-
-function section(heading: string, blocks: readonly string[]): string {
-  return [`## ${heading}`, ...blocks].join("\n\n");
-}
-
 /** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
 function listItem(marker: string, text: string): string {
   const [first, ...rest] = contained(text).split("\n");
@@ -203,104 +140,7 @@ function listItem(marker: string, text: string): string {
   return [`${marker}${first ?? ""}`, ...continued].join("\n");
 }
 
-function headerBlock(header: PlanHeader): string {
-  return `# ${oneLine(header.name)}`;
-}
-
-/** A core section: its heading over its answer, or over the unanswered mark while null. */
-function coreSection(heading: string, value: string | null): string {
-  return section(heading, [answerBlock(value)]);
-}
-
-/** An optional section: its heading and answer once it holds something, nothing while null. */
-function optionalSection(heading: string, value: string | null): readonly string[] {
-  return value === null ? [] : [section(heading, [contained(value)])];
-}
-
-/**
- * The canonical Markdown body of a plan: the header the service supplies,
- * then every section in the template's order, whatever order the fields'
- * keys arrived in. The assumptions are not part of the body; they are the
- * document's own list, drawn after it as the template's last section.
- */
-export function planBody(header: PlanHeader, fields: PlanFields): string {
-  const { openQuestions } = fields;
-  const blocks = [
-    headerBlock(header),
-    coreSection(PLAN_HEADING.CONTEXT, fields.context),
-    coreSection(PLAN_HEADING.GOAL, fields.goal),
-    coreSection(PLAN_HEADING.APPROACH, fields.approach),
-    coreSection(PLAN_HEADING.INTERFACES, fields.interfaces),
-    ...optionalSection(PLAN_HEADING.ALTERNATIVES, fields.alternatives),
-    coreSection(PLAN_HEADING.HARD_PARTS, fields.hardParts),
-    coreSection(PLAN_HEADING.NOT_DOING, fields.notDoing),
-    ...optionalSection(PLAN_HEADING.PLAN_OF_ATTACK, fields.planOfAttack),
-    coreSection(PLAN_HEADING.TESTING, fields.testing),
-    section(PLAN_HEADING.OPEN_QUESTIONS, [
-      openQuestions.length === 0
-        ? PLAN_EMPTY_TEXT.NO_QUESTIONS
-        : openQuestions.map((question) => listItem("- ", question)).join("\n"),
-    ]),
-  ];
-  return `${blocks.join("\n\n")}\n`;
-}
-
-/** A section of the template as one document holds it: its heading over its blocks, or its heading alone while it holds nothing. */
-function documentSection(heading: string, blocks: readonly string[]): string {
-  return blocks.length === 0 ? `## ${heading}` : section(heading, blocks);
-}
-
-/** A text answer's blocks: the answer, contained, or none while it is null. */
-function answerBlocks(value: string | null): readonly string[] {
-  return value === null ? [] : [contained(value)];
-}
-
-/** A list's blocks: one list of its items, or none while it is empty. */
-function listBlocks(items: readonly string[]): readonly string[] {
-  return items.length === 0 ? [] : [items.map((item) => listItem("- ", item)).join("\n")];
-}
-
-/**
- * A plan's content as one free document: every section of the template in
- * its order under its heading, no title line, and the assumptions as the
- * last section. An answered section reads exactly as the body draws it, its
- * text contained the same way; an unanswered core section is its heading
- * alone, an unanswered optional one is left out, as the body leaves it out,
- * and an empty list is its heading alone. This is what a plan kept as the
- * template's fields becomes once it is one document.
- */
-export function planDocumentOf(content: PlanContent): string {
-  const { fields } = content;
-  const optional = (heading: string, value: string | null) =>
-    value === null ? [] : [documentSection(heading, answerBlocks(value))];
-  const blocks = [
-    documentSection(PLAN_HEADING.CONTEXT, answerBlocks(fields.context)),
-    documentSection(PLAN_HEADING.GOAL, answerBlocks(fields.goal)),
-    documentSection(PLAN_HEADING.APPROACH, answerBlocks(fields.approach)),
-    documentSection(PLAN_HEADING.INTERFACES, answerBlocks(fields.interfaces)),
-    ...optional(PLAN_HEADING.ALTERNATIVES, fields.alternatives),
-    documentSection(PLAN_HEADING.HARD_PARTS, answerBlocks(fields.hardParts)),
-    documentSection(PLAN_HEADING.NOT_DOING, answerBlocks(fields.notDoing)),
-    ...optional(PLAN_HEADING.PLAN_OF_ATTACK, fields.planOfAttack),
-    documentSection(PLAN_HEADING.TESTING, answerBlocks(fields.testing)),
-    documentSection(PLAN_HEADING.OPEN_QUESTIONS, listBlocks(fields.openQuestions)),
-    documentSection(
-      PLAN_HEADING.ASSUMPTIONS,
-      listBlocks(content.assumptions.map((assumption) => assumption.text)),
-    ),
-  ];
-  return `${blocks.join("\n\n")}\n`;
-}
-
-/** The fields that hold one Markdown answer, as against the two lists. */
-export type PlanTextField = Exclude<
-  PlanField,
-  typeof PLAN_FIELD.OPEN_QUESTIONS | typeof PLAN_FIELD.ASSUMPTIONS
->;
-
-type TextField = PlanTextField;
-
-/** The heading each field stands under in the body, so a prompt or the window names a section as the developer reads it. */
+/** The heading each section stands under in the default template, so a prompt names a section as the developer reads it. */
 export const PLAN_FIELD_HEADING = {
   context: PLAN_HEADING.CONTEXT,
   goal: PLAN_HEADING.GOAL,
@@ -577,26 +417,9 @@ function itemText(text: string): string {
   return text.replace(LEADING_LIST_MARKERS, "").trim();
 }
 
-function isTextField(field: PlanField): field is TextField {
+/** Whether a field of the fixed template held one Markdown answer, as against a list of items. */
+function isTextField(field: PlanField): boolean {
   return field !== PLAN_FIELD.OPEN_QUESTIONS && field !== PLAN_FIELD.ASSUMPTIONS;
-}
-
-/** Every field holding one Markdown answer, in the template's order. */
-export const PLAN_TEXT_FIELDS: readonly PlanTextField[] =
-  Object.values(PLAN_FIELD).filter(isTextField);
-
-/** What a text field holds: its Markdown, or null while it is unanswered. */
-export function planTextFieldValue(fields: PlanFields, field: PlanTextField): string | null {
-  return fields[field];
-}
-
-/** The fields with one text field holding a new answer, or none. */
-export function withPlanTextField(
-  fields: PlanFields,
-  field: PlanTextField,
-  value: string | null,
-): PlanFields {
-  return { ...fields, [field]: value };
 }
 
 function escapedPattern(word: string): string {

@@ -1,9 +1,5 @@
 import { changedSections, withSectionWriters } from "@sidecar/hosted/plan-document";
-import {
-  applyDocumentEdit,
-  type PlanDocumentEditRequest,
-  type PlanEditRequest,
-} from "@sidecar/hosted/plan-edit";
+import { applyDocumentEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import {
   applyNotesToText,
   type PlanAgentEdit,
@@ -95,8 +91,6 @@ export const PLAN_SAVE_REFUSAL = {
   NO_PLAN: "Not saved: this plan no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
   ARCHIVED: "Not saved: this plan is archived.",
-  /** An edit of one of the fixed template's fields, which no plan keeps any longer. */
-  FIELD_EDIT: "Not saved: a plan is edited as its text, not a field.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -293,7 +287,7 @@ export type PlanEditSaveResult =
 /** The developer's edit of the whole text, taken into the text as it stands, or why it is not. */
 function takeDocumentEdit(
   stored: StoredPlan,
-  edit: PlanDocumentEditRequest,
+  edit: PlanEditRequest,
 ): Result.Result<TextTaken, PlanConflict> {
   const outcome = applyDocumentEdit(stored.text, edit);
   if ("conflict" in outcome) {
@@ -307,8 +301,7 @@ function takeDocumentEdit(
  * service bound under its lock and kept as a revision of theirs: set where
  * the text still holds the edit's base, the developer's change laid over it
  * where Luke wrote meanwhile, and a conflict, with nothing saved, where it
- * cannot be (`@sidecar/hosted/plan-edit`). An edit of one field, which an
- * older desktop could still send, is refused before anything is taken.
+ * cannot be (`@sidecar/hosted/plan-edit`).
  */
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,
@@ -316,12 +309,6 @@ export function saveDeveloperEdit(
 ): Effect.Effect<PlanEditSaveResult, never, SqlClient.SqlClient> {
   const take = (stored: StoredPlan): Result.Result<TextTaken, PlanConflict | PlanNotSaved> => {
     if (archived(stored)) return Result.fail(ARCHIVED_RESULT);
-    if (!("document" in edit)) {
-      return Result.fail({
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.FIELD_EDIT,
-      });
-    }
     return takeDocumentEdit(stored, edit);
   };
   const saved = Effect.map(

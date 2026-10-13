@@ -1,5 +1,5 @@
 import { useAtom } from "@effect/atom-react";
-import type { PlanDocumentEditRequest } from "@sidecar/hosted/plan-edit";
+import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -44,7 +44,7 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
 const ignore = () => undefined;
 
 /** How the document saves an edit: what the words were written from, and the developer's. */
-export type PlanEditDoor = (request: PlanDocumentEditRequest) => Promise<PlanningEditAnswer>;
+export type PlanEditDoor = (request: PlanEditRequest) => Promise<PlanningEditAnswer>;
 
 /** The blocks of the document that are no section of its text. */
 export const EDITOR_PLACE = {

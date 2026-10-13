@@ -183,7 +183,6 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-wire": {
     agentEditLineSchema: planWire.agentEditLineSchema,
     planAssumptionSchema: planWire.planAssumptionSchema,
-    planFieldsSchema: planWire.planFieldsSchema,
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planRenameRequestSchema: planWire.planRenameRequestSchema,
@@ -193,7 +192,6 @@ const EFFECT_MODULE_SCHEMAS = {
     planAgentsSummarySchema: planWire.planAgentsSummarySchema,
     planSummarySchema: planWire.planSummarySchema,
     planLastEditSchema: planWire.planLastEditSchema,
-    planFieldEditSchema: planWire.planFieldEditSchema,
     planSectionEditSchema: planWire.planSectionEditSchema,
     planSchema: planWire.planSchema,
     planListAnswerSchema: planWire.planListAnswerSchema,
