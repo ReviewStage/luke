@@ -197,6 +197,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         pageTitle: undefined,
         subagentTitles: new Map(),
         delegations: new Map(),
+        subagents: new Map(),
         reading: false,
         failed: false,
         onRetry: ignore,

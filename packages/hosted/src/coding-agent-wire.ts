@@ -773,6 +773,21 @@ const codingAgentDelegationStartSchema = EffectSchema.Struct({
 
 export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema.Type;
 
+/**
+ * Where one of an agent's workers stands, by the call that started it: the
+ * status its own session's newest turn reads as, the pair it runs on as its
+ * delegation recorded it, and when it began.
+ */
+const codingAgentSubagentStandingSchema = EffectSchema.Struct({
+  callId: codingAgentCallIdSchema,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  model: EffectSchema.String,
+  effort: EffectSchema.String,
+  startedAt: countedNumber,
+});
+
+export type CodingAgentSubagentStanding = typeof codingAgentSubagentStandingSchema.Type;
+
 /** One worker's short title, generated from the task it was handed, by the call that started it. */
 const codingAgentSubagentTitleSchema = EffectSchema.Struct({
   callId: codingAgentCallIdSchema,
@@ -815,6 +830,13 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * than it.
    */
   subagentTitles: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentTitleSchema)),
+  /**
+   * Where every worker of the agent's stands, by the call that started it,
+   * read from the worker's own session rather than the call, whose own state
+   * says only that the delegation was made. Absent on a worker's page, while
+   * the agent has delegated nothing, and from a service older than it.
+   */
+  subagents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentStandingSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
