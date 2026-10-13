@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { listJournals, listJournalsCalling } from "@sidecar/database/models/message-reads";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
@@ -49,7 +50,6 @@ import { subagentRecordsByCall } from "../hosted/child-models.js";
 import { childTitlesByCall } from "../hosted/child-titles.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
-import { TURN_ABANDON } from "../hosted/store/abandoned-turns.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-events.js";

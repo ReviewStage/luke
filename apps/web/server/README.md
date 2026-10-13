@@ -2271,7 +2271,7 @@ conversations stamped deleted more than thirty days ago, which is what a
 deleted plan's conversation comes to, counted as `purged`; the sweep over
 turns still running past their kind's bound, an hour for a planning turn
 and a day and an hour for a coding agent's
-(`server/hosted/store/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
+(`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
 `TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
 the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and

@@ -1,3 +1,4 @@
+import { sweepAbandonedTurns } from "@sidecar/database/models/abandoned-turns";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
@@ -7,7 +8,6 @@ import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js"
 import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { recordVoiceSeconds } from "./hosted/quota.js";
-import { sweepAbandonedTurns } from "./hosted/store/abandoned-turns.js";
 import { hostedStore, storeWriter } from "./hosted/store/index.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
