@@ -113,13 +113,23 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 
 /**
  * The document as the hidden voice window and the call window are sent it: the
- * whole of it but the planning turns' work. Note that the work is kept from
- * those windows because they draw none, and the work carries the output of
- * commands run in the developer's repository, which nothing there needs.
+ * whole of it but the planning turns' work, as the plan's work page projects
+ * it and as its planning conversation reads it. Note that both are kept from
+ * those windows because they draw neither, and both carry the output of
+ * commands run in the developer's repository and on the developer's Mac,
+ * which nothing there needs.
  */
 export function voiceWindowState<State extends Pick<AppState, "planning">>(held: State): State {
-  const { work: _work, ...planning } = held.planning;
+  const { work: _work, conversation: _conversation, ...planning } = held.planning;
   return { ...held, planning };
+}
+
+/** The document as the window that asked is to read it: the voice and call windows' as `voiceWindowState` leaves it, from their first read on, and a panel's whole. */
+export function windowAppState<State extends Pick<AppState, "planning">>(
+  held: State,
+  window: { readonly voice: boolean; readonly call: boolean },
+): State {
+  return window.voice || window.call ? voiceWindowState(held) : held;
 }
 
 /**
