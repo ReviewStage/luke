@@ -39,7 +39,12 @@ function Actions(): React.JSX.Element {
       : createElement(ActionMenu, {
           label: "Plan actions",
           menu: menu.drawn,
-          groups: [[{ label: "Rename", onSelect: () => undefined }]],
+          groups: [
+            [
+              { label: "Rename", onSelect: () => undefined },
+              { label: "Move to", items: [{ label: "Archive", onSelect: () => undefined }] },
+            ],
+          ],
           onClose: menu.close,
         }),
   );
@@ -118,4 +123,18 @@ test("the menu opened again while it leaves stands again, focused, and its old e
 
   finishExits();
   assert.ok(menu() === standing, "the exit it was playing takes nothing away");
+});
+
+test("the menu opened again while it leaves stands with no submenu, as one opened anew does", () => {
+  press();
+  const moveTo = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Move to",
+  );
+  assert.ok(moveTo, "no Move to item");
+  act(() => moveTo.click());
+  assert.equal(document.querySelectorAll('[role="menu"]').length, 2, "the submenu stands");
+
+  pressEscape();
+  press();
+  assert.equal(document.querySelectorAll('[role="menu"]').length, 1);
 });

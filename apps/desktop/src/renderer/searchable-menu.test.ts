@@ -159,6 +159,17 @@ test("a menu its owner holds through its exit takes nothing, and takes the field
   assert.ok(document.activeElement === field, "the field takes focus again");
 });
 
+test("a menu opened again while it was leaving starts afresh, its search cleared", () => {
+  const menu = mount();
+  type(menu.find<HTMLInputElement>("input"), "billing");
+  assert.equal(menu.rows().length, 1);
+
+  menu.restand({ leaving: true });
+  menu.restand({ leaving: false });
+  assert.equal(menu.find<HTMLInputElement>("input").value, "");
+  assert.equal(menu.rows().length, 3);
+});
+
 test("a row is one height whether forty rows match or one: the list is no flex column and a row flexes in no column it stands in", () => {
   const menu = mount({ rows: MANY, value: undefined });
   const field = menu.find<HTMLInputElement>("input[role=combobox]");

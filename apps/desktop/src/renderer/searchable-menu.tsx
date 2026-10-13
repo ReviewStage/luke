@@ -305,6 +305,16 @@ export function SearchableMenu(props: {
   // The submenu open under the highlighted pinned row, and the highlight inside it.
   const [submenu, setSubmenu] = useState<{ moved: number | undefined } | undefined>(undefined);
   const [place, setPlace] = useState<SubmenuPlace>(SUBMENU_FIRST_PLACE);
+  // Opened again while it was leaving, the menu starts afresh, as one opened anew does.
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) {
+      setQuery("");
+      setHighlight(undefined);
+      setSubmenu(undefined);
+    }
+  }
   const open = branch !== undefined && submenu !== undefined ? branch : undefined;
   const subChosen = open?.rows.findIndex((row) => row.id === open.value) ?? -1;
   const subAt = highlightOver({

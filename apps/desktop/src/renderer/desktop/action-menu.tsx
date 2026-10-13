@@ -382,6 +382,12 @@ export function ActionMenu({
   );
   const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
   const [submenu, setSubmenu] = useState<OpenSubmenu | undefined>(undefined);
+  // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) setSubmenu(undefined);
+  }
 
   useLayoutEffect(() => {
     const drawn = element.current;
