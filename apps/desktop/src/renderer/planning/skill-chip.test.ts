@@ -95,19 +95,21 @@ test("a skill of the plan's named in a sent message is the composer's chip, and 
   assert.deepEqual(opened, [RELEASE.path]);
 });
 
-test("a `/word` naming no skill of the plan's, or a skill's name in code, stays words, and the bubble reads as the message was written", async () => {
-  const words = "Try /unknown, then `/release`, then /release";
+test("a `/word` naming no skill of the plan's, or a skill's name in code of any fence or run of backticks, stays words, and the bubble reads as the message was written", async () => {
+  const words =
+    "Try /unknown, then `/release`, ``a /release b``, then /release\n\n~~~\n/release\n~~~";
   const { container } = await mounted([PLAN, TURN, sent(words)]);
   const chips = [...bubble(container).querySelectorAll("button.skill-chip")];
   assert.equal(chips.length, 1, "only the bare /release is a chip");
   assert.equal(bubble(container).querySelector(".skill-chip")?.closest("code"), null);
   assert.match(
     bubble(container).textContent ?? "",
-    /Try \/unknown, then \/release, then \/release/u,
+    /Try \/unknown, then \/release, a \/release b, then \/release[\s\S]*\/release/u,
   );
+  assert.doesNotMatch(bubble(container).innerHTML, /luke-skill/u, "no markup shows in code");
 });
 
-test("the row of a call that loaded one of the plan's skills opens the skill's file, and one that loaded another skill folds open as a call's row does", async () => {
+test("the row of a call that loaded one of the plan's skills opens the skill's file, and one that failed or loaded another skill folds open as a call's row does", async () => {
   const loading: CodingAgentMessage = {
     id: "m-loading",
     role: "assistant",
@@ -118,6 +120,13 @@ test("the row of a call that loaded one of the plan's skills opens the skill's f
         state: "output-available",
         input: { skill: "release" },
         output: "Tag it, then publish.",
+      },
+      {
+        type: "tool-load_skill",
+        toolCallId: "call_failed",
+        state: "output-error",
+        input: { skill: "release" },
+        errorText: "The skill could not be read.",
       },
       {
         type: "tool-load_skill",
@@ -145,4 +154,12 @@ test("the row of a call that loaded one of the plan's skills opens the skill's f
     "another skill's row opens onto what it loaded",
   );
   assert.deepEqual(opened, [RELEASE.path], "and opens no file");
+  const failed = container.querySelector<HTMLElement>('[data-call-id="call_failed"]');
+  act(() => failed?.querySelector<HTMLElement>("summary")?.click());
+  assert.match(
+    failed?.textContent ?? "",
+    /The skill could not be read\./u,
+    "a failed load says why",
+  );
+  assert.deepEqual(opened, [RELEASE.path], "and opens no file either");
 });

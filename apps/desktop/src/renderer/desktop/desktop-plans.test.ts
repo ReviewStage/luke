@@ -918,6 +918,55 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Call"]);
 });
 
+test("a skill named in a message sent to an agent is a chip, and pressing it opens the skill's file in a File tab of the side panel, opening the panel", async () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const messages: CodingAgentMessage[] = [
+    { id: "m-plan", role: "user", parts: [{ type: "text", text: "# Releases" }] },
+    { id: "m-turn", role: "assistant", parts: [{ type: "text", text: "Ready." }] },
+    { id: "m-sent", role: "user", parts: [{ type: "text", text: "Cut it with /release now." }] },
+  ];
+  // The first page lands at once; the reads after it are held, as the service holds them.
+  const readTranscript: TranscriptReader = ({ after }) =>
+    after === CODING_AGENT_CURSOR_START
+      ? Promise.resolve({
+          messages,
+          cursor: "1:1",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          title: null,
+        })
+      : new Promise(() => undefined);
+  const release = {
+    name: "release",
+    description: "Use to cut a release of the relay.",
+    path: ".agents/skills/release/SKILL.md",
+  };
+  const page = mountOpenPlan({
+    agents: codingAgentsControl({
+      agents: [agent],
+      agentIds: [agent.id],
+      readTranscript,
+      readSkills: () => Promise.resolve({ skills: [release] }),
+    }),
+  });
+  act(() => tabNamed(page, "Opus 5.5").click());
+  await settle();
+  assert.equal(panelShown(page), false);
+
+  press(page, ".desktop-agent button.skill-chip");
+  assert.equal(panelShown(page), true);
+  assert.equal(chosenTab(page), "SKILL.md");
+  assert.equal(columnChosen(page), "Opus 5.5", "the agent stays beside the skill's file");
+});
+
 test("a delegated worker wears the mark of the model its delegation chose, though its agent runs in another harness", async () => {
   const agent: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",

@@ -463,7 +463,9 @@ export function DesktopPlans({
       return (
         <SkillFiles
           source={plans.agents.readSkills}
-          onOpen={(skill) => plans.sidePanel.onOpenFile({ path: skill.path })}
+          // Note that a skill's file is browsed to, as a file the palette finds is,
+          // so its tab stands on this plan though Luke never showed it.
+          onOpen={(skill) => plans.sidePanel.onBrowseFile(skill.path, skill.path, true)}
         >
           <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />
           {secondCall}

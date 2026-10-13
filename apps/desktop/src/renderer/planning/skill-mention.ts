@@ -38,8 +38,11 @@ export interface TextEdit {
 }
 
 const SLASH = "/";
-const FENCE = "```";
-const TICK = "`";
+/** A line that opens or closes a fenced block: up to three spaces, then three or more backticks or tildes. */
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/** A run of backticks, which opens a code span the next run of the same length closes. */
+const TICKS = /`+/gu;
 
 /** A character a skill's name is spelled in, typed in either case. */
 const NAME_CHARACTER = /[A-Za-z0-9-]/u;
@@ -47,13 +50,54 @@ const NAME_CHARACTER = /[A-Za-z0-9-]/u;
 /** A character that ends a word. */
 const SPACE = /\s/u;
 
-/** Whether the index stands in code: inside a fenced block, or between backticks on its own line. */
+/** Whether the line holding the index stands inside a fenced block, its fence lines included. */
+function insideFence(text: string, at: number): boolean {
+  let open: string | undefined;
+  let start = 0;
+  for (const line of text.split("\n")) {
+    const end = start + line.length;
+    const fence = FENCE_LINE.exec(line)?.[1];
+    if (at >= start && at <= end) return open !== undefined || fence !== undefined;
+    // A fence closes on a run of its own character at least as long as the one that opened it.
+    if (fence !== undefined && open === undefined) open = fence;
+    else if (
+      fence !== undefined &&
+      open !== undefined &&
+      fence[0] === open[0] &&
+      fence.length >= open.length
+    )
+      open = undefined;
+    start = end + 1;
+  }
+  return false;
+}
+
+/** Whether the index stands inside a code span on its own line: between a run of backticks and the next run of the same length. */
+function insideSpan(text: string, at: number): boolean {
+  const lineStart = text.lastIndexOf("\n", at - 1) + 1;
+  const lineEnd = text.indexOf("\n", at);
+  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+  const runs = [...line.matchAll(TICKS)].map((run) => ({
+    start: run.index,
+    end: run.index + run[0].length,
+  }));
+  const offset = at - lineStart;
+  for (let index = 0; index < runs.length; index += 1) {
+    const opening = runs[index];
+    if (opening === undefined) continue;
+    const length = opening.end - opening.start;
+    const closing = runs.findIndex((run, later) => later > index && run.end - run.start === length);
+    // A run no later run closes is backticks as words.
+    if (closing === -1) continue;
+    if (offset >= opening.end && offset < (runs[closing]?.start ?? 0)) return true;
+    index = closing;
+  }
+  return false;
+}
+
+/** Whether the index stands in code: inside a fenced block, or inside a code span on its own line. */
 function insideCode(text: string, at: number): boolean {
-  const before = text.slice(0, at);
-  const fences = before.split(FENCE).length - 1;
-  if (fences % 2 === 1) return true;
-  const line = before.slice(before.lastIndexOf("\n") + 1).replaceAll(FENCE, "");
-  return (line.split(TICK).length - 1) % 2 === 1;
+  return insideFence(text, at) || insideSpan(text, at);
 }
 
 /** Whether a slash at the index starts a word: the message's start or a space before it, and no code around it. */

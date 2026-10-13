@@ -143,9 +143,11 @@ export function SkillFiles({
     if (source === undefined || asked.current === source) return;
     asked.current = source;
     source().then((answer) => {
+      // A read for a plan or repository left since is no answer for this one.
+      if (asked.current !== source) return;
       if ("skills" in answer) {
         setRead({ source, skills: new Map(answer.skills.map((skill) => [skill.name, skill])) });
-      } else if (asked.current === source) {
+      } else {
         asked.current = undefined;
       }
     });

@@ -327,14 +327,21 @@ function TodosDock({
   );
 }
 
-/** A call that loaded a skill: the one button that opens the skill's `SKILL.md`, where it is one of the plan's skills, and a call's row otherwise. */
+/**
+ * A call that loaded a skill: the one button that opens the skill's
+ * `SKILL.md`, where it is one of the plan's skills, and a call's row
+ * otherwise. Note that a load that failed keeps the call's row, because the
+ * row is where its error is read.
+ */
 function LoadedSkillView({
   part,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
 }): ReactNode {
   const onOpen = useSkillFile(toolCallView(part).subject);
-  if (onOpen === undefined) return <ToolCallView part={part} />;
+  if (onOpen === undefined || part.state === TOOL_STATE.OUTPUT_ERROR) {
+    return <ToolCallView part={part} />;
+  }
   return <OpeningCallView part={part} onOpen={onOpen} />;
 }
 
