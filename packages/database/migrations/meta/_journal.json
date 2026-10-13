@@ -757,6 +757,13 @@
       "when": 1791923629385,
       "tag": "20261013203349_voice_avatar_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1791925783000,
+      "tag": "20261013210942_voice_avatar_sessions_drop",
+      "breakpoints": true
     }
   ]
 }
