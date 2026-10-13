@@ -2066,15 +2066,17 @@ button.attached-file-face:hover img {
 
 /* The tools stand beside the popover, on its leading side since it hangs
    from the composer's trailing edge, up from the row's foot since it stands
-   at the panel's foot, and scroll inside themselves past a bounded height:
-   each its name in the code face, with the first line of what it does
-   under it in the muted type, cut where the list's width ends. */
+   at the panel's foot, and scroll down inside themselves past a bounded
+   height and never sideways: each its name in the code face, with the first
+   line of what it does under it in the muted type, both cut where the
+   list's width ends. */
 .agent-servers-menu .agent-servers-tools-menu {
   display: none;
   right: calc(100% + var(--menu-inset) + 9px);
   width: 280px;
   max-height: 320px;
   margin: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -2084,55 +2086,64 @@ button.attached-file-face:hover img {
 }
 
 /* The list stands outside the row, past the popover's inset and a gap, so a
-   strip of its own reaches back across both: the pointer crossing to the
-   list never leaves the row whose hover keeps it drawn. */
-.agent-servers-tools-menu::after {
+   strip of the row's own reaches across both while the list is drawn: the
+   pointer crossing to the list never leaves the row whose hover keeps it
+   drawn. Note that the strip hangs from the row rather than the list,
+   because the list scrolls, and a scroller clips what stands outside it, or
+   scrolls sideways to reach it. */
+.agent-servers-row:is(:hover, :focus-within):has(.agent-servers-tools-menu)::before {
   position: absolute;
   top: 0;
+  right: 100%;
   bottom: 0;
-  left: 100%;
   width: calc(var(--menu-inset) + 9px + 2px);
   content: "";
 }
 
 .agent-servers-tool {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 1px;
   padding: var(--space-4) var(--row-inset);
 }
 
-.agent-servers-tool-name {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
+.agent-servers-tool-name,
 .agent-servers-tool-description {
   overflow: hidden;
-  color: var(--text-tertiary);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The title's row: the title, and Settings one quiet gear away at its end,
-   a small square that keeps the row no taller than the title alone. */
+.agent-servers-tool-name {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.agent-servers-tool-description {
+  color: var(--text-tertiary);
+}
+
+/* The title's row: the title, inset from the top as a section heading's
+   words are from the side, and Settings one quiet gear away at its end, a
+   small square centred on the title's line that reaches past it into the
+   padding rather than making the row any taller than the title alone. Note
+   that the gear names the head's class too, because the window's own
+   `.icon-button` comes later in the sheet and would size it again. */
 .agent-servers-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: var(--space-2);
-  padding-bottom: 0;
 }
 
-.agent-servers-settings {
-  width: 24px;
-  height: 24px;
+.agent-servers-head .agent-servers-settings {
+  --control-height: 24px;
+  margin-block: calc(var(--space-6) * -1);
   margin-right: calc(var(--space-4) - var(--row-inset));
 }
 
-.agent-servers-settings svg {
+.agent-servers-head .agent-servers-settings svg {
   width: 14px;
   height: 14px;
 }
