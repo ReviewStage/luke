@@ -829,24 +829,26 @@ test("the plan is a card across the top of the transcript, folded under its titl
   );
 });
 
-test("the words are markdown, with the pull request's link opening on GitHub in the browser rather than in the window", () => {
+test("the words are markdown, with the pull request's link opening on GitHub and any other web page opening in the browser rather than in the window", () => {
   const markup = drawn([TURN]);
   assert.match(markup, /<a href="https:\/\/github\.com\/acme\/relay\/pull\/7" class="agent-link"/u);
-  // A link off GitHub is drawn as words that go nowhere.
-  assert.doesNotMatch(markup, /href="https:\/\/example\.com\/docs"/u);
-  assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
+  assert.match(markup, /<a href="https:\/\/example\.com\/docs" class="agent-link"/u);
+  assert.doesNotMatch(markup, /agent-link-inert/u);
 
   const sent = installActBridge();
   const container = unfolded([TURN]);
-  const link = container.querySelector<HTMLAnchorElement>("a.agent-link");
-  assert.ok(link);
-  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-  act(() => {
-    link.dispatchEvent(click);
-  });
-  assert.equal(click.defaultPrevented, true);
+  const links = [...container.querySelectorAll<HTMLAnchorElement>("a.agent-link")];
+  assert.equal(links.length, 2);
+  for (const link of links) {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(click);
+    });
+    assert.equal(click.defaultPrevented, true);
+  }
   assert.deepEqual(sent, [
     { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+    { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
   ]);
 });
 

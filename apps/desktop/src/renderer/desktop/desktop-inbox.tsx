@@ -8,6 +8,7 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { InboxBoard } from "../planning/inbox-board";
 import { useCodingAgents } from "../planning/use-coding-agents";
+import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlansControl } from "../planning/use-plans-tab";
 
@@ -165,7 +166,8 @@ function InboxPlanItems({
   plans: PlansControl;
   plan: PlanSummary;
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { act } = useAct();
+  const openLink = useOpenLink();
   const planId = plan.id;
   const agents = useCodingAgents({
     acts: { act },
@@ -208,7 +210,7 @@ function InboxPlanItems({
           control={inbox}
           agents={named}
           onOpenAgent={(agentId) => plans.onShowAgent(planId, agentId)}
-          openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+          openLink={openLink}
           code={{
             repository: plan.repository,
             readFile: (window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window }),

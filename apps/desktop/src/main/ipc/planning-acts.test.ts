@@ -458,6 +458,52 @@ it.effect("Open on GitHub opens a GitHub address in the browser, and no other ad
   }),
 );
 
+it.effect(
+  "a web link opens an http or https address in the browser, and no other scheme nor an address past the cap",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const refused = [
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "luke://plan/7",
+        "mailto:dean@example.com",
+        "//example.com/docs",
+        "https://",
+        `https://example.com/docs?q=${"a".repeat(2_048)}`,
+      ];
+
+      const opened = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
+        PANEL,
+      );
+      const plain = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "http://localhost:3000/" } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
+        VOICE,
+      );
+      const outcomes = yield* Effect.forEach(refused, (url) =>
+        f.router.performAct(
+          // SAFETY: an address the schema refuses is sent as the shape it would arrive in.
+          { kind: ACT_KIND.WEB_OPEN, payload: { url } } as never,
+          PANEL,
+        ),
+      );
+
+      assert.equal(opened.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(plain.status, ACT_OUTCOME_STATUS.DONE);
+      assert.notEqual(fromVoice.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.status === ACT_OUTCOME_STATUS.DONE),
+        refused.map(() => false),
+      );
+      assert.deepEqual(f.opened, ["https://example.com/docs", "http://localhost:3000/"]);
+    }),
+);
+
 it.effect("the voice window does not reach the plans", () =>
   Effect.gen(function* () {
     const f = fixture();

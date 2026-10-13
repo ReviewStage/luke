@@ -104,6 +104,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.GITHUB_OPEN,
     payload: { url: "https://github.com/acme/relay" },
   },
+  [ACT_KIND.WEB_OPEN]: {
+    kind: ACT_KIND.WEB_OPEN,
+    payload: { url: "https://example.com/docs" },
+  },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     kind: ACT_KIND.PLANNING_BOARD_SAVE,

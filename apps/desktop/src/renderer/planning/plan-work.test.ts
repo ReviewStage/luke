@@ -503,7 +503,7 @@ test("an older page that does not land stops the seeking, and the ask is answere
   assert.equal(revealed.mock.calls.length, 1);
 });
 
-test("a link in Luke's words opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere", () => {
+test("a link in Luke's words opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and a mail address is words that go nowhere", () => {
   const sent = installActBridge();
   const container = mounted(
     createElement(PlanWork, {
@@ -516,7 +516,7 @@ test("a link in Luke's words opens on GitHub in the browser over the act channel
           parts: [
             {
               type: PLAN_WORK_PART.TEXT,
-              text: "Read [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+              text: "Read [the pull request](https://github.com/acme/relay/pull/7), [the docs](https://example.test/docs), and [mail](mailto:dean@example.test).",
             },
           ],
         },
@@ -528,18 +528,17 @@ test("a link in Luke's words opens on GitHub in the browser over the act channel
       shown: true,
     }),
   );
-  assert.equal(container.querySelector('[href="https://example.test/docs"]'), null);
-  assert.equal(container.querySelector(".agent-link-inert")?.textContent, "the docs");
-  const link = container.querySelector<HTMLAnchorElement>(
-    'a[href="https://github.com/acme/relay/pull/7"]',
-  );
-  assert.ok(link);
-  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-  act(() => {
-    link.dispatchEvent(click);
-  });
-  assert.equal(click.defaultPrevented, true);
+  assert.equal(container.querySelector('[href="mailto:dean@example.test"]'), null);
+  assert.equal(container.querySelector(".agent-link-inert")?.textContent, "mail");
+  for (const link of container.querySelectorAll<HTMLAnchorElement>("a.agent-link")) {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(click);
+    });
+    assert.equal(click.defaultPrevented, true);
+  }
   assert.deepEqual(sent, [
     { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+    { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
   ]);
 });

@@ -13,6 +13,7 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
+import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -129,7 +130,8 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
-  const { act, tell } = useAct();
+  const { act } = useAct();
+  const openLink = useOpenLink();
   const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const inbox = usePlanInbox({
     planId: inboxPlanId,
@@ -360,7 +362,7 @@ function PlanDocument({
                   control={inbox}
                   agents={agents}
                   onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
-                  openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+                  openLink={openLink}
                   code={{
                     repository: plan.repository,
                     readFile: (window) =>

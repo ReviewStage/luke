@@ -196,6 +196,8 @@ export const ACT_KIND = {
   PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
+  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
+  WEB_OPEN: "web.open",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -464,6 +466,25 @@ const githubAddress = EffectSchema.String.check(
 /** Whether `github.open` takes an address, so a link drawn as a press is one the act will open. */
 export const isGitHubAddress: (address: string) => boolean = EffectSchema.is(githubAddress);
 
+/** An absolute web address's scheme, which is all `web.open` lets through to the browser. */
+const WEB_ADDRESS = /^https?:\/\//iu;
+
+/**
+ * An address on the web, wherever it is: an absolute http or https address
+ * the URL parser reads. Note that the scheme is the whole of the check,
+ * because the browser is the one thing it opens in, and a `file:`,
+ * `javascript:`, or another app's scheme would hand the address to
+ * something else.
+ */
+const webAddress = EffectSchema.String.check(
+  EffectSchema.isMaxLength(2_048),
+  EffectSchema.isPattern(WEB_ADDRESS),
+  EffectSchema.makeFilter((address) => URL.canParse(address)),
+);
+
+/** Whether `web.open` takes an address, so a link drawn as a press is one the act will open. */
+export const isWebAddress: (address: string) => boolean = EffectSchema.is(webAddress);
+
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in AppSettingField]: {
@@ -620,6 +641,11 @@ export const ACT = {
     payload: record({ url: githubAddress }),
     result: answersNothing,
     refusal: "Could not open GitHub on this system.",
+  },
+  [ACT_KIND.WEB_OPEN]: {
+    payload: record({ url: webAddress }),
+    result: answersNothing,
+    refusal: "Could not open that link on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
