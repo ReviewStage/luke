@@ -7,7 +7,9 @@
    live provider state. Choose the test's size, its doubles, and its
    fixtures by root `AGENTS.md`'s "Testing" section; an appearance-only
    change gets visual evidence.
-3. Run `./scripts/check.sh` for portable-only work. For a macOS, Electron-window,
+3. Run `pnpm check:affected` for portable-only work, then push and let CI, which
+   runs every check, gate the PR; `./scripts/check.sh` is the full local run,
+   for a release, a broad refactor, or on request. For a macOS, Electron-window,
    native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`
    and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`
    and inspect the page in a browser. For a hosted-service change the Mac

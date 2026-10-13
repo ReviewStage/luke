@@ -8,7 +8,8 @@ talks a plan through with Luke, who writes it down as they go.
 | Command | What it does |
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
-| `./scripts/check.sh` | Portable repository, type, test, and build checks |
+| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
+| `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `./scripts/run.sh` | Launch against live sessions, replacing any running instance (`--fixture smoke`, `--keep-running`, `--no-trace`) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
@@ -62,14 +63,18 @@ reads no account's words and runs no model.
 ## Testing
 
 ```
-./scripts/check.sh                       # CI's checks, bar the Postgres migration
+pnpm check:affected                      # before pushing: the checks for what changed
+./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
 pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
-`check.sh` must exit 0. A Mac or UI change also needs `./scripts/verify.sh`
-evidence; CI builds nothing for the Mac.
+`pnpm check:affected` must exit 0 before a push; then push and let CI, which
+runs every check, gate the PR. `check.sh` is the full local run, for a
+release, a broad refactor, or on request, and must exit 0 when it is run. A
+Mac or UI change also needs `./scripts/verify.sh` evidence; CI builds nothing
+for the Mac.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
 testing guide, and the rules below agree with it. Its `bunx vitest` is
