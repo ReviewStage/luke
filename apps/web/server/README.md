@@ -909,8 +909,12 @@ authorization server, credentialed by a Slack app of the team's workspace
 that is internal (never publicly distributed, since the server serves
 Marketplace and internal apps alone). The app needs Connect's callback
 (`https://connect.vercel.com/callback`, or the `redirectUri` the create
-prints) among its Redirect URLs and the user token scopes below, and no
-`identity.*` scope. Write its App Credentials into `slack-mcp.json`, by
+prints) among its Redirect URLs, the user token scopes below and no
+`identity.*` scope, and its Model Context Protocol switch on (Agents & AI
+Apps, `https://api.slack.com/apps/<appId>/app-assistant`): without it the
+server answers every request 400, which eve reports as an SSE transport
+error once its fallback fails too, and a token issued before the switch
+went on keeps that 400, so a developer connects again. Write its App Credentials into `slack-mcp.json`, by
 hand rather than through a shell command, so the secret stays out of shell
 history:
 
