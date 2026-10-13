@@ -1,8 +1,7 @@
-import { Effect, Result } from "effect";
+import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
-import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
-import { AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
-import { turnServers } from "../server/hosted/agent-runtime/servers.js";
+import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
+import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
 import {
@@ -10,7 +9,6 @@ import {
   productionBrainHostSeams,
 } from "../server/hosted/brain-host/production.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
-import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 
 /**
@@ -32,63 +30,39 @@ export const seams: BrainHostSeams = Effect.runSync(
 export const host: BrainHost = brainHost(seams);
 
 /**
- * Relays one event of a subagent's session into its child conversation, for
- * the subagent's own hook, which runs here rather than at an edge of its own.
- * Each task the subagent receives wakes its title on a fiber of its own once
- * relayed, so its turn is not held for it; the title always names the first
- * task the subagent received, and only the first title that lands stands.
+ * The doors this project's authored files open onto the agent runtime
+ * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner.
+ * Each task a subagent receives wakes its title on a fiber of its own once
+ * relayed, so its turn is not held for it; the title always names the
+ * first task the subagent received, and only the first title that lands
+ * stands.
  */
+const edge = edgeKit(runWeb, { host, skills: host.skills, childTasked: host.titleChild });
+
+/** Relays one event of a subagent's session into its child conversation, for the subagent's own hook. */
 export function relayChildEvent(
   event: Parameters<BrainHost["relayChild"]>[0],
   session: Parameters<BrainHost["relayChild"]>[1],
   state: Parameters<BrainHost["relayChild"]>[2],
 ): Promise<void> {
-  return runWeb(
-    Effect.gen(function* () {
-      yield* host.relayChild(event, session, state);
-      // The fiber outlives this hook and ends on its own, as a coding agent's title's does.
-      if (event.type === "message.received") {
-        yield* Effect.forkDetach(host.titleChild(session));
-      }
-    }),
-  );
+  return edge.relayChildEvent(event, session, state);
 }
 
 /**
  * The skills the planning session is offered as it starts, for the
- * project's own \`skills/repository.ts\`: the ones the plan's repository
- * keeps, or none for a session the host does not admit or a role whose
- * profile offers none.
+ * project's own `skills/repository.ts`: the ones the plan's repository
+ * keeps, or none for a session the host does not admit.
  */
 export function sessionSkills(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<readonly AgentSkill[]> {
-  if (!ROLE_PROFILE[AGENT_ROLE.PLANNER].skills) return Promise.resolve([]);
-  return runWeb(
-    Effect.gen(function* () {
-      const admitted = yield* host.admitStarting(auth, sessionId);
-      if (Result.isFailure(admitted)) return [];
-      return yield* host.skills(admitted.success);
-    }),
-  );
+  return edge.sessionSkills(AGENT_ROLE.PLANNER, auth, sessionId);
 }
 
-/**
- * Every integration one of this project's agents is handed, for that
- * agent's own `connections/integrations.ts`: the standing and the token
- * reads run here, at the edge, under the check that agent's model runs
- * under too, and the role's policy decides the servers
- * (`server/hosted/agent-runtime/servers.ts`).
- */
+/** Every integration one of this project's agents is handed, for that agent's own `connections/integrations.ts`. */
 export function integrationConnectionsFor(
   role: typeof AGENT_ROLE.PLANNER | typeof AGENT_ROLE.PLANNER_WORKER,
 ) {
-  const profile = ROLE_PROFILE[role];
-  const admit = profile.delegated ? host.admitDelegated : host.admit;
-  return integrationConnections({
-    servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
-    token: (provider) => (auth, sessionId) =>
-      runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
-  });
+  return edge.integrationConnections(role);
 }
