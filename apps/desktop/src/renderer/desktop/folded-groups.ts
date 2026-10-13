@@ -3,7 +3,7 @@ import { useState } from "react";
 import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
 
 /**
- * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox's plan groups and how it lists its items kept the same way.
+ * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
  *
  * A fold is this window's alone, as the sidebar's width is, so it is kept in
  * the renderer's own storage rather than on the account: a group folded on
@@ -14,8 +14,9 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
  * its own, since it is no repository. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's plan groups are kept on the same terms, each by its plan's id,
- * and so are its two view choices, Waiting and how it groups; a fixture
- * run draws no inbox, so it has nothing staged to keep apart.
+ * and so are its two view choices, Waiting only and how it groups, and its
+ * list's width; a fixture run draws no inbox, so it has nothing staged to
+ * keep apart.
  */
 
 /** Where the folds are kept in the renderer's storage. */
@@ -25,6 +26,19 @@ const STORAGE_KEY = {
   INBOX_PLANS: "luke.inboxFoldedPlans",
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
+  INBOX_LIST_WIDTH: "luke.inboxListWidth",
+} as const;
+
+/**
+ * How wide the Inbox's list may be dragged, in CSS pixels, and where it
+ * starts: a mail app's message list, never so narrow that its head, with
+ * the folded sidebar's buttons standing over its start, cannot name the
+ * Inbox beside its own buttons.
+ */
+export const INBOX_LIST_WIDTH = {
+  MIN: 300,
+  MAX: 520,
+  DEFAULT: 320,
 } as const;
 
 /** The folded groups, each by its repository, null for the plans with none. */
@@ -35,6 +49,9 @@ const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The Inbox's folded plans, by id. */
 const storedPlans = Schema.fromJsonString(Schema.Array(Schema.String));
+
+/** How wide the Inbox's list stands. */
+const storedWidth = Schema.fromJsonString(Schema.Finite);
 
 /** How the Inbox groups its items. */
 const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
@@ -165,6 +182,34 @@ export function useInboxViewChoices(): InboxViewChoices {
     onGrouping: (next) => {
       setGrouping(next);
       writeKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, next);
+    },
+  };
+}
+
+/** A width held within the list's bounds, in whole pixels. */
+function clampListWidth(width: number): number {
+  return Math.min(INBOX_LIST_WIDTH.MAX, Math.max(INBOX_LIST_WIDTH.MIN, Math.round(width)));
+}
+
+/** How wide the Inbox's list stands, and the drag that asks for another width. */
+export interface InboxListWidth {
+  /** Always within {@link INBOX_LIST_WIDTH}. */
+  width: number;
+  /** Asks for a width; it is clamped to the bounds before it is kept. */
+  onResize: (width: number) => void;
+}
+
+/** The Inbox list's width, the default until first dragged, and kept as it is. */
+export function useInboxListWidth(): InboxListWidth {
+  const [width, setWidth] = useState(() =>
+    clampListWidth(readKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, INBOX_LIST_WIDTH.DEFAULT)),
+  );
+  return {
+    width,
+    onResize: (asked) => {
+      const next = clampListWidth(asked);
+      setWidth(next);
+      writeKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, next);
     },
   };
 }

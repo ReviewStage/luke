@@ -45,7 +45,9 @@ export interface DesktopGates {
 /**
  * Folds the sidebar away and back. It stands beside the traffic lights rather
  * than in the sidebar, so it is in the same place whichever way the sidebar
- * is, and the plan's toolbar leaves it room while the sidebar is folded. It
+ * is, and the plan's toolbar leaves it room while the sidebar is folded; in
+ * full screen, where macOS hides the lights, it takes their place at the
+ * window's edge (`window-full-screen.ts`). It
  * stands only where there is a sidebar to fold, so it offers the chord too.
  */
 function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Element {
@@ -125,7 +127,8 @@ function usePlaceCommands(
  * The sidebar's New plan, kept in reach while the sidebar is folded: an icon
  * beside the toggle, the way a chat app keeps its compose button beside its
  * own. It asks for exactly what the sidebar's button asks for, so the shell
- * leaves it out on the new-plan page, where it would ask for the page it is on.
+ * leaves it out on the new-plan page, where it would ask for the page it is
+ * on, unless the Inbox stands in that page's place.
  */
 function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
@@ -321,7 +324,7 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls">
         <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed && plans.page !== PLANS_PAGE.NEW ? (
+        {sidebar.collapsed && (plans.page !== PLANS_PAGE.NEW || inboxOpen) ? (
           <TitleBarNewPlan plans={plans} />
         ) : null}
       </div>

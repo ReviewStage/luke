@@ -1,7 +1,13 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanningView } from "@sidecar/hosted/planning-view";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
 import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
 import type { BuildCommit, UpdateSnapshot } from "./update";
@@ -180,12 +186,14 @@ export interface AppState {
 
 /**
  * What one window answers for and the document cannot: which surface it
- * draws. Decided
- * in the main process by which window asked, never by anything a renderer
- * could claim about itself.
+ * draws, and whether it stands in full screen, where macOS hides its traffic
+ * lights and the title bar's buttons take their place. Decided in the main
+ * process by which window asked, never by anything a renderer could claim
+ * about itself.
  */
 export interface AppWindowFacts {
   role: WindowRole;
+  fullScreen: boolean;
 }
 
 /**
@@ -211,7 +219,12 @@ export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
     return false;
   }
   const window = value.window;
-  return isRecord(window) && isWireString(window.role) && WINDOW_ROLES.has(window.role);
+  return (
+    isRecord(window) &&
+    isWireString(window.role) &&
+    WINDOW_ROLES.has(window.role) &&
+    isWireBoolean(window.fullScreen)
+  );
 }
 
 /** What this run may record, as the renderer is handed it. */

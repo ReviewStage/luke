@@ -47,6 +47,11 @@ interface PanelManagerOptions {
    * say so once a hidden window of Luke's own stands beside them.
    */
   onAllClosed?: () => void;
+  /**
+   * The window went into full screen or came out of it, which its title bar
+   * lays itself out by (`windowFactsFor`).
+   */
+  onFullScreenChanged?: () => void;
 }
 
 /**
@@ -99,6 +104,7 @@ export class PanelManager {
   readonly #rendererUrl: string;
   readonly #zoomFactor: () => number;
   readonly #onAllClosed: (() => void) | undefined;
+  readonly #onFullScreenChanged: (() => void) | undefined;
   readonly #placementPath: string | undefined;
   readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
@@ -118,6 +124,7 @@ export class PanelManager {
     this.#rendererUrl = options.rendererUrl;
     this.#zoomFactor = options.zoomFactor;
     this.#onAllClosed = options.onAllClosed;
+    this.#onFullScreenChanged = options.onFullScreenChanged;
     this.#placementPath = options.placementPath;
     this.#closing = options.closing;
   }
@@ -210,6 +217,14 @@ export class PanelManager {
   owns(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed() && window.webContents === webContents) return true;
+    }
+    return false;
+  }
+
+  /** Whether the panel window whose renderer is asking stands in full screen. */
+  fullScreen(webContents: WebContents): boolean {
+    for (const window of this.#windows.values()) {
+      if (!window.isDestroyed() && window.webContents === webContents) return window.isFullScreen();
     }
     return false;
   }
@@ -325,6 +340,8 @@ export class PanelManager {
       event.preventDefault();
       window.hide();
     });
+    window.on("enter-full-screen", () => this.#onFullScreenChanged?.());
+    window.on("leave-full-screen", () => this.#onFullScreenChanged?.());
     // Found by the window rather than the id it was born under, because a
     // rebind may have moved it.
     window.on("closed", () => {

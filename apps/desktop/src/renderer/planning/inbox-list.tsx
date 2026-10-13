@@ -1,10 +1,17 @@
 import { INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { ArrowDownNarrowWideIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowDownNarrowWideIcon, ListFilterIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import type { InboxPlanFolds, InboxViewChoices } from "../desktop/folded-groups";
+import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
+import {
+  INBOX_LIST_WIDTH,
+  type InboxPlanFolds,
+  type InboxViewChoices,
+  useInboxListWidth,
+} from "../desktop/folded-groups";
 import { type CountNoun, SidebarGroupHeader } from "../desktop/sidebar-group-header";
+import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
 import { AgentGlyph, AgentMark } from "./agent-tab";
@@ -29,23 +36,29 @@ import { cardTitle } from "./tool-call-model";
  * posted it, as the plan's summary names the agent, its title, in the
  * heavier weight while it waits on the developer, and how long ago it
  * last changed; a press chooses it, for the pane beside the list to show.
- * The head offers All and Waiting, and one button whose menu says how the
- * list groups its items, by plan or newest first, the choice checked; both
- * are kept across launches. The plan page's own Inbox lists one plan's
- * items, so its list has neither head nor groups.
+ * The head names the Inbox and, at its right, offers two buttons: Waiting
+ * only, pressed while the list holds only what waits, the way a mail app
+ * shows unread mail only, and one whose menu says how the list groups its
+ * items, by plan or newest first, the choice checked; both are kept across
+ * launches. The plan page's own Inbox lists one plan's items, so its list
+ * has neither head nor groups. Either list is resized from its right edge
+ * as the sidebar is, and keeps one width between them across launches.
  */
 
 /** What a folded plan's count is read as. */
 const ITEM_NOUN: CountNoun = { one: "item", many: "items" };
 
-/** The column's two lists, as its segments name them. */
-const INBOX_FILTER = {
-  ALL: "All",
-  WAITING: "Waiting",
-} as const;
-
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
+
+/** What the head's filter button is called. */
+const WAITING_ONLY = "Waiting only";
+
+/**
+ * What the list leaves the pane beside it, in CSS pixels: the list is
+ * dragged no wider than the Inbox less this.
+ */
+const PANE_RESERVE = 360;
 
 /** The mark of the agent that posted an item, as the plan's summary lists it, else the mark of an agent of no known harness. */
 function ItemGlyph({ plan, agentId }: { plan: PlanSummary; agentId: string }): React.JSX.Element {
@@ -149,7 +162,35 @@ function ViewOptions({
   );
 }
 
-/** The window's head: the Inbox's name, All and Waiting, and the view's menu. */
+/** The head's button that lists only what waits while it is pressed. */
+function WaitingOnly({
+  waitingOnly,
+  onWaitingOnly,
+}: {
+  waitingOnly: boolean;
+  onWaitingOnly: (waitingOnly: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <Tooltip label={WAITING_ONLY}>
+      <button
+        type="button"
+        className="icon-button inbox-waiting-only"
+        aria-label={WAITING_ONLY}
+        aria-pressed={waitingOnly}
+        onClick={() => onWaitingOnly(!waitingOnly)}
+      >
+        <ListFilterIcon className="icon-button-glyph" />
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * The window's head: the Inbox's name, and Waiting only and the view's menu
+ * at the list's top right. Its heading and its buttons glide as the
+ * sidebar folds, the name making way for the sidebar's toggle and the
+ * buttons keeping to the list's edge.
+ */
 function ListHead({
   shown,
   choices,
@@ -159,21 +200,11 @@ function ListHead({
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar inbox-plans-bar">
-      <h1 className="desktop-toolbar-title">Inbox</h1>
+      <div className="desktop-toolbar-heading">
+        <h1 className="desktop-toolbar-title">Inbox</h1>
+      </div>
       <div className="desktop-toolbar-actions">
-        <fieldset className="settings-segments" aria-label="Show">
-          {[INBOX_FILTER.ALL, INBOX_FILTER.WAITING].map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              className="settings-segment"
-              aria-pressed={(filter === INBOX_FILTER.WAITING) === choices.waitingOnly}
-              onClick={() => choices.onWaitingOnly(filter === INBOX_FILTER.WAITING)}
-            >
-              {filter}
-            </button>
-          ))}
-        </fieldset>
+        <WaitingOnly waitingOnly={choices.waitingOnly} onWaitingOnly={choices.onWaitingOnly} />
         <ViewOptions shown={shown} grouping={choices.grouping} onGrouping={choices.onGrouping} />
       </div>
     </header>
@@ -205,6 +236,15 @@ export function InboxList({
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const now = useMinute();
+  const { width, onResize } = useInboxListWidth();
+  const edge = useResizableEdge({
+    side: EDGE_SIDE.RIGHT,
+    width,
+    bounds: INBOX_LIST_WIDTH,
+    reserve: () => PANE_RESERVE,
+    label: "Resize inbox list",
+    onResize,
+  });
   const row = (listed: InboxListed) => (
     <ItemRow
       key={listed.item.id}
@@ -215,7 +255,7 @@ export function InboxList({
     />
   );
   return (
-    <nav className="inbox-plans" aria-label="Inbox items">
+    <nav className="inbox-plans" aria-label="Inbox items" style={{ width }}>
       {head === undefined ? null : <ListHead shown={head.shown} choices={head.choices} />}
       <div className="inbox-plans-scroll">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
@@ -242,6 +282,7 @@ export function InboxList({
         )}
         {note}
       </div>
+      <SidebarResizeEdge edge={edge} />
     </nav>
   );
 }
