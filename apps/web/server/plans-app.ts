@@ -317,8 +317,9 @@ const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
 /**
  * DELETE: every coding agent of the plan stopped for good first, as a Stop
  * and an archive stop one, so none works on for a plan that is gone; then
- * the plan. An eve that refuses a Stop, or an agent with a turn still
- * coming that no Stop can name yet, leaves the plan standing and refused.
+ * the plan. An eve that refuses a Stop, an agent with a turn still coming
+ * that no Stop can name yet, or an agent started while the others were
+ * stopped, leaves the plan standing and refused.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: PlansAppSeams,
@@ -333,7 +334,14 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
     discard: true,
   });
-  const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
+  const stopped = new Set(agents.map(({ id }) => id));
+  const deleted = yield* hostedStoreOrUnavailable(
+    deletePlan(userId, planId, stopped).pipe(
+      Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined)),
+    ),
+  );
+  // An agent started while the others were stopped is one this delete has not stopped yet.
+  if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
