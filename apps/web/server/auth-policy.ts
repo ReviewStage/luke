@@ -14,9 +14,15 @@
  * access, and the user's email addresses), so the request names no OAuth
  * scope, and Better Auth's own `read:user user:email` default is switched off
  * rather than sent for GitHub to ignore.
+ *
+ * Every sign-in also refreshes the user's name and picture from GitHub. Note
+ * that we do so because an account first made with Google, before sign-in was
+ * GitHub's alone, still holds a Google picture URL, which the desktop's image
+ * policy (GitHub's avatar host alone) drops; GitHub's own avatar replaces it.
  */
 export const GITHUB_SIGN_IN = {
   disableDefaultScope: true,
+  overrideUserInfoOnSignIn: true,
 } as const;
 
 /**
