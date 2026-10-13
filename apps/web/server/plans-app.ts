@@ -61,6 +61,7 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./hosted/plan-notes.js";
+import { readPlanSkills } from "./hosted/plan-skills.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -100,7 +101,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * stands now, or at the commit an inbox item's code reference pins, through
  * the App, under the rule `show_code` is held to (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
- * (`hosted/plan-tree.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * (`hosted/plan-tree.ts`); `/api/plans/{id}/skills` is the skills a
+ * developer may choose of that repository, read where and as the file is
+ * (`hosted/plan-skills.ts`). `/api/plans/{id}/revisions` is the plan's history
  * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
@@ -136,6 +139,8 @@ const PLANS_PATH = {
   FILE: "/api/plans/file",
   /** GET lists one folder of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   TREE: "/api/plans/tree",
+  /** GET reads the skills a developer may choose of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  SKILLS: "/api/plans/skills",
   /** GET reads a page of the plan's history, before the revision `before` names where it names one; the rewrite moves the path's id into the `id` query. */
   REVISIONS: "/api/plans/revisions",
   /** GET reads one revision's content and the one before it; the rewrite moves the path's id and number into the `id` and `seq` queries. */
@@ -538,6 +543,22 @@ const treeEndpoint = /* @__PURE__ */ Effect.fn("web/planTreeEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, tree.value);
 });
 
+/** GET reads the skills a developer may choose of the plan's repository, or why they are not read. */
+const skillsEndpoint = /* @__PURE__ */ Effect.fn("web/planSkillsEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const skills = yield* hostedStoreOrUnavailable(readPlanSkills(userId, planId));
+  if (Option.isNone(skills)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, skills.value);
+});
+
 /**
  * The revision number the query `name` holds, named once, or nothing where
  * it is absent. A number that is not a whole number from one names no
@@ -686,6 +707,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TREE, hostedRefusing(treeEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.SKILLS, hostedRefusing(skillsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISIONS, hostedRefusing(revisionsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),

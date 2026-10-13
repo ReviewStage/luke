@@ -29,6 +29,7 @@ import {
   type PlanFileAnswer,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
+  type PlanSkillsAnswer,
   type PlanSummary,
   type PlanTreeAnswer,
   type RepositoryPin,
@@ -49,6 +50,7 @@ import {
   type PlanWorkState,
   type PlanWorkTurn,
   planningFileAnswerSchema,
+  planningSkillsAnswerSchema,
   planningTreeAnswerSchema,
   planningViewSchema,
   type RepositoryCallFailure,
@@ -125,6 +127,8 @@ interface FakeService extends PlanningClient {
   files: Record<string, PlanFileAnswer>;
   /** What the service answers for each folder's listing, by path; a path with none answers nothing, as a service that did not answer. */
   folders: Record<string, PlanTreeAnswer>;
+  /** What the service answers for each plan's skills, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  skills: Record<string, PlanSkillsAnswer>;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -161,6 +165,7 @@ function fakeService(plans: Plan[]): FakeService {
     workReads: [],
     files: {},
     folders: {},
+    skills: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -221,6 +226,7 @@ function fakeService(plans: Plan[]): FakeService {
       }),
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_planId, folder) => Effect.sync(() => service.folders[folder.path]),
+    readSkills: (planId) => Effect.sync(() => service.skills[planId]),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -1922,6 +1928,37 @@ it.effect(
       );
       assert.deepEqual(yield* folder(".env.d"), { refusal: PLAN_FILE_REFUSAL.SECRET });
       assert.deepEqual(yield* folder("gone"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a repository's skills are answered to the window that asked as the service gave them, a refusal included, and a service that did not answer as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        plan(INVITES, "Teammate invitations", "# Draft", 10),
+        plan(BILLING, "Billing", "# Draft", 9),
+      ]);
+      const skills = {
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release of the relay." }],
+        },
+      };
+      service.skills[INVITES] = skills;
+      service.skills[BILLING] = { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY };
+      const { call } = yield* openPlan(service);
+      const read = (planId: string) => call(GATEWAY_METHOD.PLANNING_SKILLS, { planId });
+
+      assert.deepEqual(
+        Result.getOrUndefined(
+          readEither(planningSkillsAnswerSchema)(unparsedWire(yield* read(INVITES))),
+        ),
+        skills,
+      );
+      assert.deepEqual(yield* read(BILLING), { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY });
+      assert.deepEqual(yield* read(STARTED), { failure: PLAN_CALL_FAILURE.UNANSWERED });
     }),
 );
 

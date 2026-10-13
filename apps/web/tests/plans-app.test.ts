@@ -44,6 +44,7 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planSkillsAnswerSchema,
   planTreeAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
@@ -85,6 +86,7 @@ import {
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
+import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -107,6 +109,7 @@ const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
 const FILE = "/api/plans/file";
 const TREE = "/api/plans/tree";
+const SKILLS = "/api/plans/skills";
 const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
@@ -373,6 +376,24 @@ function repositoryOf(sent: SentToGitHub): Response | undefined {
   const tree = trees.get(decodeURIComponent(named[1] ?? ""));
   return tree === undefined ? Response.json({ message: "Not Found" }, { status: 404 }) : tree();
 }
+
+/** The fixture repository's skills: one a developer may choose, one the model alone loads, and one in the Claude Code root. */
+const relaySkills = skillsRepository({
+  fullName: "Acme/Relay",
+  branch: "main",
+  roots: {
+    ".agents/skills": { release: SKILL_ENTRY.FOLDER, drizzle: SKILL_ENTRY.FOLDER },
+    ".claude/skills": { review: SKILL_ENTRY.FOLDER },
+  },
+  files: {
+    ".agents/skills/release/SKILL.md":
+      "---\nname: release\ndescription: Use to cut a release of the relay.\n---\nTag it, then publish.",
+    ".agents/skills/drizzle/SKILL.md":
+      "---\ndescription: Use for Drizzle schemas.\nuser-invocable: false\n---\nWrite the schema first.",
+    ".claude/skills/review/SKILL.md":
+      "---\ndescription: Use to review a pull request.\n---\nRead the diff whole.",
+  },
+});
 
 const RELAY_REACHED = [{ id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] }];
 
@@ -2031,6 +2052,80 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(
           yield* ask(new Request(twice, { headers: { authorization: `Bearer ${owner}` } })),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's repository's skills read as GitHub holds them on the default branch, naming that branch, on the App's token, as a desktop sends the read: the ones the model alone loads left out and no body carried; another account's plan reads as none, and a plan with no repository as having none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, relaySkills);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const bare = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })));
+        const skillsOf = (userId: string, plan: string) =>
+          ask(request(`/api/plans/${plan}/skills`, userId), "plans/skills");
+
+        const answered = yield* skillsOf(owner, planId);
+        assert.deepEqual(readAnswer(planSkillsAnswerSchema, HOSTED_HTTP_STATUS.OK, answered), {
+          skills: {
+            repository: "Acme/Relay",
+            branch: "main",
+            skills: [
+              { name: "release", description: "Use to cut a release of the relay." },
+              { name: "review", description: "Use to review a pull request." },
+            ],
+          },
+        });
+        assert.equal(JSON.stringify(answered.body).includes("Tag it"), false, "no body is carried");
+        const asked = github.sent.find((sent) => TREES_PATH.test(new URL(sent.url).pathname));
+        assert.equal(
+          asked?.headers.get("authorization"),
+          `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+        );
+        assert.deepEqual(
+          readAnswer(planSkillsAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* skillsOf(owner, bare)),
+          { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY },
+        );
+        assert.deepEqual(
+          yield* skillsOf(other, planId),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a repository's skills read while GitHub fails answer as unavailable, and a read by any method but GET is refused",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, (sent) =>
+          TREES_PATH.test(new URL(sent.url).pathname)
+            ? Response.json({ message: "Server Error" }, { status: 502 })
+            : undefined,
+        );
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+
+        assert.deepEqual(
+          readAnswer(
+            planSkillsAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(SKILLS, owner, { id: planId })),
+          ),
+          { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE },
+        );
+        assert.deepEqual(
+          yield* ask(request(SKILLS, owner, { id: planId, method: "POST", body: {} })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),
   );

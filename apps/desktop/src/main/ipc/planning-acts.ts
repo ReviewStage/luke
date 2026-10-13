@@ -16,6 +16,8 @@ import type {
   PlanningRevisionsParams,
   PlanningSetRepositoryAnswer,
   PlanningSetRepositoryParams,
+  PlanningSkillsAnswer,
+  PlanningSkillsParams,
   PlanningStartAnswer,
   PlanningStartRequest,
   PlanningTreeAnswer,
@@ -54,6 +56,7 @@ export interface PlanningActsDependencies {
     planningWorkEarlier(): Effect.Effect<void>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
     planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
+    planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
@@ -91,6 +94,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
   | typeof ACT_KIND.PLANNING_FILE
   | typeof ACT_KIND.PLANNING_TREE
+  | typeof ACT_KIND.PLANNING_SKILLS
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
@@ -194,6 +198,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_TREE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_TREE, sender);
       return host.planningTree(params);
+    },
+    [ACT_KIND.PLANNING_SKILLS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_SKILLS, sender);
+      return host.planningSkills(params);
     },
     [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);

@@ -35,6 +35,7 @@ import {
   type PlanRenameRequest,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
+  type PlanSkillsAnswer,
   type PlanSummary,
   type PlanTreeAnswer,
   type PlanTreeRequest,
@@ -48,6 +49,7 @@ import {
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planSkillsAnswerSchema,
   planTreeAnswerSchema,
   planTreeRequestSchema,
   planUpdateRequestSchema,
@@ -72,6 +74,7 @@ import {
   planRestorePath,
   planRevisionPath,
   planRevisionsPath,
+  planSkillsPath,
   planTranscriptPath,
   planTreePath,
   planWorkPath,
@@ -351,6 +354,16 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planTreePath(planId, admitted) },
       planTreeAnswerSchema,
+    );
+  }
+
+  /** The skills a developer may choose of the plan's repository as GitHub holds it now, or why they are not read; nothing where the service did not answer. */
+  readSkills(
+    planId: string,
+  ): Effect.Effect<PlanSkillsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planSkillsPath(planId) },
+      planSkillsAnswerSchema,
     );
   }
 

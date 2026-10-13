@@ -42,6 +42,8 @@ export const GATEWAY_METHOD = {
   PLANNING_FILE: "planning.file",
   /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   PLANNING_TREE: "planning.tree",
+  /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  PLANNING_SKILLS: "planning.skills",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISIONS: "planning.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */

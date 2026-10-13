@@ -33,6 +33,10 @@
           "dest": "/api/default.js?route=plans/tree&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/skills",
+          "dest": "/api/default.js?route=plans/skills&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/edit",
           "dest": "/api/default.js?route=plans/edit&id=$1"
         },

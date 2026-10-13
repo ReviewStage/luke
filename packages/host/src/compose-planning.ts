@@ -27,6 +27,7 @@ import {
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
+  type PlanningSkillsAnswer,
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
   type PlanningView,
@@ -42,6 +43,7 @@ import {
   planningRevisionParamsSchema,
   planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
+  planningSkillsParamsSchema,
   planningStartRequestSchema,
   planningTreeParamsSchema,
 } from "@sidecar/hosted/planning-view";
@@ -122,6 +124,7 @@ export type PlanningClient = Pick<
   | "readWork"
   | "readFile"
   | "readTree"
+  | "readSkills"
   | "readRevisions"
   | "readRevision"
   | "restore"
@@ -687,6 +690,23 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           FetchHttpClient.layer,
         );
         return carried<PlanningTreeAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      }),
+    // The repository's skills are answered to the window that asked and held
+    // nowhere: a skill added on GitHub is chosen on the next read.
+    [GATEWAY_METHOD.PLANNING_SKILLS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningSkillsParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("reading a repository's skills names the plan");
+        }
+        if (!gate()) {
+          return carried<PlanningSkillsAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const answer = yield* Effect.provide(
+          client.readSkills(read.success.planId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningSkillsAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps

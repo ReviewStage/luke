@@ -78,6 +78,7 @@ import {
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
+  type PlanningSkillsAnswer,
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
   planningArchiveParamsSchema,
@@ -96,6 +97,8 @@ import {
   planningRevisionsParamsSchema,
   planningSetRepositoryAnswerSchema,
   planningSetRepositoryParamsSchema,
+  planningSkillsAnswerSchema,
+  planningSkillsParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
   planningTreeAnswerSchema,
@@ -196,6 +199,8 @@ export const ACT_KIND = {
   PLANNING_FILE: "planning.file",
   /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
   PLANNING_TREE: "planning.tree",
+  /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  PLANNING_SKILLS: "planning.skills",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -621,6 +626,11 @@ export const ACT = {
     payload: actSchema(planningTreeParamsSchema),
     result: wireResult<PlanningTreeAnswer>(isReadable(planningTreeAnswerSchema)),
     refusal: "Could not list that folder on this system.",
+  },
+  [ACT_KIND.PLANNING_SKILLS]: {
+    payload: actSchema(planningSkillsParamsSchema),
+    result: wireResult<PlanningSkillsAnswer>(isReadable(planningSkillsAnswerSchema)),
+    refusal: "Could not read this repository's skills on this system.",
   },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     payload: record({

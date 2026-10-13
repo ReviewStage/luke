@@ -4,6 +4,7 @@ import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from 
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_REPLY } from "@sidecar/hosted/inbox-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -150,6 +151,43 @@ it.effect(
         [
           [GATEWAY_METHOD.PLANNING_TREE, { planId, path: "", recursive: true }],
           [GATEWAY_METHOD.PLANNING_TREE, { planId, path: "src" }],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a repository's skills are asked of the host by the plan alone, and an answer the window does not read is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+      const skills = {
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release of the relay." }],
+        },
+      };
+      const answers = [carried(skills), carried({ skills: "none" })];
+      const requests: RecordedCall[] = [];
+      const operator = operatorOver({
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            return { ok: true, result: answers.shift() ?? carried({}) };
+          }),
+        on: () => () => undefined,
+      });
+
+      assert.deepEqual(yield* operator.planningSkills({ planId }), skills);
+      assert.deepEqual(yield* operator.planningSkills({ planId }), {
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
+      });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLANNING_SKILLS, { planId }],
+          [GATEWAY_METHOD.PLANNING_SKILLS, { planId }],
         ],
       );
     }),
