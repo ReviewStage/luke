@@ -40,7 +40,7 @@ import { agentPublished } from "./coder-host/published.js";
 import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 import type { HostedRefusal } from "./http-effect.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
@@ -260,8 +260,10 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.WRITE_FILE, { verb: "Wrote", key: "filePath" }],
   [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
   [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
-  [CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
+  [CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
+  [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
+  [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
 ]);
 
 /** A patch header naming a file, as `apply_patch` spells one. */

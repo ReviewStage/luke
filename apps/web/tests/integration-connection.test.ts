@@ -131,6 +131,7 @@ const codingHost = Effect.gen(function* () {
     deploymentSecret: () => undefined,
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     titleModel: () => undefined,
+    research: () => ({ openAi: undefined, spend: Effect.void }),
     scriptedModel: () => false,
     now: () => NOW,
   });

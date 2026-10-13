@@ -335,3 +335,30 @@ test("a call its wire already read is drawn as the wire said it: its kind, subje
     text: JSON.stringify({ status: "queued" }, null, 2),
   });
 });
+
+test("a coding agent's hosted public reads draw as the web reads they are: a search by its query, a page by its name and its text", () => {
+  const search = toolCallView({
+    tool: "search_web",
+    input: { query: "invite link expiry" },
+    output: { status: "found", findings: [] },
+  });
+  assert.equal(search.kind, CALL_KIND.WEB_SEARCH);
+  assert.equal(search.subject, "invite link expiry");
+
+  const page = toolCallView({
+    tool: "read_web_page",
+    input: { url: "https://docs.example.com/invites/" },
+    output: {
+      status: "read",
+      url: "https://docs.example.com/invites/",
+      text: "Invites expire.",
+      truncated: true,
+    },
+  });
+  assert.equal(page.kind, CALL_KIND.WEB_PAGE);
+  assert.equal(page.subject, "docs.example.com/invites");
+  assert.deepEqual(page.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Invites expire.\n(output truncated)",
+  });
+});

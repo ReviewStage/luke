@@ -3,6 +3,7 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
@@ -22,10 +23,7 @@ import { CODER_TOOL } from "./tool-set.js";
  * message, the bytes of its JSON over four: the instructions the session
  * runs under, the definitions of the tools the coder project authors
  * (`coder/tools/`), built from the same functions and words those files
- * are, and the plan or task the agent was handed as its first message. The
- * provider-run web tools are resolved by eve per provider as the step runs
- * and are none of the service's text, so they are left in the remainder
- * with whatever framing eve and the provider add. The tools are the same
+ * are, and the plan or task the agent was handed as its first message. The tools are the same
  * for every agent, so they are estimated once, as the module loads, which
  * is in eve's service alone: this module reaches eve's tools, which no
  * route may load.
@@ -33,9 +31,6 @@ import { CODER_TOOL } from "./tool-set.js";
 
 /** The bytes a token stands for in eve's own estimate. */
 const BYTES_PER_TOKEN = 4;
-
-/** The provider-run tools, which eve resolves as the step runs and the service writes no words of. */
-type ProviderRunTool = typeof CODER_TOOL.WEB_FETCH | typeof CODER_TOOL.WEB_SEARCH;
 
 /** A tool as the model is shown it: its words and its input's JSON Schema. */
 interface ShownTool {
@@ -59,6 +54,14 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.GLOB]: shown(globIn(CODER.CHECKOUT_PATH)),
   [CODER_TOOL.GREP]: shown(grepIn(CODER.CHECKOUT_PATH)),
   [CODER_TOOL.APPLY_PATCH]: shown(applyPatchIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.SEARCH_WEB]: {
+    description: SEARCH_WEB_TOOL.description,
+    inputSchema: emitJsonSchema(SEARCH_WEB_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_WEB_PAGE]: {
+    description: READ_WEB_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(READ_WEB_PAGE_TOOL.inputSchema),
+  },
   [CODER_TOOL.DELEGATE]: {
     description: DELEGATE_TOOL.description,
     inputSchema: emitJsonSchema(DELEGATE_TOOL.inputSchema),
@@ -84,10 +87,7 @@ const AUTHORED_TOOLS = {
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
-} as const satisfies Record<
-  Exclude<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ProviderRunTool>,
-  ShownTool
->;
+} as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */
 type StepUsage = Extract<MessageStreamEvent, { type: "step.completed" }>["data"]["usage"];

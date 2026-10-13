@@ -29,6 +29,7 @@ import { SHELL_INPUT } from "../server/hosted/coder-host/shell";
 import {
   CODER_TOOL,
   CODER_TOOL_SET,
+  RETIRED_CODER_TOOL,
   SANDBOX_TOOLS,
   WORKER_TOOL_NAMES,
 } from "../server/hosted/coder-host/tool-set";
@@ -76,13 +77,15 @@ test("the agent runs none of eve's default tools, caps no input tokens, and has 
   ]);
 });
 
-test("the tools authored for the agent and every integration's calls are exactly the writer's tool set, with every sandbox tool among them", () => {
+test("the tools authored for the agent, the retired web reads an old transcript names, and every integration's calls are exactly the writer's tool set, with every sandbox tool among them", () => {
   const authored = authoredTools(TOOLS_DIRECTORY);
   const authoredSet = new Set(authored);
   for (const name of SANDBOX_TOOLS) assert.ok(authoredSet.has(name), name);
+  for (const name of Object.values(RETIRED_CODER_TOOL)) assert.ok(!authoredSet.has(name), name);
   assert.deepEqual(
     [
       ...authored,
+      ...Object.values(RETIRED_CODER_TOOL),
       ...Object.values(CONNECTION_TOOL),
       ...Object.values(INTEGRATION).map((integration) => integration.REMOTE_TOOL),
     ].sort(),

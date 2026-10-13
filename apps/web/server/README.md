@@ -2046,9 +2046,11 @@ starts an agent and a typed line that steers one, each minted as the
 developer's own principal with the deployment named as its carrier. The agent (`coder/agent.ts`) runs none of eve's default
 tools and authors its own under `coder/tools/`, which is exactly the set the
 store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
-`write_file`, `glob`, `web_fetch`, and `web_search`, the code
-extension's `apply_patch` and `grep` from `eve/extensions/code/tools`, and
-two of Luke's own: `delegate`, the hand-off to a worker (below), and
+`write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
+`eve/extensions/code/tools`, the planning model's own `search_web` and
+`read_web_page` (`public-research.ts`: the search screened, cited, and
+budgeted per turn on Luke's key and counted on the account's meter, the page
+read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`coder-host/plan-edit.ts`), which takes the
 notetaker's own notes (`@sidecar/hosted/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
@@ -2068,8 +2070,8 @@ The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
 the planning worker's shape (`eve/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
-(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_fetch`,
-`web_search`), told to change nothing, and uncapped in tokens, as the
+(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
+`read_web_page`), told to change nothing, and uncapped in tokens, as the
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the

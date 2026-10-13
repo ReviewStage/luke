@@ -82,6 +82,12 @@ import {
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
+import {
+  READ_WEB_PAGE_REFUSAL,
+  READ_WEB_PAGE_STATUS,
+  SEARCH_WEB_REFUSAL,
+  SEARCH_WEB_STATUS,
+} from "../server/hosted/public-research";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
@@ -155,6 +161,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       deploymentSecret: () => undefined,
       keys: () => Effect.succeed(KEYS),
       titleModel: () => titleModel,
+      research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
       now: () => NOW,
     };
@@ -514,6 +521,38 @@ const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
   });
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a coding agent's public reads are the planning model's own: a search on a deployment holding no key is refused in the search's words, and a page on a private address is never fetched",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const query = "invite link expiry";
+
+        const searched = yield* host.research(
+          admitted,
+          CODER_TOOL.SEARCH_WEB,
+          "turn-1",
+          unparsedWire({ query }),
+        );
+        assert.deepEqual(searched, {
+          status: SEARCH_WEB_STATUS.NOT_SEARCHED,
+          reason: SEARCH_WEB_REFUSAL.UNAVAILABLE,
+          query,
+        });
+
+        const read = yield* host.research(
+          admitted,
+          CODER_TOOL.READ_WEB_PAGE,
+          "turn-1",
+          unparsedWire({ url: "https://127.0.0.1/admin" }),
+        );
+        assert.equal(read.status, READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.ok(read.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(read.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+      }),
+  );
+
   it.effect(
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
     () =>
@@ -916,7 +955,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     assert.equal(opensSandbox(requested(CODER_TOOL.READ_FILE)), true);
     assert.equal(opensSandbox(received([{ type: "text", text: "Match this mock" }])), false);
     assert.equal(opensSandbox(received(undefined)), false);
-    assert.equal(opensSandbox(requested(CODER_TOOL.WEB_SEARCH)), false);
+    assert.equal(opensSandbox(requested(CODER_TOOL.SEARCH_WEB)), false);
   });
 
   it.effect("a title call that fails leaves the agent untitled", () =>
@@ -1791,6 +1830,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           deploymentSecret: () => undefined,
           keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
           titleModel: () => undefined,
+          research: () => ({ openAi: undefined, spend: Effect.void }),
           scriptedModel: () => true,
           now: () => NOW,
         });
