@@ -1,4 +1,5 @@
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
+import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
 import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
 import {
   createPlan,
@@ -8,6 +9,7 @@ import {
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
+import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
@@ -37,6 +39,8 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
+import { type EveReach, stoppedForGood } from "./hosted/coder-host/stop.js";
+import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -75,7 +79,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * the edit no longer lands, with nothing saved; and a restore puts back an
  * earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
- * nothing: the list stands newest started first whatever is opened. Each
+ * nothing: the list stands newest started first whatever is opened. Its
+ * `DELETE` stops every coding agent of the plan first, through the one Stop
+ * (`hosted/coder-host/stop.ts`), and only then deletes the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
  * they published, in brief, where it has any (`hosted/plan-agents.ts`). A pin
  * and an archive are changes like a rename, and the list leaves the archived
@@ -182,7 +188,7 @@ const MAXIMUM_EDIT_BODY_BYTES = PLAN_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
-export interface PlansAppSeams {
+export interface PlansAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
 }
 
@@ -308,9 +314,34 @@ const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
   HTTP_METHOD.DELETE,
 ]);
 
+/**
+ * DELETE: every coding agent of the plan stopped for good first, as a Stop
+ * and an archive stop one, so none works on for a plan that is gone; then
+ * the plan. An eve that refuses a Stop, or an agent with a turn still
+ * coming that no Stop can name yet, leaves the plan standing and refused.
+ */
+const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlansAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  planId: string,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const agents = yield* hostedStoreOrUnavailable(
+    listCodingAgents(userId, planId, { includeArchived: true }),
+  );
+  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
+    discard: true,
+  });
+  const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
+  if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+});
+
 /** GET opens one plan with its saved document; PATCH changes it; DELETE deletes it. */
 const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
   seams: PlansAppSeams,
+  writer: Effect.Effect<StoreWriter>,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (!ONE_PLAN_METHODS.has(incoming.method)) {
@@ -325,9 +356,7 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: opened.value.plan });
   }
   if (incoming.method === HTTP_METHOD.PATCH) return yield* updateEndpoint(userId, planId);
-  const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
-  if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+  return yield* deleteEndpoint(seams, writer, request, userId, planId);
 });
 
 /** GET reads the plan's board; PUT writes the Mac's scene whole. */
@@ -640,9 +669,10 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
 
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
+  const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COLLECTION, hostedRefusing(collectionEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams, writer))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),

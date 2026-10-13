@@ -120,6 +120,7 @@ import {
   readInboxItem,
 } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
+import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
   githubReaching,
@@ -144,6 +145,8 @@ const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_STOP = "/api/agents/stop";
+/** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
+const PLAN = "/api/plans/plan";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
 const AGENT_SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 
@@ -320,20 +323,30 @@ const standing = (
       github.layer,
       modelCatalogOf(CATALOG),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      codingAgentsApp({
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
-          ),
-        eveOrigin: () => ORIGIN,
-        eve: (authorization) => eve.eve(Redacted.value(authorization)),
-      }).pipe(HttpRouter.provideRequest(services)),
+    const seams = {
+      resolveUserId: (incoming: Request) =>
+        Effect.succeed(
+          Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+        ),
+      eveOrigin: () => ORIGIN,
+      eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+    };
+    const agents = HttpRouter.toWebHandler(
+      codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    yield* Effect.addFinalizer(() => Effect.promise(() => dispose()));
-    /** The response as the function answers it, for the one route that answers bytes. */
-    const fetch = (request: Request) => Effect.promise(() => handler(request));
+    const plans = HttpRouter.toWebHandler(
+      plansApp(seams).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => Promise.all([agents.dispose(), plans.dispose()])),
+    );
+    /** The response as the function answers it, for the one route that answers bytes; a plan's own path lands on the plans group. */
+    const fetch = (request: Request) =>
+      Effect.promise(() =>
+        new URL(request.url).pathname === PLAN ? plans.handler(request) : agents.handler(request),
+      );
     const ask = (request: Request) =>
       Effect.gen(function* () {
         const response = yield* fetch(request);
@@ -1241,6 +1254,96 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
         );
         assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.CANCELLED);
+      }),
+  );
+
+  it.effect(
+    "a plan's delete stops its agent's turn under way at eve by its own id before the plan goes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        const sessionId = eve.opened[0]?.sessionId ?? "";
+        yield* claimRuntimeSession(target, sessionId, new Date());
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+
+        assert.deepEqual(
+          yield* ask(request(PLAN, other, { method: "DELETE", id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(eve.cancelled, []);
+        assert.deepEqual(yield* ask(request(PLAN, owner, { method: "DELETE", id: plan.id })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan whose agent eve will not stop, or whose agent is still starting, is not deleted; past the grace the starting one reads failed and the plan goes",
+    () =>
+      Effect.gen(function* () {
+        const refusing = fakeEve({ cancels: false });
+        const refused = yield* openPlan({ eve: refusing });
+        const running = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* refused.ask(
+            startAs(refused.owner, refused.plan.id, { idempotencyKey: randomUUID() }),
+          ),
+        ).agent;
+        const stored = yield* readCodingAgent(refused.owner, running.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: refused.owner, conversationId: stored.value.conversationId };
+        yield* claimRuntimeSession(target, refusing.opened[0]?.sessionId ?? "", new Date());
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+        const statuses = (opened: typeof refused) =>
+          Effect.map(
+            opened.ask(request(PLAN_AGENTS, opened.owner, { id: opened.plan.id })),
+            (answer) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).agents.map(
+                ({ status }) => status,
+              ),
+          );
+        const remove = (opened: typeof refused) =>
+          opened.ask(request(PLAN, opened.owner, { method: "DELETE", id: opened.plan.id }));
+
+        assert.deepEqual(
+          yield* remove(refused),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.deepEqual(yield* statuses(refused), [CODING_AGENT_STATUS.RUNNING]);
+
+        // Still starting, its session may yet open a turn no Stop could name, so the plan stays.
+        const starting = yield* openPlan();
+        yield* starting.ask(
+          startAs(starting.owner, starting.plan.id, { idempotencyKey: randomUUID() }),
+        );
+        assert.deepEqual(
+          yield* remove(starting),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.deepEqual(yield* statuses(starting), [CODING_AGENT_STATUS.STARTING]);
+
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.seconds(1)));
+        assert.deepEqual(yield* remove(starting), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
       }),
   );
 

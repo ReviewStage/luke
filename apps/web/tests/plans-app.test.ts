@@ -172,6 +172,8 @@ const answer = (
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
+        // A plan here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
+        eveOrigin: () => undefined,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
