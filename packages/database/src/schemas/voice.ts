@@ -17,7 +17,7 @@ import { user } from "./auth.js";
  * session's own clock) and nowhere else. No audio is ever stored.
  *
  * These tables stand beside the storage rework's conversation tables in
- * `storage-schema.ts`, keyed by the user and cascading with the account, and
+ * `storage.ts`, keyed by the user and cascading with the account, and
  * a session's segments cascade with the session. The vocabularies the two
  * text columns are held to live in `voice-vocabulary.ts`, which the writer
  * and the session record read as well, so a column's union and a caller's

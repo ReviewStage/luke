@@ -115,7 +115,7 @@ export interface CodingAgentStarted {
   readonly created: boolean;
 }
 
-/** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`store/message-reads.ts`), re-exported here beside the agents it is read for. */
+/** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`message-reads.ts`), re-exported here beside the agents it is read for. */
 export type CodingAgentLatestTurn = LatestTurn;
 export { awaitingLinesOf, latestTurnsOf, type TurnUsageRow, turnUsagesOf };
 

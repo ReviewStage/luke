@@ -5,7 +5,7 @@ import { user } from "./auth.js";
 
 /**
  * One of an account's own provider API keys, at most one per provider,
- * sealed by `hosted/provider-key-seal.ts`: no column holds the key or the
+ * sealed by `models/provider-key-seal.ts`: no column holds the key or the
  * data key in the clear. The hint is the one part of the key kept readable,
  * its prefix and last four characters, so the account can tell its keys
  * apart. Saving a key for a provider that holds one replaces the row whole,

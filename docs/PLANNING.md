@@ -506,7 +506,7 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 
 - **The record.** The service keeps each call's words as timed fragments
   (`voice_transcript_segments`) and answers them at
-  `GET /api/plans/{id}/transcript` (`hosted/transcript-store.ts`), grouped
+  `GET /api/plans/{id}/transcript` (`packages/database/src/models/transcript-store.ts`), grouped
   into turns by the same ledger the captions use, so a call that ended reads
   back in the lines its captions drew. Each turn is answered as an AI SDK
   `UIMessage` (`packages/hosted/src/transcript-wire.ts`): its place on the
@@ -652,7 +652,7 @@ The service lays each save over what Luke wrote meanwhile
 ### History
 
 Every save that changes the plan is kept as a revision
-(`apps/web/server/hosted/plan-revisions.ts`, table `plan_revision`): the
+(`packages/database/src/models/plan-revisions.ts`, table `plan_revision`): the
 plan's text as it stood after it, who wrote it (the
 developer, editing the text or restoring the earlier revision `restored_from`
 names; the notetaker, on the call it listens to; or a coding agent, by its
@@ -767,7 +767,7 @@ coding-agent chain beside the account's default model. A template past
 page goes that fail to save are said in a toast with a Retry. Reset to
 default asks first, waits for any save already out, and writes null, and
 stands only while the account holds its own. The template is written in
-the plan's own document editor (`plan-template-editor.tsx`), under
+the plan's own document editor (`settings/plan-template-page.tsx`), under
 `ph-no-capture`, with no title and no merged answer to take; Esc leaves it
 as focus leaving does. It is built once on the text it opens with and again
 only for words it did not write, as a reset's, and should its bundle fail to

@@ -42,7 +42,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
  * is posted by a path and kept by an attachment: the caller reads the
  * file's bytes from the agent's sandbox and hands them in beside the post,
  * and the post writes each as a row of the item's
- * (`db/inbox-attachment-schema.ts`) under an id minted here, which the
+ * (`@sidecar/database/schemas/inbox-attachment`) under an id minted here, which the
  * block kept on the item names in the path's place; the item's attachments
  * its new blocks no longer name go with the same write, so a picture the
  * agent dropped from an item is dropped from the store. A post counts the agent's open items against the bound

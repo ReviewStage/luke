@@ -10,7 +10,7 @@ import { plan } from "./plan.js";
 import { conversations } from "./storage.js";
 
 /**
- * coding-agent-schema.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
+ * coding-agent.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
  *
  * A coding agent is a `coding_agent` conversation: its transcript is that
  * conversation's `messages` rows and its status its latest `turns` row, so

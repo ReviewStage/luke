@@ -20,7 +20,7 @@ import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
 /**
- * inbox-schema.ts -- one item of the developer's inbox: something a coding agent needs of the developer, posted under a key of the agent's own.
+ * inbox.ts -- one item of the developer's inbox: something a coding agent needs of the developer, posted under a key of the agent's own.
  *
  * The agent names the item by its key, unique per agent, so posting under
  * the same key again is a write of this row rather than a second one: the

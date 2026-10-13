@@ -57,7 +57,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * `GET /api/account/provider-keys` answers the account's keys as hints and
  * statuses; `PUT` saves one, first asking the provider whether it accepts
  * it (`hosted/provider-key-check.ts`), and keeps it sealed
- * (`hosted/provider-key-seal.ts`) only where it does; `DELETE` with the
+ * (`@sidecar/database/models/provider-key-seal`) only where it does; `DELETE` with the
  * provider in the query removes one. Every answer is the keys as they then
  * stand and none carries a key: the one body that holds a key is the
  * `PUT`'s own, it is sealed the moment it is read, and neither it nor what

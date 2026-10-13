@@ -41,7 +41,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * in this request's memory and goes when it ends.
  *
  * What is kept is the meter: one call and the clip's seconds on the
- * account's day (`hosted/quota.ts`), the seconds OpenAI billed where it says
+ * account's day (`@sidecar/database/models/quota`), the seconds OpenAI billed where it says
  * and the desktop's own timing otherwise, which the bound above holds to two
  * minutes. A meter the database refused is logged and the text still
  * answered, since the transcription was had and paid for. A deployment

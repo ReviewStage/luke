@@ -8,7 +8,7 @@ import { inboxItem } from "./inbox.js";
 import { plan } from "./plan.js";
 
 /**
- * inbox-attachment-schema.ts -- one picture of an inbox item's: the bytes of an image block, kept beside the item it belongs to.
+ * inbox-attachment.ts -- one picture of an inbox item's: the bytes of an image block, kept beside the item it belongs to.
  *
  * An agent posts an image by the path of a file in its sandbox, and the
  * service reads the file and keeps it here, so the item's block names a
