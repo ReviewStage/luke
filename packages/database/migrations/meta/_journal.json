@@ -694,6 +694,13 @@
       "when": 1791867599361,
       "tag": "20261013045959_linear_connection_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1791870478277,
+      "tag": "20261013054758_plan_agent_edits_headings",
+      "breakpoints": true
     }
   ]
 }
