@@ -323,9 +323,10 @@ export const PLAN_SECTION_BOUNDS = {
 } as const;
 
 /**
- * The save that last changed one section of a plan that is one document, as
- * the section's "Edited by" line reads it: the section is known by its
- * heading's words, so a renamed heading is a section no save has changed.
+ * The revision that last changed one section of a plan that is one document,
+ * as the section's "Edited by" line reads it: the section is known by its
+ * heading's words, and a heading renamed with nothing beneath it changed
+ * keeps the revision that last changed them.
  */
 export const planSectionEditSchema = EffectSchema.Struct({
   section: EffectSchema.String.check(

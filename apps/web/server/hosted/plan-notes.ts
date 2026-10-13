@@ -2,14 +2,13 @@ import {
   type PlanWriter,
   readRevisionContent,
   recordRevision,
-  writerOf,
 } from "@sidecar/database/models/plan-revisions";
 import {
   readPlanForUpdate,
   type StoredPlan,
   savePlanText,
 } from "@sidecar/database/models/plan-store";
-import { changedSections, withSectionWriters } from "@sidecar/hosted/plan-document";
+import { changedSections } from "@sidecar/hosted/plan-document";
 import { applyDocumentEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import {
   applyNotesToText,
@@ -44,9 +43,9 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * (`plan-revisions.ts`), in the same transaction, so the plan and its history
  * never disagree. A coding agent's save that took any note is also written
  * into the plan's journal with the notes as taken, which is what the planning
- * model is told of what each agent changed. Each section a save changed
- * names its writer as the section's last, which tells the planning model and
- * the notetaker the sections the developer wrote. The developer's edit is the
+ * model is told of what each agent changed. Who last changed each section,
+ * which tells the planning model and the notetaker the sections the developer
+ * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
  * now where Luke wrote meanwhile, or answered as a conflict with nothing
  * saved (`@sidecar/hosted/plan-edit`). Their restore of one of the plan's
@@ -167,10 +166,10 @@ interface PlanConflict {
 /**
  * The plan read under its row's lock, the change taken into its text, and
  * saved, all in one transaction. A text past the plan's bound is refused. A
- * change that moved the text is kept as a revision under its writer, and
- * each section it moved names the writer as its last; one that moved nothing
- * saves the text as it stood. A change that refuses the plan as it found it
- * answers its refusal, and nothing is saved.
+ * change that moved the text is kept as a revision under its writer, which
+ * names the writer as the last of each section it moved; one that moved
+ * nothing saves the text as it stood. A change that refuses the plan as it
+ * found it answers its refusal, and nothing is saved.
  */
 function savedUnderLock<T extends TextTaken, F>(
   binding: PlanDocumentBinding,
@@ -204,19 +203,12 @@ function savedUnderLock<T extends TextTaken, F>(
           : Option.none(),
       });
     }
-    const saved = yield* savePlanText(binding.userId, binding.planId, after, {
-      ...(taken.agentEdits === undefined ? undefined : { agentEdits: taken.agentEdits }),
-      ...(moved
-        ? {
-            sectionWriters: withSectionWriters(
-              stored.value.sectionWriters,
-              { before, after },
-              writerOf(writer),
-              now,
-            ),
-          }
-        : undefined),
-    });
+    const saved = yield* savePlanText(
+      binding.userId,
+      binding.planId,
+      after,
+      taken.agentEdits === undefined ? {} : { agentEdits: taken.agentEdits },
+    );
     if (Option.isNone(saved)) return NO_PLAN_RESULT;
     return { status: PLAN_SAVE_STATUS.SAVED, plan: saved.value, taken, moved };
   });

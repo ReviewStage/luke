@@ -246,10 +246,12 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   plan's version history.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
-  on the section, from the writer the plan keeps for each section by its
-  heading (`sectionEdits` on the wire, `plan.section_writers` on the
-  service); a section no save has changed since the service began keeping
-  writers says nothing, and neither does a renamed heading. A press on a
+  on the section, read off the plan's revisions (`sectionEdits` on the
+  wire): the newest of the last fifty revisions that changed the section,
+  each held against the one before it; a section none of them changed says
+  nothing. A heading renamed with nothing beneath it changed keeps the line
+  it had, and a rename that changes the words beneath is that revision's
+  change. A press on a
   section's line, or Return on it from the keyboard, opens the version
   history on the revision that save made, and opens no editor.
 - The sections someone other than the developer changed since they last
@@ -778,8 +780,10 @@ load, the template is a plain Markdown textarea instead.
 A section is a `#` or `##` heading and what stands under it up to the next,
 a deeper heading inside it and a heading in a code fence no heading at all,
 known by its heading's words (`planSections`). Who last changed each section
-is kept by heading (`plan.section_writers`, `sectionEdits` on the wire), so a
-renamed heading is a section no save has changed. Luke's notes land under the
+is read off the plan's revisions by heading (`sectionWritersOf`,
+`sectionEdits` on the wire), each against the one before it, so a heading
+renamed with nothing beneath it changed is the same section under its new
+words. Luke's notes land under the
 developer's headings (`applyNotesToText` in `plan-template.ts`): an addition
 at the end of its section, or as a new section at the end of the text where
 the text has none; a correction or a strike names a phrase standing once in

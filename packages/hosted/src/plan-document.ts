@@ -1,5 +1,4 @@
-import { Schema as EffectSchema } from "effect";
-import { PLAN_ACTOR, PLAN_SECTION_BOUNDS } from "./plan-wire.js";
+import { PLAN_SECTION_BOUNDS, type PlanActor } from "./plan-wire.js";
 
 /**
  * plan-document.ts -- a plan kept as one free Markdown document: its sections, and who last changed each.
@@ -11,33 +10,30 @@ import { PLAN_ACTOR, PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * next one, a deeper heading standing inside its section, and a heading
  * inside a code fence being no heading at all; what stands before the first
  * heading is a section of its own with no heading. A section is known by its
- * heading's words, so the window can say who wrote each section, and a
- * renamed heading is a section no save has
- * changed yet.
+ * heading's words, so the window can say who wrote each section. Who last
+ * changed each is read off the plan's revisions, each against the one before
+ * it, and a heading renamed with nothing beneath it changed is the same
+ * section under its new words, still naming the save that last changed them.
  */
 
 /**
  * Who last changed one section of a plan that is one document, and when: the
- * section's heading, the writer (`PLAN_ACTOR`), the coding
- * agent's id where an agent made the save, whether the notetaker made it on
- * one of the plan's calls, and the instant.
+ * section's heading, the writer (`PLAN_ACTOR`), the coding agent's id where
+ * an agent wrote the revision, whether the notetaker wrote it on one of the
+ * plan's calls, and the revision's latest save.
  */
-export const planSectionWriterSchema = EffectSchema.Struct({
-  section: EffectSchema.String.check(
-    EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
-  ),
-  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
-  /** The coding agent's id, where a coding agent made the save. */
-  agentId: EffectSchema.optionalKey(EffectSchema.String),
-  /** Present, and true, where the notetaker made the save on one of the plan's calls. */
-  duringCall: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Epoch milliseconds of the save. */
-  at: EffectSchema.Number,
-});
+export interface PlanSectionWriter {
+  readonly section: string;
+  readonly actor: PlanActor;
+  /** The coding agent's id, where a coding agent wrote the revision. */
+  readonly agentId?: string;
+  /** Present, and true, where the notetaker wrote the revision on one of the plan's calls. */
+  readonly duringCall?: boolean;
+  /** Epoch milliseconds of the revision's latest save. */
+  readonly at: number;
+}
 
-export type PlanSectionWriter = typeof planSectionWriterSchema.Type;
-
-/** Who made a save, as each section it changed keeps them. */
+/** Who wrote a revision, as each section it changed names them. */
 export type PlanSectionWriterWho = Omit<PlanSectionWriter, "section" | "at">;
 
 /**
@@ -175,25 +171,108 @@ export function changedSections(before: string, after: string): readonly string[
   return [...changed, ...[...was.keys()].filter((heading) => !now.has(heading))];
 }
 
+/** A section's words beneath its heading line, which renaming the heading alone leaves as they stood. */
+function wordsBeneath(section: PlanSection): string {
+  const end = section.text.indexOf("\n");
+  return end === -1 ? "" : section.text.slice(end + 1);
+}
+
+/** How many of the sections hold each run of words beneath their heading. */
+function countBeneath(sections: readonly PlanSection[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const section of sections) {
+    const words = wordsBeneath(section);
+    counts.set(words, (counts.get(words) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /**
- * The sections' writers after a save by `who` at `at` that took the text
- * from `before` to `after`: each section it changed now names it, every
- * other section still standing keeps the writer it had, and a section the
- * text no longer holds keeps none. The newest are kept past the bound.
+ * The headings a change renamed and nothing else, each new heading to the
+ * one it replaced: a heading only `after` holds whose words beneath stand
+ * exactly as those of a heading only `before` held. Note that a pair is
+ * taken only where those words name one heading on each side, because two
+ * empty sections, one struck and one renamed, cannot be told apart, and an
+ * arbitrary writer carried over is worse than the renamer named.
  */
-export function withSectionWriters(
+function renamedHeadings(
+  before: readonly PlanSection[],
+  after: readonly PlanSection[],
+): ReadonlyMap<string, string> {
+  const was = new Set(before.map((section) => section.heading));
+  const now = new Set(after.map((section) => section.heading));
+  const gone = before.filter((section) => section.heading !== "" && !now.has(section.heading));
+  const arrived = after.filter((section) => section.heading !== "" && !was.has(section.heading));
+  const goneCounts = countBeneath(gone);
+  const arrivedCounts = countBeneath(arrived);
+  const renamed = new Map<string, string>();
+  for (const section of arrived) {
+    const words = wordsBeneath(section);
+    const old = gone.find((each) => wordsBeneath(each) === words);
+    const alone = goneCounts.get(words) === 1 && arrivedCounts.get(words) === 1;
+    if (old !== undefined && alone) renamed.set(section.heading, old.heading);
+  }
+  return renamed;
+}
+
+/**
+ * The sections' writers after a revision by `who` at `at` that took the text
+ * from `before` to `after`: each section it changed now names it, a section
+ * it only renamed keeps the writer it had under its new heading, every other
+ * section still standing keeps the writer it had, and a section the text no
+ * longer holds keeps none. The newest are kept past the bound.
+ */
+function withSectionWriters(
   writers: readonly PlanSectionWriter[],
   change: { readonly before: string; readonly after: string },
   who: PlanSectionWriterWho,
   at: number,
 ): readonly PlanSectionWriter[] {
-  const standing = new Set(planSections(change.after).map((section) => section.heading));
-  const changed = changedSections(change.before, change.after).filter((heading) =>
-    standing.has(heading),
+  const after = planSections(change.after);
+  const renamed = renamedHeadings(planSections(change.before), after);
+  const standing = new Set(after.map((section) => section.heading));
+  const changed = changedSections(change.before, change.after).filter(
+    (heading) => standing.has(heading) && !renamed.has(heading),
   );
-  const kept = writers.filter(
-    (writer) => standing.has(writer.section) && !changed.includes(writer.section),
-  );
+  const renamedTo = new Map([...renamed].map(([heading, old]) => [old, heading]));
+  const kept = writers.flatMap((writer) => {
+    const section = renamedTo.get(writer.section) ?? writer.section;
+    return standing.has(section) && !changed.includes(section) ? [{ ...writer, section }] : [];
+  });
   const written = [...kept, ...changed.map((section) => ({ section, ...who, at }))];
   return written.slice(-PLAN_SECTION_BOUNDS.MAX_SECTIONS);
+}
+
+/** One revision of a plan as its sections' writers are read off it: its text, and who wrote it, when. */
+export interface SectionRevision {
+  readonly text: string;
+  readonly who: PlanSectionWriterWho;
+  /** Epoch milliseconds of the revision's latest save. */
+  readonly at: number;
+}
+
+/**
+ * Who last changed each section of a plan, read off its revisions, oldest
+ * first, each against the text before it, the first against `base`: the
+ * newest revision that changed a section names its writer on it. Note that a
+ * revision is one writer's saves joined, and keeps only the text they left,
+ * so a section is named with the revision's latest save, and one changed and
+ * changed back within a revision is no change of it.
+ */
+export function sectionWritersOf(
+  base: string,
+  revisions: readonly SectionRevision[],
+): readonly PlanSectionWriter[] {
+  let writers: readonly PlanSectionWriter[] = [];
+  let before = base;
+  for (const revision of revisions) {
+    writers = withSectionWriters(
+      writers,
+      { before, after: revision.text },
+      revision.who,
+      revision.at,
+    );
+    before = revision.text;
+  }
+  return writers;
 }

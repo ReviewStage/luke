@@ -78,6 +78,8 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
 const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // Migration 0088 moved the fixed kinds into `blocks` and `response`.
   ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
+  // Who last changed each section is read off the plan's revisions.
+  ["plan", new Set(["section_writers"])],
 ]);
 
 /**

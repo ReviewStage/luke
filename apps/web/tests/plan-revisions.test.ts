@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { writePlanTemplate } from "@sidecar/database/models/account-store";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import {
   listRevisions,
@@ -38,7 +39,7 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { added } from "./support/plan-contents";
-import { INVITATIONS_TEXT } from "./support/plan-documents";
+import { INVITATIONS_TEXT, recordDocumentRevision } from "./support/plan-documents";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:
@@ -443,6 +444,78 @@ it.layer(getTestDB())("a plan's history", (it) => {
             duringCall: false,
           },
         });
+      }),
+  );
+
+  it.effect(
+    "a heading the developer renames with nothing beneath it changed still names the save that last changed its words",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const start = yield* Clock.currentTimeMillis;
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_HEADING.GOAL, "Invite by email.")],
+          ON_CALL,
+        );
+        yield* TestClock.adjust(Duration.minutes(3));
+        const base = Option.getOrThrow(yield* readPlan(userId, planId)).text;
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { document: { base, value: base.replace("## Goal\n", "## Goals\n") } },
+        );
+
+        const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+        assert.ok(stored.text.includes("## Goals\n") && stored.text.includes("Invite by email."));
+        assert.deepEqual(stored.plan.sectionEdits, [
+          { section: "Goals", actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
+        ]);
+        assert.deepEqual(
+          stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's first save is read against the template it started from, not one the account wrote since",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* writePlanTemplate(userId, "## Why\n\nSay why.\n\n## How\n\nSay how.\n");
+        yield* TestClock.adjust(Duration.minutes(1));
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_HEADING.CONTEXT, "Admins only.")],
+          ON_CALL,
+        );
+
+        const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+        assert.deepEqual(
+          stored.plan.sectionEdits?.map(({ section }) => section),
+          ["Context"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a section changed only before the newest revisions the history reads names nobody",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const at = new Date(yield* Clock.currentTimeMillis);
+        const goal = INVITATIONS_TEXT.replace("by email.", "by email or link.");
+        yield* recordDocumentRevision(planId, 1, goal, at);
+        for (let seq = 2; seq <= PLAN_REVISION.SECTION_HISTORY + 1; seq += 1) {
+          yield* recordDocumentRevision(planId, seq, goal.replace("today.", `today, ${seq}.`), at);
+        }
+
+        const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+        assert.deepEqual(
+          stored.plan.sectionEdits?.map(({ section }) => section),
+          ["Context"],
+        );
       }),
   );
 

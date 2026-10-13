@@ -13,7 +13,6 @@ import {
   updatePlan,
 } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
-import { plan } from "@sidecar/database/schemas/plan";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { getTestDB } from "@sidecar/database/testing";
@@ -21,7 +20,6 @@ import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import type { PlanDocument } from "@sidecar/hosted/plan-wire";
-import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -337,33 +335,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         assert.deepEqual(
           listed.map((summary) => summary.id),
           [ledger.id, relay.id],
-        );
-      }),
-  );
-
-  it.effect(
-    "a plan whose sections' writers are in a shape this build does not read still lists beside the rest",
-    () =>
-      Effect.gen(function* () {
-        const userId = yield* openUser;
-        const relay = yield* createPlan(userId, RELAY_PLAN);
-        yield* TestClock.adjust("1 minute");
-        const ledger = yield* createPlan(userId, LEDGER_PLAN);
-        // The writers in a shape this build does not know, as a migration
-        // landing ahead of the build that reads its shape leaves a row.
-        yield* db
-          .update(plan)
-          .set({ sectionWriters: sql`'[{"heading":1,"writer":"someone"}]'::jsonb` })
-          .where(eq(plan.id, relay.id));
-
-        const listed = yield* listPlans(userId);
-
-        assert.deepEqual(
-          listed.map(({ id, name }) => [id, name]),
-          [
-            [ledger.id, LEDGER_PLAN.name],
-            [relay.id, RELAY_PLAN.name],
-          ],
         );
       }),
   );

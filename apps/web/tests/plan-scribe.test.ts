@@ -15,7 +15,7 @@ import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
-import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
+import { INVITATIONS_TEXT, makeSavedDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 
 /**
@@ -84,7 +84,7 @@ const DRAFTED_CONTEXT = "Only an admin can add someone to a workspace today.";
 /** A plan already holding the invitations draft, as an earlier run of the call left it. */
 const openDraftedPlan = Effect.gen(function* () {
   const opened = yield* openPlan;
-  yield* makeDocumentPlan(opened.planId, INVITATIONS_TEXT);
+  yield* makeSavedDocumentPlan(opened.planId, INVITATIONS_TEXT);
   return opened;
 });
 
@@ -671,10 +671,12 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
-          const { userId, planId } = yield* openPlan;
-          yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
-            { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, at: 1 },
-          ]);
+          const { userId, planId } = yield* openDraftedPlan;
+          const goal = INVITATIONS_TEXT.replace("by email.", "by email or link.");
+          yield* saveDeveloperEdit(
+            { userId, planId },
+            { document: { base: INVITATIONS_TEXT, value: goal } },
+          );
           const { scribe, asked, drafts } = yield* scribeFor(userId, planId, [
             { notes: [added(PLAN_HEADING.CONTEXT, PROBLEM)] },
           ]);
@@ -684,7 +686,7 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
 
           const prompt = promptText(asked[0]);
-          assert.ok(prompt.includes(`[saved plan]\n${INVITATIONS_TEXT}`));
+          assert.ok(prompt.includes(`[saved plan]\n${goal}`));
           assert.ok(prompt.includes("[sections the developer wrote]\nGoal"));
           assert.ok(
             body.startsWith(

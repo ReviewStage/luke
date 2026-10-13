@@ -1,4 +1,8 @@
-import type { PlanSectionWriterWho } from "@sidecar/hosted/plan-document";
+import {
+  type PlanSectionWriter,
+  type PlanSectionWriterWho,
+  sectionWritersOf,
+} from "@sidecar/hosted/plan-document";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -38,6 +42,8 @@ import { InstantColumnSchema } from "./columns.js";
  * of its own that names the one it brought back; it joins nothing before it,
  * and nothing after it joins it, so each restore stands in the history, and
  * a restore is undone by restoring the revision before it.
+ * Who last changed each section is read off the newest revisions, each
+ * against the one before it, rather than kept beside the plan.
  *
  * A save is recorded for a plan id handed by a caller that already holds the
  * account's own row under its lock; the history is read under the account,
@@ -48,6 +54,8 @@ import { InstantColumnSchema } from "./columns.js";
 export const PLAN_REVISION = {
   /** How long after a revision's latest save the same writer's next save still joins it. */
   JOIN_WITHIN_MS: 10 * 60_000,
+  /** The newest revisions who last changed each section is read off; a section none of them changed names nobody. */
+  SECTION_HISTORY: 50,
 } as const;
 
 /** How an agent whose row is gone is named: a discarded start, or a row from before the journal. */
@@ -269,6 +277,35 @@ const findRevisionContents = SqlSchema.findAll({
       ),
 });
 
+const SectionRevisionRowSchema = Schema.Struct({
+  actor: Schema.Literals(Object.values(PLAN_ACTOR)),
+  agentId: Schema.NullOr(Schema.String),
+  liveSessionId: Schema.NullOr(Schema.String),
+  at: InstantColumnSchema,
+  document: Schema.String,
+});
+
+type SectionRevisionRow = typeof SectionRevisionRowSchema.Type;
+
+/** The plan's newest revisions with their text, newest first, with one past the bound read as the text the oldest changed. */
+const findSectionRevisions = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: SectionRevisionRowSchema,
+  execute: (planId) =>
+    db
+      .select({
+        actor: planRevision.actor,
+        agentId: planRevision.agentId,
+        liveSessionId: planRevision.liveSessionId,
+        at: planRevision.at,
+        document: planRevision.document,
+      })
+      .from(planRevision)
+      .where(eq(planRevision.planId, planId))
+      .orderBy(desc(planRevision.seq))
+      .limit(PLAN_REVISION.SECTION_HISTORY + 1),
+});
+
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
 function lastEditOf(row: LastEditRow): PlanLastEdit {
   return {
@@ -342,13 +379,12 @@ function recordEarlier(
   });
 }
 
-/** The writer as each section their save changed keeps them: the actor, the agent where one wrote, and whether on a call. */
-export function writerOf(writer: PlanWriter): PlanSectionWriterWho {
-  const agentId = agentOf(writer);
+/** A revision's writer as each section it changed names them: the actor, the agent where one wrote, and whether on a call. */
+function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
   return {
-    actor: writer.actor,
-    ...(agentId === null ? undefined : { agentId }),
-    ...(callOf(writer) === null ? undefined : { duringCall: true }),
+    actor: row.actor,
+    ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+    ...(row.liveSessionId === null ? undefined : { duringCall: true }),
   };
 }
 
@@ -399,6 +435,33 @@ export function readLastEdit(
   planId: string,
 ): Effect.Effect<Option.Option<PlanLastEdit>, RevisionFailure, SqlClient.SqlClient> {
   return Effect.map(findLastEdit(planId), Option.map(lastEditOf));
+}
+
+/**
+ * Who last changed each section of a plan, read off its newest revisions
+ * (`sectionWritersOf`); none for a plan with no history yet. The oldest read
+ * is only the text the next changed where it is past the bound or the plan
+ * as it stood before history, `earlier`, which no writer wrote. The plan's
+ * first revision is read against `started`, the text the plan started as,
+ * read only where the first revision is among those read.
+ */
+export function readSectionWriters<E, R>(
+  planId: string,
+  started: Effect.Effect<string, E, R>,
+): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, SqlClient.SqlClient | R> {
+  return Effect.gen(function* () {
+    const rows = [...(yield* findSectionRevisions(planId))].reverse();
+    const first = rows[0];
+    if (first === undefined) return [];
+    const fromStart =
+      rows.length <= PLAN_REVISION.SECTION_HISTORY && first.actor !== PLAN_ACTOR.EARLIER;
+    const base = fromStart ? yield* started : first.document;
+    const written = fromStart ? rows : rows.slice(1);
+    return sectionWritersOf(
+      base,
+      written.map((row) => ({ text: row.document, who: writerOf(row), at: row.at.getTime() })),
+    );
+  });
 }
 
 /**

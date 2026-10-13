@@ -1,16 +1,15 @@
 import { db } from "@sidecar/database/core/query";
 import { plan } from "@sidecar/database/schemas/plan";
 import { planRevision } from "@sidecar/database/schemas/plan-revision";
-import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 /**
- * plan-documents.ts -- a stored plan's text, its sections' writers, and its revisions, as a test sets them.
+ * plan-documents.ts -- a stored plan's text and its revisions, as a test sets them.
  *
  * A plan starts as one document, a copy of its account's template
- * (`docs/PLANNING.md`); a test that needs other words writes the text and its
- * sections' writers, or a revision of the text, straight onto the rows.
+ * (`docs/PLANNING.md`); a test that needs other words writes the text, or a
+ * revision of the text, straight onto the rows.
  */
 
 /** A synthetic document: a template's headings with an answer under each, and the assumptions as a section of the text. */
@@ -29,13 +28,21 @@ export const INVITATIONS_TEXT = [
   "",
 ].join("\n");
 
-/** Makes the plan one document holding `text`, with the sections' writers given. */
-export function makeDocumentPlan(
-  planId: string,
-  text: string,
-  sectionWriters: readonly PlanSectionWriter[] = [],
-) {
-  return db.update(plan).set({ document: text, sectionWriters }).where(eq(plan.id, planId));
+/** Makes the plan one document holding `text`. */
+export function makeDocumentPlan(planId: string, text: string) {
+  return db.update(plan).set({ document: text }).where(eq(plan.id, planId));
+}
+
+/**
+ * Makes the plan one document holding `text`, saved a minute after it
+ * started and before its history began, so its first save records the text
+ * as the revision it changed (`earlier`) and its sections read as no one's.
+ */
+export function makeSavedDocumentPlan(planId: string, text: string) {
+  return db
+    .update(plan)
+    .set({ document: text, updatedAt: sql`${plan.createdAt} + interval '1 minute'` })
+    .where(eq(plan.id, planId));
 }
 
 /** Records a revision of a document plan: its text after the revision, written by the developer at `at`. */

@@ -88,6 +88,7 @@ import { added } from "./support/plan-contents";
 import {
   INVITATIONS_TEXT,
   makeDocumentPlan,
+  makeSavedDocumentPlan,
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
@@ -2561,11 +2562,24 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const at = yield* Clock.currentTimeMillis;
-        yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
-          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, duringCall: true, at },
-          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at },
-        ]);
+        yield* makeSavedDocumentPlan(planId, INVITATIONS_TEXT);
+        const notedAt = yield* Clock.currentTimeMillis;
+        const noted = yield* saveNotes(
+          { userId: owner, planId },
+          [added(PLAN_HEADING.GOAL, "- Admins can withdraw an invite.")],
+          { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: "live-session-1" },
+        );
+        assert.ok(noted.status === PLAN_SAVE_STATUS.SAVED);
+        yield* TestClock.adjust(Duration.minutes(3));
+        const base = noted.document.body;
+        const value = base.replace("Only an admin", "Only an owner");
+        yield* ask(
+          request(EDIT, owner, {
+            id: planId,
+            method: "POST",
+            body: { document: { base, value } },
+          }),
+        );
 
         const { plan } = readAnswer(
           planAnswerSchema,
@@ -2589,10 +2603,15 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(PLANS, owner)),
         ).plans;
 
-        assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
+        assert.deepEqual(plan.document, { body: value, assumptions: [] });
         assert.deepEqual(plan.sectionEdits, [
-          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true },
-          { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
+          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at: notedAt, duringCall: true },
+          {
+            section: "Context",
+            actor: PLAN_ACTOR.DEVELOPER,
+            at: notedAt + Duration.toMillis(Duration.minutes(3)),
+            duringCall: false,
+          },
         ]);
         assert.equal(renamed.name, "Invitations by email");
         assert.deepEqual(renamed.document, plan.document);
@@ -2611,7 +2630,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+        yield* makeSavedDocumentPlan(planId, INVITATIONS_TEXT);
 
         const edited = yield* ask(
           request(EDIT, owner, {
@@ -2664,9 +2683,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* makeDocumentPlan(planId, INVITATIONS_TEXT, [
-          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, duringCall: true, at: 1 },
-        ]);
+        yield* makeSavedDocumentPlan(planId, INVITATIONS_TEXT);
         const value = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
 
         const answered = readAnswer(
@@ -2688,7 +2705,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const { revision } = readAnswer(
           planRevisionAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "1" } })),
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "2" } })),
         );
 
         assert.ok("plan" in answered);
@@ -2697,15 +2714,17 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(plan.document, { body: value, assumptions: [] });
         assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
         assert.deepEqual(plan.sectionEdits, [
-          { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: true },
           { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
         ]);
         assert.deepEqual(
           page.revisions.map(({ seq, lastEdit, changes }) => [seq, lastEdit.actor, changes]),
-          [[1, PLAN_ACTOR.DEVELOPER, 1]],
+          [
+            [2, PLAN_ACTOR.DEVELOPER, 1],
+            [1, PLAN_ACTOR.EARLIER, 0],
+          ],
         );
         assert.deepEqual(revision.document, { body: value, assumptions: [] });
-        assert.equal(revision.previous, null);
+        assert.deepEqual(revision.previous, { body: INVITATIONS_TEXT, assumptions: [] });
       }),
   );
 
