@@ -435,6 +435,29 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the Linear connection's token 
         assert.deepEqual(unconfigured, Result.fail(LINEAR_UNAVAILABLE.NOT_CONFIGURED));
       }),
   );
+
+  it.effect(
+    "an admission that died fails the read as unreachable, and the log names its kind and nothing it said",
+    () =>
+      Effect.gen(function* () {
+        const secret = "lin_oauth_leaked_bearer_1234567890abcdef and the developer said ship it";
+        const logged: string[] = [];
+        const capture = Logger.make((options) => {
+          logged.push(JSON.stringify(options.message), String(options.cause));
+        });
+
+        const read = yield* linearAccessToken(Effect.die(new TypeError(secret))).pipe(
+          Effect.provide(connectLayer(new Map())),
+          Effect.provide(Logger.layer([capture])),
+        );
+        assert.deepEqual(read, Result.fail(LINEAR_UNAVAILABLE.UNREACHABLE));
+        assert.ok(
+          logged.some((line) => line.includes("TypeError")),
+          logged.join("\n"),
+        );
+        for (const line of logged) assert.ok(!line.includes(secret), line);
+      }),
+  );
 });
 
 it.effect(

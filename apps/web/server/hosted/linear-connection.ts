@@ -29,6 +29,7 @@
  * Disconnect takes effect from the next step, whatever the SDK cached.
  */
 
+import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -130,7 +131,7 @@ export function linearAccessToken(
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
-        Effect.logWarning("the Linear connection could not be read", cause),
+        Effect.logWarning(`the Linear connection could not be read: ${causeKind(cause)}`),
         Result.fail(LINEAR_UNAVAILABLE.UNREACHABLE),
       ),
     ),

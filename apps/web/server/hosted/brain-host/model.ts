@@ -1,4 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { failureKind } from "@sidecar/runtime/effect";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 import { Redacted, Result } from "effect";
 import type { CoderRefusal } from "../coder-host/bounds.js";
@@ -27,16 +28,13 @@ export interface MeterSeams {
   readonly report: (message: string) => void;
 }
 
-/** How much of a failed write's own wording the report keeps. */
-const REPORT_REASON_BOUND = 200;
-
 function meteredMiddleware(meter: MeterSeams): LanguageModelMiddleware {
   const record = async () => {
     try {
       await meter.spend();
     } catch (cause) {
-      const reason = cause instanceof Error ? cause.message : String(cause);
-      meter.report(`A hosted inference was not counted: ${reason.slice(0, REPORT_REASON_BOUND)}`);
+      // Note that the failure is reported by its kind, because a store's message can quote a row.
+      meter.report(`A hosted inference was not counted: ${failureKind(cause)}`);
     }
   };
   return {

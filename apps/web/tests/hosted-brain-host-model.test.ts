@@ -61,12 +61,12 @@ test("every inference counts the meter once, past any former ceiling", async () 
   assert.deepEqual(reports, []);
 });
 
-test("a meter that cannot be written is reported, and the inference runs anyway", async () => {
+test("a meter that cannot be written is reported by its kind alone, and the inference runs anyway", async () => {
   const inner = answer();
   const reports: string[] = [];
   const model = meteredModel(inner, {
     spend: async () => {
-      throw new Error("fixture: store down");
+      throw new TypeError("fixture: the row for fixture-account-words was refused");
     },
     report: (message) => reports.push(message),
   });
@@ -75,7 +75,7 @@ test("a meter that cannot be written is reported, and the inference runs anyway"
 
   assert.equal(text, "ok");
   assert.equal(inner.doGenerateCalls.length, 1);
-  assert.deepEqual(reports, ["A hosted inference was not counted: fixture: store down"]);
+  assert.deepEqual(reports, ["A hosted inference was not counted: TypeError"]);
 });
 
 test("the brain's model runs as a coding agent's does: OpenAI's Responses model at its own id, asked for the effort and a summary of its reasoning, in the brain's window", () => {

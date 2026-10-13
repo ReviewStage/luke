@@ -2,6 +2,7 @@
  * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
+import { failureKind } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
@@ -147,17 +148,15 @@ export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
 }> {}
 
 /**
- * The failure in the words a report carries: the client's own, and beneath a
- * transport failure the platform's, which is where a refused connection or a
- * failed handshake says what it was.
+ * The failure in the words a report carries: the client's kind of failure,
+ * and the status where eve answered at all. Note that the client's message
+ * is not written, because it names the request's address and can describe
+ * the body eve sent, and the platform's error beneath it is not either.
  */
 export function describeUnreachable(failure: EveUnreachable): string {
-  const reason = failure.cause.reason;
-  const beneath =
-    reason._tag === "TransportError" && reason.cause !== undefined
-      ? `: ${String(reason.cause)}`
-      : "";
-  return `${failure.cause.message}${beneath}`;
+  const kind = failureKind(failure.cause);
+  const status = failure.cause.response?.status;
+  return status === undefined ? kind : `${kind} ${status}`;
 }
 
 /** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */

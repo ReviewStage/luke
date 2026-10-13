@@ -12,6 +12,7 @@ import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -97,9 +98,9 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     CODING_AGENT_DEFAULT_CHOICE;
   return yield* acceptedModelChoice(choice).pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
-        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-      ),
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
 });

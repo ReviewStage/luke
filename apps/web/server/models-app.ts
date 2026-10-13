@@ -1,3 +1,4 @@
+import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -49,7 +50,7 @@ const modelsEndpoint = /* @__PURE__ */ Effect.fn("web/modelsEndpoint")(function*
   const catalog = yield* ModelCatalog;
   const models = yield* catalog.read.pipe(
     Effect.tapError((unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause),
+      Effect.logWarning(`the model catalog could not be read: ${failureKind(unavailable.cause)}`),
     ),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );

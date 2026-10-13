@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Logger, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -49,8 +49,15 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the catalog handed in, answering one request. */
-async function answer(catalog: Layer.Layer<ModelCatalog>, request: Request): Promise<Answer> {
+/** The group over the catalog handed in, answering one request, with every line it logs kept in `logged`. */
+async function answer(
+  catalog: Layer.Layer<ModelCatalog>,
+  request: Request,
+  logged: string[] = [],
+): Promise<Answer> {
+  const capture = Logger.make((options) => {
+    logged.push(JSON.stringify(options.message), String(options.cause));
+  });
   const { handler, dispose } = HttpRouter.toWebHandler(
     modelsApp({
       resolveUserId: (incoming) =>
@@ -59,7 +66,7 @@ async function answer(catalog: Layer.Layer<ModelCatalog>, request: Request): Pro
             ? Option.some(USER_ID)
             : Option.none(),
         ),
-    }).pipe(HttpRouter.provideRequest(catalog)),
+    }).pipe(HttpRouter.provideRequest(Layer.merge(catalog, Logger.layer([capture])))),
     { disableLogger: true },
   );
   const response = await handler(request);
@@ -102,6 +109,20 @@ test("a catalog the instance cannot read is an outage to retry", async () => {
     status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
     body: { error: HOSTED_API_ERROR.UNAVAILABLE },
   });
+});
+
+test("a catalog the instance cannot read is logged by its kind, and nothing its error said", async () => {
+  const secret = "sk-gateway-leaked-0123456789abcdef";
+  const leaking = Layer.succeed(ModelCatalog, {
+    read: Effect.fail(new ModelCatalogUnavailable({ cause: new TypeError(secret) })),
+  });
+  const logged: string[] = [];
+  await answer(leaking, request(MODELS), logged);
+  assert.ok(
+    logged.some((line) => line.includes("TypeError")),
+    logged.join("\n"),
+  );
+  for (const line of logged) assert.ok(!line.includes(secret), line);
 });
 
 test("a path the group declares no route for is refused", async () => {

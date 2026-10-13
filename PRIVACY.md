@@ -405,9 +405,8 @@ only when you press Send.
   Luke's judgment; drops the audio OpenAI reflects back, so neither your voice
   nor Luke's transits our service; keeps only the lines and the call record
   described under "Your account"; logs status and close codes, event names,
-  and counts rather than what was said, though an unexpected failure to write
-  the record is logged with its error; and counts each session's billed
-  seconds once.
+  the kind of any failure, and counts, never what was said or an error's own
+  words; and counts each session's billed seconds once.
   Luke's judgment is a separate call to OpenAI's Responses API, made from our
   service on our key when you ask him something on a call, carrying the plan
   conversation's working memory: the saved plan, the conversation so far, and

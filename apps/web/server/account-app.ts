@@ -12,6 +12,7 @@ import {
   type PlanTemplateAnswer,
   planTemplateWriteRequestSchema,
 } from "@sidecar/hosted/plan-document-template";
+import { failureKind } from "@sidecar/runtime/effect";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -205,9 +206,9 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* acceptedModelChoice(read.success).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
-        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-      ),
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
 });

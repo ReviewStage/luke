@@ -8,6 +8,7 @@
  * Schema failure's issue may quote the row. A route carries the failure
  * onward as the unavailable refusal.
  */
+import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, type Schema } from "effect";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
@@ -21,6 +22,5 @@ export type StoreFailure = SqlError | Schema.SchemaError;
  * can quote the key a constraint refused.
  */
 export function logStoreFailure(failure: StoreFailure): Effect.Effect<void> {
-  const kind = failure._tag === "SqlError" ? failure.reason._tag : failure.issue._tag;
-  return Effect.logWarning(`Hosted store unavailable: ${failure._tag}: ${kind}`);
+  return Effect.logWarning(`Hosted store unavailable: ${failureKind(failure)}`);
 }

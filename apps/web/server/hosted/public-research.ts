@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { failureKind } from "@sidecar/runtime/effect";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import {
@@ -519,7 +520,9 @@ export function runSearchWeb(
     // on the count: it is logged and the search goes ahead.
     return call.spend.pipe(
       Effect.catchTag("MeterUnavailable", (unavailable) =>
-        Effect.logWarning("A search was not counted against the account.", unavailable.cause),
+        Effect.logWarning(
+          `A search was not counted against the account: ${failureKind(unavailable.cause)}`,
+        ),
       ),
       Effect.andThen(searchPublicWeb(openAi, query)),
     );
