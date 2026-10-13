@@ -2462,7 +2462,7 @@ button.subagent-line:hover {
 
 /* Inbox ----------------------------------------------------------------------- */
 
-/* A choice's option on the Inbox tab (`inbox-board.tsx`): a row the width of
+/* A choice's option on the Inbox (`inbox-pane.tsx`): a row the width of
    its card, its label over its trade-off, picked the way Settings' segments
    are (`.settings-segment`), the fill of a chosen segment once pressed, ringed
    so it reads apart from the hover that shares the fill. The
@@ -2481,20 +2481,43 @@ button.subagent-line:hover {
   transition: background-color var(--duration-hover) ease;
 }
 
-.inbox-option:hover:not(:disabled) {
+button.inbox-option:hover:not(:disabled) {
   background: var(--raised-strong);
 }
 
-.inbox-option[aria-pressed="true"] {
+.inbox-option[aria-pressed="true"],
+.inbox-option[data-picked="true"] {
   background: var(--raised-strong);
   box-shadow: inset 0 0 0 1px var(--selected-edge);
+}
+
+/* A settled item keeps every option it offered: the pick wears the
+   pressed look, and the rest step back to an outline in muted words. */
+.inbox-option[data-picked="false"] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+}
+
+.inbox-picked {
+  margin-left: var(--space-8);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.inbox-picked svg {
+  width: 13px;
+  height: 13px;
+  margin-right: var(--space-2);
+  vertical-align: -2px;
 }
 
 .inbox-option:disabled {
   opacity: 0.4;
 }
 
-/* An image block on the Inbox tab (`inbox-board.tsx`): the picture the
+/* An image block on the Inbox (`inbox-pane.tsx`): the picture the
    agent took, at the card's own reading width and no wider than itself, a
    press on it opening the attached-file viewer. The spinner's room stands
    in for it while its bytes are read, so the card does not jump. */

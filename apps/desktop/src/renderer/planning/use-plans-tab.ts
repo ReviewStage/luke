@@ -94,6 +94,7 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
+import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
@@ -115,7 +116,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { startedAgentCallIds, workerCallIds } from "./work-model";
+import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -152,23 +153,27 @@ interface SourceReveal {
   readonly source: Exclude<RevisionSource, { kind: typeof REVISION_SOURCE.AGENT }>;
 }
 
+/** The item chosen in the window's Inbox, and the plan it belongs to. */
+export interface InboxChoice {
+  readonly planId: string;
+  readonly itemId: string;
+}
+
 /**
  * The window's Inbox, standing in the plan's place beside the sidebar: the
- * plans holding inbox items in a column of their own, and the chosen plan's
- * items beside them. It is the window's alone, as a version history is, so
+ * items of every plan holding one in a column of their own, and the chosen
+ * item beside them. It is the window's alone, as a version history is, so
  * it leaves the plan the host has open, and the call bound to it, as they
- * stand; opening any plan, or a new one, leaves it.
+ * stand; opening any plan, or a new one, leaves it. The item chosen is kept
+ * while it stands, so the item answered stays in sight.
  */
 interface InboxViewControl {
   readonly open: boolean;
-  /** The plan chosen in it, none until one is, where the list's first stands in. */
-  readonly planId: string | undefined;
-  /** Whether it lists only the plans with an item waiting on the developer. */
-  readonly waitingOnly: boolean;
+  /** The item chosen in it, none until one is, where the list's first stands in. */
+  readonly chosen: InboxChoice | undefined;
   readonly onOpen: () => void;
   readonly onClose: () => void;
-  readonly onChoose: (planId: string) => void;
-  readonly onWaitingOnly: (waitingOnly: boolean) => void;
+  readonly onChoose: (chosen: InboxChoice) => void;
 }
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -231,10 +236,12 @@ export interface PlansControl {
    * is read before where an older one stands, and that read.
    */
   work: {
-    turns: PlanningView["work"];
+    /** The open plan's planning conversation as an agent's transcript is read; none before the first read lands. */
+    conversation: PlanningView["conversation"];
     callLive: boolean;
-    earlier: string | undefined;
     onLoadEarlier: () => Promise<void>;
+    /** Reads a planning worker's session past a cursor, as an agent's worker's tab reads its own, the plan standing in the agent's place. */
+    readWorker: TranscriptReader;
     /** The moment whose turn the tab is asked to bring into view, and the word that it has; what a version's Open asks. */
     reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
   };
@@ -410,10 +417,11 @@ function secondCallQuestion(planName: string): DialogQuestion {
 
 /** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
-  view: Pick<PlanningView, "board" | "shownCode" | "work">,
+  view: Pick<PlanningView, "board" | "shownCode" | "conversation">,
   transcript: TranscriptRegion,
 ): PlanHolds {
-  const { board, shownCode, work } = view;
+  const { board, shownCode, conversation } = view;
+  const work = conversation?.messages;
   return {
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
@@ -471,9 +479,9 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** The window's Inbox while it stands: the plan chosen in it, and whether it lists only the unread. */
+  /** The window's Inbox while it stands, and the item chosen in it. */
   const [inboxView, setInboxView] = useState<
-    { readonly planId: string | undefined; readonly waitingOnly: boolean } | undefined
+    { readonly chosen: InboxChoice | undefined } | undefined
   >(undefined);
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
@@ -586,12 +594,18 @@ export function usePlansTab(input: {
     lukeEndedCall: voice.view.lukeEndedCall,
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
-  const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
+  const workers = useMemo(
+    () => workerCallIds(workRowsOf(viewed.conversation, false)),
+    [viewed.conversation],
+  );
   // An agent Luke started in the call is in the work before it is in the
   // list, so the list is read again as its start answers, and the tab
   // appears as it does after a Start; a start already in the work when the
   // plan opens is read with the plan.
-  const startedByLuke = useMemo(() => startedAgentCallIds(viewed.work), [viewed.work]);
+  const startedByLuke = useMemo(
+    () => startedAgentCallIds(viewed.conversation),
+    [viewed.conversation],
+  );
   const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
     planId: undefined,
     ids: new Set(),
@@ -647,8 +661,7 @@ export function usePlansTab(input: {
   // neither while the tab is away, the version history stands in the plan's
   // place, the side panel fills the window over the column, or the column
   // shows something else; a fixture's staged agents are no one's to announce.
-  // The window's Inbox shows the plan chosen in it.
-  // The window's Inbox stands in the column's place, showing the plan chosen there.
+  // The window's Inbox stands in the column's place, showing the plan whose item is chosen there.
   const columnShown =
     shown &&
     historyFor === undefined &&
@@ -658,7 +671,7 @@ export function usePlansTab(input: {
   const shownAgent = columnShown && isAgentTab(mainTabs.tab) ? mainTabs.tab.agent : null;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
-      ? (inboxView.planId ?? null)
+      ? (inboxView.chosen?.planId ?? null)
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activePlanId ?? null)
         : null;
@@ -1125,6 +1138,16 @@ export function usePlansTab(input: {
   // tab never closes, and a draft's lets its draft go, so neither is kept.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
+  // A planning worker's tab reads its session as an agent's worker's tab does, the plan standing in the agent's place.
+  const readWorker = useCallback<TranscriptReader>(
+    ({ agentId, after, callId }) =>
+      act(ACT_KIND.PLANNING_MESSAGES, {
+        planId: agentId,
+        after,
+        ...(callId === undefined ? undefined : { callId }),
+      }),
+    [act],
+  );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
       const at = openTabs.findIndex((each) => sameTab(each, tab));
@@ -1287,10 +1310,10 @@ export function usePlansTab(input: {
     },
     // A fixture's open plan is drawn mid-call, as its status and transcript are.
     work: {
-      turns: planning.work,
+      conversation: planning.conversation,
       callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
-      earlier: planning.workEarlier,
-      onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
+      onLoadEarlier: () => act(ACT_KIND.PLANNING_CONVERSATION_EARLIER),
+      readWorker,
       reveal:
         revealing?.kind === REVISION_SOURCE.WORK
           ? { at: revealing.at, onRevealed: revealed }
@@ -1318,15 +1341,13 @@ export function usePlansTab(input: {
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
-      planId: inboxView?.planId,
-      waitingOnly: inboxView?.waitingOnly ?? false,
+      chosen: inboxView?.chosen,
       onOpen: () => {
         setHistoryFor(undefined);
-        setInboxView((held) => held ?? { planId: undefined, waitingOnly: false });
+        setInboxView((held) => held ?? { chosen: undefined });
       },
       onClose: () => setInboxView(undefined),
-      onChoose: (planId) => setInboxView((held) => held && { ...held, planId }),
-      onWaitingOnly: (waitingOnly) => setInboxView((held) => held && { ...held, waitingOnly }),
+      onChoose: (chosen) => setInboxView((held) => held && { chosen }),
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a

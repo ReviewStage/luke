@@ -43,6 +43,7 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   type CodingAgentArchiveRequest,
@@ -98,6 +99,8 @@ import {
   inboxItemPath,
   planAgentsPath,
   planInboxPath,
+  planMessagesPath,
+  planSubagentMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
 } from "./service-paths.js";
@@ -476,6 +479,26 @@ export class HostedCodingAgentClient {
       callId === undefined
         ? agentMessagesPath(agentId, after)
         : agentSubagentMessagesPath(agentId, callId, after);
+    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
+      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * One plan's planning conversation as an agent's transcript is read, or a
+   * planning worker's where the call that started it is named: past the
+   * cursor, held by the service while a turn or the worker runs; with no
+   * cursor, its newest turns; with `before`, the turns before that one.
+   */
+  planMessages(
+    planId: string,
+    page: { after?: string; before?: string },
+    callId?: string,
+  ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
+    const path =
+      callId === undefined
+        ? planMessagesPath(planId, page)
+        : planSubagentMessagesPath(planId, callId, page.after ?? CODING_AGENT_CURSOR_START);
     return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
       readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
     );

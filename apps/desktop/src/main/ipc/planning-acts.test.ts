@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { highlightSnippet } from "@sidecar/host";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
@@ -43,6 +44,12 @@ function fixture() {
     host: {
       planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
       planningWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
+      planningConversationEarlier: () => Effect.sync(() => void asked.push("conversation-earlier")),
+      planningMessages: (params) =>
+        Effect.sync(() => {
+          asked.push(`messages:${params.planId}:${params.callId}:${params.after}`);
+          return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+        }),
       planningClose: () => Effect.sync(() => void asked.push("close")),
       planningOpen: (planId) =>
         Effect.sync(() => {
@@ -235,4 +242,26 @@ it.effect("the voice window does not reach the plans", () =>
     });
     assert.deepEqual(f.asked, []);
   }),
+);
+
+it.effect(
+  "a planning worker's page is read through the host from a panel, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const page = {
+        kind: ACT_KIND.PLANNING_MESSAGES,
+        payload: { planId: PLAN_ID, callId: "call-models", after: "0:0" },
+      } as const;
+
+      const read = yield* f.router.performAct(page, PANEL);
+      const fromVoice = yield* f.router.performAct(page, VOICE);
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, [`messages:${PLAN_ID}:call-models:0:0`]);
+    }),
 );

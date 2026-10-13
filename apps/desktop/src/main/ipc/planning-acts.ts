@@ -1,3 +1,4 @@
+import type { CodingAgentMessagesAnswerView } from "@sidecar/hosted/coding-agent-view";
 import type {
   CodeLines,
   PlanningArchiveParams,
@@ -6,6 +7,7 @@ import type {
   PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
+  PlanningMessagesParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
   PlanningRenameParams,
@@ -54,6 +56,8 @@ export interface PlanningActsDependencies {
     planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
+    planningConversationEarlier(): Effect.Effect<void>;
+    planningMessages(params: PlanningMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
     planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
     planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
@@ -93,6 +97,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
+  | typeof ACT_KIND.PLANNING_CONVERSATION_EARLIER
+  | typeof ACT_KIND.PLANNING_MESSAGES
   | typeof ACT_KIND.PLANNING_FILE
   | typeof ACT_KIND.PLANNING_TREE
   | typeof ACT_KIND.PLANNING_SKILLS
@@ -197,6 +203,14 @@ export function planningActRows(
     [ACT_KIND.PLANNING_WORK_EARLIER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_WORK_EARLIER, sender);
       return host.planningWorkEarlier();
+    },
+    [ACT_KIND.PLANNING_CONVERSATION_EARLIER]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_CONVERSATION_EARLIER, sender);
+      return host.planningConversationEarlier();
+    },
+    [ACT_KIND.PLANNING_MESSAGES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_MESSAGES, sender);
+      return host.planningMessages(params);
     },
     [ACT_KIND.PLANNING_FILE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);

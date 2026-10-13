@@ -1,5 +1,7 @@
 import { readBoard, writeScene } from "@sidecar/database/models/board-store";
+import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
+import { childConversationId } from "@sidecar/database/models/ids";
 import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
 import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
 import {
@@ -13,6 +15,12 @@ import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { readTranscript } from "@sidecar/database/models/transcript-store";
 import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import {
+  CODING_AGENT_CURSOR_START,
+  CODING_AGENT_STATUS,
+  codingAgentCallIdSchema,
+  codingAgentCursorSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import { pageVersionNumberSchema } from "@sidecar/hosted/page-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
@@ -24,7 +32,7 @@ import {
   planTreeRequestSchema,
 } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -42,8 +50,16 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
+import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
+import {
+  CURSOR_START,
+  cursorOfWire,
+  cursorToWire,
+  type TranscriptPage,
+  transcriptPast,
+} from "./hosted/coder-host/transcript.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -56,6 +72,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
+import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanFile } from "./hosted/plan-file.js";
 import {
@@ -66,7 +83,16 @@ import {
 } from "./hosted/plan-notes.js";
 import { readPlanSkills } from "./hosted/plan-skills.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
-import { readPlanWork } from "./hosted/plan-work-store.js";
+import { readPlanCode, readPlanWork } from "./hosted/plan-work-store.js";
+import {
+  PLANNER_POLL,
+  type PlannerPage,
+  plannerPagePast,
+  plannerStatusNow,
+  plannerTitleAwaited,
+  plannerTurnsPage,
+  plannerWorkerSession,
+} from "./hosted/planner-transcript.js";
 import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -143,6 +169,12 @@ const PLANS_PATH = {
   TRANSCRIPT: "/api/plans/transcript",
   /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
+  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
+  MESSAGES: "/api/plans/messages",
+  /** GET reads one planning worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
+  SUBAGENT_MESSAGES: "/api/plans/subagent-messages",
+  /** GET reads every code Luke showed on the plan; the rewrite moves the path's id into the `id` query. */
+  CODE: "/api/plans/code",
   /** GET reads a window of one file of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   FILE: "/api/plans/file",
   /** GET lists one folder of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
@@ -175,6 +207,12 @@ const PLAN_ID_QUERY = "id";
 
 /** The query naming the turn an older page of a plan's work is read before, and the revision an older page of its history is. */
 const BEFORE_TURN_QUERY = "before";
+
+/** The queries of a transcript read: the cursor it reads past, and the call that started the worker whose session it is. */
+const TRANSCRIPT_QUERY = {
+  AFTER: "after",
+  CALL: "call",
+} as const;
 
 /** The query naming one revision of the plan by its number. */
 const REVISION_SEQ_QUERY = "seq";
@@ -215,8 +253,12 @@ export interface PlansAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
 }
 
-/** What the routes may require of the function that stands them: the store, and GitHub through the App for a repository's check. */
-export type PlansAppServices = SqlClient.SqlClient | GitHubApp | HttpClient.HttpClient;
+/** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
+export type PlansAppServices =
+  | SqlClient.SqlClient
+  | GitHubApp
+  | HttpClient.HttpClient
+  | ModelCatalog;
 
 type PlansServices = PlansAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -479,6 +521,146 @@ const workEndpoint = /* @__PURE__ */ Effect.fn("web/planWorkEndpoint")(function*
   const work = yield* hostedStoreOrUnavailable(readPlanWork(userId, planId, before));
   if (Option.isNone(work)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, work.value);
+});
+
+/** The cursor a transcript read names, at most once, or none; refused where it names something else. */
+const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<string | undefined, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(TRANSCRIPT_QUERY.AFTER);
+  const [after] = named;
+  if (after === undefined) return undefined;
+  const read = readEither(codingAgentCursorSchema)(unparsedWire(after));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is; a planning conversation is named by its plan, so it carries no title. */
+function transcriptAnswer(
+  page: PlannerPage | TranscriptPage,
+  title: string | null,
+): HttpServerResponse.HttpServerResponse {
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    ...page,
+    cursor: cursorToWire(page.cursor),
+    title,
+  });
+}
+
+/**
+ * GET reads the plan's planning conversation as a coding agent's transcript
+ * is read: past the cursor, held while a turn or a worker runs; with no
+ * cursor, its newest turns, or with `before` the turns queued before that
+ * one. A plan never planned on reads as an empty conversation.
+ */
+const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/planMessagesEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const after = yield* cursorQueryOf(request);
+  const before = yield* beforeTurnOf(request);
+  if (after !== undefined && before !== undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
+  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { conversationId } = plan.value;
+  if (conversationId === undefined) {
+    return transcriptAnswer(
+      { messages: [], cursor: CURSOR_START, status: CODING_AGENT_STATUS.COMPLETED },
+      null,
+    );
+  }
+  const target = { userId, conversationId };
+  const page = yield* hostedStoreOrUnavailable(
+    after === undefined
+      ? plannerTurnsPage(target, before)
+      : plannerPagePast(target, cursorOfWire(after)),
+  );
+  return transcriptAnswer(page, null);
+});
+
+/**
+ * GET reads one planning worker's session past the cursor, as an agent's
+ * worker's is read and on the same answer: the child conversation of the
+ * plan's conversation under the call that started the worker, held while it
+ * runs, with its title once one landed. A worker whose session has written
+ * nothing yet reads as starting, held for, so a tab opened the moment its
+ * call was made keeps reading.
+ */
+const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/planSubagentMessagesEndpoint")(
+  function* (
+    seams: PlansAppSeams,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.GET) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const planId = yield* idOf(request, PLAN_ID_QUERY);
+    const call = readEither(codingAgentCallIdSchema)(
+      unparsedWire(new URL(request.url).searchParams.get(TRANSCRIPT_QUERY.CALL) ?? ""),
+    );
+    if (Result.isFailure(call)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const userId = yield* resolvedUserId(seams, request);
+    const after = (yield* cursorQueryOf(request)) ?? CODING_AGENT_CURSOR_START;
+    const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
+    if (Option.isNone(plan) || plan.value.conversationId === undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    }
+    const parent = { userId, conversationId: plan.value.conversationId };
+    const session = yield* hostedStoreOrUnavailable(plannerWorkerSession(parent, call.success));
+    if (session === undefined) {
+      // A tab opens the moment its call is made, a step before the journal holds the call; past the turn, none is none for good.
+      const status = yield* hostedStoreOrUnavailable(plannerStatusNow(parent));
+      if (status !== CODING_AGENT_STATUS.RUNNING)
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return transcriptAnswer(
+        { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
+        null,
+      );
+    }
+    const child = childConversationId(parent.conversationId, session);
+    const createdAt = new Date(yield* Clock.currentTimeMillis);
+    const page = yield* hostedStoreOrUnavailable(
+      transcriptPast(
+        { userId, conversationId: child },
+        HOSTED_TOOL_SET,
+        cursorOfWire(after),
+        { createdAt },
+        undefined,
+        plannerTitleAwaited(parent, child),
+        PLANNER_POLL,
+      ),
+    );
+    // The title is read after the page, since it lands beside the worker's start, which a held read may span.
+    const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
+    return transcriptAnswer(page, titles.get(child) ?? null);
+  },
+);
+
+/** GET reads every code Luke showed on the plan, oldest first. */
+const codeEndpoint = /* @__PURE__ */ Effect.fn("web/planCodeEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const code = yield* hostedStoreOrUnavailable(readPlanCode(userId, planId));
+  if (Option.isNone(code)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, code.value);
 });
 
 /** The window of a file the queries name, each named once, or the invalid-request refusal. */
@@ -775,6 +957,13 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.MESSAGES, hostedRefusing(messagesEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      PLANS_PATH.SUBAGENT_MESSAGES,
+      hostedRefusing(subagentMessagesEndpoint(seams)),
+    ),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.CODE, hostedRefusing(codeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TREE, hostedRefusing(treeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.SKILLS, hostedRefusing(skillsEndpoint(seams))),

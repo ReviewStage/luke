@@ -365,7 +365,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   const planId = plans.activePlanId;
   if (planId === undefined) return [];
   const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
-  const workers = planWorkers(plans.work.turns, workRowsOf(plans.work.turns, plans.work.callLive));
+  const workers = planWorkers(workRowsOf(plans.work.conversation, plans.work.callLive));
   const inbox = inboxEntries(plans.agents, () => plans.onShowInbox(planId));
   const agents = agentEntries(plans.mainTabs, plans.agents, true).map((entry) => ({
     ...entry,

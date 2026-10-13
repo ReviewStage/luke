@@ -38,6 +38,10 @@ export const GATEWAY_METHOD = {
   PLANNING_EDIT: "planning.edit",
   /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",
+  /** The page of the open plan's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
+  PLANNING_CONVERSATION_EARLIER: "planning.conversationEarlier",
+  /** One page of a plan's conversation as an agent's transcript is read, or a planning worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
+  PLANNING_MESSAGES: "planning.messages",
   /** A window of a file of one plan's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   PLANNING_FILE: "planning.file",
   /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */

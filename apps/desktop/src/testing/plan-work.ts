@@ -8,12 +8,20 @@
 
 import { EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import {
+  CODING_AGENT_CURSOR_START,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentMessagesAnswer,
+  type CodingAgentStatus,
+  TURN_ENDING,
+} from "@sidecar/hosted/coding-agent-wire";
+import {
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../renderer/ai-elements/tool";
 
 /** The model's words, as a journal stores them. */
@@ -100,5 +108,70 @@ export function workTurn(
     journal,
     workers: [],
     ...rest,
+  };
+}
+
+/** Where a worker's own session stands, as a planner page says it, by where the test's worker stands. */
+const STATUS_OF_STATE = {
+  [PLAN_WORK_STATE.RUNNING]: CODING_AGENT_STATUS.RUNNING,
+  [PLAN_WORK_STATE.DONE]: CODING_AGENT_STATUS.COMPLETED,
+  [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
+} as const satisfies Record<PlanWorkState, CodingAgentStatus>;
+
+/** A turn's journal as a planner page carries it: its parts, its turn and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
+function messageOfTurn(turn: PlanWorkTurn): CodingAgentMessage {
+  const { model, effort, tokens } = turn;
+  const ending =
+    turn.state === PLAN_WORK_STATE.FAILED ? (turn.ending ?? TURN_ENDING.STOPPED) : turn.ending;
+  return {
+    id: turn.turnId,
+    role: MESSAGE_ROLE.ASSISTANT,
+    // SAFETY: a test's journal holds the stored parts the builders above make, JSON objects each.
+    parts: turn.journal as CodingAgentMessage["parts"],
+    turnId: turn.turnId,
+    ...(turn.earlierOmitted ? { earlierOmitted: true } : undefined),
+    ...(turn.asked === undefined ? undefined : { asked: turn.asked }),
+    ...(turn.askedAt === undefined ? undefined : { askedAt: turn.askedAt }),
+    startedAt: turn.startedAt,
+    ...(turn.state === PLAN_WORK_STATE.RUNNING
+      ? undefined
+      : { finishedAt: turn.endedAt ?? turn.startedAt }),
+    ...(model === undefined ? undefined : { model }),
+    ...(effort === undefined ? undefined : { effort }),
+    ...(tokens === undefined ? undefined : { tokens }),
+    ...(ending === undefined ? undefined : { ending }),
+  };
+}
+
+/**
+ * The turns as the plan's planning conversation reads them, as the window
+ * holds it (`planning.conversation`): each turn's journal one message, and
+ * where each worker stands and its title beside them, as the planner's pages
+ * say them; with the turn the page before is read before, where one is.
+ */
+export function conversationOf(
+  turns: readonly PlanWorkTurn[],
+  earlier?: string,
+): CodingAgentMessagesAnswer {
+  const workers = turns.flatMap((turn) => turn.workers.map((worker) => ({ turn, worker })));
+  const titles = workers.flatMap(({ worker }) =>
+    worker.title === undefined ? [] : [{ callId: worker.callId, title: worker.title }],
+  );
+  return {
+    messages: turns.map(messageOfTurn),
+    cursor: CODING_AGENT_CURSOR_START,
+    ...(earlier === undefined ? undefined : { earlier }),
+    status: turns.some((turn) => turn.state === PLAN_WORK_STATE.RUNNING)
+      ? CODING_AGENT_STATUS.RUNNING
+      : CODING_AGENT_STATUS.COMPLETED,
+    subagents: workers.map(({ turn, worker }) => ({
+      callId: worker.callId,
+      status: STATUS_OF_STATE[worker.state],
+      model: worker.model ?? "",
+      effort: worker.effort ?? "",
+      startedAt: worker.startedAt ?? turn.startedAt,
+    })),
+    ...(titles.length === 0 ? undefined : { subagentTitles: titles }),
+    title: null,
   };
 }

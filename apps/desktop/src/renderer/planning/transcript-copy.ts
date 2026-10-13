@@ -1,5 +1,6 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  applyMessagesPage,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_CURSOR_START,
@@ -12,7 +13,6 @@ import {
   AGENT_PART,
   type AgentPart,
   agentRows,
-  applyMessagesPage,
   isDelegation,
   messageWords,
   workerLines,
@@ -27,7 +27,6 @@ import {
   type TurnRow,
 } from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
-import { type WorkWorkerBlock, workerJob } from "./work-model";
 
 /**
  * transcript-copy.ts -- a coding agent's or a subagent's transcript as the markdown its tab's menu copies: concise, or whole.
@@ -215,20 +214,6 @@ export function agentTranscript(input: {
     brief: first === undefined ? undefined : { label, text: messageWords(first) },
     earlierOmitted: false,
     turns,
-  };
-}
-
-/** A worker of the plan's work, as its tab draws its session, read for a copy as an agent's worker is: the message it was handed is the brief, and its session one turn. */
-export function workerTranscript(worker: WorkWorkerBlock): CopiedTranscript {
-  const { session } = worker;
-  return {
-    ...agentTranscript({
-      title: workerJob(worker.call),
-      messages: session === undefined ? [] : [session.message],
-      brief: undefined,
-      task: worker.task,
-    }),
-    earlierOmitted: session?.earlierOmitted ?? false,
   };
 }
 

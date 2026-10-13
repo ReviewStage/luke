@@ -155,6 +155,35 @@ export function planWorkPath(planId: string, before?: string): string {
   return `${path}?${query}`;
 }
 
+/**
+ * One plan's planning conversation as a coding agent's transcript is read
+ * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
+ * open while a turn runs; with no cursor, its newest turns; with `before`,
+ * the turns queued before that one.
+ */
+export function planMessagesPath(
+  planId: string,
+  page: { after?: string; before?: string },
+): string {
+  const path = `${planPath(planId)}/messages`;
+  const query = new URLSearchParams({
+    ...(page.after === undefined ? undefined : { after: page.after }),
+    ...(page.before === undefined ? undefined : { before: page.before }),
+  });
+  return query.size === 0 ? path : `${path}?${query}`;
+}
+
+/** One planning worker's transcript past a cursor (GET), under the plan and the call that started it, held open while the worker runs; the same answer as `planMessagesPath`'s read. */
+export function planSubagentMessagesPath(planId: string, callId: string, after: string): string {
+  const query = new URLSearchParams({ after });
+  return `${planPath(planId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
+}
+
+/** Every code Luke showed on one plan, oldest first (GET). */
+export function planCodePath(planId: string): string {
+  return `${planPath(planId)}/code`;
+}
+
 /** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
 export function planFilePath(
   planId: string,

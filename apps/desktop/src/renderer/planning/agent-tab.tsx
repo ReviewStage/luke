@@ -171,7 +171,7 @@ export const AGENT_LEAD: TranscriptLead = {
 };
 
 /** A worker's transcript: the task it was handed, and the worker starting. */
-export const WORKER_LEAD: TranscriptLead = {
+const WORKER_LEAD: TranscriptLead = {
   label: "Task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting. Its transcript appears here.",
@@ -557,7 +557,7 @@ export function agentEndMark(
 }
 
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
-export function AgentTranscriptView({
+function AgentTranscriptView({
   messages,
   brief,
   lead = AGENT_LEAD,
