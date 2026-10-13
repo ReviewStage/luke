@@ -272,6 +272,7 @@ function groupSeams(state: Backing): AccountAppSeams {
     standingSessions: () => overStore(state, async () => state.sessions),
     deleteUser: (userId) => overStore(state, () => deleteUser(state)(userId)),
     readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
+    ownKeyProviders: () => Effect.succeed(new Set()),
     writePreferences: (userId, write) =>
       overStore(state, () => writePreferences(state)(userId, write)),
     // The plan template's path is answered over a real dialect in `account-plan-template.test.ts`.

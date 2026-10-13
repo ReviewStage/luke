@@ -25,6 +25,7 @@ import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
+  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -109,6 +110,10 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.PROVIDER_KEY]:
     "your API key was refused or can't be read; check Settings › Coding agents › API keys",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
+  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
+    "Fast isn't available on your own API key; choose the model with Fast off",
+  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
+    "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -414,6 +419,9 @@ export function orderedModels(models: readonly CatalogModel[]): readonly Catalog
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
 
+/** What the Fast row says where the service withholds the model's fast version because the account runs its provider on its own key. */
+const FAST_OWN_KEY_NOTE = "Fast isn't available on your own API key";
+
 /** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
 const CHOICE_WORD_SEPARATOR = " ";
 
@@ -467,6 +475,17 @@ export function unsearchedModels(
   }
   if (leads.size === 0) return new Set(offered);
   return new Set([...leads.values(), ...(chosen === undefined ? [] : [chosen])]);
+}
+
+/** Why the Fast row rests for the base model chosen, or nothing where its fast version is offered: withheld for the account's own key, or none listed. */
+export function fastRestingNote(
+  baseId: string,
+  offered: OfferedModel | undefined,
+  models: readonly CatalogModel[],
+): string | undefined {
+  if (offered?.fast !== undefined) return undefined;
+  if (offered?.model.fastWithheld === FAST_WITHHELD.OWN_KEY) return FAST_OWN_KEY_NOTE;
+  return `No fast version of ${modelLabel(baseId, models)}`;
 }
 
 /** Whether the id is the fast version of a model the catalog offers. */

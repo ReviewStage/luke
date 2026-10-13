@@ -140,6 +140,10 @@ export const CODING_AGENT_FAILURE = {
   PROVIDER_KEY: "provider_key",
   /** The agent's session never started, so no turn ran; a new agent is the way on. */
   NOT_STARTED: "not_started",
+  /** The agent runs a fast version, which Luke runs on its own key alone, and the account runs the provider on its own key. */
+  FAST_ON_OWN_KEY: "fast_own_key",
+  /** The provider refused fast mode for the organization of the key the step ran on. */
+  FAST_NOT_ENABLED: "fast_not_enabled",
   OTHER: "other",
 } as const;
 

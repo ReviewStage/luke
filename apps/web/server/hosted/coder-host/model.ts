@@ -32,7 +32,11 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * planning brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. A fast version runs as its base
  * model asked for Anthropic's fast speed, the SDK sending the beta header
- * that speed needs. The agent's
+ * that speed needs, and on Luke's key alone: Anthropic's fast mode is a
+ * research preview it grants organization by organization, so a step on an
+ * account's own key is refused before any request, and Anthropic's refusal
+ * of fast mode for Luke's own organization fails the step in words saying
+ * so. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
  * same provider door, always on Luke's own Anthropic key. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
@@ -75,6 +79,9 @@ const OPENAI_NO_QUOTA = "insufficient_quota";
 
 /** Anthropic's words, in a refusal's body, for an account out of credit. */
 const ANTHROPIC_NO_CREDIT = /credit balance/iu;
+
+/** Anthropic's words, in a 429's body, for an organization fast mode was never enabled for: a fast limit of 0. */
+const ANTHROPIC_FAST_NOT_ENABLED = /rate limit of 0 fast mode/iu;
 
 const PROVIDER_REFUSAL_STATUS = {
   UNAUTHORIZED: 401,
@@ -205,6 +212,31 @@ function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddle
   };
 }
 
+/**
+ * The call, with Anthropic's refusal of fast mode for the key's
+ * organization read as that, in words, rather than as a model call that
+ * failed. Note that the words are thrown as a plain error, because the SDK
+ * retries a 429 and a limit of 0 answers every retry the same.
+ */
+async function fastModeSettled<A>(call: () => PromiseLike<A>): Promise<A> {
+  try {
+    return await call();
+  } catch (failure) {
+    const notEnabled =
+      APICallError.isInstance(failure) &&
+      failure.statusCode === PROVIDER_REFUSAL_STATUS.TOO_MANY_REQUESTS &&
+      ANTHROPIC_FAST_NOT_ENABLED.test(failure.responseBody ?? "");
+    if (notEnabled) throw new Error(CODER_REFUSAL.FAST_NOT_ENABLED);
+    throw failure;
+  }
+}
+
+/** A fast step's calls, each settled as above. */
+const FAST_MODE_MIDDLEWARE: LanguageModelMiddleware = {
+  wrapGenerate: ({ doGenerate }) => fastModeSettled(doGenerate),
+  wrapStream: ({ doStream }) => fastModeSettled(doStream),
+};
+
 /** The provider's model on the key, behind the account's middleware where the key is the account's own, and the meter where it is Luke's. */
 function modelOnKey(
   provider: ModelProvider,
@@ -242,7 +274,7 @@ export function titleModel(
   return meteredModel(createAnthropic(settings)(AGENT_TITLE_MODEL_ID), meter);
 }
 
-/** The choice as a step runs it, or why it cannot: a provider Luke does not run, a fast version Luke cannot ask its provider for, an account's key that cannot be read, or no key at all. */
+/** The choice as a step runs it, or why it cannot: a provider Luke does not run, a fast version Luke cannot ask its provider for or would run on the account's own key, an account's key that cannot be read, or no key at all. */
 export function coderModel(
   choice: ModelChoice,
   keys: ProviderKeys,
@@ -255,8 +287,10 @@ export function coderModel(
   const key = named.provider === MODEL_PROVIDER.ANTHROPIC ? keys.anthropic : keys.openAi;
   if (key === undefined) return Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY);
   if (key === PROVIDER_KEY_UNREADABLE) return Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE);
+  if (named.fast && key.account !== undefined) return Result.fail(CODER_REFUSAL.FAST_ON_OWN_KEY);
+  const model = modelOnKey(named.provider, named.modelId, key, keys.fetch);
   return Result.succeed({
-    model: modelOnKey(named.provider, named.modelId, key, keys.fetch),
+    model: named.fast ? wrapLanguageModel({ model, middleware: FAST_MODE_MIDDLEWARE }) : model,
     modelContextWindowTokens: contextWindowTokens,
     modelOptions: stepOptions(named, choice.effort),
   });

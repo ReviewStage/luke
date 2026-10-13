@@ -11,11 +11,13 @@ import {
 import { Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
+  acceptedModelChoice,
   MODEL_CATALOG_TTL,
   MODEL_CATALOG_URL,
   MODEL_CHOICE_REFUSAL,
   ModelCatalog,
   modelCatalogLayer,
+  modelCatalogOf,
   type OfferedModel,
   providerModelOf,
   validateModelChoice,
@@ -420,6 +422,40 @@ it.effect(
       assert.deepEqual(
         validateModelChoice(offered, { model: "openai/gpt-5.5-fast", effort: "high" }),
         Result.fail(MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL),
+      );
+    }),
+);
+
+it.effect(
+  "a choice of a fast version is refused for an account that runs its provider on its own key, and accepted for one on Luke's key",
+  () =>
+    Effect.gen(function* () {
+      const catalog = modelCatalogOf([
+        {
+          id: "anthropic/claude-opus-5.5",
+          name: "Claude Opus 5.5",
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          efforts: OPUS_EFFORTS,
+        },
+        {
+          id: "anthropic/claude-opus-5.5-fast",
+          name: "Claude Opus 5.5 (Fast)",
+          provider: MODEL_PROVIDER.ANTHROPIC,
+          efforts: OPUS_EFFORTS,
+        },
+      ]);
+      const fast = { model: "anthropic/claude-opus-5.5-fast", effort: "high" };
+      const ownKey = yield* acceptedModelChoice(fast, new Set([MODEL_PROVIDER.ANTHROPIC])).pipe(
+        Effect.flip,
+        Effect.provide(catalog),
+      );
+      assert.equal(
+        ownKey._tag === "ModelChoiceRefused" ? ownKey.reason : ownKey._tag,
+        MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL,
+      );
+      assert.deepEqual(
+        yield* acceptedModelChoice(fast, new Set()).pipe(Effect.provide(catalog)),
+        fast,
       );
     }),
 );

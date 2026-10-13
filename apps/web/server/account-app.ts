@@ -5,7 +5,7 @@ import type {
 } from "@sidecar/database/models/account-store";
 import type { StandingSession } from "@sidecar/database/models/recorded-session";
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -107,6 +107,8 @@ export interface AccountAppSeams extends EveReach {
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
+  /** The providers the account runs on a key of its own, whose fast versions its coding-agent choice may not name. */
+  ownKeyProviders: (userId: string) => AccountSeamEffect<ReadonlySet<ModelProvider>>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
   writePreferences: (
     userId: string,
@@ -241,16 +243,19 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEn
 });
 
 /**
- * The write's coding-agent part, as the catalog accepts it: a choice the
- * catalog does not offer is a bad request, and a catalog the instance
+ * The write's coding-agent part, as the catalog accepts it for the
+ * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
  * cannot read is an outage the caller may retry.
  */
 const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AccountAppSeams,
+  userId: string,
   value: UnparsedWireValue,
-): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog> {
+): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | SqlClient.SqlClient> {
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return yield* acceptedModelChoice(read.success).pipe(
+  const own = yield* hostedStoreOrUnavailable(seams.ownKeyProviders(userId));
+  return yield* acceptedModelChoice(read.success, own).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(
@@ -291,7 +296,7 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
       write.preferences = preferences;
     }
     if (body.codingAgent !== undefined) {
-      write.codingAgent = yield* acceptedCodingAgent(body.codingAgent);
+      write.codingAgent = yield* acceptedCodingAgent(seams, userId, body.codingAgent);
     }
 
     const row = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, write));

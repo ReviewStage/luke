@@ -10,6 +10,7 @@ import {
   type ProviderKeyRow,
   setProviderKeyStatus,
 } from "@sidecar/database/models/provider-key-store";
+import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { DateTime, Effect, type Redacted, Result } from "effect";
 import type { WebStoreRun } from "../../runtime.js";
@@ -95,4 +96,12 @@ export function accountProviderKeys(
       ),
     };
   });
+}
+
+/** The providers the account runs on a key of its own: each it holds a row for, readable or not, as a step would. */
+export function ownKeyProviders(userId: string): PlanStoreEffect<ReadonlySet<ModelProvider>> {
+  return Effect.map(
+    listProviderKeyRows(userId),
+    (rows) => new Set(rows.map((row) => row.provider)),
+  );
 }
