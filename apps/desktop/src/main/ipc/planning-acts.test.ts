@@ -43,7 +43,6 @@ const GRACE = {
   email: "grace@luke.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
-const _REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
