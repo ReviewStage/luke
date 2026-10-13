@@ -2513,21 +2513,6 @@ body,
 
 /* Version history ------------------------------------------------------------ */
 
-/* The plan the versions are of, under the view's own title, which gives up
-   its gap below to this line. */
-.version-log-title:has(+ .version-log-plan) {
-  margin-bottom: var(--space-2);
-}
-
-.version-log-plan {
-  margin: 0 var(--row-inset) var(--space-12);
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The versions, newest first, one row each, the row whose version is drawn
    lit as a chosen sidebar row is (desktop-version-history.tsx). */
 .version-list {
@@ -2551,7 +2536,10 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
-.version-row:hover {
+/* A row fills while the pointer is anywhere on its item, its ⋯ included,
+   and no more than its hover does, so the chosen row keeps its stronger
+   fill. */
+:where(.version-item:hover) > .version-row {
   background: var(--raised);
 }
 
@@ -2625,10 +2613,12 @@ body,
 
 .version-row-time {
   flex: none;
+  min-width: var(--sidebar-plan-mark);
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .version-row-summary {
@@ -2639,99 +2629,33 @@ body,
   white-space: nowrap;
 }
 
-/* A row and the chevron beside it that opens the sections its revision
-   changed, set over the row's end beside its time, so the row keeps its
-   whole width to press. */
+/* A row's ⋯ stands in its time's place, which is always as wide as it, while
+   the row is hovered, holds the keyboard, or its menu is open, drawn as a
+   sidebar plan's Pin and Archive are: the row's sibling, since a button
+   holds no button, laid over its first line. */
 .version-item {
+  --sidebar-plan-mark: 22px;
   position: relative;
 }
 
-.version-item:has(.version-row-sections) .version-row {
-  padding-right: calc(var(--row-inset) + 20px);
-}
-
-.version-row-sections {
+.version-row-actions {
   position: absolute;
-  top: 50%;
-  right: var(--space-4);
-  display: grid;
-  width: 20px;
-  height: 22px;
-  place-items: center;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-tertiary);
-  transform: translateY(-50%);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.version-row-sections:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.version-row-sections svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* A revision's Open: a quiet arrow at the row's end, beside the chevron
-   where there is one, standing only while the row is hovered, focused, or
-   its menu is open, in the place the time gives up for it. */
-.version-row-open {
-  position: absolute;
-  top: 50%;
-  right: var(--space-4);
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-tertiary);
+  top: var(--space-8);
+  right: var(--row-inset);
+  display: flex;
+  height: 1lh;
+  align-items: center;
+  font-size: 12.5px;
   opacity: 0;
-  transform: translateY(-50%);
-  transition:
-    opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
 }
 
-.version-item:has(.version-row-sections) .version-row-open {
-  right: calc(var(--space-4) + 22px);
-}
-
-.version-item:is(:hover, :focus-within, [data-menu-open="true"]) .version-row-open {
+.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]) > .version-row-actions {
   opacity: 1;
 }
 
-.version-item:is(:hover, :focus-within, [data-menu-open="true"]):has(.version-row-open)
+.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(.version-row-actions)
   .version-row-time {
-  opacity: 0;
-}
-
-.version-row-open:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.version-row-open svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Over a revision's sections the Open stands at the end of its one line,
-   in the flow rather than over a row, while the line is hovered. */
-.version-sections-head .version-row-open {
-  position: static;
-  margin-left: auto;
-  transform: none;
-}
-
-.version-sections-head:is(:hover, :focus-within) .version-row-open {
-  opacity: 1;
+  visibility: hidden;
 }
 
 /* The versions and the sections of the one opened stand side by side in a
@@ -2742,11 +2666,17 @@ body,
   min-height: 0;
   flex: 1;
   grid-template-columns: 100% 100%;
+  grid-template-rows: minmax(0, 1fr);
   overflow: clip;
 }
 
+/* The view's title heads the versions' pane rather than the column, so it
+   slides away with them and the sections' own head stands in its place. */
 .version-log-pane {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   transition: transform var(--duration-pane) var(--motion-pane);
 }
 
@@ -2759,21 +2689,30 @@ body,
   margin-bottom: var(--space-8);
 }
 
-/* Who wrote the revision and when, on the one line over its sections. */
+/* Who wrote the revision, on the one line over its sections: a row of its
+   own that goes where the revision was written, lit under the pointer as a
+   sidebar row is, where anywhere in the window wrote it. */
 .version-sections-head {
   display: flex;
   min-width: 0;
+  flex: none;
   align-items: center;
-  gap: var(--space-6);
-  margin: 0 var(--row-inset) var(--space-8);
-  color: var(--text-tertiary);
+  gap: var(--space-8);
+  margin: 0 0 var(--space-8);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
   font-size: 12px;
+  text-align: left;
   white-space: nowrap;
 }
 
-.version-sections-head time {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.version-sections-source {
+  transition: background-color var(--duration-hover) ease;
+}
+
+.version-sections-source:hover {
+  background: var(--raised);
 }
 
 .version-section-row {

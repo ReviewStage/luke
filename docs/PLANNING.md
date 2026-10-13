@@ -678,8 +678,8 @@ line reads.
 Version history, in the plan's ⋯ menu (the toolbar's and the sidebar row's
 right-click alike) and behind the "Edited by" line, takes the whole window
 the way Settings does (`desktop/desktop-version-history.tsx`): a column as
-wide as the sidebar, with Back at its head, "Version history" and the
-plan's name, and the revisions newest first, fifty a page
+wide as the sidebar, with Back at its head, "Version history", and the
+revisions newest first, fifty a page
 (`GET /api/plans/{id}/revisions`), each as who wrote it ("Luke", "You", or a
 coding agent by its row), whether on a call, how many changes it made, and
 how long ago; the newest is labelled "Current", and the plan from before
@@ -691,7 +691,12 @@ moment, older pages read until one shows it, and the newest where one cannot
 be read), is read with the content before it
 (`GET /api/plans/{id}/revisions/{seq}`), and drawn read-only under the plan's
 name as it stands, beside the list (`planning/version-view.tsx`), under a bar with its moment and Restore this
-version; the up and down arrows step through the list. Every version, the
+version; the up and down arrows step through the list. A row's ⋯, standing
+in its time's place while the row is hovered or focused, and its right-click
+offer what applies: Show changes (its sections, for a revision of several
+changes), the Open that goes where it was written, and Restore this version.
+Over a revision's sections, who wrote it is the one control that opens where
+it was written. Every version, the
 current one included, is drawn against the one just before it, which is what
 the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
