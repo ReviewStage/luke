@@ -8,6 +8,7 @@ import {
 } from "@sidecar/analytics";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
+import { type AvatarGrant, avatarGrantFromWire } from "@sidecar/hosted/avatar-grant";
 import { liveExchangeActive } from "@sidecar/live";
 import {
   EXCESS_KEYS,
@@ -20,12 +21,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import {
-  type AvatarFeed,
-  type AvatarGrant,
-  avatarFeedFromWire,
-  avatarGrantFromWire,
-} from "./messages/avatar";
+import { type AvatarFeed, avatarFeedFromWire } from "./messages/avatar";
 import {
   isVoiceCommand,
   isVoiceView,

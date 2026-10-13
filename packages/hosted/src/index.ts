@@ -57,7 +57,6 @@ export {
   type AvatarUnavailableReason,
   avatarRequestFrameFromWire,
   avatarStartedFrameFromWire,
-  avatarStartedFrameSchema,
   avatarStartFrameSchema,
   avatarStopFrameSchema,
   avatarUnavailableFrameFromWire,

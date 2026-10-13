@@ -1,8 +1,7 @@
 // avatar.ts -- Luke's avatar on a call: its standing in the document, and the voice feed it is lip-synced to.
-import { avatarStartedFrameSchema } from "@sidecar/hosted";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result, Struct } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 
 /**
  * Where the avatar stands, as main holds it in the document: `OFF` until the
@@ -65,22 +64,6 @@ export const avatarStateSchema = EffectSchema.Union([
     endReason: EffectSchema.Literals(Object.values(AVATAR_END_REASON)),
   }),
 ]);
-
-/**
- * Keyframe's grant for one call's avatar, as main hands it to the call window
- * and to no other: the LiveKit server, the participant token, and the
- * identity the avatar publishes under. The frame's request id stays with the
- * host that matched it to its ask. The token can view the avatar and send it
- * audio, so it never enters the document, a trace, or an event.
- */
-const avatarGrantSchema = avatarStartedFrameSchema.mapFields(Struct.omit(["type", "requestId"]));
-
-export type AvatarGrant = typeof avatarGrantSchema.Type;
-
-/** A grant as it crossed to the call window, or nothing where it is not one. */
-export function avatarGrantFromWire(value: UnparsedWireValue): AvatarGrant | undefined {
-  return Result.getOrUndefined(readEither(avatarGrantSchema)(value));
-}
 
 /** What one feed message says: a chunk of Luke's voice, the end of his turn, or the developer cutting in. */
 export const AVATAR_FEED_KIND = {

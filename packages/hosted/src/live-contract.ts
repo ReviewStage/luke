@@ -9,6 +9,7 @@ import {
 import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
+import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
@@ -471,24 +472,9 @@ export type AvatarUnavailableReason =
  */
 export const AVATAR_FRAME_BOUNDS = {
   REQUEST_ID_CHARS: 64,
-  URL_CHARS: 2_048,
-  TOKEN_CHARS: 8_192,
-  IDENTITY_CHARS: 256,
+  ...AVATAR_GRANT_BOUNDS,
   REASON_CHARS: 64,
 } as const;
-
-/** The scheme the avatar's room must be on, so a service answer can never point the call window at a plain socket. */
-const AVATAR_SERVER_PROTOCOL = "wss:";
-
-function isSecureSocketUrl(value: string): boolean {
-  return URL.canParse(value) && new URL(value).protocol === AVATAR_SERVER_PROTOCOL;
-}
-
-/** An absolute `wss:` address, bounded, as written. */
-const avatarServerUrl = Schema.String.check(
-  Schema.isMaxLength(AVATAR_FRAME_BOUNDS.URL_CHARS),
-  Schema.makeFilter(isSecureSocketUrl, wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
-);
 
 /**
  * A reason the service answers with. One a newer service added reads as
@@ -551,9 +537,7 @@ export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
 export const avatarStartedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
   requestId: avatarRequestId,
-  serverUrl: avatarServerUrl,
-  participantToken: verbatimText(AVATAR_FRAME_BOUNDS.TOKEN_CHARS),
-  agentIdentity: verbatimText(AVATAR_FRAME_BOUNDS.IDENTITY_CHARS),
+  ...avatarGrantSchema.fields,
 });
 
 export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;

@@ -4,10 +4,11 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@sidecar/host";
+import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { AvatarFeed, AvatarGrant } from "#shared/messages/avatar";
+import type { AvatarFeed } from "#shared/messages/avatar";
 import { CallAvatarRelay } from "./call-window-avatar";
 import {
   CALL_WINDOW_BOUNDS,

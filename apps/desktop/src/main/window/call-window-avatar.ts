@@ -8,9 +8,10 @@
  * and tested as the plain relay it is.
  */
 
+import type { AvatarGrant } from "@sidecar/hosted/avatar-grant";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
-import type { AvatarFeed, AvatarGrant } from "#shared/messages/avatar";
+import type { AvatarFeed } from "#shared/messages/avatar";
 
 /** The call window's page as the relay reaches it: its own `webContents`, and nothing wider. */
 export interface CallWindowPage {
