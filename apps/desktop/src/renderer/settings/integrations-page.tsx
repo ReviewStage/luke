@@ -41,6 +41,8 @@ import { ConfirmSwap } from "./confirm-swap";
 const INTEGRATION_OFFER = {
   [INTEGRATION_PROVIDER.LINEAR]: "Read and update issues, projects, and documents.",
   [INTEGRATION_PROVIDER.NOTION]: "Search, read, and update pages and databases.",
+  [INTEGRATION_PROVIDER.SENTRY]:
+    "Read issues, errors, and traces. Untick write access on Sentry's sign-in to keep it read-only.",
 } as const satisfies Record<IntegrationProvider, string>;
 
 const PAGE_LINE = {

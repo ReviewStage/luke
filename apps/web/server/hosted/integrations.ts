@@ -44,6 +44,13 @@ export const INTEGRATION = {
       "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
     REMOTE_TOOL: "notion_remote",
   },
+  [INTEGRATION_PROVIDER.SENTRY]: {
+    CONNECTOR_VARIABLE: "SENTRY_CONNECTOR_UID",
+    MCP_URL: "https://mcp.sentry.dev/mcp",
+    DESCRIPTION:
+      "Sentry, the developer's error and performance monitoring, as their own account sees it: find and read issues, errors, events, traces, logs, and releases, and update issues where the account allows it.",
+    REMOTE_TOOL: "sentry_remote",
+  },
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
 
 /** Every integration's name as one phrase an instruction can say: "Linear or Notion". */

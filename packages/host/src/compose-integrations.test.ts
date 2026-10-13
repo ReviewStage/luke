@@ -36,7 +36,11 @@ function fakeService(script: ServiceScript) {
   const client: IntegrationsClient = {
     statuses: () =>
       Effect.sync(() => ({
-        integrations: { linear: script.status, notion: INTEGRATION_STATUS.UNAVAILABLE },
+        integrations: {
+          linear: script.status,
+          notion: INTEGRATION_STATUS.UNAVAILABLE,
+          sentry: INTEGRATION_STATUS.UNAVAILABLE,
+        },
       })),
     connect: (provider) =>
       Effect.sync(() => {
@@ -123,6 +127,7 @@ it.effect("the statuses and a Disconnect are the service's answers, whole", () =
       integrations: {
         linear: INTEGRATION_STATUS.CONNECTED,
         notion: INTEGRATION_STATUS.UNAVAILABLE,
+        sentry: INTEGRATION_STATUS.UNAVAILABLE,
       },
     });
     assert.deepEqual(yield* call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, LINEAR), {
@@ -132,6 +137,7 @@ it.effect("the statuses and a Disconnect are the service's answers, whole", () =
       integrations: {
         linear: INTEGRATION_STATUS.DISCONNECTED,
         notion: INTEGRATION_STATUS.UNAVAILABLE,
+        sentry: INTEGRATION_STATUS.UNAVAILABLE,
       },
     });
   }),

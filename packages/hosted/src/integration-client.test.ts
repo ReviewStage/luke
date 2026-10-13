@@ -26,6 +26,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
           integrations: {
             linear: INTEGRATION_STATUS.CONNECTED,
             notion: INTEGRATION_STATUS.UNAVAILABLE,
+            sentry: INTEGRATION_STATUS.UNAVAILABLE,
           },
         }),
       },
@@ -35,6 +36,7 @@ it.effect("reads where every provider stands under the account's bearer", () =>
       integrations: {
         linear: INTEGRATION_STATUS.CONNECTED,
         notion: INTEGRATION_STATUS.UNAVAILABLE,
+        sentry: INTEGRATION_STATUS.UNAVAILABLE,
       },
     });
     assert.deepEqual(api.credentials(), ["token-1"]);
@@ -57,7 +59,11 @@ it.effect(
       const unknown = fakeCloudApi({
         "GET /api/account/integrations": {
           answer: () => ({
-            integrations: { linear: "half-connected", notion: INTEGRATION_STATUS.UNAVAILABLE },
+            integrations: {
+              linear: "half-connected",
+              notion: INTEGRATION_STATUS.UNAVAILABLE,
+              sentry: INTEGRATION_STATUS.UNAVAILABLE,
+            },
           }),
         },
       });
