@@ -10,6 +10,9 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/schemas/index.ts",
   out: "./migrations",
+  // Note that a new migration is named by the time it was generated rather
+  // than by the next index, so two branches never pick the same file name.
+  migrations: { prefix: "timestamp" },
   strict: true,
   verbose: true,
 });
