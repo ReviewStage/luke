@@ -43,6 +43,11 @@ import {
   READ_CODING_AGENT_TOOL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
+import {
+  MAC_COMMAND_REFUSAL,
+  MAC_COMMAND_STATUS,
+  RUN_ON_MAC_TOOL,
+} from "../server/hosted/mac-command";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
@@ -212,6 +217,7 @@ const AGENT_ID = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
 const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>([
   [RUN_IN_REPOSITORY_TOOL.name, { command: "ls" }],
+  [RUN_ON_MAC_TOOL.name, { command: "git status" }],
   [SEARCH_WEB_TOOL.name, { query: "queue library comparison" }],
   [READ_WEB_PAGE_TOOL.name, { url: "https://example.com/docs" }],
   [SHOW_CODE_TOOL.name, { path: "src/invite.ts" }],
@@ -276,6 +282,75 @@ test("a repository command reads as its command while it runs, then with its out
       "src/invite.ts:4:export function invite()\ngrep: src/vendor: Permission denied\nExit code 2",
     ],
     [PLAN_WORK_PART.TEXT, "Invites live in one file."],
+  ]);
+});
+
+test("a command run on the Mac reads as its command, with its output and how it ended: an exit code it failed with, its timeout, why it was not run, or the error of a shell that never started", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const ran = { status: MAC_COMMAND_STATUS.RAN, stderr: "", truncated: false };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: RUN_ON_MAC_TOOL.name,
+          input: { command: "git status", description: "Check the local branch" },
+          output: {
+            ...ran,
+            exitCode: 128,
+            stdout: "",
+            stderr: "fatal: not a git repository",
+            timedOut: false,
+          },
+        },
+        {
+          toolName: RUN_ON_MAC_TOOL.name,
+          input: { command: "pnpm dev" },
+          output: { ...ran, exitCode: null, stdout: "ready on :3000", timedOut: true },
+        },
+        {
+          toolName: RUN_ON_MAC_TOOL.name,
+          input: { command: "ls" },
+          output: { status: MAC_COMMAND_STATUS.NOT_RUN, reason: MAC_COMMAND_REFUSAL.NO_MAC },
+        },
+        {
+          toolName: RUN_ON_MAC_TOOL.name,
+          input: { command: "pwd" },
+          output: {
+            ...ran,
+            exitCode: null,
+            stdout: "",
+            stderr: "Luke could not start the command: no such file: /bin/fish",
+            timedOut: false,
+          },
+        },
+      ]),
+    ],
+    standing,
+  );
+
+  const done = await worked(target, standing);
+  assert.deepEqual(done.parts.map(read), [
+    [
+      PLAN_WORK_TOOL.MAC_COMMAND,
+      "git status",
+      PLAN_WORK_STATE.DONE,
+      "fatal: not a git repository\nExit code 128",
+    ],
+    [
+      PLAN_WORK_TOOL.MAC_COMMAND,
+      "pnpm dev",
+      PLAN_WORK_STATE.DONE,
+      "ready on :3000\nKilled at its timeout",
+    ],
+    [PLAN_WORK_TOOL.MAC_COMMAND, "ls", PLAN_WORK_STATE.DONE, MAC_COMMAND_REFUSAL.NO_MAC],
+    [
+      PLAN_WORK_TOOL.MAC_COMMAND,
+      "pwd",
+      PLAN_WORK_STATE.DONE,
+      "Luke could not start the command: no such file: /bin/fish",
+    ],
   ]);
 });
 

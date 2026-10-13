@@ -45,6 +45,8 @@ export const AGENT_TOOL = {
   // The public reads, every role's (`../public-research.ts`).
   SEARCH_WEB: "search_web",
   READ_WEB_PAGE: "read_web_page",
+  // A command on the developer's own Mac, every role's (`../mac-command.ts`).
+  RUN_ON_MAC: "run_on_mac",
   // eve's shell and file tools and the code extension's, started in a coding agent's checkout (`../coder-host/files.ts`).
   BASH: "bash",
   READ_FILE: "read_file",
@@ -90,6 +92,7 @@ export const TOOL_ROLES = {
   [AGENT_TOOL.END_CALL]: [PLANNER],
   [AGENT_TOOL.SEARCH_WEB]: [PLANNER, PLANNER_WORKER, CODER, CODER_WORKER],
   [AGENT_TOOL.READ_WEB_PAGE]: [PLANNER, PLANNER_WORKER, CODER, CODER_WORKER],
+  [AGENT_TOOL.RUN_ON_MAC]: [PLANNER, PLANNER_WORKER, CODER, CODER_WORKER],
   [AGENT_TOOL.BASH]: [CODER, CODER_WORKER],
   [AGENT_TOOL.READ_FILE]: [CODER, CODER_WORKER],
   [AGENT_TOOL.WRITE_FILE]: [CODER],

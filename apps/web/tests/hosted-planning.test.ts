@@ -78,6 +78,7 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
+import { RUN_ON_MAC_TOOL } from "../server/hosted/mac-command";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { SHOW_PAGE_TOOL } from "../server/hosted/page-tool";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
@@ -562,6 +563,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
             WITHDRAW_QUESTION_TOOL.name,
             SHOW_CODE_TOOL.name,
             RUN_IN_REPOSITORY_TOOL.name,
+            RUN_ON_MAC_TOOL.name,
             SEARCH_WEB_TOOL.name,
             READ_WEB_PAGE_TOOL.name,
             DRAW_ON_BOARD_TOOL.name,

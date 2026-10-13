@@ -15,9 +15,12 @@ import {
   type MacCommandResult,
   macCommandSchema,
 } from "@sidecar/hosted/mac-command-wire";
-import { readEither } from "@sidecar/wire/effect";
-import { Clock, Duration, Effect, Option, Result, Schedule } from "effect";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { describeWire, readEither } from "@sidecar/wire/effect";
+import { Clock, Duration, Effect, Option, Result, Schedule, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**
  * mac-command.ts -- a shell command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
@@ -87,6 +90,46 @@ export interface MacCommandAsk {
 
 const readMacCommand = readEither(macCommandSchema);
 
+const RUN_ON_MAC_INPUT = Schema.Struct({
+  command: describeWire(
+    Schema.String.check(Schema.isMinLength(1)),
+    "One shell command, run in the developer's login shell from their home folder on their Mac, " +
+      'such as "git -C ~/code/app status", "ls ~/code", or "node --version".',
+  ),
+  description: COMMAND_DESCRIPTION,
+  timeout_seconds: Schema.optionalKey(
+    describeWire(
+      Schema.Int.check(
+        Schema.isBetween({ minimum: 1, maximum: MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS }),
+      ),
+      `Seconds before the command is killed; ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} when ` +
+        `left out, at most ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}. Ask for longer only for a ` +
+        "command that needs it, such as a test suite or a build.",
+    ),
+  ),
+});
+
+const readInput = readEither(RUN_ON_MAC_INPUT);
+
+/**
+ * The tool as every agent is offered it, the planning model, a coding agent,
+ * and either's workers alike: its name, its words, and its input schema.
+ */
+export const RUN_ON_MAC_TOOL = {
+  name: AGENT_TOOL.RUN_ON_MAC,
+  description:
+    "Run one shell command on the developer's own Mac, in their login shell from their home " +
+    "folder, and read what it printed. It runs at once, without asking the developer, and " +
+    "reaches whatever the developer's account on the Mac reaches: their local checkouts and " +
+    "uncommitted work, installed tools, running servers. Use it for what only the Mac has; " +
+    "read the plan's repository where you have it. Nothing reads stdin, so a command that asks " +
+    `for input fails. It is killed after ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} seconds ` +
+    "unless `timeout_seconds` says otherwise. Answers the exit code, stdout, and stderr, each " +
+    `cut to ${MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS} characters, or \`not-run\` and why, such as ` +
+    "Luke not running on the Mac.",
+  inputSchema: RUN_ON_MAC_INPUT,
+} as const;
+
 function notRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
@@ -147,6 +190,24 @@ export function runOnMac(
     return { status: MAC_COMMAND_STATUS.RAN, ...answered.value } satisfies MacCommandAnswer;
   });
   return Effect.catch(run, () => Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
+}
+
+/**
+ * One `run_on_mac` call made for the account, whichever agent made it: its
+ * input read against the tool's schema, then run as `runOnMac` runs it. The
+ * one door every agent's tool goes through, so each root's tool is a line.
+ */
+export function runOnMacTool(
+  userId: string,
+  input: UnparsedWireValue,
+): Effect.Effect<MacCommandAnswer, never, SqlClient.SqlClient> {
+  const read = readInput(input);
+  if (Result.isFailure(read)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
+  const { command, timeout_seconds } = read.success;
+  return runOnMac(
+    userId,
+    timeout_seconds === undefined ? { command } : { command, timeoutSeconds: timeout_seconds },
+  );
 }
 
 /**

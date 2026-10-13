@@ -3,6 +3,7 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { SHOW_PAGE_TOOL } from "../page-tool.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
@@ -91,6 +92,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RUN_ON_MAC]: {
+    description: RUN_ON_MAC_TOOL.description,
+    inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
   },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 

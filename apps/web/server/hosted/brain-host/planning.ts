@@ -38,6 +38,7 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import { INTEGRATION_NAMES_SAID } from "../integrations.js";
+import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../page-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
@@ -222,6 +223,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - withdraw_question takes back a queued question an answer made moot, before Luke asks it.
 - show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window. Code is on screen only from a call in this turn, so when the developer asks to see code again or says they cannot see it, call show_code again rather than saying it is up.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do. ${COMMAND_DESCRIPTION_INSTRUCTION}
+- run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the plan's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the plan's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
 - worker does a job in the background, as above.
@@ -454,6 +456,11 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
       })),
   },
   {
+    ...RUN_ON_MAC_TOOL,
+    run: (call, input) =>
+      Effect.map(runOnMacTool(call.plan.userId, input), (result) => ({ ...result })),
+  },
+  {
     ...SEARCH_WEB_TOOL,
     run: (call, input) =>
       Effect.map(runSearchWeb(call.research, input), (result) => ({ ...result })),
@@ -562,7 +569,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = toolsOf(AGENT_ROLE.PLANNER
 export const WORKER_INSTRUCTIONS = `
 You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. run_on_mac runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;

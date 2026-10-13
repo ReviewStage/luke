@@ -5,6 +5,7 @@ import { db } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
+  MAC_COMMAND_BOUNDS,
   type MacCommand,
   type MacCommandResult,
   macCommandsAnswerSchema,
@@ -21,6 +22,7 @@ import {
   MAC_COMMAND_SERVICE,
   MAC_COMMAND_STATUS,
   runOnMac,
+  runOnMacTool,
 } from "../server/hosted/mac-command";
 import { macCommandsApp } from "../server/mac-commands-app";
 import { driven, forkClockDriven } from "./support/clock-driven";
@@ -192,7 +194,7 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
       const asks = [
         { command: "" },
         { command: "ls", timeoutSeconds: 0 },
-        { command: "ls", timeoutSeconds: 601 },
+        { command: "ls", timeoutSeconds: MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS + 1 },
       ];
       for (const ask of asks) {
         assert.deepEqual(yield* runOnMac(owner, ask), {
@@ -220,6 +222,42 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         reason: MAC_COMMAND_REFUSAL.NO_ANSWER,
       });
     }),
+  );
+
+  it.effect(
+    "the tool every agent calls reads its input: the timeout it names rides to the Mac, and input it cannot read runs nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        yield* heldRead(owner);
+
+        const unreadable = yield* runOnMacTool(owner, unparsedWire({ cmd: "ls" }));
+        const call = yield* forkClockDriven(
+          runOnMacTool(
+            owner,
+            unparsedWire({
+              command: "pnpm test",
+              description: "Run the tests",
+              timeout_seconds: 300,
+            }),
+          ),
+        );
+        yield* Queue.take(call.asleep);
+        const [queued] = commandsOf(yield* ask(read(owner)));
+        if (queued === undefined) return assert.fail("the Mac's read carried no command");
+        yield* ask(settle(owner, queued.id));
+
+        assert.deepEqual(unreadable, {
+          status: MAC_COMMAND_STATUS.NOT_RUN,
+          reason: MAC_COMMAND_REFUSAL.UNREADABLE,
+        });
+        assert.equal(queued.command, "pnpm test", "the description is never run");
+        assert.equal(queued.timeoutSeconds, 300);
+        assert.deepEqual(yield* driven(call, MAC_COMMAND_SERVICE.POLL), {
+          status: MAC_COMMAND_STATUS.RAN,
+          ...RESULT,
+        });
+      }),
   );
 
   it.effect("a request without a bearer is refused", () =>

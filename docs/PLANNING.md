@@ -897,8 +897,9 @@ comparative evaluation.
 
 ### How the planning model reads code
 
-The planning model reads the plan's repository, never a folder on the Mac,
-and so does the code it puts on the developer's screen.
+The planning model reads the plan's repository, not a folder on the Mac,
+and so does the code it puts on the developer's screen. What only the Mac
+has, it reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the planning
 conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
 the plan's GitHub repository (`apps/web/server/hosted/repository-shell.ts`).
@@ -936,6 +937,20 @@ picked by their parts in the statement and read by the same reading
 keeps every code shown after the call. A file that is missing,
 outside the checkout, binary, too large, or secret, and a checkout that
 cannot be reached, answer `rejected` with why, and nothing goes on screen.
+
+### Commands on the developer's Mac
+
+`run_on_mac` (`apps/web/server/hosted/mac-command.ts`) runs one shell
+command on the developer's own Mac and answers its exit code and output, for
+the planning model, its worker, coding agents, and their workers alike, with
+no approval: Dean's ruling of 2026-10-13. The call is queued under the
+account; a signed-in Mac with Settings › General's "Let agents run commands
+on this Mac" on (the default) holds `GET /api/mac-commands` open, takes it,
+runs it in the login shell from the home folder
+(`packages/host/src/mac-command-runner.ts`), and posts the result back. A
+call where no Mac read lately answers `not-run` at once, in one line Luke
+repeats. The output is not redacted (`PRIVACY.md`, "Commands agents run on
+your Mac").
 
 ### From a plan to a pull request
 

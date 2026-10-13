@@ -1,7 +1,15 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../server/core.js";
+import { defineTool } from "eve/tools";
+import {
+  ACTION_RESULT_STATUS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+  type WireRecord,
+} from "../server/core.js";
 import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
 import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
 import { turnServers } from "../server/hosted/agent-runtime/servers.js";
@@ -19,6 +27,12 @@ import {
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import { integrationAccessToken } from "../server/hosted/integration-connection.js";
+import {
+  MAC_COMMAND_STATUS,
+  type MacCommandAnswer,
+  RUN_ON_MAC_TOOL,
+  runOnMacTool,
+} from "../server/hosted/mac-command.js";
 import { showPageRejected } from "../server/hosted/page-tool.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
@@ -204,5 +218,31 @@ export function integrationConnectionsFor(
     servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
     token: (provider) => (auth, sessionId) =>
       runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  });
+}
+
+/**
+ * `run_on_mac` as the agent and its worker are offered it, each admitted on
+ * its own terms (the worker's on ownership, as its resolvers are), and run
+ * through the one door every agent's call goes through
+ * (`server/hosted/mac-command.ts`). A session the host does not admit runs
+ * nothing.
+ */
+export function runOnMacFor(admit: CoderHost["admit"]) {
+  return defineTool({
+    description: RUN_ON_MAC_TOOL.description,
+    inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
+    execute: (input, ctx): Promise<MacCommandAnswer> =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) {
+            return { status: MAC_COMMAND_STATUS.NOT_RUN, reason: admitted.failure };
+          }
+          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+          const call = unparsedWire(input as WireBoundaryInput);
+          return yield* runOnMacTool(admitted.success.target.userId, call);
+        }),
+      ),
   });
 }

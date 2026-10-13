@@ -34,6 +34,7 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../hosted/coding-agent-tools.js";
 import { END_CALL_TOOL } from "../hosted/end-call.js";
+import { MAC_COMMAND_STATUS, RUN_ON_MAC_TOOL } from "../hosted/mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -61,6 +62,7 @@ export const SUBAGENT_JOURNALS = 10;
 
 const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [RUN_IN_REPOSITORY_TOOL.name, PLAN_WORK_TOOL.REPOSITORY],
+  [RUN_ON_MAC_TOOL.name, PLAN_WORK_TOOL.MAC_COMMAND],
   [SEARCH_WEB_TOOL.name, PLAN_WORK_TOOL.SEARCH_WEB],
   [READ_WEB_PAGE_TOOL.name, PLAN_WORK_TOOL.READ_WEB_PAGE],
   [SHOW_CODE_TOOL.name, PLAN_WORK_TOOL.SHOW_CODE],
@@ -80,6 +82,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
+const isMacCommandInput = Schema.is(RUN_ON_MAC_TOOL.inputSchema);
 const isSearchInput = Schema.is(SEARCH_WEB_TOOL.inputSchema);
 const isPageInput = Schema.is(READ_WEB_PAGE_TOOL.inputSchema);
 const isCodeInput = Schema.is(SHOW_CODE_TOOL.storedInputSchema);
@@ -105,6 +108,23 @@ const isRepositoryOutput = Schema.is(
     }),
     Schema.Struct({
       status: Schema.Literal(REPOSITORY_SHELL_STATUS.NOT_RUN),
+      reason: Schema.String,
+    }),
+  ]),
+);
+
+/** What `run_on_mac` answers, as its call's output is journaled (`MacCommandAnswer`). */
+const isMacCommandOutput = Schema.is(
+  Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal(MAC_COMMAND_STATUS.RAN),
+      exitCode: Schema.NullOr(Schema.Number),
+      stdout: Schema.String,
+      stderr: Schema.String,
+      timedOut: Schema.Boolean,
+    }),
+    Schema.Struct({
+      status: Schema.Literal(MAC_COMMAND_STATUS.NOT_RUN),
       reason: Schema.String,
     }),
   ]),
@@ -147,6 +167,7 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   const { input } = part;
   if (storedToolName(part) === EVE_SKILL_TOOL.NAME && isSkillInput(input)) return input.skill;
   if (tool === PLAN_WORK_TOOL.REPOSITORY && isRepositoryInput(input)) return input.command;
+  if (tool === PLAN_WORK_TOOL.MAC_COMMAND && isMacCommandInput(input)) return input.command;
   if (tool === PLAN_WORK_TOOL.SEARCH_WEB && isSearchInput(input)) return input.query;
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;
   if (tool === PLAN_WORK_TOOL.QUEUE_QUESTION && isQuestionInput(input)) return input.question;
@@ -180,6 +201,14 @@ function outputOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined 
     if (output.status === REPOSITORY_SHELL_STATUS.NOT_RUN) return `Not run: ${output.reason}`;
     const text = [output.stdout, output.stderr].filter((stream) => stream !== "").join("\n");
     return output.exitCode === 0 ? text : `${text}\nExit code ${output.exitCode}`.trimStart();
+  }
+  if (tool === PLAN_WORK_TOOL.MAC_COMMAND && isMacCommandOutput(output)) {
+    if (output.status === MAC_COMMAND_STATUS.NOT_RUN) return output.reason;
+    const text = [output.stdout, output.stderr].filter((stream) => stream !== "").join("\n");
+    if (output.timedOut) return `${text}\nKilled at its timeout`.trimStart();
+    // Note that no exit code is a shell that never started, which its error says alone.
+    if (output.exitCode === null || output.exitCode === 0) return text;
+    return `${text}\nExit code ${output.exitCode}`.trimStart();
   }
   return JSON.stringify(output, null, 2);
 }
