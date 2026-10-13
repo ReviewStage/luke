@@ -14,6 +14,7 @@ import {
   inboxPostInputSchema,
 } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
@@ -58,6 +59,7 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
 } as const;
 
 export interface ToolCallView {
@@ -427,6 +429,13 @@ function knownToolView(
       };
     case AGENT_TOOL.WRITE_TODOS:
       return todosToolView(input);
+    case AGENT_TOOL.SHOW_PAGE:
+      return {
+        kind: CALL_KIND.SHOW_PAGE,
+        subject: stringAt(input, "title") ?? "",
+        input: textBlock(stringAt(input, "path") ?? stringAt(input, "html") ?? ""),
+        output: output === undefined ? undefined : jsonBlock(output),
+      };
     case AGENT_TOOL.POST_TO_INBOX:
     case AGENT_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:

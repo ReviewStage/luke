@@ -14,6 +14,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * draws it in a sandboxed frame of its own scheme.
  */
 
+/** The tool every agent writes a page with, by the name its calls carry. */
+export const SHOW_PAGE_TOOL_NAME = "show_page";
+
 export const PAGE_BOUNDS = {
   /** The most characters a page's title may spell. */
   MAX_TITLE_CHARS: 80,
@@ -21,12 +24,12 @@ export const PAGE_BOUNDS = {
   MAX_HTML_CHARS: 256 * 1024,
 } as const;
 
-const pageTitleSchema = EffectSchema.String.check(
+export const pageTitleSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(PAGE_BOUNDS.MAX_TITLE_CHARS),
 );
 
-const pageHtmlSchema = EffectSchema.String.check(
+export const pageHtmlSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(PAGE_BOUNDS.MAX_HTML_CHARS),
 );

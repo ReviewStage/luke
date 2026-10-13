@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
+  AppWindowIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
@@ -223,6 +224,7 @@ const CALL_ICON = {
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
+  [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 

@@ -13,6 +13,7 @@ import type {
   PlanMarks,
 } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -93,8 +94,10 @@ import type { RunMode } from "./run-mode.js";
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
  * The pages agents wrote for the open plan are listed with its document, by
- * title and newest version alone; a page's HTML is answered to the frame
- * that draws it and held nowhere here.
+ * title and newest version alone, and again whenever the call's activity
+ * says a page the planning model showed just settled or it stopped working;
+ * a page's HTML is answered to the frame that draws it and held nowhere
+ * here.
  */
 
 /**
@@ -246,6 +249,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
+
+  /** The plans whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
+  const pageReads = yield* Queue.sliding<string>(1);
 
   /** The plans a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
@@ -532,6 +538,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       was?.action !== LOOK_AT_BOARD_TOOL_NAME;
     write({ activity, callActivity: activity });
     if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
+    // A page shown settles the same way a drawing does, and is read as the board is.
+    const paged = was?.action === SHOW_PAGE_TOOL_NAME && activity.planner?.action !== was.action;
+    if (paged || stopped) Queue.offerUnsafe(pageReads, planId);
   }
 
   function showCode(planId: string, shown: PlanShownCode): void {
@@ -1052,13 +1061,21 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The board reads a settled draw asks for and the transcript and work
-    // reads a call's end asks for; every other read of the plans is an ask's.
+    // The board and page reads a settled draw or page asks for, and the
+    // transcript and work reads a call's end asks for; every other read of
+    // the plans is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (planId) =>
             gate() ? serial(readBoard(planId)) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(pageReads), (planId) =>
+            gate() ? serial(readPages(planId)) : Effect.void,
           ),
         ),
       );

@@ -17,8 +17,9 @@ import { connectionToolEntries } from "../connection-tools.js";
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), and the load of one of its
- * repository's skills (`skills.ts`). The worker's own rows name
+ * developer's inbox it posts to (`inbox.ts`), the load of one of its
+ * repository's skills (`skills.ts`), and the pages it shows the developer
+ * (`../page-tool.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -49,6 +50,7 @@ export const CODER_TOOL = {
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
+  SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
 } as const;
 
 /**

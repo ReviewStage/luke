@@ -25,6 +25,7 @@ import {
   CODING_AGENT_TODOS_TOOL,
 } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@sidecar/hosted/page-wire";
 import { AGENT_ROLE, type AgentRole } from "./role.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
@@ -60,6 +61,8 @@ export const AGENT_TOOL = {
   READ_INBOX: INBOX_TOOL.READ,
   // eve's own, which loads one of the skills a session is offered (`skills.ts`).
   LOAD_SKILL: "load_skill",
+  // An interactive page shown in the plan's side panel, the planning model's and a coding agent's alike (`../page-tool.ts`).
+  SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
 } as const;
 
 export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
@@ -100,6 +103,7 @@ export const TOOL_ROLES = {
   [AGENT_TOOL.CLOSE_INBOX_ITEM]: [CODER],
   [AGENT_TOOL.READ_INBOX]: [CODER],
   [AGENT_TOOL.LOAD_SKILL]: [PLANNER, CODER],
+  [AGENT_TOOL.SHOW_PAGE]: [PLANNER, CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 
 /** The tools a role is offered, in the registry's order. */

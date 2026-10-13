@@ -3,6 +3,7 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { SHOW_PAGE_TOOL } from "../page-tool.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -87,6 +88,10 @@ const AUTHORED_TOOLS = {
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
+  [CODER_TOOL.SHOW_PAGE]: {
+    description: SHOW_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */

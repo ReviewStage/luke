@@ -110,6 +110,7 @@
                       "message-agent",
                       "start-agent",
                       "end-call",
+                      "show-page",
                       "other"
                     ]
                   },
@@ -222,6 +223,7 @@
                                     "message-agent",
                                     "start-agent",
                                     "end-call",
+                                    "show-page",
                                     "other"
                                   ]
                                 },

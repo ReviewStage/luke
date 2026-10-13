@@ -39,6 +39,7 @@ import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import type { ModelCatalog } from "../model-catalog.js";
+import { runShowPage, SHOW_PAGE_TOOL } from "../page-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -227,6 +228,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
+- show_page shows the developer an interactive HTML page in the plan's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
 - list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
@@ -423,7 +425,9 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`); the four
+ * hands back the board as the Mac draws it (`board-look.ts`); `show_page`
+ * writes an interactive page for the side panel, the coding agents' tool
+ * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
@@ -466,6 +470,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LOOK_AT_BOARD_TOOL,
     run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
+  },
+  {
+    ...SHOW_PAGE_TOOL,
+    run: (call, input) => runShowPage(call.plan, input),
   },
   {
     ...LIST_CODING_AGENTS_TOOL,

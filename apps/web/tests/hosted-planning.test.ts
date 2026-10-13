@@ -79,6 +79,7 @@ import {
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
+import { SHOW_PAGE_TOOL } from "../server/hosted/page-tool";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import {
   READ_WEB_PAGE_TOOL,
@@ -547,7 +548,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the plan's coding agents, and the end of the call, and no write to the plan",
+    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the pages it shows, the plan's coding agents, and the end of the call, and no write to the plan",
     () =>
       Effect.gen(function* () {
         const { host } = yield* savedPlanWithConversation();
@@ -565,6 +566,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
             READ_WEB_PAGE_TOOL.name,
             DRAW_ON_BOARD_TOOL.name,
             LOOK_AT_BOARD_TOOL.name,
+            SHOW_PAGE_TOOL.name,
             LIST_CODING_AGENTS_TOOL.name,
             READ_CODING_AGENT_TOOL.name,
             MESSAGE_CODING_AGENT_TOOL.name,
