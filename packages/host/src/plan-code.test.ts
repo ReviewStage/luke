@@ -44,6 +44,13 @@ test("the lines the service sent are drawn whole and coloured as the file's lang
   assert.deepEqual(code.lines[1], [], "an empty line carries no run");
 });
 
+test("the commit the checkout read the lines at stays with them, so their file opens there, and code shown before it was recorded carries none", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+
+  assert.equal(highlightCode({ ...shown("src/invite.ts", INVITE), commit }).commit, commit);
+  assert.equal("commit" in highlightCode(shown("src/invite.ts", INVITE)), false);
+});
+
 test("a file of no language the highlighter knows is drawn plain, one run per line", () => {
   const code = highlightCode(shown("notes.txt", ["first line", "", "third line"]));
 

@@ -36,7 +36,7 @@ import {
   lastFinished,
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
-import { fileName, shownFiles } from "../planning/code-pane-model";
+import { fileName, type ShownFile, shownFiles } from "../planning/code-pane-model";
 import { agentGlyphState, agentStateWords, providerOf } from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
@@ -248,7 +248,7 @@ export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
-  files: readonly CodeRef[];
+  files: readonly ShownFile[];
   standing: boolean;
 }): AddEntry[] {
   const { panel, workers, files, standing } = input;
@@ -286,7 +286,7 @@ export function panelEntries(input: {
         terms: [ref.path],
         section: ADD_SECTION.FILES,
       },
-      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref)),
+      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref, ref.commit)),
     };
   });
   return [...kinds, ...subagentRows, ...fileRows];
@@ -497,7 +497,7 @@ function PanelTabs({
   /** The open file tabs of files shown on the plan, in the strip's order. */
   files: readonly OpenFile[];
   /** Each file Luke showed on the plan, which the "+" offers. */
-  shownFiles: readonly CodeRef[];
+  shownFiles: readonly ShownFile[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
 }): React.JSX.Element {
@@ -711,7 +711,7 @@ function TabContent({
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File tab's tree is open, which holds for every File tab alike, and its toggle. */
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */

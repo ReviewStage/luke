@@ -22,6 +22,7 @@ import {
   type FileRead,
   fileUrl,
   notesOf,
+  shortCommit,
   WHOLE_TEXT,
   type WholeText,
   wholeTextOf,
@@ -53,8 +54,9 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
  * alone, its path plain in the bar. A file opened at a commit, as an inbox
- * item's code opens it, is read at that commit, its GitHub page and its
- * copy too, and drawn afresh when the same file is opened at another.
+ * item's code or a snippet Luke read from his checkout opens it, is read at
+ * that commit, its GitHub page and its copy too, the commit named quietly
+ * beside the path, and drawn afresh when the same file is opened at another.
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
@@ -259,9 +261,8 @@ export function FileView({
   );
 
   const commit = file.commit;
-  // Luke's notes are on the lines of his own checkout, which no commit pins.
   const notes: FileNotes = {
-    notes: commit === undefined ? notesOf(shownCode, file.path, repository) : [],
+    notes: notesOf(shownCode, file.path, repository, commit),
     folded: file.foldedNotes ?? [],
     onFold: onFoldNote,
     onShow: onShowNote,
@@ -304,6 +305,11 @@ export function FileView({
             </span>
           </Tooltip>
         )}
+        {commit === undefined ? null : (
+          <Tooltip label={`Read at commit ${commit}`}>
+            <span className="file-view-commit">{shortCommit(commit)}</span>
+          </Tooltip>
+        )}
         <div className="file-view-actions">
           <Tooltip label="Open on GitHub">
             <button
@@ -324,13 +330,12 @@ export function FileView({
       </header>
       <div className="file-view-body">
         {/* Keyed by the file, then by the commit it is read at, so lines read
-            at one commit are never laid beside another's. Luke's snippet was
-            read from his own checkout, which no commit pins. */}
+            at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
           <FileTab
             key={commit ?? HEAD_READ}
             file={file}
-            snippet={commit === undefined ? snippet : undefined}
+            snippet={snippet}
             notes={notes}
             readFile={readAt}
             onRead={onRead}

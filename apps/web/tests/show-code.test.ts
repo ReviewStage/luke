@@ -15,7 +15,7 @@ import {
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
-import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
+import { CHECKOUT_COMMIT, type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 
 /**
  * The planning model's `show_code`, reading the lines it names from the
@@ -54,12 +54,15 @@ const FILES: CheckoutFiles = {
   "wide.txt": "x".repeat(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS + 50),
 };
 
-/** An account holding one plan, on the repository given, and the sandbox its session opens over the files. */
-const openPlan = (repository: string | null) =>
+/** An account holding one plan, on the repository given, and the sandbox its session opens over the files, its checkout at the commit given. */
+const openPlan = (repository: string | null, commit?: string) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const started = yield* createPlan(userId, { name: "Teammate invitations", repository });
-    const sandbox = sandboxDouble(() => undefined, { files: FILES });
+    const sandbox = sandboxDouble(() => undefined, {
+      files: FILES,
+      ...(commit === undefined ? undefined : { commit }),
+    });
     const call: RepositoryCall = {
       plan: { userId, planId: started.id },
       repository,
@@ -91,7 +94,7 @@ function linesOf(answer: WireRecord): readonly string[] {
 
 it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
   it.effect(
-    "a file of the repository is answered whole with its place, and the first call makes the checkout",
+    "a file of the repository is answered whole with its place and the commit the checkout stands at, and the first call makes the checkout",
     () =>
       Effect.gen(function* () {
         const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
@@ -103,6 +106,7 @@ it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
           code: {
             ref: { path: "src/invite.ts", startLine: 3, endLine: 4 },
             repository: RELAY_FULL_NAME,
+            commit: CHECKOUT_COMMIT,
             firstLine: 1,
             lineCount: 6,
             lines: INVITE.split("\n"),
@@ -117,6 +121,18 @@ it.layer(getTestDB())("show_code reads the plan's checkout", (it) => {
         assert.equal(reads.length, 2);
         for (const read of reads) assert.equal(read.command.includes("invite"), false);
       }),
+  );
+
+  it.effect("a checkout git names no commit of still shows the lines, pinned to no commit", () =>
+    Effect.gen(function* () {
+      const { call } = yield* openPlan(RELAY_FULL_NAME, "");
+
+      const answer = yield* show(call, { path: "src/invite.ts" });
+
+      assert.deepEqual(linesOf(answer), INVITE.split("\n"));
+      assert.ok(isRecord(answer.code));
+      assert.equal("commit" in answer.code, false);
+    }),
   );
 
   it.effect(

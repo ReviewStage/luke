@@ -50,6 +50,11 @@
           "type": "string",
           "maxLength": 140
         },
+        "commit": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 40
+        },
         "firstLine": {
           "type": "integer",
           "minimum": 1

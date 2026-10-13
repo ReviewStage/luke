@@ -218,7 +218,7 @@ function CodeCardContent({
   onOpenFile,
 }: {
   showing: PlanCodeShowing;
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
   return (
@@ -230,7 +230,7 @@ function CodeCardContent({
       <CodeCardHeader
         codeRef={code.ref}
         copied={copiedLines(code)}
-        onOpen={() => onOpenFile(code.ref)}
+        onOpen={() => onOpenFile(code.ref, code.commit)}
       />
       {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
       <CodeLines code={code} />
@@ -256,7 +256,7 @@ function CodeFeedRun({
 }: {
   call: CodeFeedCall;
   now: number;
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -295,7 +295,7 @@ export function CodePane({
   /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** The call whose card to scroll to, once, as the tab is drawn; none to keep to the newest. */
   reveal?: string | undefined;
   /** Says the card asked for was scrolled to, so the tab drawn again later keeps to the newest. */

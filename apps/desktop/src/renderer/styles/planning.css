@@ -523,6 +523,14 @@ button.code-card-path:hover {
   white-space: nowrap;
 }
 
+/* The commit a pinned read is at, quiet beside the path. */
+.file-view-commit {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
+}
+
 /* The bar's path as breadcrumbs: each crumb a press that lists where it
    stands, the chevrons between plain. The crumbs give way from the left,
    so the file's own name stays in sight. */

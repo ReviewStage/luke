@@ -502,6 +502,8 @@ export const shownCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
   /** The repository the lines were read from, `owner/name`. */
   repository: githubRepositoryFullNameSchema,
+  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
+  commit: EffectSchema.optionalKey(commitShaSchema),
   /** The file's line the first carried line is. */
   firstLine: codeLineSchema,
   /** How many lines the whole file has. */

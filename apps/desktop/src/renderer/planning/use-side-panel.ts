@@ -420,8 +420,8 @@ export interface SidePanelControl {
   /**
    * Shows the panel on the file's tab, opening one at the strip's end where
    * none stands, its lit lines the reference's; with `commit`, as an inbox
-   * item's code opens it, the file as it stood at that commit, drawn on the
-   * open plan though Luke never showed it there.
+   * item's code or a snippet Luke read from his checkout opens it, the file
+   * as it stood at that commit, drawn on the open plan.
    */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /**

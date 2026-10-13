@@ -46,7 +46,10 @@ afterEach(() => {
 });
 
 /** The feed drawn into the document, redrawn by each `draw`, its atoms on `registry` where one is given. */
-function mounted(onOpenFile: (ref: CodeRef) => void = openNothing, registry?: AtomRegistry) {
+function mounted(
+  onOpenFile: (ref: CodeRef, commit?: string) => void = openNothing,
+  registry?: AtomRegistry,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -347,18 +350,25 @@ it.effect(
     }),
 );
 
-test("a card's Open file and its path each open the whole file, its lines lit", () => {
-  const opened: CodeRef[] = [];
-  const { container, draw } = mounted((ref) => opened.push(ref));
-  draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+test("a card's Open file and its path each open the whole file, its lines lit, at the commit Luke's checkout read it at where one was recorded", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const opened: { ref: CodeRef; commit: string | undefined }[] = [];
+  const { container, draw } = mounted((ref, at) => opened.push({ ref, commit: at }));
+  draw([showing("a", 2_000, { ...windowOf("src/invite.ts", 11, 12), commit })]);
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
   act(() =>
     container.querySelector<HTMLButtonElement>('button[aria-label="Open src/invite.ts"]')?.click(),
   );
+  draw([showing("b", 2_000, windowOf("src/invite.ts", 11, 12))]);
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
 
   const ref = { path: "src/invite.ts", startLine: 11, endLine: 12 };
-  assert.deepEqual(opened, [ref, ref]);
+  assert.deepEqual(opened, [
+    { ref, commit },
+    { ref, commit },
+    { ref, commit: undefined },
+  ]);
 });
 
 test("the heading names one line, a range, or nothing for a whole file", () => {
