@@ -9,6 +9,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanCode,
 } from "@sidecar/hosted/planning-view";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
@@ -115,11 +116,15 @@ const SHOWN: PlansControl["shownCode"] = [
   { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
 
+/** Each archive and unarchive the page asked of its agents, in order. */
+const archives: [string, boolean][] = [];
+
 function Page({
   archived,
   shownCode,
   resting,
   failed,
+  shelved,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
@@ -127,6 +132,8 @@ function Page({
   resting: boolean;
   /** Whether the agent's turn failed, whatever `resting` says of it. */
   failed: boolean;
+  /** The plan's archived agents. */
+  shelved: readonly CodingAgentSummary[];
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
@@ -135,6 +142,11 @@ function Page({
   const agents = codingAgentsControl({
     agents: [{ ...AGENT, status }],
     agentIds: [AGENT.id],
+    archived: shelved,
+    onArchive: (agentId, archive) => {
+      archives.push([agentId, archive]);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
     ...(archived ? { onUnarchive: () => undefined } : undefined),
   });
   const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined, false);
@@ -167,11 +179,17 @@ function Page({
   );
 }
 
-function mount(archived = false, shownCode = SHOWN, resting = false, failed = false): HTMLElement {
+function mount(
+  archived = false,
+  shownCode = SHOWN,
+  resting = false,
+  failed = false,
+  shelved: readonly CodingAgentSummary[] = [],
+): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed })));
+  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed, shelved })));
   return container;
 }
 
@@ -183,6 +201,7 @@ function quit(): void {
 
 afterEach(() => {
   quit();
+  archives.length = 0;
   vi.restoreAllMocks();
   window.localStorage.clear();
 });
@@ -355,6 +374,109 @@ test("an agent's row chooses its tab in the column, and a file's opens the file 
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
     "invite.ts",
   );
+});
+
+/** A right-click on a control, and the menu it opened over the window, by its items' words. */
+function rightClick(control: HTMLElement): string[] {
+  act(() => {
+    control.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }),
+    );
+  });
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+function pressMenuItem(label: string): void {
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  act(() => item.click());
+}
+
+test("an agent's row offers Archive agent on a right-click, archiving one at rest at once and asking first of one still working", async () => {
+  const resting = mount(false, SHOWN, true);
+  assert.deepEqual(rightClick(rowNamed(summaryOf(resting), AGENT.title ?? "")), ["Archive agent"]);
+  pressMenuItem("Archive agent");
+  await act(() => Promise.resolve());
+  assert.deepEqual(archives, [[AGENT.id, true]]);
+  quit();
+
+  const working = mount();
+  rightClick(rowNamed(summaryOf(working), AGENT.title ?? ""));
+  pressMenuItem("Archive agent");
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.ok(dialog, "a working agent asks first");
+  assert.equal(dialog.querySelector("h2")?.textContent, `Stop and archive ${AGENT.title}?`);
+  const stop = [...dialog.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Stop and archive",
+  );
+  assert.ok(stop);
+  await act(async () => stop.click());
+  assert.deepEqual(archives, [
+    [AGENT.id, true],
+    [AGENT.id, true],
+  ]);
+});
+
+test("Escape in a menu an agent's row of the card opened closes the menu alone, and the card stands", () => {
+  const page = mount();
+  layOutColumn(800);
+  act(() => page.querySelector<HTMLElement>('[aria-label="Expand summary"]')?.click());
+  const hung = card();
+  assert.ok(hung, "the card hangs");
+  rightClick(rowNamed(hung, AGENT.title ?? ""));
+  const item = document.body.querySelector<HTMLElement>('[role="menuitem"]');
+  assert.ok(item);
+  act(() => {
+    item.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(document.body.querySelector('[role="menu"]'), null, "the menu closed");
+  assert.ok(card(), "the card still hangs");
+});
+
+test("the archived agents fold under Archived at the foot of Coding agents, counted while folded, each unarchived from its own button or its right-click", async () => {
+  const shelved = {
+    ...AGENT,
+    id: "2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d",
+    title: "Old try",
+    archivedAt: 9,
+  };
+  const page = mount(false, SHOWN, false, false, [shelved]);
+  const summary = summaryOf(page);
+  const fold = summary.querySelector<HTMLElement>(".plan-summary-archived-toggle");
+  assert.ok(fold, "Coding agents ends in the archived agents' fold");
+  assert.equal(fold.getAttribute("aria-expanded"), "false");
+  assert.equal(fold.textContent, "Archived1 archived agent");
+  assert.equal(summary.querySelector('ul[aria-label="Archived agents"]'), null);
+  assert.deepEqual(
+    listed(summary)[1],
+    ["Coding agents", ["Inbox", AGENT.title]],
+    "an archived agent is no row of its own",
+  );
+
+  act(() => fold.click());
+  const rows = summary.querySelector<HTMLElement>('ul[aria-label="Archived agents"]');
+  assert.ok(rows);
+  assert.equal(rows.querySelector(".plan-summary-label")?.textContent, "Old try");
+  const unarchive = rows.querySelector<HTMLElement>('button[aria-label="Unarchive"]');
+  assert.ok(unarchive);
+  await act(async () => unarchive.click());
+  assert.deepEqual(archives, [[shelved.id, false]]);
+
+  const row = rows.querySelector<HTMLElement>("li");
+  assert.ok(row);
+  assert.deepEqual(rightClick(row), ["Unarchive"]);
+  pressMenuItem("Unarchive");
+  await act(() => Promise.resolve());
+  assert.deepEqual(archives, [
+    [shelved.id, false],
+    [shelved.id, false],
+  ]);
 });
 
 test("an archived plan's summary still opens what it lists", () => {

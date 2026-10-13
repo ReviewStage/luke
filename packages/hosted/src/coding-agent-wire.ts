@@ -314,6 +314,8 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.Boolean,
 });
 
+export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
+
 /**
  * The plan's agent list's query (GET): `archived=include` lists the
  * archived agents among the rest, each carrying its `archivedAt`. Without

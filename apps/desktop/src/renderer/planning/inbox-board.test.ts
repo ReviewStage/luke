@@ -611,6 +611,28 @@ it.effect(
 );
 
 it.effect(
+  "a plan whose only agent is archived still reads its inbox, since that agent's items still stand",
+  () =>
+    Effect.gen(function* () {
+      const reads: string[] = [];
+      const agents = codingAgentsControl({
+        agents: [],
+        agentIds: [],
+        heldIds: [AGENT.id],
+        readInbox: ({ after }) => {
+          reads.push(after);
+          return after === INBOX_CURSOR_START
+            ? Promise.resolve({ items: [SETTINGS], cursor: "a" })
+            : new Promise(() => undefined);
+        },
+      });
+      mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.deepEqual(reads, [INBOX_CURSOR_START, "a"]);
+    }),
+);
+
+it.effect(
   "an answer that lands after the window opened another plan is drawn on neither, so the plan now open shows only its own items",
   () =>
     Effect.gen(function* () {

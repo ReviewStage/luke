@@ -6,22 +6,16 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 /**
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
- * A plan is its owner's name for it and one current document: a Markdown `body` and an `assumptions` list, each assumption its
- * text (`docs/PLANNING.md`). The
- * document is the whole of what the plan's notetaker writes, through notes
- * the service takes into the plan's fields and formats into the body as the
- * one fixed template (`plan-template.ts`), and it is replaced whole on every
- * save: there is no revision argument and no per-assumption id. The service
- * keeps every save as a revision of the plan under the writer who made it,
- * and a plan carries its newest as `lastEdit`, which is what the window's
- * "Edited by" line reads.
- * A plan is moving from the fixed template to one free Markdown document
- * (`plan-document.ts`). A plan that is one document answers its text as the
- * `body`, with no title line and an empty `assumptions` list, since its
- * assumptions are a section of the text, and without `fields`: a window
- * edits a section of a plan only where `fields` stands, so every build
- * draws a document plan as its text. Who last changed each of its sections
- * is `sectionEdits`, by heading.
+ * A plan is its owner's name for it and one current document: one free
+ * Markdown text (`plan-document.ts`, `docs/PLANNING.md`), answered as the
+ * document's `body` with no title line, since the name is its own, and an
+ * empty `assumptions` list, since its assumptions are a section of the text;
+ * the list stays on the wire because a desktop through v0.11.0 requires it.
+ * The text is written by the plan's notetaker and its coding agents through
+ * notes, and by the developer whole. The service keeps every save as a
+ * revision of the plan under the writer who made it, and a plan carries its
+ * newest as `lastEdit`, which is what the window's "Edited by" line reads,
+ * and who last changed each section as `sectionEdits`, by heading.
  * A plan may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
@@ -74,42 +68,11 @@ export const planAssumptionSchema = EffectSchema.Struct({
   text: trimmedText(PLAN_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
-export type PlanAssumption = typeof planAssumptionSchema.Type;
-
-/** Bounds on a plan's fields; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
-export const PLAN_FIELD_BOUNDS = {
-  /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
-  MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
-  /** The most open questions or assumptions. */
-  MAX_ITEMS: 200,
-} as const;
-
-/** An ordinary answer: null while unanswered, otherwise nonblank text. */
-const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS));
-
 /**
- * Every section of the fixed template, in its order: what the service keeps
- * for a plan, and what the window edits a section of (`plan-template.ts`
- * formats them into the body).
+ * The default template's sections, in its order, by the names the fixed
+ * template once kept them under: what its guidance and the prompts are keyed
+ * by (`plan-template.ts`), and what a note an older agent takes names.
  */
-export const planFieldsSchema = EffectSchema.Struct({
-  context: ANSWER,
-  goal: ANSWER,
-  approach: ANSWER,
-  interfaces: ANSWER,
-  alternatives: ANSWER,
-  hardParts: ANSWER,
-  notDoing: ANSWER,
-  planOfAttack: ANSWER,
-  testing: ANSWER,
-  openQuestions: EffectSchema.Array(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS)).check(
-    EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
-  ),
-});
-
-export type PlanFields = typeof planFieldsSchema.Type;
-
-/** Every field a note may be taken under, in the template's order: the fields above, then the assumptions. */
 export const PLAN_FIELD = {
   CONTEXT: "context",
   GOAL: "goal",
@@ -128,7 +91,7 @@ export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
 /** The one saved document of a plan, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
-  /** The fixed template's canonical Markdown, stored exactly as formatted. */
+  /** The plan's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(planAssumptionSchema).check(
     EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_ASSUMPTIONS),
@@ -369,12 +332,6 @@ export const planLastEditSchema = EffectSchema.Struct({
 
 export type PlanLastEdit = typeof planLastEditSchema.Type;
 
-/** The save that last changed one field of a plan, as the section's "Edited by" line reads it. */
-export const planFieldEditSchema = EffectSchema.Struct({
-  field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
-  ...planLastEditSchema.fields,
-});
-
 /** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
 export const PLAN_SECTION_BOUNDS = {
   /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
@@ -397,7 +354,7 @@ export const planSectionEditSchema = EffectSchema.Struct({
 
 export type PlanSectionEdit = typeof planSectionEditSchema.Type;
 
-/** One plan with its saved document, its newest revision, who last changed each field, and the saves coding agents made on it, oldest first. */
+/** One plan with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
 export const planSchema = EffectSchema.Struct({
   ...planSummaryFields,
   document: planDocumentSchema,
@@ -407,22 +364,7 @@ export const planSchema = EffectSchema.Struct({
   ),
   /** Absent for a plan nobody has written since history began, and from a service before it. */
   lastEdit: EffectSchema.optionalKey(planLastEditSchema),
-  /** The fields the body was formatted from, which the window edits a field of; absent from a service before editing. */
-  fields: EffectSchema.optionalKey(planFieldsSchema),
-  /**
-   * The save that last changed each field, for the fields a save has changed
-   * since the service began keeping it; absent from a service before it.
-   */
-  fieldEdits: EffectSchema.optionalKey(
-    EffectSchema.Array(planFieldEditSchema).check(
-      EffectSchema.isMaxLength(Object.values(PLAN_FIELD).length),
-    ),
-  ),
-  /**
-   * For a plan that is one document, the save that last changed each of its
-   * sections, for the sections a save has changed; absent for a plan still
-   * kept as the fixed template's fields, and from a service before documents.
-   */
+  /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
     EffectSchema.Array(planSectionEditSchema).check(
       EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),

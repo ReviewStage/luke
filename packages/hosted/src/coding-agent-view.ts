@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
+  codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
@@ -133,9 +134,10 @@ export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;
 
-/** One plan's agents, as the window asks them: the plan. */
+/** One plan's agents, as the window asks them: the plan, and whether the archived agents are listed among the rest. */
 export const codingAgentListParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
+  includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
@@ -204,6 +206,14 @@ export const codingAgentRenameParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentRenameParams = typeof codingAgentRenameParamsSchema.Type;
+
+/** One agent archived or brought back, as the window asks it: the agent and which. */
+export const codingAgentArchiveParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentArchiveRequestSchema.fields,
+});
+
+export type CodingAgentArchiveParams = typeof codingAgentArchiveParamsSchema.Type;
 
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({

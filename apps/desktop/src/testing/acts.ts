@@ -195,6 +195,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_STOP,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
   },
+  [ACT_KIND.CODING_AGENTS_ARCHIVE]: {
+    kind: ACT_KIND.CODING_AGENTS_ARCHIVE,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", archived: true },
+  },
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     kind: ACT_KIND.CODING_AGENTS_SHOWN,
     payload: { agentId: null, inboxPlanId: null },

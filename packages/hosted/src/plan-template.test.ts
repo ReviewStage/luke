@@ -3,12 +3,10 @@ import { isRecord, type UnparsedWireValue, unparsedWire, valueFromJsonText } fro
 import { test } from "vitest";
 import {
   applyNotesToText,
-  EMPTY_PLAN_FIELDS,
   NOTE_KIND,
   PLAN_AGENT_EDITS_KEPT,
   PLAN_HEADING,
   type PlanNote,
-  planDocumentOf,
   readNotes,
   textNotesInProgress,
   withAgentEdit,
@@ -56,53 +54,6 @@ test("the agents' journal keeps the newest saves and lets the oldest go past its
   assert.equal(journal.length, PLAN_AGENT_EDITS_KEPT);
   assert.equal(journal[0]?.at, 3);
   assert.equal(journal.at(-1)?.at, PLAN_AGENT_EDITS_KEPT + 2);
-});
-
-test("a plan of fields becomes one document of its sections, no title, an unanswered section its heading alone, and the assumptions last", () => {
-  const document = planDocumentOf({
-    fields: {
-      ...EMPTY_PLAN_FIELDS,
-      context: "Only an admin can add someone.\n## Not a section",
-      planOfAttack: "- Ship the table, then the route.",
-      openQuestions: ["Who can withdraw an invite?"],
-    },
-    assumptions: [{ text: "Invites expire after 7 days." }],
-  });
-
-  assert.equal(
-    document,
-    [
-      "## Context",
-      "",
-      "Only an admin can add someone.",
-      "\\## Not a section",
-      "",
-      "## Goal",
-      "",
-      "## Approach",
-      "",
-      "## Interfaces",
-      "",
-      "## Hard parts",
-      "",
-      "## Not doing",
-      "",
-      "## Plan of attack",
-      "",
-      "- Ship the table, then the route.",
-      "",
-      "## Testing",
-      "",
-      "## Open questions",
-      "",
-      "- Who can withdraw an invite?",
-      "",
-      "## Assumptions",
-      "",
-      "- Invites expire after 7 days.",
-      "",
-    ].join("\n"),
-  );
 });
 
 const DOCUMENT = [

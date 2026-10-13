@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import {
   CODE_PATH_MAX_CHARS,
-  PLAN_FIELD,
+  PLAN_BOUNDS,
   PLAN_FILE_REFUSAL,
   PLAN_TREE_ENTRY,
 } from "./plan-wire.js";
@@ -599,7 +599,7 @@ it.effect(
 );
 
 it.effect(
-  "an edit of one field sends its base and value trimmed, and answers the plan as saved or the field as it stands",
+  "an edit sends the text it was written from and the text written, exactly, and answers the plan as saved or the text as it stands; one past the bound is never sent",
   () =>
     Effect.gen(function* () {
       const saved = { ...PLAN, updatedAt: 1_800_000_400_000 };
@@ -613,12 +613,14 @@ it.effect(
           },
         },
       });
-      const edit = { field: PLAN_FIELD.CONTEXT, base: null, value: " - Mine. " };
+      const edit = { document: { base: "## Goal\n", value: "## Goal\n\n - Mine. \n" } };
 
       const first = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
       const second = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
       const blank = yield* Effect.provide(
-        client().edit(PLAN_ID, { field: PLAN_FIELD.CONTEXT, base: null, value: "  " }),
+        client().edit(PLAN_ID, {
+          document: { base: "", value: "x".repeat(PLAN_BOUNDS.MAX_BODY_CHARS + 1) },
+        }),
         api.layer,
       );
 
@@ -627,10 +629,7 @@ it.effect(
       assert.deepEqual(blank, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(
         api.requests().map((request) => JSON.parse(request.body ?? "{}")),
-        [
-          { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
-          { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." },
-        ],
+        [edit, edit],
       );
     }),
 );
@@ -645,7 +644,7 @@ it.effect("an edit of a plan the service does not find reads as not found", () =
     });
 
     const edited = yield* Effect.provide(
-      client().edit(PLAN_ID, { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." }),
+      client().edit(PLAN_ID, { document: { base: "", value: "Invites expire." } }),
       api.layer,
     );
 
@@ -663,7 +662,7 @@ it.effect("an edit of an archived plan reads as archived, which the window says 
     });
 
     const edited = yield* Effect.provide(
-      client().edit(PLAN_ID, { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." }),
+      client().edit(PLAN_ID, { document: { base: "", value: "Invites expire." } }),
       api.layer,
     );
 
@@ -729,7 +728,7 @@ it.effect(
         [`POST /api/plans/${PLAN_ID}/edit`]: { answer: () => newer },
       });
       const read = { ok: true, answer: PLAN };
-      const edit = { field: PLAN_FIELD.CONTEXT, base: null, value: "- Mine." };
+      const edit = { document: { base: "", value: "- Mine." } };
 
       assert.deepEqual(yield* Effect.provide(client().open(PLAN_ID), api.layer), read);
       assert.deepEqual(

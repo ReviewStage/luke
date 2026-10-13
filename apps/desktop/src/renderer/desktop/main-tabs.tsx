@@ -31,6 +31,7 @@ import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-ma
 import type { PinnedTab } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
+import { useAgentArchive } from "./agent-archive";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import {
   type AddEntry,
@@ -166,27 +167,33 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, renamed in place from its menu while its plan is not archived. */
+/** An agent's tab, renamed in place from its menu while its plan is not archived, and archived from it (`agent-archive.tsx`). */
 function AgentMenuTab({
   agent,
   agents,
   look,
   doors,
+  shown,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   look: TabLook;
   doors: TabDoors;
+  shown: boolean;
 }): React.JSX.Element {
   const rename = usePlanRename(agent.id, agents.onRename);
+  const archive = useAgentArchive(agent, agents, shown);
   return (
-    <RenamableTab
-      look={look}
-      doors={doors}
-      // A rename still open when the plan is archived elsewhere is let go unsaved.
-      rename={agents.onUnarchive === undefined ? rename : undefined}
-      field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
-    />
+    <>
+      <RenamableTab
+        look={look}
+        doors={{ ...doors, archive: archive.action }}
+        // A rename still open when the plan is archived elsewhere is let go unsaved.
+        rename={agents.onUnarchive === undefined ? rename : undefined}
+        field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+      />
+      {archive.dialog}
+    </>
   );
 }
 
@@ -299,6 +306,7 @@ export function agentEntries(
     },
     endMark: standing ? agentEndMark(agent, true) : undefined,
     onPick: () => main.onChoose({ agent: agent.id }),
+    agent,
   }));
 }
 
@@ -309,7 +317,8 @@ export function agentEntries(
  * through `onPick`.
  */
 export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
-  if ((agents.agentIds?.length ?? 0) === 0) return [];
+  // An archived agent's items still stand, so the row stands while the plan holds any agent.
+  if ((agents.heldIds?.length ?? 0) === 0) return [];
   const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon />, section: AGENTS_SECTION };
   return [{ row, onPick }];
 }
@@ -351,6 +360,7 @@ export function MainTabStrip({
   pins,
   rename,
   keys,
+  shown,
   inbox,
 }: {
   plan: PlanSummary;
@@ -369,6 +379,8 @@ export function MainTabStrip({
   rename: ReturnType<typeof usePlanRename> | undefined;
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
+  /** Whether the plan's page is on screen, which a tab's Archive asks its question on. */
+  shown: boolean;
   /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
   inbox: number;
 }): React.JSX.Element {
@@ -470,6 +482,7 @@ export function MainTabStrip({
               agents={agents}
               look={entry.look}
               doors={doorsOf(entry)}
+              shown={shown}
             />
           ),
         )}

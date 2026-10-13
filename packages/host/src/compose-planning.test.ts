@@ -314,8 +314,7 @@ function fakeService(plans: Plan[]): FakeService {
           updatedAt: EDITED_AT,
           document: {
             ...found.document,
-            body:
-              "document" in edit ? edit.document.value : `${found.document.body}\n\n${edit.value}`,
+            body: edit.document.value,
           },
           lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: EDITED_AT, duringCall: false },
         };

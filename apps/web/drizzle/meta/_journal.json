@@ -664,28 +664,35 @@
       "idx": 95,
       "version": "7",
       "when": 1791440000000,
-      "tag": "0095_organization",
+      "tag": "0095_plan_drop_template_columns",
       "breakpoints": true
     },
     {
       "idx": 96,
       "version": "7",
       "when": 1791450000000,
-      "tag": "0096_personal_workspace",
+      "tag": "0096_organization",
       "breakpoints": true
     },
     {
       "idx": 97,
       "version": "7",
       "when": 1791460000000,
-      "tag": "0097_plan_organization",
+      "tag": "0097_personal_workspace",
       "breakpoints": true
     },
     {
       "idx": 98,
       "version": "7",
       "when": 1791470000000,
-      "tag": "0098_github_installation",
+      "tag": "0098_plan_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791480000000,
+      "tag": "0099_github_installation",
       "breakpoints": true
     }
   ]

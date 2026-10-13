@@ -92,7 +92,7 @@ adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
 The organization plugin's tables (`organization`, `member`, `invitation`, and
-`session.active_organization_id`; migration 0095) are transcribed from
+`session.active_organization_id`; migration 0096) are transcribed from
 `auth generate` for 1.6.29 with one edit, instants through `instant()`, and
 keep Better Auth's default model names, since the
 Drizzle adapter finds a model by its export's name. A Luke workspace is an
@@ -109,7 +109,7 @@ member through the plugin over PGlite.
 Every account has a personal workspace, named for the account, slugged
 `personal-<user id>`, with `{"personal":true}` as its metadata text, and named
 the account's own by a `personal_workspace` row (`server/db/personal-workspace-schema.ts`;
-migration 0096, which backfills one for every account in one data-modifying
+migration 0097, which backfills one for every account in one data-modifying
 statement). `hosted/workspace-store.ts`'s `ensurePersonalWorkspace` makes it
 the first time it is asked for, through `hosted/workspace-seams.ts`'s
 `createOrganization` over the plugin, so its organization and owner rows are
@@ -120,7 +120,7 @@ workspace the account is a member of, its personal one first and the rest by
 name. `tests/workspace-store.test.ts` holds the three.
 
 Every plan belongs to one workspace: `plan.organization_id`, not null and
-cascading with the organization (migration 0097, which moves every plan
+cascading with the organization (migration 0098, which moves every plan
 standing into its starter's personal workspace before it sets the column
 not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
@@ -1054,7 +1054,7 @@ each `{ id, name, personal, role }`, and `available`, each
 `{ installationId, name }`, the workspaces of Luke GitHub App installations
 the account's GitHub reaches that it is not a member of. A workspace beside
 the personal one stands for one installation: a `github_installation` row
-(`server/db/github-installation-schema.ts`, migration 0098) ties the
+(`server/db/github-installation-schema.ts`, migration 0099) ties the
 `organization` to GitHub's installation id and account id, never the login,
 with the account's login and kind and the installation's status. Before it
 reads either list the route ensures the personal workspace and runs

@@ -13,6 +13,7 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
+  codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentInboxAnswerParamsSchema,
@@ -72,6 +73,7 @@ export type CodingAgentClient = Pick<
   | "message"
   | "choose"
   | "rename"
+  | "archive"
   | "stop"
   | "pullRequest"
   | "readProviderKeys"
@@ -192,12 +194,12 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
       }),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
-        const { planId } = yield* read(
+        const { planId, includeArchived } = yield* read(
           codingAgentListParamsSchema,
           params,
           "listing a plan's agents names one plan",
         );
-        const answer = yield* asked(client.list(planId));
+        const answer = yield* asked(client.list(planId, includeArchived));
         return carried<CodingAgentListAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
@@ -248,6 +250,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "renaming an agent names the agent and its title",
         );
         const answer = yield* asked(client.rename(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentArchiveParamsSchema,
+          params,
+          "archiving an agent names the agent and whether it is archived",
+        );
+        const answer = yield* asked(client.archive(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

@@ -183,7 +183,8 @@ export function usePlanInbox(input: {
   /** Whether main's read of what waits across the account says an item waits on the plan. */
   waiting: boolean;
   agents: {
-    readonly agentIds: readonly string[] | undefined;
+    /** Every agent of the plan by id, an archived one among them, whose items still stand. */
+    readonly heldIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
     readonly readInboxImage: InboxImageReader;
@@ -216,10 +217,10 @@ export function usePlanInbox(input: {
   const latest = useRef({ ...agents, planId });
   latest.current = { ...agents, planId };
 
-  // A plan with no agent has no Inbox tab and nothing to read, so it holds
-  // no read open, unless an item waits on it, which an agent this window has
-  // not listed, one started on another Mac, posted.
-  const readable = (agents.agentIds?.length ?? 0) > 0 || waiting;
+  // A plan with no agent, standing or archived, has no Inbox tab and nothing
+  // to read, so it holds no read open, unless an item waits on it, which an
+  // agent this window has not listed, one started on another Mac, posted.
+  const readable = (agents.heldIds?.length ?? 0) > 0 || waiting;
   const active = shown && planId !== undefined && readable && !held.failed;
   useEffect(() => {
     if (!active || planId === undefined) return;
@@ -307,7 +308,7 @@ export function usePlanInbox(input: {
   // An item of an agent the list has not read yet, one started from another
   // window, has the list read again, once for each such agent.
   const asked = useRef(new Set<string>());
-  const ids = agents.agentIds;
+  const ids = agents.heldIds;
   useEffect(() => {
     if (ids === undefined) return;
     const unknown = held.items

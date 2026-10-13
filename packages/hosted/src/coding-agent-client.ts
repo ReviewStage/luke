@@ -38,6 +38,9 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_LIST_ARCHIVED,
+  CODING_AGENT_LIST_QUERY,
+  type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
   type CodingAgentRenameRequest,
   type CodingAgentStartRequest,
@@ -137,6 +140,12 @@ const START_REFUSALS = {
 /** The refusals a call that names one row can answer with. */
 const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+} satisfies NamedRefusals;
+
+/** The refusals an archive can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
+const ARCHIVE_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
 /** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its plan archived, and the two the turn's checkout needs mended first. */
@@ -372,11 +381,17 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One plan's agents with their status, in the order they were started. */
-  list(planId: string): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: planAgentsPath(planId) }),
-      (answer) => readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
+  /** One plan's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
+  list(
+    planId: string,
+    includeArchived = false,
+  ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CODING_AGENT_LIST_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE,
+    });
+    const path = includeArchived ? `${planAgentsPath(planId)}?${query}` : planAgentsPath(planId);
+    return Effect.flatMap(this.#call.send({ method: HTTP_METHOD.GET, path }), (answer) =>
+      readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
     );
   }
 
@@ -469,6 +484,21 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */
+  archive(
+    agentId: string,
+    request: CodingAgentArchiveRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify({ archived: request.archived }),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, ARCHIVE_REFUSALS),
     );
   }
 

@@ -1,6 +1,5 @@
-import type { PlanActor, PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
-import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import type { PlanActor } from "@sidecar/hosted/plan-wire";
+import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { codingAgent } from "./coding-agent-schema.js";
 import { instant } from "./instant.js";
 import { plan } from "./plan-schema.js";
@@ -13,9 +12,8 @@ import { plan } from "./plan-schema.js";
  * writer makes one after another, on one call or within a few minutes, are
  * one revision that each save moves on (`hosted/plan-revisions.ts`), so a
  * call is about one row rather than one per pause in the speech. The content
- * is the template's fields and the assumptions, from which the body is
- * formatted again under whatever name the plan has now, or, for a plan that
- * is one document, its whole text; a rename is not a revision. A plan from before history starts it with the one revision its
+ * is the plan's whole text; a rename is not a revision. A plan from before
+ * history starts it with the one revision its
  * first later save found, under `earlier`. The developer restoring an
  * earlier revision writes a revision of its own naming the one it brought
  * back, which nothing joins. Rows go with their plan, and outlive the coding
@@ -34,15 +32,8 @@ export const planRevision = pgTable(
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The call the notetaker wrote it on, as `voice_sessions.live_session_id` names it; null for any other writer. */
     liveSessionId: text("live_session_id"),
-    /** The template's fields after the revision; null for a revision of a plan that is one document. */
-    fields: jsonb("fields").$type<PlanFields>(),
-    /** The document plan's whole text after the revision; null for a revision of the template's fields. */
-    document: text("document"),
-    /** The fixed template's assumptions; nothing writes them, and the column goes with the fields. */
-    assumptions: jsonb("assumptions")
-      .$type<readonly PlanAssumption[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
+    /** The plan's whole text after the revision. */
+    document: text("document").notNull(),
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),
     /** The revision's first save. */

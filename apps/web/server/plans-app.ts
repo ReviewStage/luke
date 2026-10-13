@@ -1,7 +1,7 @@
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
-  PLAN_FIELD_BOUNDS,
+  PLAN_BOUNDS,
   type PlanFileRequest,
   type PlanTreeRequest,
   planFileRequestSchema,
@@ -180,8 +180,8 @@ const TREE_RECURSIVE_QUERY = "recursive";
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
-/** An edit is a field's answer or a document's text twice, its base and its value, each at its bound with every character escaped. */
-const MAXIMUM_EDIT_BODY_BYTES = PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS * 2 * 6 + 1_024;
+/** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
+const MAXIMUM_EDIT_BODY_BYTES = PLAN_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
@@ -669,7 +669,6 @@ const restoreEndpoint = /* @__PURE__ */ Effect.fn("web/planRestoreEndpoint")(fun
 const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
   [PLAN_SAVE_REFUSAL.NO_PLAN, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.PLAN_ARCHIVED],
-  [PLAN_SAVE_REFUSAL.FIELD_EDIT, HOSTED_REFUSAL.INVALID_REQUEST],
 ]);
 
 /**
