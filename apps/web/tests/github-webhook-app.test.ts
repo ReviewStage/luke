@@ -25,7 +25,7 @@ import {
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
 } from "@sidecar/hosted/automation-wire";
-import type { CodingAgentPullRequest } from "@sidecar/hosted/coding-agent-wire";
+import { type CodingAgentPullRequest, PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { and, eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
@@ -36,6 +36,7 @@ import { githubWebhookApp } from "../server/github-webhook-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { LINK_OUTCOME } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import { type FakeEve, fakeEve } from "./support/fake-eve";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -52,7 +53,9 @@ import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
  * under the deployment's secret, a deployment with no secret refuses every
  * delivery, and a delivery about a pull request or its checks reads what the
  * agents on that branch published again through the installation connected
- * to the plan's workspace, which the agent's row keeps for the plan list.
+ * to the plan's workspace, which the agent's row keeps for the plan list. A pull request merged or closed,
+ * or a review asking for changes, on a rollout worker's branch is reported
+ * to Luke on the worker's plan, once per delivery, through a fake eve.
  *
  * Synthetic accounts, secrets, repositories, and deliveries throughout.
  */
@@ -135,8 +138,13 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the test's database, the GitHub given, and the secret given, answering one request. */
-const answer = (github: FakeGitHub, secret: string | undefined, request: Request) =>
+/** The group over the test's database, the GitHub given, the secret given, and the eve given, answering one request. */
+const answer = (
+  github: FakeGitHub,
+  secret: string | undefined,
+  request: Request,
+  eve: FakeEve = fakeEve(),
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
@@ -147,7 +155,9 @@ const answer = (github: FakeGitHub, secret: string | undefined, request: Request
       github.layer,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
-      githubWebhookApp().pipe(HttpRouter.provideRequest(services)),
+      githubWebhookApp({ eveOrigin: () => ORIGIN, eve: eve.eve }).pipe(
+        HttpRouter.provideRequest(services),
+      ),
       { disableLogger: true },
     );
     const response = yield* Effect.promise(() => handler(request));
@@ -157,12 +167,12 @@ const answer = (github: FakeGitHub, secret: string | undefined, request: Request
     return { status: response.status, body } satisfies Answer;
   });
 
-/** A delivery of the event given, signed under the secret given, or carrying the signature given. */
+/** A delivery of the event given, signed under the secret given, or carrying the signature given, under GitHub's id for it, or none. */
 function delivery(
   event: string,
   payload: WireBoundaryInput,
   signing: { readonly secret: string } | { readonly signature: string } = { secret: SECRET },
-  deliveryId: string = randomUUID(),
+  deliveryId: string | null = randomUUID(),
 ): Request {
   const body = JSON.stringify(payload);
   const signature =
@@ -174,7 +184,7 @@ function delivery(
     headers: {
       "content-type": "application/json",
       "x-github-event": event,
-      "x-github-delivery": deliveryId,
+      ...(deliveryId === null ? undefined : { "x-github-delivery": deliveryId }),
       "x-hub-signature-256": signature,
     },
     body,
@@ -183,13 +193,34 @@ function delivery(
 
 const repository = { full_name: RELAY_FULL_NAME, private: true };
 
-/** GitHub's delivery of a pull request's action, as much of it as matters and a little that does not. */
-function pullRequestDelivery(action: string, ref: string) {
-  return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
+/** GitHub's delivery of a pull request's action, as much of it as matters and a little that does not, merged where the close says so. */
+function pullRequestDelivery(action: string, ref: string, merged = false) {
+  return {
+    action,
+    repository,
+    pull_request: {
+      number: 41,
+      title: "Ignored",
+      head: { ref },
+      base: { ref: "main" },
+      merged,
+      merge_commit_sha: merged ? "9f3c2ab0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6" : null,
+    },
+  };
 }
 
-/** An account whose plan's workspace reaches the repository, with one agent on a plan about it, its row on the pull request's branch. */
-const openAgent = (pull: PullRequestFixture) =>
+/** GitHub's delivery of a review submitted on the pull request from the agent's branch. */
+function reviewDelivery(state: string, ref: string, body: string | null) {
+  return {
+    action: "submitted",
+    repository,
+    review: { state, body, user: { login: "reviewer" } },
+    pull_request: { number: 41, head: { ref } },
+  };
+}
+
+/** An account whose plan's workspace reaches the repository, with one agent on a plan about it, at the rollout position given or none, its row on the pull request's branch. */
+const openAgent = (pull: PullRequestFixture, position?: number) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const plan = yield* startPlan(owner, {
@@ -209,6 +240,7 @@ const openAgent = (pull: PullRequestFixture) =>
       planSnapshot: "# Teammate invitations\n",
       task: null,
       repository: RELAY_FULL_NAME,
+      position,
     });
     const agent: CodingAgent = Option.getOrElse(started, () =>
       assert.fail("the start made no agent"),
@@ -226,7 +258,7 @@ const openAgent = (pull: PullRequestFixture) =>
         listPublishedCodingAgents(owner, [plan.id]),
         (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
       );
-    return { github, kept, ref };
+    return { owner, github, kept, ref };
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -559,5 +591,82 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         "the failed commit is kept by its address",
       );
     }),
+  );
+
+  it.effect(
+    "a pull request merged on a rollout worker's branch is reported to Luke on its plan as the deployment acting for its owner, a redelivery reports nothing more, and a close without merging and a review asking for changes are reported too",
+    () =>
+      Effect.gen(function* () {
+        const pull: PullRequestFixture = { state: "closed", merged: true, conclusion: "success" };
+        const { owner, github, kept, ref } = yield* openAgent(pull, 1);
+        const eve = fakeEve();
+        const told = () =>
+          [...eve.opened, ...eve.sent].map((each) => [each.authorization, each.message.message]);
+
+        const merged = delivery("pull_request", pullRequestDelivery("closed", ref, true));
+        assert.deepEqual(yield* answer(github, SECRET, merged.clone(), eve), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { read: 1, queued: 0 },
+        });
+        assert.equal((yield* kept())?.state, PULL_REQUEST_STATE.MERGED);
+        assert.deepEqual(told(), [
+          [owner, "[github] merged #41\n\n#41 merged into main as 9f3c2ab on GitHub."],
+        ]);
+
+        yield* answer(github, SECRET, merged, eve);
+        assert.equal(told().length, 1);
+
+        pull.merged = false;
+        yield* answer(
+          github,
+          SECRET,
+          delivery("pull_request", pullRequestDelivery("closed", ref)),
+          eve,
+        );
+        yield* answer(
+          github,
+          SECRET,
+          delivery("pull_request_review", reviewDelivery("changes_requested", ref, " Rename it. ")),
+          eve,
+        );
+        assert.deepEqual(told().slice(1), [
+          [owner, "[github] stopped on #41\n\n#41 closed without merging on GitHub."],
+          [owner, "[github] blocked on #41\n\nA review requested changes on #41.\n\nRename it."],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "an agent at no position of a rollout, a review that approves or comments, an action that ends nothing, and a delivery with no id of its own are reported to no one",
+    () =>
+      Effect.gen(function* () {
+        const pull: PullRequestFixture = { state: "closed", merged: true, conclusion: "success" };
+        const eve = fakeEve();
+        const unplaced = yield* openAgent(pull);
+        assert.deepEqual(
+          yield* answer(
+            unplaced.github,
+            SECRET,
+            delivery("pull_request", pullRequestDelivery("closed", unplaced.ref, true)),
+            eve,
+          ),
+          { status: HOSTED_HTTP_STATUS.OK, body: { read: 1, queued: 0 } },
+        );
+
+        const worker = yield* openAgent(pull, 2);
+        const quiet = [
+          delivery("pull_request_review", reviewDelivery("approved", worker.ref, "Looks good.")),
+          delivery("pull_request_review", reviewDelivery("commented", worker.ref, "Nit.")),
+          delivery("pull_request", pullRequestDelivery("synchronize", worker.ref)),
+          delivery(
+            "pull_request",
+            pullRequestDelivery("closed", worker.ref, true),
+            { secret: SECRET },
+            null,
+          ),
+        ];
+        for (const each of quiet) yield* answer(worker.github, SECRET, each, eve);
+        assert.deepEqual([...eve.opened, ...eve.sent], []);
+      }),
   );
 });
