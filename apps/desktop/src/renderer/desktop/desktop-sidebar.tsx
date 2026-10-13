@@ -40,7 +40,7 @@ import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
-import { SidebarPlan, SidebarPlanRepository } from "./plan-actions";
+import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -136,14 +136,12 @@ interface RowContext {
   readonly inSight: boolean;
 }
 
-/** One section's plans, each a row of the sidebar, naming its repository where nothing above it does. */
+/** One section's plans, each a row of the sidebar. */
 function PlanRows({
   rows,
-  repositoryShown,
   context,
 }: {
   rows: readonly PlanSummary[];
-  repositoryShown: boolean;
   context: RowContext;
 }): React.JSX.Element {
   return (
@@ -155,7 +153,6 @@ function PlanRows({
           plan={plan}
           current={context.current(plan.id)}
           unread={context.unread(plan)}
-          repositoryShown={repositoryShown}
           now={context.now}
           onOpen={() => context.onOpen(plan.id)}
         />
@@ -208,7 +205,6 @@ function PinnedRows({
             plan={plan}
             current={context.current(plan.id)}
             unread={context.unread(plan)}
-            repositoryShown
             now={context.now}
             onOpen={() => context.onOpen(plan.id)}
           />
@@ -296,19 +292,17 @@ function inboxRows(plans: PlansControl): InboxRow[] {
 /**
  * One plan under the Inbox, in a plan row's shape: its name, cut short
  * where it must, with how many of its items wait at the row's end, muted
- * in even figures as a row's time is, and its repository beneath. A press
+ * in even figures as a row's time is. A press
  * opens the plan on its Inbox tab, and the row is current while that tab
  * is on screen.
  */
 function SidebarInboxPlan({
   row,
   shown,
-  pictures,
   onOpen,
 }: {
   row: InboxRow;
   shown: boolean;
-  pictures: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const { plan, open } = row;
@@ -327,9 +321,6 @@ function SidebarInboxPlan({
             <span className="visually-hidden"> {open === 1 ? ITEM_NOUN.one : ITEM_NOUN.many}</span>
           </span>
         </span>
-        {plan.repository === null ? null : (
-          <SidebarPlanRepository repository={plan.repository} pictures={pictures} />
-        )}
       </button>
     </li>
   );
@@ -350,14 +341,12 @@ function InboxSection({
   rows,
   folds,
   shown,
-  pictures,
   onOpen,
 }: {
   rows: readonly InboxRow[];
   folds: FoldedGroups;
   /** Whether a plan's Inbox is on show, which a fold leaves standing. */
   shown: (planId: string) => boolean;
-  pictures: boolean;
   onOpen: (planId: string) => void;
 }): React.JSX.Element {
   const folded = folds.inboxFolded;
@@ -387,7 +376,6 @@ function InboxSection({
               key={row.plan.id}
               row={row}
               shown={shown(row.plan.id)}
-              pictures={pictures}
               onOpen={() => onOpen(row.plan.id)}
             />
           ))}
@@ -581,9 +569,7 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {rows.length === 0 ? null : (
-        <PlanRows rows={rows} repositoryShown={false} context={context} />
-      )}
+      {rows.length === 0 ? null : <PlanRows rows={rows} context={context} />}
     </div>
   );
 }
@@ -594,7 +580,7 @@ function RepositorySection({
  * the picture's place, giving way to the fold's chevron while hovered or
  * reached from the keyboard, and folded, the count after its name. A press
  * unfolds the list beneath it, and each archived plan opens and offers its
- * actions like any other, flat and naming its repository. It draws nothing
+ * actions like any other. It draws nothing
  * while no plan is archived, and it starts folded, because an archived plan
  * is one the developer put out of the way.
  */
@@ -619,7 +605,7 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
           {unfolded ? null : <FoldedCount count={archived.length} />}
         </button>
       </div>
-      {unfolded ? <PlanRows rows={archived} repositoryShown context={context} /> : null}
+      {unfolded ? <PlanRows rows={archived} context={context} /> : null}
     </div>
   );
 }
@@ -631,8 +617,8 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  * waits on the developer, the Inbox heads the list, a row for each plan
  * with an inbox item open. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
- * while any are pinned, newest pinned first, a plan naming its repository
- * and a tab its plan, under a header that folds as a repository's does;
+ * while any are pinned, newest pinned first, under a header that folds as
+ * a repository's does, every row one line whose hover card says the rest;
  * the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
  * pinned first, then the group updated most recently first;
@@ -791,13 +777,7 @@ export function DesktopSidebar({
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
         {plans.signedIn && waiting.length > 0 ? (
-          <InboxSection
-            rows={waiting}
-            folds={folds}
-            shown={inboxShown}
-            pictures={plans.repositories.pictures}
-            onOpen={openInbox}
-          />
+          <InboxSection rows={waiting} folds={folds} shown={inboxShown} onOpen={openInbox} />
         ) : null}
         {plans.signedIn && pinnedSection.length > 0 ? (
           <PinnedSection
