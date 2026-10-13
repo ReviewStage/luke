@@ -681,3 +681,11 @@ export const planningPageAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningPageAnswer = typeof planningPageAnswerSchema.Type;
+
+/** A page tab's read of one version's source, as the window hears it: its HTML line by line, coloured as HTML, or that the service did not answer. */
+export const planningPageSourceAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ lines: codeLinesSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningPageSourceAnswer = typeof planningPageSourceAnswerSchema.Type;

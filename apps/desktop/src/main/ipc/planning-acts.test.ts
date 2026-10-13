@@ -30,8 +30,14 @@ interface StartScript {
   callStanding: boolean;
 }
 
+/** The HTML the service answers for a page's version, none where it does not answer. */
+interface PageScript {
+  html: string | undefined;
+}
+
 function fixture() {
   const asked: string[] = [];
+  const page: PageScript = { html: undefined };
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
@@ -134,6 +140,13 @@ function fixture() {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
+      planningPage: (params) =>
+        Effect.sync(() => {
+          asked.push(`page:${params.pageId}:${params.version}`);
+          const { html } = page;
+          if (html === undefined) return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+          return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
+        }),
     },
     openExternal: (url) => {
       opened.push(url);
@@ -150,7 +163,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, opened, view, start };
+  return { router, asked, talked, opened, view, start, page };
 }
 it.effect(
   "the developer's edit of the text reaches the host from a panel, and not from the voice window",
@@ -242,6 +255,47 @@ it.effect("the voice window does not reach the plans", () =>
     });
     assert.deepEqual(f.asked, []);
   }),
+);
+
+it.effect(
+  "a page's source is read through the host and coloured as HTML for a panel, plain past the bound, and not for the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const source = {
+        kind: ACT_KIND.PLANNING_PAGE_SOURCE,
+        payload: { planId: PLAN_ID, pageId: "page-funnel", version: 2 },
+      } as const;
+      const long = `<p>${"a".repeat(70_000)}</p>`;
+
+      const unanswered = yield* f.router.performAct(source, PANEL);
+      f.page.html = "<h1>Invites</h1>\n<p>sent</p>";
+      const read = yield* f.router.performAct(source, PANEL);
+      const fromVoice = yield* f.router.performAct(source, VOICE);
+      f.page.html = long;
+      const plain = yield* f.router.performAct(source, PANEL);
+
+      assert.deepEqual(unanswered, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      });
+      assert.ok(read.status === ACT_OUTCOME_STATUS.DONE && "lines" in read.value);
+      const { lines } = read.value;
+      assert.deepEqual(
+        lines.map((line) => line.map((run) => run.text).join("")),
+        ["<h1>Invites</h1>", "<p>sent</p>"],
+      );
+      assert.ok(lines[0]?.some((run) => run.color !== undefined));
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_PAGE_SOURCE].refusal,
+      });
+      assert.deepEqual(plain, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { lines: [[{ text: long }]] },
+      });
+      assert.deepEqual(f.asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
+    }),
 );
 
 it.effect(

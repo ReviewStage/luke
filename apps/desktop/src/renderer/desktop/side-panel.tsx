@@ -832,6 +832,7 @@ function TabContent({
   agents,
   standings,
   shown,
+  findActive,
   onOpenSubagent,
   onOpenTarget,
   onWorkerStatus,
@@ -863,6 +864,8 @@ function TabContent({
   standings: WorkerStandings;
   /** Whether the panel is on screen, so a subagent's tab knows to follow its transcript. */
   shown: boolean;
+  /** Whether the panel holds the window's keys, so a page's tab finds in its source. */
+  findActive: boolean;
   /** Opens a planning worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
   /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the plan's column. */
@@ -895,7 +898,15 @@ function TabContent({
     return page === undefined ? (
       <SpinnerRegion label="Loading page" />
     ) : (
-      <PagePane key={page.id} planId={planId} page={page} />
+      <PagePane
+        key={page.id}
+        planId={planId}
+        page={page}
+        readSource={(version) =>
+          act(ACT_KIND.PLANNING_PAGE_SOURCE, { planId, pageId: page.id, version })
+        }
+        findActive={findActive}
+      />
     );
   }
   if (isChangesTab(tab)) {
@@ -1383,7 +1394,8 @@ export function SidePanel({
           </div>
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and
-          // a page's words stand in a sandboxed frame no find of the window reaches.
+          // a page's words stand in a sandboxed frame no find of the window
+          // reaches, so a page's tab finds in its source alone, itself.
           <FindScope
             className="side-panel-content"
             role="tabpanel"
@@ -1405,6 +1417,7 @@ export function SidePanel({
               agents={agents}
               standings={standings}
               shown={keys}
+              findActive={keys && focused}
               onOpenSubagent={openSubagent}
               onOpenTarget={onOpenTarget}
               onWorkerStatus={views.onWorkerStatus}

@@ -714,6 +714,21 @@ button.code-card-path:hover {
   border: 0;
 }
 
+/* The find a page's tab keeps over its source fills the tab as the panel's
+   own would. */
+.page-view-find {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The source's toggle reads as on while the source is shown, as the File
+   tab's tree toggle does. */
+.page-view-source-toggle[data-source="true"] {
+  color: var(--text-primary);
+}
+
 /* What became of a changed file, lettered quietly beside its path in a
    Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
    tree is. */

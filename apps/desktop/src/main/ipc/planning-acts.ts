@@ -8,6 +8,9 @@ import type {
   PlanningFileAnswer,
   PlanningFileParams,
   PlanningMessagesParams,
+  PlanningPageAnswer,
+  PlanningPageParams,
+  PlanningPageSourceAnswer,
   PlanningPinParams,
   PlanningPinRepositoryParams,
   PlanningRenameParams,
@@ -64,6 +67,7 @@ export interface PlanningActsDependencies {
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+    planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
@@ -105,13 +109,30 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
-  | typeof ACT_KIND.PLANNING_RESTORE;
+  | typeof ACT_KIND.PLANNING_RESTORE
+  | typeof ACT_KIND.PLANNING_PAGE_SOURCE;
+
+/**
+ * The longest page whose source main colours. Note that a longer one is
+ * drawn plain rather than cut, as a transcript's long block is, because
+ * colouring holds main for about a millisecond per hundred characters.
+ */
+const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
   if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
   }
+}
+
+/** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
+function pageSourceLines(
+  html: string,
+  colourCode: PlanningActsDependencies["colourCode"],
+): CodeLines {
+  if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
+  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
 }
 
 export function planningActRows(
@@ -239,6 +260,17 @@ export function planningActRows(
     [ACT_KIND.PLANNING_RESTORE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_RESTORE, sender);
       return host.planningRestore(params);
+    },
+    // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
+    [ACT_KIND.PLANNING_PAGE_SOURCE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PAGE_SOURCE, sender);
+      return Effect.map(
+        host.planningPage(params),
+        (answer): PlanningPageSourceAnswer =>
+          "page" in answer
+            ? { lines: pageSourceLines(answer.page.html, dependencies.colourCode) }
+            : answer,
+      );
     },
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
