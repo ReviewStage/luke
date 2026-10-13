@@ -135,7 +135,7 @@ function Window({
     planId: shown,
     editedAt: undefined,
     name: undefined,
-    shown: historyOpen,
+    shown: historyOpen && tab === PANEL_TAB.PLANS,
     seek: undefined,
     returnTo: historyFor?.spot,
     onRestored: ignore,
@@ -599,6 +599,22 @@ test("Back from what a version's Open opened returns to the version history on t
   command("[");
   command("[");
   assert.equal(where(), INVITATIONS.name, "the plan it was opened from is behind it");
+});
+
+test("Back from Settings opened over a version history returns to it on the version chosen", async () => {
+  show();
+  openPlan(INVITATIONS);
+  openVersionHistory(INVITATIONS);
+  await landed();
+  click(document.body.querySelectorAll<HTMLButtonElement>(".version-row")[1]);
+  await landed();
+  command(",");
+  assert.equal(where(), "General");
+
+  command("[");
+  await landed();
+  assert.equal(where(), VERSION_HISTORY);
+  assert.deepEqual(chosenVersion(), { revision: 1, section: undefined });
 });
 
 test("a restore lands on the plan it restored, as Back would from its own plan, and on that plan though another was open", async () => {

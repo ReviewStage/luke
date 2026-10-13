@@ -253,8 +253,21 @@ export function usePlanHistory(input: {
   if (chosen !== undefined && sought !== undefined) {
     setVersion({ ...chosen, seq: sought === newest ? undefined : sought, seeking: undefined });
   }
-  const seekingBefore =
-    seeking !== undefined && sought === undefined && current ? held.earlier : undefined;
+  // A version gone back to that no page read so far shows is read for on
+  // older pages as a save is, and gives way to the plan as it stands where
+  // the whole history read holds none.
+  const returned = seeking === undefined ? chosen?.seq : undefined;
+  const unread =
+    returned !== undefined && current && !revisions.some((line) => line.seq === returned);
+  if (chosen !== undefined && unread && complete) {
+    setVersion({ ...chosen, seq: undefined, opened: undefined });
+  }
+  const readBefore =
+    (seeking !== undefined && sought === undefined) || unread
+      ? current
+        ? held.earlier
+        : undefined
+      : undefined;
 
   useEffect(() => {
     if (!reading || planId === undefined) return;
@@ -364,20 +377,21 @@ export function usePlanHistory(input: {
     return true;
   };
 
-  // A save no page read so far shows is sought on the next older page, and
-  // one whose page could not be read gives way to the plan as it stands,
-  // unless the view has since been opened on another plan or another save.
+  // A save or a version gone back to that no page read so far shows is
+  // sought on the next older page, and one whose page could not be read gives
+  // way to the plan as it stands, unless the view has since been opened on
+  // another plan, another save, or another version.
   useEffect(() => {
-    if (seekingBefore === undefined || planId === undefined) return;
+    if (readBefore === undefined || planId === undefined) return;
     onLoadEarlier().then((landed) => {
       if (landed) return;
-      setVersion((held) =>
-        held !== undefined && held.planId === planId && held.seeking === seeking
-          ? { ...held, seeking: undefined }
-          : held,
-      );
+      setVersion((held) => {
+        if (held === undefined || held.planId !== planId || held.seeking !== seeking) return held;
+        if (seeking !== undefined) return { ...held, seeking: undefined };
+        return held.seq === returned ? { ...held, seq: undefined, opened: undefined } : held;
+      });
     });
-  }, [seekingBefore]);
+  }, [readBefore]);
 
   const onRestore = async (): Promise<ActionResult> => {
     if (planId === undefined || seq === undefined) return RESTORE_REFUSED;

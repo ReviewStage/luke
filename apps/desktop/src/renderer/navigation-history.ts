@@ -251,8 +251,11 @@ export function useWindowHistory(input: {
       return;
     }
     if (tab !== PANEL_TAB.PLANS) input.onTabChange(PANEL_TAB.PLANS);
+    // Note that a version history is opened on its spot even where it is
+    // still open under Settings, because a version history out of sight
+    // keeps no version chosen.
     if (to.kind === PLACE_KIND.VERSION_HISTORY) {
-      if (!historyOpen || boundFor !== to.planId) plans.history.onReturn(to.planId, to.spot);
+      plans.history.onReturn(to.planId, to.spot);
       return;
     }
     if (historyOpen) plans.history.onClose();
