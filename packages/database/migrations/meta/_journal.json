@@ -789,8 +789,8 @@
     {
       "idx": 113,
       "version": "7",
-      "when": 1791919441928,
-      "tag": "20261013192401_github_connect_intent",
+      "when": 1791919859480,
+      "tag": "20261013193059_github_install_intent",
       "breakpoints": true
     }
   ]

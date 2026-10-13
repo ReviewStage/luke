@@ -45,7 +45,7 @@
     "./schemas/auth": "./src/schemas/auth.js",
     "./schemas/coding-agent": "./src/schemas/coding-agent.js",
     "./schemas/favorite": "./src/schemas/favorite.js",
-    "./schemas/github-connect-intent": "./src/schemas/github-connect-intent.js",
+    "./schemas/github-install-intent": "./src/schemas/github-install-intent.js",
     "./schemas/github-installation": "./src/schemas/github-installation.js",
     "./schemas/inbox": "./src/schemas/inbox.js",
     "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",

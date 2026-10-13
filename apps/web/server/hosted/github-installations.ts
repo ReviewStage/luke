@@ -6,7 +6,7 @@ import {
   type GitHubAccountType,
   type GitHubInstallationStatus,
 } from "@sidecar/database/github-installation-vocabulary";
-import { githubConnectIntent } from "@sidecar/database/schemas/github-connect-intent";
+import { githubInstallIntent } from "@sidecar/database/schemas/github-install-intent";
 import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { and, eq, gt, ne, or } from "drizzle-orm";
@@ -77,7 +77,7 @@ const insertIntent = SqlSchema.void({
     now: Schema.Date,
   }),
   execute: (row) =>
-    db.insert(githubConnectIntent).values({
+    db.insert(githubInstallIntent).values({
       stateHash: row.stateHash,
       userId: row.userId,
       organizationId: row.organizationId,
@@ -91,13 +91,13 @@ const deleteIntent = SqlSchema.findOneOption({
   Result: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   execute: ({ stateHash, now }) =>
     db
-      .delete(githubConnectIntent)
+      .delete(githubInstallIntent)
       .where(
-        and(eq(githubConnectIntent.stateHash, stateHash), gt(githubConnectIntent.expiresAt, now)),
+        and(eq(githubInstallIntent.stateHash, stateHash), gt(githubInstallIntent.expiresAt, now)),
       )
       .returning({
-        userId: githubConnectIntent.userId,
-        organizationId: githubConnectIntent.organizationId,
+        userId: githubInstallIntent.userId,
+        organizationId: githubInstallIntent.organizationId,
       }),
 });
 

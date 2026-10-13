@@ -1,5 +1,5 @@
 {
-  "id": "e86b40f0-2ec1-47de-98ed-e02dd42916d4",
+  "id": "2ed51cb6-c37b-43a5-8934-73ecd2e55e2a",
   "prevId": "829f1648-a1f0-41e5-8b6d-2ed47acd43f9",
   "version": "7",
   "dialect": "postgresql",
@@ -2144,8 +2144,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.github_connect_intent": {
-      "name": "github_connect_intent",
+    "public.github_install_intent": {
+      "name": "github_install_intent",
       "schema": "",
       "columns": {
         "state_hash": {
@@ -2181,18 +2181,18 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "github_connect_intent_user_id_user_id_fk": {
-          "name": "github_connect_intent_user_id_user_id_fk",
-          "tableFrom": "github_connect_intent",
+        "github_install_intent_user_id_user_id_fk": {
+          "name": "github_install_intent_user_id_user_id_fk",
+          "tableFrom": "github_install_intent",
           "tableTo": "user",
           "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "github_connect_intent_organization_id_organization_id_fk": {
-          "name": "github_connect_intent_organization_id_organization_id_fk",
-          "tableFrom": "github_connect_intent",
+        "github_install_intent_organization_id_organization_id_fk": {
+          "name": "github_install_intent_organization_id_organization_id_fk",
+          "tableFrom": "github_install_intent",
           "tableTo": "organization",
           "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],

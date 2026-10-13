@@ -11,7 +11,7 @@ import { organization, user } from "./auth.js";
  * intent past its expiry, or already spent, links nothing; it leaves with
  * its account or its workspace.
  */
-export const githubConnectIntent = pgTable("github_connect_intent", {
+export const githubInstallIntent = pgTable("github_install_intent", {
   /** The hex SHA-256 of the state the install address carried. */
   stateHash: text("state_hash").primaryKey(),
   userId: text("user_id")
