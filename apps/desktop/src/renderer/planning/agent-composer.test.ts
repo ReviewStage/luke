@@ -22,6 +22,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
@@ -611,6 +612,8 @@ test("the model button is the pair alone and a chevron: no mark before it, the e
   assert.equal(button.firstElementChild?.matches(".model-label"), true, "the words come first");
   assert.equal(button.lastElementChild?.matches("svg"), true, "the chevron comes last");
   assert.equal(button.querySelectorAll("svg").length, 1, "the chevron is its one glyph");
+  act(() => button.click());
+  assertOpensWhatItNames(button);
 });
 
 test("the chip's menu ends on one muted line with what the agent has cost: tokens and dollars, tokens alone where the service priced none, and nothing before a turn settled", async () => {

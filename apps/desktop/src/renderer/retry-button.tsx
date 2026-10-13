@@ -6,7 +6,9 @@
  * and Codex draw a failed load. A row that is itself the button, "Show older
  * versions" turned failure, cannot hold a second one, so it draws the same
  * glyph and word after its failure (`RetryRowLabel`), and its own press is
- * the retry.
+ * the retry. The failure's words are an alert, because they appear in the
+ * row's place after a press or a scroll and a reader would otherwise hear
+ * nothing of it.
  */
 
 import { RotateCwIcon } from "lucide-react";
@@ -33,7 +35,7 @@ export function RetryButton({
 export function RetryRowLabel({ failure }: { failure: string }): React.JSX.Element {
   return (
     <>
-      {failure}{" "}
+      <span role="alert">{failure}</span>{" "}
       <span className="retry-label">
         <RotateCwIcon aria-hidden="true" />
         {RETRY_WORD}

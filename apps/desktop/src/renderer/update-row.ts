@@ -22,6 +22,8 @@ export interface UpdateRow {
   action: UpdateRowAction;
   /** Whether the running build is positively the latest, for the check mark. */
   current: boolean;
+  /** Whether the detail says a check or an install failed, which Settings announces as an alert. */
+  failed: boolean;
 }
 
 /**
@@ -87,6 +89,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
       detail: "This build updates by hand: the releases page has the latest.",
       action: UPDATE_ROW_ACTION.GET,
       current: false,
+      failed: false,
     };
   }
   switch (update.status) {
@@ -95,24 +98,28 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
         detail: "Checking the latest release…",
         action: UPDATE_ROW_ACTION.CHECKING,
         current: false,
+        failed: false,
       };
     case UPDATE_STATUS.DOWNLOADING:
       return {
         detail: downloadingDetail(update),
         action: UPDATE_ROW_ACTION.DOWNLOADING,
         current: false,
+        failed: false,
       };
     case UPDATE_STATUS.READY:
       return {
         detail: `Version ${update.latestVersion} is downloaded.`,
         action: UPDATE_ROW_ACTION.RESTART,
         current: false,
+        failed: false,
       };
     case UPDATE_STATUS.UPDATED:
       return {
         detail: `Updated from version ${update.previousVersion}.`,
         action: UPDATE_ROW_ACTION.CHECK,
         current: true,
+        failed: false,
       };
     case UPDATE_STATUS.ERROR:
       return {
@@ -121,6 +128,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
           : "The update check failed. The releases page has the latest build.",
         action: UPDATE_ROW_ACTION.GET,
         current: false,
+        failed: true,
       };
     default:
       return update.status === UPDATE_STATUS.IDLE && update.upToDate
@@ -128,6 +136,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
             detail: "This is the latest release.",
             action: UPDATE_ROW_ACTION.CHECK,
             current: true,
+            failed: false,
           }
         : {
             // Not an answer: nothing has been learned yet, so the row only
@@ -135,6 +144,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
             detail: "The latest release has not been checked for yet.",
             action: UPDATE_ROW_ACTION.CHECK,
             current: false,
+            failed: false,
           };
   }
 }

@@ -194,7 +194,7 @@ export function RepositoryChip(props: {
           ref={trigger}
           type="button"
           className="plan-compose-chip"
-          aria-haspopup={offersInstall ? undefined : "listbox"}
+          aria-haspopup={offersInstall ? undefined : "dialog"}
           aria-expanded={offersInstall ? undefined : open}
           aria-controls={open ? menuId : undefined}
           onClick={press}

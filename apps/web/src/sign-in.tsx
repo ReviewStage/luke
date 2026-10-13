@@ -134,7 +134,11 @@ function SignIn(): React.JSX.Element {
             </button>
           </div>
         ) : null}
-        {failure ? <p className="m-0 text-attention">{failure}</p> : null}
+        {failure ? (
+          <p className="m-0 text-attention" role="alert">
+            {failure}
+          </p>
+        ) : null}
         {/* Its own line rather than a run-on: with no provider to continue
             with there is no action block between it and the copy above. */}
         <small className="mt-4 block text-muted-foreground">
