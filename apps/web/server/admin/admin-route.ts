@@ -52,7 +52,7 @@ function resolveSessionViewer(
 }
 
 export function hostedAdminSeams(): AdminSeams {
-  // The sign-in clients are read as the auth service reads them, so the
+  // The sign-in client is read as the auth service reads it, so the
   // dashboard reports the pair a GitHub sign-in would run on.
   const socialClients = authSecrets(process.env);
   const integrations = adminIntegrations({
@@ -61,7 +61,6 @@ export function hostedAdminSeams(): AdminSeams {
     analyticsErasure:
       configured(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY) &&
       configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
-    googleSignIn: socialClientConfigured(socialClients.google),
     githubSignIn: socialClientConfigured(socialClients.github),
   });
 

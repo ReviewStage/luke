@@ -16,6 +16,7 @@ import {
 import type { AccountToken } from "./account-token.js";
 import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import {
+  GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
@@ -239,21 +240,28 @@ export class HostedPlanClient {
   }
 
   /**
-   * The repositories the account reaches through the Luke GitHub App, with
+   * The repositories the account reaches through the Luke GitHub App, or
+   * only those of the installation the workspace given stands for, with
    * whether the App is installed anywhere for it and where to install it;
    * or why there is no list: the service did not answer, or the account must
    * sign in with GitHub again.
    */
-  repositories(): Effect.Effect<
+  repositories(
+    workspaceId?: string,
+  ): Effect.Effect<
     PlanCallResult<GitHubRepositoriesAnswer, RepositoryListFailure>,
     never,
     HttpClient.HttpClient
   > {
     const call = this.#call;
     return Effect.gen(function* () {
+      const query =
+        workspaceId === undefined
+          ? ""
+          : `?${new URLSearchParams({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceId })}`;
       const answer = yield* call.send({
         method: HTTP_METHOD.GET,
-        path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES,
+        path: `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}${query}`,
       });
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));

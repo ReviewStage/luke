@@ -18,6 +18,7 @@ import {
   type PlanningView,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { LIVE_STATUS } from "@sidecar/live";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
@@ -64,6 +65,8 @@ const PLAN: Plan = {
 const OPEN: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.READY,
+  workspaces: [],
+  available: [],
   activePlanId: PLAN.id,
   document: { status: PLANNING_READ.READY, plan: PLAN },
 };
@@ -109,6 +112,8 @@ function mount(
   const shownInboxes: (string | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
+  /** Each asked act's payload, unread until a test reads it as the act's schema would. */
+  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -134,9 +139,10 @@ function mount(
         // An act the test does not answer is recorded and refused.
         act: <Kind extends ActKind>(
           kind: Kind,
-          ..._args: unknown[]
+          ...args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
           record(kind);
+          payloads.push({ kind, payload: args[0] });
           const answer = answers[kind];
           if (answer !== undefined) return answer();
           return Promise.reject(new Error("Not answered in this test."));
@@ -182,6 +188,7 @@ function mount(
     shownAgents,
     shownInboxes,
     voiceCommands,
+    payloads,
     control: () => {
       assert.ok(control);
       return control;
@@ -1244,6 +1251,303 @@ test("a repository chosen by New plan is let go once a plan opens, so a later vi
 
   assert.deepEqual(chosen, { repository: "acme/ledger" });
   assert.equal(tab.control().newPlan.preset, undefined);
+});
+
+const PERSONAL = {
+  id: "workspace-personal",
+  name: "Personal",
+  personal: true,
+  role: WORKSPACE_ROLE.OWNER,
+  active: true,
+};
+const ACME = {
+  id: "workspace-acme",
+  name: "acme",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
+
+/** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
+const TWO_WORKSPACES: PlanningView = {
+  ...IDLE_PLANNING_VIEW,
+  listStatus: PLANNING_READ.READY,
+  workspaces: [PERSONAL, ACME],
+  plans: [
+    row("notes", 4),
+    { ...row("alerts", 3), workspaceId: ACME.id },
+    row("billing", 2),
+    { ...row("old-launch", 1, { archivedAt: 9 }), workspaceId: ACME.id },
+    row("old-notes", 1, { archivedAt: 8 }),
+  ],
+};
+
+/** A start's or a repository read's payload, read back as the acts' own schemas admit it. */
+const readWorkspaceNamed = Schema.decodeUnknownOption(
+  Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
+);
+
+/** A join's payload, read back as the act's own schema admits it. */
+const readJoin = Schema.decodeUnknownOption(Schema.Struct({ installationId: Schema.Number }));
+
+/** The workspace each act of `kind` the tab asked named, none where it named none. */
+function namedIn(
+  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
+  kind: ActKind,
+): (string | undefined)[] {
+  return payloads
+    .filter((asked) => asked.kind === kind)
+    .map((asked) => Option.getOrUndefined(readWorkspaceNamed(asked.payload))?.workspaceId);
+}
+
+/** The workspace each start the tab asked for named. */
+const startedIn = (payloads: Parameters<typeof namedIn>[0]) =>
+  namedIn(payloads, ACT_KIND.PLANNING_START);
+
+const UNSTARTED = {
+  [ACT_KIND.PLANNING_START]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+};
+
+test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone while every plan stays findable, and New plan starts in the one chosen", async () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
+
+  const personal = {
+    workspace: tab.control().workspace?.id,
+    plans: tab.control().listed.plans.map((plan) => plan.id),
+    archived: tab.control().listed.archived.map((plan) => plan.id),
+  };
+  await tab.control().newPlan.start("Invites", null);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await tab.control().newPlan.start("Usage", "acme/relay");
+
+  assert.deepEqual(personal, {
+    workspace: PERSONAL.id,
+    plans: ["notes", "billing"],
+    archived: ["old-notes"],
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["alerts"],
+  );
+  assert.deepEqual(
+    tab.control().listed.archived.map((plan) => plan.id),
+    ["old-launch"],
+  );
+  assert.deepEqual(startedIn(tab.payloads), [PERSONAL.id, ACME.id]);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+    "the palette, the inbox, and the history find every workspace's plans",
+  );
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    ["old-launch", "old-notes"],
+  );
+});
+
+test("opening a plan of another workspace lists that workspace, and one of the workspace listed changes nothing", () => {
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() => tab.control().onSelect("billing"));
+  const stayed = tab.control().workspace?.id;
+  act(() => tab.control().onSelect("alerts"));
+
+  assert.equal(stayed, PERSONAL.id);
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["alerts"],
+  );
+});
+
+test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the personal one", () => {
+  const first = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => first.control().onChooseWorkspace(ACME.id));
+  document.body.innerHTML = "";
+
+  const relaunched = mount({ shown: true, planning: TWO_WORKSPACES });
+  const kept = relaunched.control().workspace?.id;
+  relaunched.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL] } });
+
+  assert.equal(kept, ACME.id);
+  assert.equal(relaunched.control().workspace?.id, PERSONAL.id);
+  assert.deepEqual(
+    relaunched.control().listed.plans.map((plan) => plan.id),
+    ["notes", "billing"],
+  );
+});
+
+test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the personal one", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
+
+  await tab.control().newPlan.start("Invites", null);
+
+  assert.equal(tab.control().workspace, undefined);
+  assert.deepEqual(
+    tab.control().listed.plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+  );
+  assert.deepEqual(startedIn(tab.payloads), [undefined]);
+});
+
+const GLOBEX = { installationId: 4242, name: "globex" };
+const GLOBEX_JOINED = {
+  id: "workspace-globex",
+  name: "globex",
+  personal: false,
+  role: WORKSPACE_ROLE.MEMBER,
+  active: true,
+};
+
+test("joining an installation's workspace asks for it by the installation and lists it once main's view holds it", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
+    { [ACT_KIND.WORKSPACE_JOIN]: () => Promise.resolve(GLOBEX_JOINED) },
+  );
+
+  const offered = tab.control().available;
+  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
+  await settle();
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, GLOBEX_JOINED], available: [] },
+  });
+
+  assert.deepEqual(offered, [GLOBEX]);
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_JOIN)
+      .map((asked) => Option.getOrUndefined(readJoin(asked.payload))?.installationId),
+    [GLOBEX.installationId],
+  );
+  assert.equal(tab.control().workspace?.id, GLOBEX_JOINED.id);
+});
+
+test("a join the service refuses says why in a toast and keeps the workspace listed", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, available: [GLOBEX] } },
+    {
+      [ACT_KIND.WORKSPACE_JOIN]: () =>
+        Promise.reject(new Error("Could not join that workspace on this system.")),
+    },
+  );
+
+  act(() => tab.control().onJoinWorkspace(GLOBEX.installationId));
+  await settle();
+
+  assert.equal(toast(), "Could not join that workspace on this system.");
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("the repository chip reads the chosen workspace's repositories on the new-plan page, and the open plan's on its page", async () => {
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
+
+  await tab.control().repositories.read();
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await tab.control().repositories.read();
+  tab.stand({ planning: { ...OPEN, workspaces: [PERSONAL, ACME] } });
+  await tab.control().repositories.read();
+
+  assert.deepEqual(namedIn(tab.payloads, ACT_KIND.PLANNING_REPOSITORIES), [
+    PERSONAL.id,
+    ACME.id,
+    PLAN.workspaceId,
+  ]);
+});
+
+test("Install Luke on GitHub opens the installation page the repository read answers", async () => {
+  const installationUrl = "https://github.com/apps/luke/installations/new";
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        Promise.resolve({ repositories: { installed: false, repositories: [], installationUrl } }),
+    },
+  );
+
+  act(() => tab.control().onInstallApp());
+  await settle();
+
+  assert.deepEqual(tab.told, [
+    ACT_KIND.PLANNING_REFRESH,
+    ACT_KIND.PLANNING_REPOSITORIES,
+    ACT_KIND.GITHUB_OPEN,
+  ]);
+});
+
+test("Install Luke on GitHub opens the page an earlier read answered when the read now fails, and says why where none ever did", async () => {
+  const installationUrl = "https://github.com/apps/luke/installations/new";
+  let reachable = true;
+  const tab = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        reachable
+          ? Promise.resolve({
+              repositories: { installed: true, repositories: [], installationUrl },
+            })
+          : Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+    },
+  );
+  const offline = mount(
+    { shown: true, planning: TWO_WORKSPACES },
+    {
+      [ACT_KIND.PLANNING_REPOSITORIES]: () =>
+        Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+    },
+  );
+
+  await tab.control().repositories.read();
+  reachable = false;
+  act(() => tab.control().onInstallApp());
+  await settle();
+  act(() => offline.control().onInstallApp());
+  await settle();
+
+  assert.equal(tab.told.at(-1), ACT_KIND.GITHUB_OPEN);
+  assert.equal(offline.told.includes(ACT_KIND.GITHUB_OPEN), false);
+  assert.equal(toast(), "Luke could not reach GitHub to install the App. Try again.");
+});
+
+test("a workspace left lists the personal one again", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const chosen = tab.control().workspace?.id;
+
+  act(() => tab.control().onLeftWorkspace());
+
+  assert.equal(chosen, ACME.id);
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a fixture run lists its personal workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+  const staged = fixture.control().listed.plans.map((plan) => plan.name);
+  act(() => fixture.control().onChooseWorkspace("workspace-acme"));
+  act(() => fixture.control().onJoinWorkspace(4242));
+
+  assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
+  assert.deepEqual(
+    fixture.control().listed.plans.map((plan) => plan.name),
+    ["Usage alerts"],
+  );
+  assert.equal(fixture.control().workspaces.length, 2);
+  assert.equal(fixture.control().available.length, 1);
+  assert.deepEqual(fixture.told, [], "a fixture's join asks nothing");
+  assert.equal(window.localStorage.length, 0);
 });
 
 test("a fixture's plan is pinned and archived nowhere", () => {

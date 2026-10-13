@@ -2,13 +2,12 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { GitHubMark, GoogleMark } from "./account-marks";
+import { GitHubMark } from "./account-marks";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import {
-  SOCIAL_PROVIDER,
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
   socialProviderFromState,
@@ -17,25 +16,11 @@ import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`
 // through social sign-in, so the new Better Auth session resumes this exact
-// desktop authorization request when Google or GitHub returns.
+// desktop authorization request when GitHub returns.
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
-}
-
-function ProviderMark({
-  provider,
-  className,
-}: {
-  provider: SocialProvider;
-  className?: string;
-}): React.JSX.Element {
-  return provider === SOCIAL_PROVIDER.GITHUB ? (
-    <GitHubMark className={className} />
-  ) : (
-    <GoogleMark className={className} />
-  );
 }
 
 function SignIn(): React.JSX.Element {
@@ -75,9 +60,7 @@ function SignIn(): React.JSX.Element {
             page, so it carries the same face the product and the landing page
             wear. */}
         {provider ? (
-          <ConnectionGraphic
-            mark={<ProviderMark provider={provider} className="size-10 shrink-0" />}
-          />
+          <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
         ) : (
           <div className="inline-flex w-13" aria-hidden="true">
             <LukeMark className="h-auto w-full" />
@@ -99,7 +82,7 @@ function SignIn(): React.JSX.Element {
               disabled={pending !== undefined}
               onClick={() => void begin()}
             >
-              <ProviderMark provider={provider} className="size-[15px] shrink-0" />
+              <GitHubMark className="size-[15px] shrink-0" />
               {pending ? "Opening…" : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}
             </button>
           </div>

@@ -54,8 +54,7 @@ changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
-`GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
+`GITHUB_APP_CLIENT_ID`, and `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
 under "The Luke GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
@@ -164,13 +163,32 @@ plan's one conversation, which `openPlanConversation` answers with its
 opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
+A workspace of an installation is joined, read, and left through
+`server/workspaces-app.ts` under the bearer, since the plugin's own member
+endpoints take a session cookie a Mac never holds. `POST /api/workspaces/join`
+takes an active installation's id, asks GitHub on the account's own token
+whether it still reaches it (`GitHubApp.userReachesInstallation`), and adds
+the account as a member through the plugin's server-only `addMember`
+(`hosted/workspace-seams.ts`); one already in is answered as it stands.
+`GET /api/workspaces/members?workspaceId=` answers a workspace's members to a
+member, read through Drizzle (`hosted/workspace-members.ts`).
+`POST /api/workspaces/members/remove` lets an owner or an admin remove a
+member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
+an owner leave; both delete the `member` row through Drizzle, no
+organization hook being configured that the plugin's own delete would run.
+A workspace the account is not in is `not-found`; a personal one, or a role
+that does not allow it, `not-permitted`.
+`tests/workspaces-app.test.ts` holds each over the plugin on PGlite.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
 during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.
 
-Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
+Sign-in is GitHub's alone, since a workspace is a GitHub App installation and
+every account needs a GitHub identity; an account that signed in with Google
+alone, from before, can no longer sign in. GitHub's callback is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests no
 OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
@@ -242,7 +260,11 @@ the two reads reaches nothing rather than failing the whole.
 passes before it is kept: only the installation on the owner can reach it,
 so only that one is paged, and only as far as the page the repository is on,
 the name is matched the way GitHub folds case, and what is answered is the
-full name as GitHub spells it. `repositoryReadToken(userId, "owner/name")`
+full name as GitHub spells it; `userRepositoryInstallation` answers the
+same with the id of the installation it was reached through.
+`userInstallationRepositories(userId, installationId)` pages one
+installation's repositories on the user's token, most recently updated
+first. `repositoryReadToken(userId, "owner/name")`
 is the same check followed by the one token the App mints: `POST
 /app/installations/{id}/access_tokens` under the App's JWT, naming that one
 repository and `contents: read`, answered sealed beside the repository as
@@ -258,7 +280,12 @@ listing under the account bearer, answered as
 `packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
 `repositories` (owner, name, full name, default branch, private, and when
 GitHub last saw it change), and `installationUrl`, which is where the desktop
-sends an account with nothing installed. Nothing is stored. An account whose
+sends an account with nothing installed. Nothing is stored. A
+`workspaceId` query names the workspace the listing is for: a workspace of
+an installation lists that installation's repositories alone, `installed`
+true, to a member of it; one the account is not in is `not-found` (404),
+and the query given twice is `invalid-request`. A personal workspace, or
+none named, lists everything as before. An account whose
 token the service cannot use, having never signed in with GitHub, signed in
 before the App, or had the token refused or revoked, is `github-sign-in-required`
 (403); a GitHub or a store the service could not reach is `unavailable`.
@@ -300,8 +327,13 @@ whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on its owner's own token
 through `agentPublished`, as the agent's tab reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
-answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
-scripted GitHub and PGlite.
+answered and ignored. An `installation` delivery, which GitHub sends every
+App unsubscribed, moves the status of its workspace's `github_installation`
+row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
+a workspace whose installation is not active is listed by
+`GET /api/workspaces` with `active: false`, so its plans stay reachable, and
+nothing is deleted. `tests/github-webhook-app.test.ts`
+holds it over a scripted GitHub and PGlite.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
@@ -1073,6 +1105,39 @@ account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
 
+`server/workspaces-app.ts` answers `GET /api/workspaces`
+(`packages/hosted/src/workspace-wire.ts`): `workspaces`, every workspace the
+bearer's account is a member of, its personal one first and the rest by name,
+each `{ id, name, personal, role, active }`, and `available`, each
+`{ installationId, name }`, the workspaces of Luke GitHub App installations
+the account's GitHub reaches that it is not a member of. A workspace beside
+the personal one stands for one installation: a `github_installation` row
+(`packages/database/src/schemas/github-installation.ts`, migration `20261013162123_github_installation`) ties the
+`organization` to GitHub's installation id and account id, never the login,
+with the account's login and kind and the installation's status. Before it
+reads either list the route ensures the personal workspace and runs
+`hosted/github-installations.ts`'s `syncInstallations`, which reads
+`/user/installations` on the account's own GitHub token: an installation no
+row names yet becomes a workspace, created through `workspaceSeams(auth.api)`
+with the account as its owner and the login as its name and slug, and one a
+row names has its login and kind refreshed. GitHub gives a reinstall a new
+installation id, so a new installation on an account a row already names by
+`account_id` moves that row to it and sets it active, and the workspace comes
+back with its members and plans. A sync never adds or removes a
+member, since it would put back a member an admin removed; that is what
+`available` is for. A GitHub the account cannot read (no GitHub sign-in, an
+App not configured, GitHub down) leaves the installations unsynced and
+`available` empty and is logged by its kind; a plugin refusal answers
+`unavailable`. A workspace of a suspended or removed installation is listed
+with `active: false` and is never offered in `available`. A slug the plugin
+refuses as taken is adopted only where the organization under it is already
+linked to the same GitHub account (a racing sync); an organization anyone else
+made under the login is never adopted, and the workspace is slugged
+`<login>-<account id>` instead. The personal ensure follows the same rule
+against its own `personal_workspace` row.
+`tests/workspaces-app.test.ts` holds it over the plugin on PGlite and a
+scripted GitHub.
+
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
 conversation's turns, twenty a page newest first, each projected from its
@@ -1130,7 +1195,7 @@ restores as `not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is
-kept only once `userRepository` on the `GitHubApp` confirms the account
+kept only once `userRepositoryInstallation` on the `GitHubApp` confirms the account
 reaches it, read from GitHub on the account's own token before the row is
 written, so a plan never names a repository its owner could not reach
 through the Luke GitHub App at the moment it was named; the stored spelling
@@ -1140,6 +1205,12 @@ the App reaches no installation of for the account is
 included; an account that must sign in with GitHub again is
 `github-sign-in-required` (403); and a GitHub the service could not read is
 `unavailable`, the plan standing as it was. A change naming null clears it.
+A plan in the workspace of a GitHub App installation (one with a
+`github_installation` row) may name only a repository reached through that
+installation, compared by GitHub's installation id rather than the owner's
+login; one of another installation is `repository-not-reachable` too, since
+the workspace does not reach it. A personal workspace's plan may name any
+repository the account reaches.
 
 A plan's text has one write, `server/hosted/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
@@ -1380,16 +1451,13 @@ carries the relay hooks, while only a positively identified Preview accepts the
 returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`BETTER_AUTH_PROXY_SECRET`, Google's `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
+`BETTER_AUTH_PROXY_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
 `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
-`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the end that
-exchanges the code, but Better Auth's Google provider refuses to build the
-authorization URL without a client secret, so a Preview without
-`GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
-leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
-the provider secrets in every environment, and Charles chose on 2026-09-18 to
-follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the
+end that exchanges the code, but Better Auth's oauth-proxy setup sets the
+provider secrets in every environment, and Charles chose on 2026-09-18 to
+follow it rather than hold them back from Preview; the preview then builds its
+own authorization URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into

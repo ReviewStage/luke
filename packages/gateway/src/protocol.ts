@@ -54,6 +54,16 @@ export const GATEWAY_METHOD = {
   PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
+  WORKSPACES_REFRESH: "workspaces.refresh",
+  /** The workspace of a GitHub App installation the account reaches joined on the service; the view's workspaces and plans are read again. */
+  WORKSPACES_JOIN: "workspaces.join",
+  /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_MEMBERS: "workspaces.members",
+  /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
+  WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
+  /** The account left one workspace on the service; the view's workspaces and plans are read again. */
+  WORKSPACES_LEAVE: "workspaces.leave",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */

@@ -9,17 +9,25 @@ import {
   type PlanTreeEntry,
 } from "@sidecar/hosted/plan-wire";
 import {
+  IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
   PLAN_WORK_TOOL,
+  PLANNING_READ,
   type PlanningTreeAnswer,
+  type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { BoardIcon, CodeIcon, TranscriptIcon } from "@sidecar/panel";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
+import type { ActKind, ActResultFor } from "#shared/messages/acts";
+import { RUN_PROFILE } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import {
   codingAgentsControl,
@@ -34,7 +42,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { isSubagentTab, tabKey } from "../planning/tab-strip-model";
 import { NO_LOOKS } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { type PlansControl, usePlansTab } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { settingsRowsInput } from "../settings/settings-panel";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
@@ -739,4 +747,99 @@ test("Permanently delete plan chosen from the palette asks the plan's own questi
   const dialog = document.querySelector('[role="alertdialog"]');
   assert.ok(dialog, "Delete asks before anything goes");
   assert.match(dialog.textContent ?? "", /Teammate invitations/u);
+});
+
+/** The account's plans across two workspaces, the personal one listed: one of its own, one of acme's. */
+const ACROSS_WORKSPACES: PlanningView = {
+  ...IDLE_PLANNING_VIEW,
+  listStatus: PLANNING_READ.READY,
+  workspaces: [
+    {
+      id: "workspace-personal",
+      name: "Personal",
+      personal: true,
+      role: WORKSPACE_ROLE.OWNER,
+      active: true,
+    },
+    {
+      id: "workspace-acme",
+      name: "acme",
+      personal: false,
+      role: WORKSPACE_ROLE.MEMBER,
+      active: true,
+    },
+  ],
+  plans: [
+    {
+      id: OPEN.id,
+      workspaceId: "workspace-personal",
+      name: "Notes",
+      createdAt: 1,
+      updatedAt: 2,
+      repository: null,
+    },
+    {
+      id: "acme-alerts",
+      workspaceId: "workspace-acme",
+      name: "Usage alerts",
+      createdAt: 3,
+      updatedAt: 3,
+      repository: "acme/web",
+    },
+  ],
+};
+
+test("the palette finds a plan of a workspace the sidebar does not list, and opening it lists that workspace", () => {
+  const selected: string[] = [];
+  let control: PlansControl | undefined;
+  function Window(): React.JSX.Element {
+    useAppKeymap(true);
+    const plans = usePlansTab({
+      acts: {
+        act: <Kind extends ActKind>(kind: Kind, ..._args: unknown[]): Promise<ActResultFor<Kind>> =>
+          Promise.reject(new Error(`Not answered: ${kind}`)),
+        tell: () => undefined,
+      },
+      planning: ACROSS_WORKSPACES,
+      run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },
+      signedIn: true,
+      voiceAvailable: false,
+      microphoneStatus: MICROPHONE_STATUS.GRANTED,
+      shown: true,
+      unseenAgents: [],
+      inboxWaiting: [],
+      inboxPlans: [],
+      voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: () => undefined },
+      onOpenIntegrations: () => undefined,
+    });
+    control = plans;
+    return createElement(CommandPalette, {
+      available: true,
+      tab: PANEL_TAB.PLANS,
+      onTabChange: () => undefined,
+      plans: {
+        ...plans,
+        onSelect: (planId: string) => {
+          selected.push(planId);
+          plans.onSelect(planId);
+        },
+      },
+      settings: { rows: undefined, onViewChange: () => undefined },
+      readFiles: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+    });
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => root?.render(createElement(Window)));
+  const listedBefore = control?.listed.plans.map((plan) => plan.name);
+
+  search(openPalette(), "Usage");
+  const found = rows();
+  choose("Usage alerts");
+
+  assert.deepEqual(listedBefore, ["Notes"]);
+  assert.deepEqual(found, ["Usage alerts · acme/web"]);
+  assert.deepEqual(selected, ["acme-alerts"]);
+  assert.equal(control?.workspace?.id, "workspace-acme");
+  window.localStorage.clear();
 });

@@ -1,4 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  GITHUB_INSTALLATION_STATUS,
+  type GitHubInstallationStatus,
+} from "@sidecar/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@sidecar/database/models/coding-agent-store";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -13,6 +17,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { GitHubApp } from "./github/github-app.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
+import { setInstallationStatus } from "./hosted/github-installations.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -26,7 +31,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again.
+ * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, and one about an installation marks its workspace active or not.
  *
  * The events read are a pull request's, a check suite's, a check run's once
  * it ends, and a commit status's, since the checks' one word counts the
@@ -44,6 +49,12 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * read that fails is logged by its kind alone and the delivery is still
  * answered, since GitHub retries nothing on its own and the next delivery
  * or the tab's next read reads again.
+ *
+ * An installation's own deliveries, which GitHub sends every App without
+ * its subscribing, move the status of the workspace that stands for it
+ * (`hosted/github-installations.ts`): removed or suspended marks it
+ * inactive, and unsuspended active again. Nothing is deleted, so an installation
+ * suspended and brought back keeps its members and its plans.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -69,7 +80,16 @@ const WEBHOOK_EVENT = {
   CHECK_RUN: "check_run",
   /** A commit status, which the checks' one word counts beside the check runs. */
   STATUS: "status",
+  /** The App installed, removed, suspended, or brought back on an account. */
+  INSTALLATION: "installation",
 } as const;
+
+/** What each installation action leaves its workspace's status at; any other action moves nothing. */
+const INSTALLATION_ACTION_STATUS: ReadonlyMap<string, GitHubInstallationStatus> = new Map([
+  ["deleted", GITHUB_INSTALLATION_STATUS.DELETED],
+  ["suspend", GITHUB_INSTALLATION_STATUS.SUSPENDED],
+  ["unsuspend", GITHUB_INSTALLATION_STATUS.ACTIVE],
+]);
 
 /** A pull request's actions that change what a plan's row says of it: where it stands, its title, or its size. */
 const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
@@ -126,6 +146,11 @@ const CheckRunDeliverySchema = Schema.Struct({
 const StatusDeliverySchema = Schema.Struct({
   repository: RepositorySchema,
   branches: Schema.Array(Schema.Struct({ name: Schema.String })),
+});
+
+const InstallationDeliverySchema = Schema.Struct({
+  action: Schema.String,
+  installation: Schema.Struct({ id: Schema.Number }),
 });
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -206,6 +231,18 @@ function deliveryTarget(event: string, payload: UnparsedWireValue): DeliveryTarg
   }
 }
 
+/** The installation an installation delivery is about and the status its action leaves it at, where its action moves one. */
+function installationTarget(
+  payload: UnparsedWireValue,
+): { readonly installationId: number; readonly status: GitHubInstallationStatus } | undefined {
+  const read = readDelivery(InstallationDeliverySchema, payload);
+  if (Result.isFailure(read)) return undefined;
+  const status = INSTALLATION_ACTION_STATUS.get(read.success.action);
+  return status === undefined
+    ? undefined
+    : { installationId: read.success.installation.id, status };
+}
+
 /** What the agents on the target's branches published, read again on each owner's token; answers how many reads landed. */
 const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgain")(function* (
   target: DeliveryTarget,
@@ -261,7 +298,15 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     }
     const event = request.headers[DELIVERY_HEADER.EVENT] ?? "";
     if (event === WEBHOOK_EVENT.PING) return hostedJsonResponse(200, { read: 0 });
-    const target = deliveryTarget(event, yield* parseJsonBytes(body));
+    const payload = yield* parseJsonBytes(body);
+    if (event === WEBHOOK_EVENT.INSTALLATION) {
+      const moved = installationTarget(payload);
+      if (moved !== undefined) {
+        yield* hostedStoreOrUnavailable(setInstallationStatus(moved.installationId, moved.status));
+      }
+      return hostedJsonResponse(200, { read: 0 });
+    }
+    const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
     return hostedJsonResponse(200, { read });
   },

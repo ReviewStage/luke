@@ -51,7 +51,10 @@ export const githubRepositorySchema = EffectSchema.Struct({
 
 export type GitHubRepository = typeof githubRepositorySchema.Type;
 
-/** The repositories (GET): every one the App reaches for the developer, most recently updated first. */
+/** The query naming the workspace a listing is for; a workspace of a GitHub App installation lists only that installation's repositories. */
+export const GITHUB_REPOSITORIES_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
+
+/** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
 export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
   /** Whether the developer reaches any installation of the App at all; false is "Install Luke on GitHub". */
   installed: EffectSchema.Boolean,

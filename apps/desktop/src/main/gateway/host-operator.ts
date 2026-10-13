@@ -1,5 +1,5 @@
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
-import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { AccountSnapshot, SignInProvider } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
 import {
@@ -97,6 +97,7 @@ import {
   type PlanningPinRepositoryParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
+  type PlanningRepositoriesParams,
   type PlanningRevisionAnswer,
   type PlanningRevisionParams,
   type PlanningRevisionsAnswer,
@@ -110,6 +111,13 @@ import {
   type PlanningTreeAnswer,
   type PlanningTreeParams,
   type PlanningView,
+  type PlanningWorkspaceJoinAnswer,
+  type PlanningWorkspaceJoinParams,
+  type PlanningWorkspaceLeaveAnswer,
+  type PlanningWorkspaceLeaveParams,
+  type PlanningWorkspaceMemberRemoveParams,
+  type PlanningWorkspaceMembersAnswer,
+  type PlanningWorkspaceMembersParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
   planningPageAnswerSchema,
@@ -121,6 +129,10 @@ import {
   planningStartAnswerSchema,
   planningTreeAnswerSchema,
   planningViewSchema,
+  planningWorkspaceJoinAnswerSchema,
+  planningWorkspaceLeaveAnswerSchema,
+  planningWorkspaceMembersAnswerSchema,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";
@@ -176,7 +188,7 @@ export interface HostOperator {
   ): Effect.Effect<SettingsUpdateResult>;
   resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
+  beginSignIn(provider: SignInProvider): Effect.Effect<AccountSnapshot>;
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
@@ -205,6 +217,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
+  /** The account's workspaces read again, where the host's last read is a minute old. */
+  workspacesRefresh(): Effect.Effect<void>;
   /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
   planningWorkEarlier(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
@@ -225,7 +239,9 @@ export interface HostOperator {
   /** One plan archived or brought back; answers whether the service changed it. */
   planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
-  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  planningRepositories(
+    params: PlanningRepositoriesParams,
+  ): Effect.Effect<PlanningRepositoriesAnswer>;
   /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
   planningSetRepository(
     params: PlanningSetRepositoryParams,
@@ -255,6 +271,18 @@ export interface HostOperator {
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
+  /** The workspace of a GitHub App installation joined; the workspace, or why it was not. */
+  workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
+  /** One workspace's members; or why there are none. */
+  workspaceMembers(
+    params: PlanningWorkspaceMembersParams,
+  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  /** One member removed from a workspace; the members who remain, or why none was removed. */
+  workspaceMemberRemove(
+    params: PlanningWorkspaceMemberRemoveParams,
+  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  /** One workspace left; or why it was not. */
+  workspaceLeave(params: PlanningWorkspaceLeaveParams): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -356,6 +384,16 @@ function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Ef
  * rest on to the act, whose own answer guard is checked in the router and
  * again in the window that asked.
  */
+/** A workspace method's answer as its schema reads it; unanswered where the host refused or the shape is not read. */
+function workspaceAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) {
+  return (answer: GatewayCallResult): Answer | typeof WORKSPACE_UNANSWERED =>
+    (answer.ok
+      ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+      : undefined) ?? WORKSPACE_UNANSWERED;
+}
+
+const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
+
 function record(result: GatewayCallResult): WireRecord | undefined {
   return result.ok && isRecord(result.result) ? result.result : undefined;
 }
@@ -530,6 +568,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     planningWorkEarlier: () => fire(client.call(GATEWAY_METHOD.PLANNING_WORK_EARLIER)),
     planningOpen: (planId) =>
       Effect.map(
@@ -568,9 +607,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         (answer) => record(answer)?.changed === true,
       ),
-    planningRepositories: () =>
+    planningRepositories: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
+        client.call(
+          GATEWAY_METHOD.PLANNING_REPOSITORIES,
+          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
+        ),
         (answer): PlanningRepositoriesAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
@@ -667,6 +709,29 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
+    workspaceJoin: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_JOIN, { installationId: params.installationId }),
+        workspaceAnswer(planningWorkspaceJoinAnswerSchema),
+      ),
+    workspaceMembers: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+      ),
+    workspaceMemberRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+          workspaceId: params.workspaceId,
+          userId: params.userId,
+        }),
+        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+      ),
+    workspaceLeave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceLeaveAnswerSchema),
+      ),
     planningSetRepository: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
@@ -697,6 +762,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
           ...("repository" in request ? { repository: request.repository } : undefined),
+          ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok
