@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { account, user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import { symmetricDecrypt } from "better-auth/crypto";
@@ -18,7 +19,6 @@ import {
   githubAppFromEnvironment,
   SIGN_IN_REQUIRED,
 } from "../server/github/github-app";
-import { InstantColumnSchema } from "../server/hosted/store/database";
 import {
   fakeGitHub,
   GITHUB_APP_PUBLIC_KEY,

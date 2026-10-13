@@ -1,5 +1,11 @@
 import { db } from "@sidecar/database/core/query";
 import {
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  optionalField,
+  TurnUsageColumnSchema,
+} from "@sidecar/database/models/columns";
+import {
   conversations,
   messages,
   type StoredTurnUsage,
@@ -40,12 +46,6 @@ import {
   type WireBoundaryInput,
   WireValueSchema,
 } from "../../core.js";
-import {
-  EpochMillisColumnSchema,
-  InstantColumnSchema,
-  optionalField,
-  TurnUsageColumnSchema,
-} from "./database.js";
 
 /**
  * The conversation reads the brain and the voice make: a turn's journal by

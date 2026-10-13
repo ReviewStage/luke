@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
 import { user } from "@sidecar/database/schemas/auth";
 import { devices } from "@sidecar/database/schemas/devices";
 import {
@@ -16,7 +17,6 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**

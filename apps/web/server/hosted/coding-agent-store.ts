@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import {
   codingAgent,
   codingAgentDelegation,
@@ -22,7 +23,6 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
 import { PlanArchived } from "./plan-store.js";
-import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";
 import {
   awaitingLinesOf,

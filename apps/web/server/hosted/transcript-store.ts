@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { plan } from "@sidecar/database/schemas/plan";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
@@ -13,7 +14,6 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import type { PlanStoreEffect } from "./plan-store.js";
-import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * transcript-store.ts -- what was said on a plan's voice calls, read back for the Plans tab.

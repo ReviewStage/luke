@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import {
   VOICE_CLOSE_REASON,
@@ -13,7 +14,6 @@ import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { readPlan } from "../hosted/plan-store.js";
-import { InstantColumnSchema } from "../hosted/store/database.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.

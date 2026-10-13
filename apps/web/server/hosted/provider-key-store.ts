@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -11,7 +12,6 @@ import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import type { PlanStoreEffect } from "./plan-store.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
-import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.

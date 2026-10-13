@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
 import { db } from "@sidecar/database/core/query";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
 import {
   conversations,
   events,
@@ -21,7 +22,6 @@ import { eq, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
