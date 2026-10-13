@@ -34,7 +34,7 @@ export const GATEWAY_METHOD = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
-  /** The developer's edit of one field of a plan saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
+  /** The developer's edit of a plan's document saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
   PLANNING_EDIT: "planning.edit",
   /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",

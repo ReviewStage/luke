@@ -18,8 +18,8 @@ import {
  *
  * The template is plain Markdown. Its guidance sentences are ordinary text the
  * developer and Luke both read: nothing draws them muted and no code replaces
- * them. Nothing reads the template to start a plan yet; that waits on plans
- * becoming one document (`docs/PLANNING.md`, "The fixed template").
+ * them. Every new plan starts as a copy of it (`plan-store.ts`'s
+ * `createPlan`; `docs/PLANNING.md`, "The template").
  *
  * Every write that changes the template is kept as a revision, read and
  * restored the way a plan's are: `GET /api/account/plan-template/revisions`
@@ -34,8 +34,8 @@ export const PLAN_TEMPLATE_BOUNDS = {
 } as const;
 
 /**
- * The default's sections: today's fixed template (`plan-template.ts`'s
- * `PLAN_HEADING`, in its order), each with one plain sentence on what it holds.
+ * The default's sections (`plan-template.ts`'s `PLAN_HEADING`, in its
+ * order), each with one plain sentence on what it holds.
  */
 const DEFAULT_SECTIONS = [
   [

@@ -951,7 +951,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningEditParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("an edit names a plan, a field, its base, and its value");
+          return yield* invalid("an edit names a plan, and its document's base and value");
         }
         if (!gate()) return carried<PlanningEditAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         const { planId, edit } = read.success;

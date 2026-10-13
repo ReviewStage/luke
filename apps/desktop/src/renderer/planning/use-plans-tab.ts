@@ -176,7 +176,7 @@ export interface PlansControl {
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
-  /** Saves the developer's edit of one field of the open plan: saved, a conflict with what the field holds now, or why not. */
+  /** Saves the developer's edit of the open plan's document: saved, a conflict with the text as it stands now, or why not. */
   edit: (planId: string, request: PlanEditRequest) => Promise<PlanningEditAnswer>;
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
   /** Silences Luke's voice on this Mac for the open plan's call, or plays it again; offered with the stop. */

@@ -522,7 +522,7 @@ export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
 
 export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;
 
-/** The developer's edit of one field of a plan, as the window asks it saved: the plan, and the edit as the service takes it. */
+/** The developer's edit of a plan's document, as the window asks it saved: the plan, and the edit as the service takes it. */
 export const planningEditParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   edit: planEditRequestSchema,

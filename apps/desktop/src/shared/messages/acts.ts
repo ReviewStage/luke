@@ -189,7 +189,7 @@ export const ACT_KIND = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
-  /** The developer's edit of one field of the open plan, saved on the service; answers saved, a conflict with what the field holds now, or why nothing was saved. */
+  /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",

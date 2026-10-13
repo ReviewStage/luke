@@ -121,7 +121,7 @@ export function planBoardPath(planId: string): string {
   return `${planPath(planId)}/board`;
 }
 
-/** The developer's edit of one field of one plan (POST). */
+/** The developer's edit of one plan's document (POST). */
 export function planEditPath(planId: string): string {
   return `${planPath(planId)}/edit`;
 }
