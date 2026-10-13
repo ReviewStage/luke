@@ -24,6 +24,7 @@
     "unicorn/no-useless-spread": "off",
     "anti-slop/enforce-delete-with-where": "error",
     "anti-slop/enforce-update-with-where": "error",
+    "anti-slop/no-await-drizzle-statement": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-known-value-widening": "error",
