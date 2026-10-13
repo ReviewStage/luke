@@ -375,3 +375,76 @@ test("a read that did not answer copies nothing", async () => {
   const rejected: TranscriptReader = () => Promise.reject(new Error("gone"));
   assert.equal(await readWholeTranscript(rejected, { agentId: "a" }), undefined);
 });
+
+test("a command run on the Mac copies as a command does, saying it ran on the Mac", () => {
+  const ran = agentTranscript({
+    title: "Invite flow",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    messages: [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-run_on_mac",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { command: "git status" },
+            output: {
+              status: "ran",
+              exitCode: 0,
+              stdout: "",
+              stderr: "",
+              truncated: false,
+              timedOut: false,
+            },
+          },
+          {
+            type: "tool-run_on_mac",
+            toolCallId: "call_2",
+            state: "output-available",
+            input: { command: "node --version", description: "Check the Node version" },
+            output: {
+              status: "ran",
+              exitCode: 0,
+              stdout: "v24\n",
+              stderr: "",
+              truncated: false,
+              timedOut: false,
+            },
+          },
+          { type: "text", text: "Clean." },
+        ],
+      },
+    ],
+  });
+
+  const copied = transcriptMarkdown(ran, TRANSCRIPT_COPY.CONCISE);
+
+  assert.match(copied, /- Ran \(on your Mac\) `git status`/u);
+  assert.match(copied, /- Check the Node version \(on your Mac\): `node --version`/u);
+  const running = agentTranscript({
+    title: "Invite flow",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    messages: [
+      {
+        id: "m1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-run_on_mac",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { command: "node --version", description: "Check the Node version" },
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(latestActivity(running), {
+    kind: LATEST_ACTIVITY.CALL,
+    verb: "Check the Node version (on your Mac)",
+    subject: "",
+    code: false,
+  });
+});

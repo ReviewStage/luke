@@ -18,7 +18,14 @@ import {
   workerLines,
 } from "./coding-agent-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
-import { CALL_KIND, CALL_WORDS, type CallKind, TURN_ROW, type TurnRow } from "./turn-rows";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  type CallKind,
+  callPlace,
+  TURN_ROW,
+  type TurnRow,
+} from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type WorkWorkerBlock, workerJob } from "./work-model";
 
@@ -263,8 +270,11 @@ function oneLine(text: string): string {
  */
 function callParts(call: CopiedCall) {
   const worker = call.call === CALL_KIND.WORKER;
+  const said = call.description ?? CALL_WORDS[call.call].verb;
+  const place = callPlace(call.call);
   return {
-    verb: call.description ?? CALL_WORDS[call.call].verb,
+    verb:
+      place === undefined ? said : `${said} (${place.charAt(0).toLowerCase()}${place.slice(1)})`,
     subject: oneLine(call.subject),
     joiner: worker || call.description !== undefined ? ": " : " ",
     code: !worker && CALL_WORDS[call.call].code,
@@ -329,9 +339,10 @@ export function latestActivity(transcript: CopiedTranscript): LatestActivity | u
   if (block.kind === COPIED_BLOCK.WORDS) {
     return { kind: LATEST_ACTIVITY.WORDS, text: plainWords(block.text) };
   }
-  // A described command says its description alone, as its row does.
+  // A described command says its description, and where it ran where that is the Mac, as its row does.
   if (block.description !== undefined) {
-    return { kind: LATEST_ACTIVITY.CALL, verb: block.description, subject: "", code: false };
+    const { verb } = callParts(block);
+    return { kind: LATEST_ACTIVITY.CALL, verb, subject: "", code: false };
   }
   // The verb and its joiner as the concise copy's line puts them, the subject drawn apart.
   const { verb, subject, joiner, code } = callParts(block);

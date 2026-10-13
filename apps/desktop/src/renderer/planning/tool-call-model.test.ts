@@ -50,6 +50,48 @@ test("a command the model described carries its description on one line for the 
   }
 });
 
+test("a command run on the Mac is the command it ran, described as a command is, and its answer says how it ended: its exit, its timeout, or why it was not run", () => {
+  const ran = (output: Record<string, string | number | boolean | null>) =>
+    toolCallView({
+      tool: "run_on_mac",
+      input: { command: "pnpm dev", description: "Start the dev server" },
+      output,
+    });
+  const killed = ran({
+    status: "ran",
+    exitCode: null,
+    stdout: "  ready on :3000\n",
+    stderr: "",
+    truncated: false,
+    timedOut: true,
+  });
+  assert.equal(killed.kind, CALL_KIND.MAC_COMMAND);
+  assert.equal(killed.subject, "pnpm dev");
+  assert.equal(killed.description, "Start the dev server");
+  assert.deepEqual(killed.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm dev" });
+  assert.deepEqual(killed.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "  ready on :3000\n(killed at its timeout)",
+  });
+  const failed = ran({
+    status: "ran",
+    exitCode: 1,
+    stdout: "",
+    stderr: "missing script: dev\n",
+    truncated: false,
+    timedOut: false,
+  });
+  assert.deepEqual(failed.output, { kind: TOOL_BLOCK.TEXT, text: "missing script: dev\nexit 1" });
+  const refused = ran({
+    status: "not-run",
+    reason: "Not run: Luke is not running on the developer's Mac.",
+  });
+  assert.deepEqual(refused.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not run: Luke is not running on the developer's Mac.",
+  });
+});
+
 test("a file read and a search say the path and the pattern, and answer with the words under them", () => {
   const read = toolCallView({
     tool: "read_file",

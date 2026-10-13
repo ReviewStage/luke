@@ -22,6 +22,7 @@ import {
   CALL_WORDS,
   type CallKind,
   commandDescription,
+  isCommandKind,
   pageName,
   type SaidCall,
 } from "./turn-rows";
@@ -93,7 +94,7 @@ export interface WorkTurnRow {
 /** Each of the planning model's tools as a kind of call. */
 const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.REPOSITORY]: CALL_KIND.COMMAND,
-  [PLAN_WORK_TOOL.MAC_COMMAND]: CALL_KIND.COMMAND,
+  [PLAN_WORK_TOOL.MAC_COMMAND]: CALL_KIND.MAC_COMMAND,
   [PLAN_WORK_TOOL.SEARCH_WEB]: CALL_KIND.WEB_SEARCH,
   [PLAN_WORK_TOOL.READ_WEB_PAGE]: CALL_KIND.WEB_PAGE,
   [PLAN_WORK_TOOL.SHOW_CODE]: CALL_KIND.SHOW_CODE,
@@ -260,10 +261,9 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
  */
 function toolPartOf(part: WorkToolPart, call: WorkCallRow, worker?: WorkWorkerBlock): WireValue {
   const input = wireValueOf(part.input);
-  const description =
-    call.kind === CALL_KIND.COMMAND
-      ? commandDescription(inputField(input, INPUT_FIELD.DESCRIPTION))
-      : undefined;
+  const description = isCommandKind(call.kind)
+    ? commandDescription(inputField(input, INPUT_FIELD.DESCRIPTION))
+    : undefined;
   const said: SaidCall = {
     kind: call.kind,
     ...(call.subject === undefined ? undefined : { subject: call.subject }),

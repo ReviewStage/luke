@@ -163,6 +163,8 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectIsCode?: boolean;
   /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
   subjectInBody?: boolean;
+  /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac"); none for the rest. */
+  place?: string | undefined;
 };
 
 /**
@@ -191,7 +193,11 @@ export function ToolLine({
   label,
   subject,
   subjectIsCode = true,
-}: Pick<ToolHeaderProps, "state" | "icon" | "label" | "subject" | "subjectIsCode">): ReactNode {
+  place,
+}: Pick<
+  ToolHeaderProps,
+  "state" | "icon" | "label" | "subject" | "subjectIsCode" | "place"
+>): ReactNode {
   return (
     <>
       <span
@@ -219,6 +225,11 @@ export function ToolLine({
           </span>
         )}
       </span>
+      {place === undefined ? null : (
+        <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">
+          {` ${place}`}
+        </span>
+      )}
       <ToolStateMark state={state} />
     </>
   );
@@ -232,6 +243,7 @@ export function ToolHeader({
   subject,
   subjectIsCode = true,
   subjectInBody = false,
+  place,
   className,
   ...props
 }: ToolHeaderProps): ReactNode {
@@ -244,6 +256,7 @@ export function ToolHeader({
         label={label}
         subject={subjectInBody && drawn ? undefined : subject}
         subjectIsCode={subjectIsCode}
+        place={place}
       />
     </FoldSummary>
   );
