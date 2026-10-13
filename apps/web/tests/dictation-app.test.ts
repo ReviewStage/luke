@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import type { WireBoundaryInput } from "@sidecar/wire";
@@ -78,6 +78,7 @@ function modelResponse(answer: ModelAnswer): Response {
 /** An account behind its own bearer, the model, and the group answering under the key given. */
 const openAccount = (options: { model?: ModelAnswer; key?: string | undefined } = {}) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const model = recordingHttpClient(() => modelResponse(options.model ?? { text: SAID }));
@@ -117,6 +118,7 @@ const answer = (
     // The handler runs on the router's own fiber, so it is handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment),
       seams.model,

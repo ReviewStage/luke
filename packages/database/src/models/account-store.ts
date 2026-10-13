@@ -5,8 +5,7 @@ import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/
 import { eq } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { conversations } from "../schemas/storage.js";
@@ -27,7 +26,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * session.
  */
 
-type AccountSeamFailure = SqlError | Schema.SchemaError;
+type AccountSeamFailure = QueryError | Schema.SchemaError;
 
 /** One account's stored snapshot: the preferences every device shares, the coding agents' default, and when the preferences were last written. */
 export interface AccountPreferencesRow {
@@ -53,7 +52,7 @@ export interface AccountPreferencesWrite {
 }
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
-export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient>;
+export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, DatabaseServices>;
 
 /**
  * The account's erasure is the one delete, and the row's own foreign keys are
@@ -65,24 +64,28 @@ export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClien
  */
 const deleteUserRow = SqlSchema.void({
   Request: Schema.String,
-  execute: (userId) => db.delete(user).where(eq(user.id, userId)),
+  execute: (userId) => Database.use((db) => db.delete(user).where(eq(user.id, userId))),
 });
 
 const lockUserRow = SqlSchema.void({
   Request: Schema.String,
   execute: (userId) =>
-    db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+    Database.use((db) =>
+      db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+    ),
 });
 
 const findAccountSessions = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) }),
   execute: (userId) =>
-    db
-      .select({ runtimeSessionId: conversations.runtimeSessionId })
-      .from(conversations)
-      .where(eq(conversations.userId, userId))
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ runtimeSessionId: conversations.runtimeSessionId })
+        .from(conversations)
+        .where(eq(conversations.userId, userId))
+        .for("update"),
+    ),
 });
 
 /**
@@ -96,7 +99,7 @@ const findAccountSessions = SqlSchema.findAll({
  */
 export function deleteAccount(
   userId: string,
-): Effect.Effect<void, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<void, AccountSeamFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -154,17 +157,19 @@ const findPreference = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PreferenceRowSchema,
   execute: (userId) =>
-    db
-      .select(PREFERENCE_COLUMNS)
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(PREFERENCE_COLUMNS)
+        .from(accountPreference)
+        .where(eq(accountPreference.userId, userId))
+        .limit(1),
+    ),
 });
 
 /** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(
   userId: string,
-): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, DatabaseServices> {
   return Effect.map(
     findPreference(userId),
     Option.match({ onNone: () => undefined, onSome: snapshotOf }),
@@ -211,11 +216,13 @@ const upsertPreference = SqlSchema.findOne({
   Result: PreferenceRowSchema,
   execute: (write) => {
     const columns = writtenColumns(write);
-    return db
-      .insert(accountPreference)
-      .values({ userId: write.userId, ...columns })
-      .onConflictDoUpdate({ target: accountPreference.userId, set: columns })
-      .returning(PREFERENCE_COLUMNS);
+    return Database.use((db) =>
+      db
+        .insert(accountPreference)
+        .values({ userId: write.userId, ...columns })
+        .onConflictDoUpdate({ target: accountPreference.userId, set: columns })
+        .returning(PREFERENCE_COLUMNS),
+    );
   },
 });
 
@@ -229,7 +236,7 @@ const upsertPreference = SqlSchema.findOne({
 export function writeAccountPreferences(
   userId: string,
   write: AccountPreferencesWrite,
-): Effect.Effect<AccountPreferencesRow, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<AccountPreferencesRow, AccountSeamFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
     const stored: PreferenceWrite = {
@@ -257,17 +264,19 @@ const findPlanTemplate = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PlanTemplateRowSchema,
   execute: (userId) =>
-    db
-      .select(PLAN_TEMPLATE_COLUMNS)
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(PLAN_TEMPLATE_COLUMNS)
+        .from(accountPreference)
+        .where(eq(accountPreference.userId, userId))
+        .limit(1),
+    ),
 });
 
 /** The account's own template, or null where it holds the default: no row, or a reset. */
 export function readPlanTemplate(
   userId: string,
-): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<string | null, AccountSeamFailure, DatabaseServices> {
   return Effect.map(
     findPlanTemplate(userId),
     Option.match({ onNone: () => null, onSome: (row) => row.planTemplate }),
@@ -282,7 +291,8 @@ const PlanTemplateWriteSchema = Schema.Struct({
 /** Opens the account's preference row where it has none, so the template's write has a row to lock. */
 const openPreferenceRow = SqlSchema.void({
   Request: Schema.String,
-  execute: (userId) => db.insert(accountPreference).values({ userId }).onConflictDoNothing(),
+  execute: (userId) =>
+    Database.use((db) => db.insert(accountPreference).values({ userId }).onConflictDoNothing()),
 });
 
 /** The template the account holds, its row locked until the transaction ends. */
@@ -290,11 +300,13 @@ const lockPlanTemplate = SqlSchema.findOne({
   Request: Schema.String,
   Result: PlanTemplateRowSchema,
   execute: (userId) =>
-    db
-      .select(PLAN_TEMPLATE_COLUMNS)
-      .from(accountPreference)
-      .where(eq(accountPreference.userId, userId))
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select(PLAN_TEMPLATE_COLUMNS)
+        .from(accountPreference)
+        .where(eq(accountPreference.userId, userId))
+        .for("update"),
+    ),
 });
 
 /**
@@ -307,11 +319,13 @@ const updatePlanTemplate = SqlSchema.findOne({
   Request: PlanTemplateWriteSchema,
   Result: PlanTemplateRowSchema,
   execute: (write) =>
-    db
-      .update(accountPreference)
-      .set({ planTemplate: write.planTemplate })
-      .where(eq(accountPreference.userId, write.userId))
-      .returning(PLAN_TEMPLATE_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(accountPreference)
+        .set({ planTemplate: write.planTemplate })
+        .where(eq(accountPreference.userId, write.userId))
+        .returning(PLAN_TEMPLATE_COLUMNS),
+    ),
 });
 
 /**
@@ -324,8 +338,8 @@ function underTemplateLock<A>(
   userId: string,
   body: (
     before: string | null,
-  ) => Effect.Effect<A, AccountSeamFailure | Cause.NoSuchElementError, SqlClient.SqlClient>,
-): Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient> {
+  ) => Effect.Effect<A, AccountSeamFailure | Cause.NoSuchElementError, DatabaseServices>,
+): Effect.Effect<A, AccountSeamFailure, DatabaseServices> {
   const locked = Effect.gen(function* () {
     yield* openPreferenceRow(userId);
     const { planTemplate: before } = yield* lockPlanTemplate(userId);
@@ -348,11 +362,7 @@ function writtenUnderLock(
   before: string | null,
   template: string | null,
   restoredFrom?: number,
-): Effect.Effect<
-  string | null,
-  AccountSeamFailure | Cause.NoSuchElementError,
-  SqlClient.SqlClient
-> {
+): Effect.Effect<string | null, AccountSeamFailure | Cause.NoSuchElementError, DatabaseServices> {
   return Effect.gen(function* () {
     if (before === template && restoredFrom === undefined) return before;
     const { planTemplate: after } = yield* updatePlanTemplate({ userId, planTemplate: template });
@@ -370,7 +380,7 @@ function writtenUnderLock(
 export function writePlanTemplate(
   userId: string,
   template: string | null,
-): Effect.Effect<string | null, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<string | null, AccountSeamFailure, DatabaseServices> {
   return underTemplateLock(userId, (before) => writtenUnderLock(userId, before, template));
 }
 
@@ -384,7 +394,7 @@ export function writePlanTemplate(
 export function restorePlanTemplate(
   userId: string,
   seq: number,
-): Effect.Effect<Option.Option<string | null>, AccountSeamFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<string | null>, AccountSeamFailure, DatabaseServices> {
   return underTemplateLock(userId, (before) =>
     Effect.flatMap(readTemplateRevisionContent(userId, seq), (content) =>
       Option.match(content, {

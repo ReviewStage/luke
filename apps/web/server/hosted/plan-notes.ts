@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   type PlanWriter,
   readRevisionContent,
@@ -179,12 +180,12 @@ function savedUnderLock<T extends TextTaken, F>(
   take: (
     stored: StoredPlan,
     now: number,
-  ) => Effect.Effect<Result.Result<T, F>, StoreFailure, SqlClient.SqlClient>,
-): Effect.Effect<LockedSave<T> | F, StoreFailure, SqlClient.SqlClient> {
+  ) => Effect.Effect<Result.Result<T, F>, StoreFailure, DatabaseServices>,
+): Effect.Effect<LockedSave<T> | F, StoreFailure, DatabaseServices> {
   const locked = Effect.gen(function* (): Effect.fn.Return<
     LockedSave<T> | F,
     StoreFailure,
-    SqlClient.SqlClient
+    DatabaseServices
   > {
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
@@ -222,8 +223,8 @@ function savedUnderLock<T extends TextTaken, F>(
 
 /** A save's failure logged and answered as the store being out of reach, so every outcome is a result. */
 function reachedStore<A>(
-  save: Effect.Effect<A, StoreFailure, SqlClient.SqlClient>,
-): Effect.Effect<A | PlanNotSaved, never, SqlClient.SqlClient> {
+  save: Effect.Effect<A, StoreFailure, DatabaseServices>,
+): Effect.Effect<A | PlanNotSaved, never, DatabaseServices> {
   return save.pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() =>
@@ -246,7 +247,7 @@ export function saveNotes(
   binding: PlanDocumentBinding,
   notes: readonly PlanNote[],
   writer: PlanWriter = NOTETAKER,
-): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
+): Effect.Effect<PlanSaveResult, never, DatabaseServices> {
   const take = (stored: StoredPlan, now: number) =>
     Effect.map(readStartedText(binding.userId, stored.plan.createdAt), (started) => {
       const noted = applyNotesToText(stored.text, notes, started);
@@ -308,7 +309,7 @@ function takeDocumentEdit(
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,
   edit: PlanEditRequest,
-): Effect.Effect<PlanEditSaveResult, never, SqlClient.SqlClient> {
+): Effect.Effect<PlanEditSaveResult, never, DatabaseServices> {
   const take = (stored: StoredPlan) =>
     Effect.succeed<Result.Result<TextTaken, PlanConflict | PlanNotSaved>>(
       archived(stored) ? Result.fail(ARCHIVED_RESULT) : takeDocumentEdit(stored, edit),
@@ -340,11 +341,11 @@ export type PlanRestoreResult =
 export function restoreRevision(
   binding: PlanDocumentBinding,
   seq: number,
-): Effect.Effect<PlanRestoreResult, never, SqlClient.SqlClient> {
+): Effect.Effect<PlanRestoreResult, never, DatabaseServices> {
   const restored = Effect.gen(function* (): Effect.fn.Return<
     PlanRestoreResult,
     StoreFailure,
-    SqlClient.SqlClient
+    DatabaseServices
   > {
     const content = yield* readRevisionContent(binding.userId, binding.planId, seq);
     if (Option.isNone(content)) {

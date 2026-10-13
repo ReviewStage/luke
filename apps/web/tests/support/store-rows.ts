@@ -1,11 +1,11 @@
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { MessageRoleSchema } from "@sidecar/wire";
-import { count, eq } from "drizzle-orm";
+import { count, eq, getColumnTable } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
@@ -53,6 +53,7 @@ export interface ConversationRow {
 export function insertConversation(run: HostedStoreTestRun, row: ConversationRow): Promise<string> {
   return run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(conversations)
         .values({
@@ -80,13 +81,15 @@ export function setConversationDeletedAt(
 ): Promise<void> {
   return run(
     Effect.asVoid(
-      db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
+      Database.use((db) =>
+        db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
+      ),
     ),
   );
 }
 
 export function readConversationById(run: HostedStoreTestRun, id: string) {
-  return run(db.select().from(conversations).where(eq(conversations.id, id)));
+  return run(Database.use((db) => db.select().from(conversations).where(eq(conversations.id, id))));
 }
 
 export interface MessageRow {
@@ -117,6 +120,7 @@ export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise
   const createdAt = row.createdAt ?? new Date();
   return run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(messages)
         .values({
@@ -146,11 +150,13 @@ export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise
 
 export function readMessagesByConversation(run: HostedStoreTestRun, conversationId: string) {
   return run(
-    db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(messages.seq),
+    Database.use((db) =>
+      db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(messages.seq),
+    ),
   );
 }
 
@@ -171,6 +177,7 @@ export interface TurnInsertRow {
 export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise<string> {
   return run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(turns)
         .values({
@@ -221,16 +228,18 @@ export function readTurnsByConversation(
   conversationId: string,
 ): Promise<readonly TurnRow[]> {
   return run(
-    Effect.map(db.select().from(turns).where(eq(turns.conversationId, conversationId)), (rows) =>
-      rows.map((row) => decodeTurnRow(row)),
+    Effect.map(
+      Database.use((db) => db.select().from(turns).where(eq(turns.conversationId, conversationId))),
+      (rows) => rows.map((row) => decodeTurnRow(row)),
     ),
   );
 }
 
 export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnRow | undefined> {
   return run(
-    Effect.map(db.select().from(turns).where(eq(turns.id, id)), (rows) =>
-      rows[0] === undefined ? undefined : decodeTurnRow(rows[0]),
+    Effect.map(
+      Database.use((db) => db.select().from(turns).where(eq(turns.id, id))),
+      (rows) => (rows[0] === undefined ? undefined : decodeTurnRow(rows[0])),
     ),
   );
 }
@@ -266,11 +275,13 @@ export function readMessagesByConversationTyped(
 ): Promise<readonly MessageRowFull[]> {
   return run(
     Effect.map(
-      db
-        .select()
-        .from(messages)
-        .where(eq(messages.conversationId, conversationId))
-        .orderBy(messages.seq),
+      Database.use((db) =>
+        db
+          .select()
+          .from(messages)
+          .where(eq(messages.conversationId, conversationId))
+          .orderBy(messages.seq),
+      ),
       (rows) => rows.map((row) => decodeMessageRow(row)),
     ),
   );
@@ -292,6 +303,7 @@ export function insertVoiceSession(
 ): Promise<string> {
   return run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(voiceSessions)
         .values({
@@ -329,8 +341,9 @@ export function readVoiceSessionsByUserTyped(
   userId: string,
 ): Promise<readonly VoiceSessionRow[]> {
   return run(
-    Effect.map(db.select().from(voiceSessions).where(eq(voiceSessions.userId, userId)), (rows) =>
-      rows.map((row) => decodeVoiceSessionRow(row)),
+    Effect.map(
+      Database.use((db) => db.select().from(voiceSessions).where(eq(voiceSessions.userId, userId))),
+      (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
     ),
   );
 }
@@ -350,20 +363,26 @@ export function insertVoiceTranscriptSegment(
 ): Promise<void> {
   return run(
     Effect.asVoid(
-      db.insert(voiceTranscriptSegments).values({
-        voiceSessionId: row.voiceSessionId,
-        seq: row.seq,
-        role: row.role,
-        text: row.text,
-        startMs: row.startMs,
-        endMs: row.endMs,
-      }),
+      Database.use((db) =>
+        db.insert(voiceTranscriptSegments).values({
+          voiceSessionId: row.voiceSessionId,
+          seq: row.seq,
+          role: row.role,
+          text: row.text,
+          startMs: row.startMs,
+          endMs: row.endMs,
+        }),
+      ),
     ),
   );
 }
 
 export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
-  return run(db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)));
+  return run(
+    Database.use((db) =>
+      db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
+    ),
+  );
 }
 
 export function readVoiceTranscriptSegmentsBySession(
@@ -371,16 +390,18 @@ export function readVoiceTranscriptSegmentsBySession(
   voiceSessionId: string,
 ) {
   return run(
-    db
-      .select()
-      .from(voiceTranscriptSegments)
-      .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId))
-      .orderBy(voiceTranscriptSegments.seq),
+    Database.use((db) =>
+      db
+        .select()
+        .from(voiceTranscriptSegments)
+        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId))
+        .orderBy(voiceTranscriptSegments.seq),
+    ),
   );
 }
 
 export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(Effect.asVoid(db.delete(user).where(eq(user.id, id))));
+  return run(Effect.asVoid(Database.use((db) => db.delete(user).where(eq(user.id, id)))));
 }
 
 /**
@@ -391,7 +412,9 @@ export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
  */
 function countRows(column: PgColumn, value: string) {
   return Effect.map(
-    db.select({ count: count() }).from(column.table).where(eq(column, value)),
+    Database.use((db) =>
+      db.select({ count: count() }).from(getColumnTable(column)).where(eq(column, value)),
+    ),
     (rows) => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count,
   );
 }

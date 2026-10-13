@@ -2,8 +2,7 @@ import { ASK_ORIGIN, type AskOrigin } from "@sidecar/hosted";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { asks, conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { recordedRuntimeSession } from "./recorded-session.js";
@@ -128,10 +127,10 @@ export interface AskDeliveryBinding {
   stoppedOn(target: ConversationTarget, turnId: string): AskEffect<readonly AskRow[]>;
 }
 
-type AskFailure = SqlError | Schema.SchemaError;
+type AskFailure = QueryError | Schema.SchemaError;
 
 /** What every method of the record answers: an effect over the ambient client. */
-type AskEffect<A> = Effect.Effect<A, AskFailure, SqlClient.SqlClient>;
+type AskEffect<A> = Effect.Effect<A, AskFailure, DatabaseServices>;
 
 /** The whole of an ask's row, as every read of one projects it and the binding returns it. */
 const ASK_COLUMNS = {
@@ -193,18 +192,20 @@ const AskWriteSchema = Schema.Struct({
 const insertAsk = SqlSchema.void({
   Request: AskWriteSchema,
   execute: (ask) =>
-    db
-      .insert(asks)
-      .values({
-        userId: ask.userId,
-        conversationId: ask.conversationId,
-        clientId: ask.clientId,
-        origin: ask.origin,
-        createdAt: ask.createdAt,
-        voiceSessionId: ask.voice?.sessionId ?? null,
-        taskRevision: ask.voice?.revision ?? null,
-      })
-      .onConflictDoNothing({ target: [asks.conversationId, asks.clientId] }),
+    Database.use((db) =>
+      db
+        .insert(asks)
+        .values({
+          userId: ask.userId,
+          conversationId: ask.conversationId,
+          clientId: ask.clientId,
+          origin: ask.origin,
+          createdAt: ask.createdAt,
+          voiceSessionId: ask.voice?.sessionId ?? null,
+          taskRevision: ask.voice?.revision ?? null,
+        })
+        .onConflictDoNothing({ target: [asks.conversationId, asks.clientId] }),
+    ),
 });
 
 const AskByClientSchema = Schema.Struct({ conversationId: Schema.String, clientId: Schema.String });
@@ -213,10 +214,12 @@ const findAskByClient = SqlSchema.findOneOption({
   Request: AskByClientSchema,
   Result: AskRowSchema,
   execute: (key) =>
-    db
-      .select(ASK_COLUMNS)
-      .from(asks)
-      .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
+    Database.use((db) =>
+      db
+        .select(ASK_COLUMNS)
+        .from(asks)
+        .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
+    ),
 });
 
 const AskByIdSchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
@@ -225,10 +228,12 @@ const findAskById = SqlSchema.findOneOption({
   Request: AskByIdSchema,
   Result: AskRowSchema,
   execute: (key) =>
-    db
-      .select(ASK_COLUMNS)
-      .from(asks)
-      .where(and(eq(asks.id, key.id), eq(asks.userId, key.userId))),
+    Database.use((db) =>
+      db
+        .select(ASK_COLUMNS)
+        .from(asks)
+        .where(and(eq(asks.id, key.id), eq(asks.userId, key.userId))),
+    ),
 });
 
 const LatestSessionSchema = Schema.Struct({ userId: Schema.String, conversationId: Schema.String });
@@ -239,24 +244,26 @@ const findLatestSession = SqlSchema.findOneOption({
   Request: LatestSessionSchema,
   Result: SessionRowSchema,
   execute: (key) =>
-    db
-      .select({ sessionId: asks.sessionId })
-      .from(asks)
-      .where(
-        and(
-          eq(asks.userId, key.userId),
-          eq(asks.conversationId, key.conversationId),
-          isNotNull(asks.sessionId),
-        ),
-      )
-      .orderBy(desc(asks.sessionId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ sessionId: asks.sessionId })
+        .from(asks)
+        .where(
+          and(
+            eq(asks.userId, key.userId),
+            eq(asks.conversationId, key.conversationId),
+            isNotNull(asks.sessionId),
+          ),
+        )
+        .orderBy(desc(asks.sessionId))
+        .limit(1),
+    ),
 });
 
 /** The newest session any of the conversation's asks was handed to, by eve's sortable ids. */
 function latestSessionOf(
   target: ConversationTarget,
-): Effect.Effect<string | undefined, AskFailure, SqlClient.SqlClient> {
+): Effect.Effect<string | undefined, AskFailure, DatabaseServices> {
   return Effect.map(findLatestSession(target), (found) =>
     Option.getOrUndefined(Option.map(found, (row) => row.sessionId)),
   );
@@ -297,14 +304,16 @@ const DispatchSchema = Schema.Struct({
 const markDispatched = SqlSchema.void({
   Request: DispatchSchema,
   execute: (dispatch) =>
-    db
-      .update(asks)
-      .set({
-        sessionId: dispatch.sessionId,
-        deliveryId: sql`coalesce(${dispatch.deliveryId}, ${asks.deliveryId})`,
-        turnId: sql`coalesce(${dispatch.turnId}::uuid, ${asks.turnId})`,
-      })
-      .where(eq(asks.id, dispatch.id)),
+    Database.use((db) =>
+      db
+        .update(asks)
+        .set({
+          sessionId: dispatch.sessionId,
+          deliveryId: sql`coalesce(${dispatch.deliveryId}, ${asks.deliveryId})`,
+          turnId: sql`coalesce(${dispatch.turnId}::uuid, ${asks.turnId})`,
+        })
+        .where(eq(asks.id, dispatch.id)),
+    ),
 });
 
 const CancelSchema = Schema.Struct({ id: Schema.String, at: Schema.Date });
@@ -313,10 +322,12 @@ const CancelSchema = Schema.Struct({ id: Schema.String, at: Schema.Date });
 const markCancelRequested = SqlSchema.void({
   Request: CancelSchema,
   execute: (cancel) =>
-    db
-      .update(asks)
-      .set({ cancelRequestedAt: cancel.at })
-      .where(and(eq(asks.id, cancel.id), isNull(asks.cancelRequestedAt))),
+    Database.use((db) =>
+      db
+        .update(asks)
+        .set({ cancelRequestedAt: cancel.at })
+        .where(and(eq(asks.id, cancel.id), isNull(asks.cancelRequestedAt))),
+    ),
 });
 
 const SpokenInSchema = Schema.Struct({ userId: Schema.String, voiceSessionId: Schema.String });
@@ -335,19 +346,21 @@ const findSpokenIn = SqlSchema.findAll({
   Request: SpokenInSchema,
   Result: SpokenAskRowSchema,
   execute: (key) =>
-    db
-      .select({
-        id: asks.id,
-        clientId: asks.clientId,
-        revision: sql<number>`coalesce(${asks.taskRevision}, 0)`,
-        turnId: asks.turnId,
-        cancelRequestedAt: asks.cancelRequestedAt,
-        toldSeq: asks.toldSeq,
-        endToldAt: asks.endToldAt,
-      })
-      .from(asks)
-      .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
-      .orderBy(asc(asks.taskRevision), asc(asks.createdAt)),
+    Database.use((db) =>
+      db
+        .select({
+          id: asks.id,
+          clientId: asks.clientId,
+          revision: sql<number>`coalesce(${asks.taskRevision}, 0)`,
+          turnId: asks.turnId,
+          cancelRequestedAt: asks.cancelRequestedAt,
+          toldSeq: asks.toldSeq,
+          endToldAt: asks.endToldAt,
+        })
+        .from(asks)
+        .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
+        .orderBy(asc(asks.taskRevision), asc(asks.createdAt)),
+    ),
 });
 
 function spokenAsk(read: Schema.Schema.Type<typeof SpokenAskRowSchema>): SpokenAsk {
@@ -375,13 +388,15 @@ const ToldSchema = Schema.Struct({
 const markTold = SqlSchema.void({
   Request: ToldSchema,
   execute: (told) =>
-    db
-      .update(asks)
-      .set({
-        toldSeq: sql`greatest(${asks.toldSeq}, ${told.seq})`,
-        endToldAt: sql`coalesce(${asks.endToldAt}, ${told.endAt}::timestamptz)`,
-      })
-      .where(eq(asks.id, told.id)),
+    Database.use((db) =>
+      db
+        .update(asks)
+        .set({
+          toldSeq: sql`greatest(${asks.toldSeq}, ${told.seq})`,
+          endToldAt: sql`coalesce(${asks.endToldAt}, ${told.endAt}::timestamptz)`,
+        })
+        .where(eq(asks.id, told.id)),
+    ),
 });
 
 const BindSchema = Schema.Struct({
@@ -401,18 +416,20 @@ const findStoppedOn = SqlSchema.findAll({
   Request: StoppedOnSchema,
   Result: AskRowSchema,
   execute: (key) =>
-    db
-      .select(ASK_COLUMNS)
-      .from(asks)
-      .where(
-        and(
-          eq(asks.userId, key.userId),
-          eq(asks.conversationId, key.conversationId),
-          eq(asks.turnId, key.turnId),
-          isNotNull(asks.cancelRequestedAt),
-        ),
-      )
-      .orderBy(asks.id),
+    Database.use((db) =>
+      db
+        .select(ASK_COLUMNS)
+        .from(asks)
+        .where(
+          and(
+            eq(asks.userId, key.userId),
+            eq(asks.conversationId, key.conversationId),
+            eq(asks.turnId, key.turnId),
+            isNotNull(asks.cancelRequestedAt),
+          ),
+        )
+        .orderBy(asks.id),
+    ),
 });
 
 /** Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and changes nothing. */
@@ -420,18 +437,20 @@ const bindDeliveredAsks = SqlSchema.findAll({
   Request: BindSchema,
   Result: AskRowSchema,
   execute: (bind) =>
-    db
-      .update(asks)
-      .set({ turnId: bind.turnId })
-      .where(
-        and(
-          eq(asks.userId, bind.userId),
-          eq(asks.conversationId, bind.conversationId),
-          inArray(asks.deliveryId, [...bind.deliveryIds]),
-          isNull(asks.turnId),
-        ),
-      )
-      .returning(ASK_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(asks)
+        .set({ turnId: bind.turnId })
+        .where(
+          and(
+            eq(asks.userId, bind.userId),
+            eq(asks.conversationId, bind.conversationId),
+            inArray(asks.deliveryId, [...bind.deliveryIds]),
+            isNull(asks.turnId),
+          ),
+        )
+        .returning(ASK_COLUMNS),
+    ),
 });
 
 const ConversationLockSchema = Schema.Struct({
@@ -444,24 +463,26 @@ const lockConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (target) =>
-    db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, target.conversationId),
-          eq(conversations.userId, target.userId),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, target.conversationId),
+            eq(conversations.userId, target.userId),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .for("update"),
+    ),
 });
 
 /** The ask's row, read inside the conversation's lock. */
 const readAsk = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AskRowSchema,
-  execute: (id) => db.select(ASK_COLUMNS).from(asks).where(eq(asks.id, id)),
+  execute: (id) => Database.use((db) => db.select(ASK_COLUMNS).from(asks).where(eq(asks.id, id))),
 });
 
 /**
@@ -482,7 +503,7 @@ function dispatchAskOnce(
   target: ConversationTarget,
   id: string,
   dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
-): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, SqlClient.SqlClient> {
+): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -513,7 +534,7 @@ function dispatchAskOnce(
 /** The one place a client id becomes a row: the insert lands or is refused by the index, and the row is read back either way. */
 const recordAsk = /* @__PURE__ */ Effect.fn("web/recordAsk")(function* (
   ask: AskWrite,
-): Effect.fn.Return<AskRow, AskFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AskRow, AskFailure, DatabaseServices> {
   yield* insertAsk(ask);
   const row = yield* findAskByClient({
     conversationId: ask.conversationId,

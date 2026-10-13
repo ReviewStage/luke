@@ -1,10 +1,10 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { writeDrawing } from "@sidecar/database/models/board-store";
 import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { type DrawingElement, drawingElementsSchema } from "@sidecar/hosted/board-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import { layoutFindings } from "./board-layout.js";
 import { logStoreFailure } from "./store-failure.js";
 
@@ -95,7 +95,7 @@ function refusalOf(elements: readonly DrawingElement[]): string | undefined {
 export function runDrawOnBoard(
   binding: BoardToolBinding,
   input: UnparsedWireValue,
-): Effect.Effect<DrawOnBoardResult, never, SqlClient.SqlClient> {
+): Effect.Effect<DrawOnBoardResult, never, DatabaseServices> {
   return Effect.suspend(() => {
     const read = readInput(input);
     if (Result.isFailure(read)) return Effect.succeed(notDrawn(DRAW_ON_BOARD_REFUSAL.UNREADABLE));

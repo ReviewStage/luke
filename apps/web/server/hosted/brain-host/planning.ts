@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { LabelledAgentEdit, StoredPlan } from "@sidecar/database/models/plan-store";
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
@@ -15,7 +16,6 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -419,7 +419,7 @@ interface PlanningTool {
 }
 
 /** What a planning call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
-type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog;
+type PlanningToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.

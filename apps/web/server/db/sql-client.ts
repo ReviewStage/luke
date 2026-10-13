@@ -1,4 +1,5 @@
 import { PgClient } from "@effect/sql-pg";
+import { databaseOverPgClient } from "@sidecar/database/core/query";
 import { Duration, Effect, Layer } from "effect";
 import { databaseUrl, POOL_LIMITS } from "./index.js";
 
@@ -17,7 +18,8 @@ const POOL_CONFIG = {
 } as const;
 
 /**
- * The `SqlClient` every effect on the web runtime reads, over a pool built to
+ * The `SqlClient` every effect on the web runtime reads, and the Drizzle
+ * `Database` over that same client, over a pool built to
  * the same `POOL_LIMITS` Drizzle's is, so the two halves of this migration
  * cannot drift apart on how many connections one warm instance holds.
  *
@@ -27,5 +29,7 @@ const POOL_CONFIG = {
  * round trip would land on the cold start of functions that never query.
  */
 export const webSqlClient = Layer.unwrap(
-  Effect.map(databaseUrl, (url) => PgClient.layer({ url, ...POOL_CONFIG })),
+  Effect.map(databaseUrl, (url) =>
+    Layer.provideMerge(databaseOverPgClient, PgClient.layer({ url, ...POOL_CONFIG })),
+  ),
 );

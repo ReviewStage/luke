@@ -14,8 +14,12 @@ import {
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import {
+  Database,
+  type DatabaseServices,
+  type DatabaseShape,
+  type QueryError,
+} from "../core/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../voice-vocabulary.js";
 import {
@@ -114,12 +118,12 @@ export interface VoiceWriter {
   consume(
     target: VoiceTarget,
     event: LiveServerEvent,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
   /** One speaker's utterance as it stands: inserted under the ledger's id on first sight, grown in place after, cut from the session's segments over its span each time. */
   upsertSpokenRow(
     target: VoiceTarget,
     row: SpokenRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
   /**
    * The developer's rows a delegation is about take that delegation, and its
    * turn where the ask has learned one. The service names the rows by the
@@ -132,7 +136,7 @@ export interface VoiceWriter {
   attachSpokenAsk(
     target: VoiceTarget,
     attach: SpokenAskAttach,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
 }
 
 interface VoiceWriterOptions {
@@ -161,7 +165,7 @@ const SEGMENT_ROLE_OF_SPEAKER = {
 } as const satisfies Record<TranscriptSpeaker, VoiceSegmentRole>;
 
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type VoiceWriteFailure = SqlError | Schema.SchemaError;
+type VoiceWriteFailure = QueryError | Schema.SchemaError;
 
 /** The store's answer to a row write, as this writer reports it: written or grown is written, a refusal is the store's own. */
 const upserted = <E, R>(
@@ -180,7 +184,7 @@ const VoiceSessionKeySchema = Schema.Struct({
 const VoiceSessionRowSchema = Schema.Struct({ id: Schema.String });
 
 /** The `voice_sessions` row read by its account and the Live API's own id for it, locked or not. */
-const voiceSessionOf = (key: { userId: string; liveSessionId: string }) =>
+const voiceSessionOf = (db: DatabaseShape, key: { userId: string; liveSessionId: string }) =>
   db
     .select({ id: voiceSessions.id })
     .from(voiceSessions)
@@ -195,14 +199,14 @@ const VoiceSegmentRoleSchema = Schema.Literals(Object.values(VOICE_SEGMENT_ROLE)
 const findVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
-  execute: (key) => voiceSessionOf(key),
+  execute: (key) => Database.use((db) => voiceSessionOf(db, key)),
 });
 
 /** The same row, locked, where the caller is about to take a position in the session's sequence. */
 const lockVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
-  execute: (key) => voiceSessionOf(key).for("update"),
+  execute: (key) => Database.use((db) => voiceSessionOf(db, key).for("update")),
 });
 
 /** The session's last position, zero where it holds no segment yet; the builder has no spelling for that fallback, so it is a fragment. */
@@ -212,10 +216,12 @@ const findLastSegmentSeq = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ seq: Schema.Number }),
   execute: (voiceSessionId) =>
-    db
-      .select({ seq: LAST_SEGMENT_SEQ })
-      .from(voiceTranscriptSegments)
-      .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId)),
+    Database.use((db) =>
+      db
+        .select({ seq: LAST_SEGMENT_SEQ })
+        .from(voiceTranscriptSegments)
+        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId)),
+    ),
 });
 
 const insertSegment = SqlSchema.void({
@@ -228,14 +234,16 @@ const insertSegment = SqlSchema.void({
     endMs: Schema.Int,
   }),
   execute: (row) =>
-    db.insert(voiceTranscriptSegments).values({
-      voiceSessionId: row.voiceSessionId,
-      seq: row.seq,
-      role: row.role,
-      text: row.text,
-      startMs: row.startMs,
-      endMs: row.endMs,
-    }),
+    Database.use((db) =>
+      db.insert(voiceTranscriptSegments).values({
+        voiceSessionId: row.voiceSessionId,
+        seq: row.seq,
+        role: row.role,
+        text: row.text,
+        startMs: row.startMs,
+        endMs: row.endMs,
+      }),
+    ),
 });
 
 /** One speaker's segments of one session over an utterance's span, both ends included, in the order the deltas came. */
@@ -251,18 +259,20 @@ const findUtteranceSegments = SqlSchema.findAll({
     startMs: Schema.Number,
   }),
   execute: (request) =>
-    db
-      .select({ text: voiceTranscriptSegments.text, startMs: voiceTranscriptSegments.startMs })
-      .from(voiceTranscriptSegments)
-      .where(
-        and(
-          eq(voiceTranscriptSegments.voiceSessionId, request.voiceSessionId),
-          eq(voiceTranscriptSegments.role, request.role),
-          gte(voiceTranscriptSegments.startMs, request.startMs),
-          lte(voiceTranscriptSegments.startMs, request.endMs),
-        ),
-      )
-      .orderBy(asc(voiceTranscriptSegments.seq)),
+    Database.use((db) =>
+      db
+        .select({ text: voiceTranscriptSegments.text, startMs: voiceTranscriptSegments.startMs })
+        .from(voiceTranscriptSegments)
+        .where(
+          and(
+            eq(voiceTranscriptSegments.voiceSessionId, request.voiceSessionId),
+            eq(voiceTranscriptSegments.role, request.role),
+            gte(voiceTranscriptSegments.startMs, request.startMs),
+            lte(voiceTranscriptSegments.startMs, request.endMs),
+          ),
+        )
+        .orderBy(asc(voiceTranscriptSegments.seq)),
+    ),
 });
 
 export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
@@ -270,7 +280,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function appendSegment(
     target: VoiceTarget,
     delta: SegmentDelta,
-  ): Effect.Effect<Option.Option<VoiceSessionRow>, VoiceWriteFailure, SqlClient.SqlClient> {
+  ): Effect.Effect<Option.Option<VoiceSessionRow>, VoiceWriteFailure, DatabaseServices> {
     return Effect.flatMap(SqlClient.SqlClient, (client) =>
       client.withTransaction(
         Effect.gen(function* () {
@@ -310,7 +320,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function upsertSpokenRow(
     target: VoiceTarget,
     row: SpokenRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
     return Effect.gen(function* () {
       const voiceSession = yield* findVoiceSession({
         userId: target.userId,
@@ -371,7 +381,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function attachSpokenAsk(
     target: VoiceTarget,
     attach: SpokenAskAttach,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
     return Effect.map(store.attachSpokenAsk(target.conversation, attach), (attached) =>
       Result.isSuccess(attached)
         ? attached.success.length > 0

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   type CodingAgentBriefText,
   createCodingAgent,
@@ -283,16 +283,18 @@ const TurnRowSchema = Schema.Struct({
 /** The turn row as the relay wrote it, read on the test's own client. */
 const turnRow = (id: string) =>
   Effect.map(
-    db
-      .select({
-        origin: turns.origin,
-        status: turns.status,
-        model: turns.model,
-        reasoningEffort: turns.reasoningEffort,
-        promptHash: turns.promptHash,
-      })
-      .from(turns)
-      .where(eq(turns.id, id)),
+    Database.use((db) =>
+      db
+        .select({
+          origin: turns.origin,
+          status: turns.status,
+          model: turns.model,
+          reasoningEffort: turns.reasoningEffort,
+          promptHash: turns.promptHash,
+        })
+        .from(turns)
+        .where(eq(turns.id, id)),
+    ),
     (rows) =>
       rows[0] === undefined ? undefined : Schema.decodeUnknownSync(TurnRowSchema)(rows[0]),
   );

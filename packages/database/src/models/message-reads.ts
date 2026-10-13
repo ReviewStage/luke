@@ -34,9 +34,8 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { asks, conversations, messages, type StoredTurnUsage, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
@@ -77,7 +76,7 @@ import {
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-type MessageReadFailure = SqlError | Schema.SchemaError;
+type MessageReadFailure = QueryError | Schema.SchemaError;
 
 /** The vocabularies the text columns hold, as the writer spells them; a row outside one is refused. */
 const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
@@ -277,20 +276,22 @@ const findRecentMessages = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          isNotNull(messages.finishedAt),
-          inArray(messages.role, [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
-        ),
-      )
-      .orderBy(desc(messages.seq))
-      .limit(options.limit),
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            isNotNull(messages.finishedAt),
+            inArray(messages.role, [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
+          ),
+        )
+        .orderBy(desc(messages.seq))
+        .limit(options.limit),
+    ),
 });
 
 /**
@@ -304,7 +305,7 @@ export function listRecentMessages(
   conversationId: string,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
@@ -333,35 +334,39 @@ const findMessagesPast = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          or(gt(messages.seq, options.seq), gt(messages.revision, options.revision)),
-        ),
-      )
-      .orderBy(asc(messages.seq))
-      .limit(options.limit),
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            or(gt(messages.seq, options.seq), gt(messages.revision, options.revision)),
+          ),
+        )
+        .orderBy(asc(messages.seq))
+        .limit(options.limit),
+    ),
 });
 
 const findJournalRevision = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ journalRevision: EpochMillisColumnSchema }),
   execute: (options) =>
-    db
-      .select({ journalRevision: conversations.journalRevision })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, options.conversationId),
-          eq(conversations.userId, options.userId),
-          isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .select({ journalRevision: conversations.journalRevision })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, options.conversationId),
+            eq(conversations.userId, options.userId),
+            isNull(conversations.deletedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /**
@@ -381,7 +386,7 @@ export function listMessagesPast(
   tools: ToolSet,
   cursor: MessageCursor,
   limit?: number,
-): Effect.Effect<MessagePagePast, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<MessagePagePast, MessageReadFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* findJournalRevision({ conversationId, userId });
     if (Option.isNone(standing)) return { read: { ok: true, value: [] }, cursor };
@@ -470,19 +475,21 @@ const findNewestJournals = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          eq(messages.role, MESSAGE_ROLE.ASSISTANT),
-        ),
-      )
-      .orderBy(desc(messages.seq))
-      .limit(options.limit),
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.role, MESSAGE_ROLE.ASSISTANT),
+          ),
+        )
+        .orderBy(desc(messages.seq))
+        .limit(options.limit),
+    ),
 });
 
 /**
@@ -496,7 +503,7 @@ export function listJournals(
   conversationId: string,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
   return Effect.flatMap(
     findNewestJournals({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
@@ -511,17 +518,19 @@ const findMessageByClientIdRow = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          eq(messages.clientId, options.clientId),
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.clientId, options.clientId),
+          ),
         ),
-      ),
+    ),
 });
 
 /**
@@ -534,7 +543,7 @@ export function readMessageByClientId(
   conversationId: string,
   tools: ToolSet,
   clientId: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
   return Effect.flatMap(
     findMessageByClientIdRow({ conversationId, userId, clientId }),
     (selected) => readSelected(selected, tools),
@@ -582,24 +591,26 @@ const findLatestTurns = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
   Result: LatestTurnRowSchema,
   execute: ({ userId, conversationIds }) =>
-    db
-      .selectDistinctOn([turns.conversationId], {
-        conversationId: turns.conversationId,
-        id: turns.id,
-        status: turns.status,
-        eveTurnId: turns.eveTurnId,
-        failure: turns.failure,
-        failureDetail: turns.failureDetail,
-        cancelRequestedAt: turns.cancelRequestedAt,
-        queuedAt: turns.queuedAt,
-        startedAt: turns.startedAt,
-        settledAt: turns.settledAt,
-        model: turns.model,
-        usage: turns.usage,
-      })
-      .from(turns)
-      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
-      .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
+    Database.use((db) =>
+      db
+        .selectDistinctOn([turns.conversationId], {
+          conversationId: turns.conversationId,
+          id: turns.id,
+          status: turns.status,
+          eveTurnId: turns.eveTurnId,
+          failure: turns.failure,
+          failureDetail: turns.failureDetail,
+          cancelRequestedAt: turns.cancelRequestedAt,
+          queuedAt: turns.queuedAt,
+          startedAt: turns.startedAt,
+          settledAt: turns.settledAt,
+          model: turns.model,
+          usage: turns.usage,
+        })
+        .from(turns)
+        .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
+        .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
+    ),
 });
 
 /** What one settled turn ran under and cost, as a conversation's total is summed from it. */
@@ -619,32 +630,34 @@ const findTurnUsages = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: TurnUsageRowSchema,
   execute: ({ userId, conversationId }) =>
-    db
-      .select({ model: turns.model, usage: turns.usage })
-      .from(turns)
-      .where(
-        and(
-          eq(turns.userId, userId),
-          isNotNull(turns.usage),
-          or(
-            eq(turns.conversationId, conversationId),
-            inArray(
-              turns.conversationId,
-              db
-                .select({ id: conversations.id })
-                .from(conversations)
-                .where(eq(conversations.parentConversationId, conversationId)),
+    Database.use((db) =>
+      db
+        .select({ model: turns.model, usage: turns.usage })
+        .from(turns)
+        .where(
+          and(
+            eq(turns.userId, userId),
+            isNotNull(turns.usage),
+            or(
+              eq(turns.conversationId, conversationId),
+              inArray(
+                turns.conversationId,
+                db
+                  .select({ id: conversations.id })
+                  .from(conversations)
+                  .where(eq(conversations.parentConversationId, conversationId)),
+              ),
             ),
           ),
         ),
-      ),
+    ),
 });
 
 /** The usage of every settled turn of the account's conversation and of the conversations delegated from it. */
 export function turnUsagesOf(
   userId: string,
   conversationId: string,
-): Effect.Effect<readonly TurnUsageRow[], MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<readonly TurnUsageRow[], MessageReadFailure, DatabaseServices> {
   return findTurnUsages({ userId, conversationId });
 }
 
@@ -652,7 +665,7 @@ export function turnUsagesOf(
 export function latestTurnsOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
     findLatestTurns({ userId, conversationIds }),
@@ -690,7 +703,7 @@ const fencedWords = (parts: AnyPgColumn) =>
  */
 export function noReceiptOfLine() {
   return notExists(
-    db
+    queryBuilder
       .select({ id: receipt.id })
       .from(receipt)
       .where(
@@ -718,24 +731,26 @@ const countAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
   Result: AwaitingLinesRowSchema,
   execute: ({ userId, conversationIds }) =>
-    db
-      .select({
-        conversationId: messages.conversationId,
-        lines: sql<number>`count(*)::int`,
-      })
-      .from(messages)
-      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-      .where(
-        and(
-          eq(messages.userId, userId),
-          inArray(messages.conversationId, [...conversationIds]),
-          eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
-          eq(messages.role, MESSAGE_ROLE.USER),
-          isNull(messages.turnId),
-          noReceiptOfLine(),
-        ),
-      )
-      .groupBy(messages.conversationId),
+    Database.use((db) =>
+      db
+        .select({
+          conversationId: messages.conversationId,
+          lines: sql<number>`count(*)::int`,
+        })
+        .from(messages)
+        .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+        .where(
+          and(
+            eq(messages.userId, userId),
+            inArray(messages.conversationId, [...conversationIds]),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            isNull(messages.turnId),
+            noReceiptOfLine(),
+          ),
+        )
+        .groupBy(messages.conversationId),
+    ),
 });
 
 const findSentLine = SqlSchema.findOneOption({
@@ -746,17 +761,19 @@ const findSentLine = SqlSchema.findOneOption({
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, conversationId, clientId }) =>
-    db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, conversationId),
-          eq(messages.userId, userId),
-          eq(messages.clientId, clientId),
-        ),
-      )
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.userId, userId),
+            eq(messages.clientId, clientId),
+          ),
+        )
+        .limit(1),
+    ),
 });
 
 /** Whether a row of the account's conversation stands under the client id: the line a send repeated after a lost answer already wrote, read before anything is sent again. */
@@ -764,7 +781,7 @@ export function sentLineStands(
   userId: string,
   conversationId: string,
   clientId: string,
-): Effect.Effect<boolean, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<boolean, MessageReadFailure, DatabaseServices> {
   return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
 }
 
@@ -772,7 +789,7 @@ export function sentLineStands(
 export function awaitingLinesOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
   if (conversationIds.length === 0) return Effect.succeed(new Set());
   return Effect.map(
     countAwaitingLines({ userId, conversationIds }),
@@ -840,15 +857,17 @@ const TurnRowsSchema = Schema.Array(TurnRowSchema);
 export function turnsNamed(
   userId: string,
   turnIds: readonly string[],
-): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, DatabaseServices> {
   if (turnIds.length === 0) return Effect.succeed([]);
   return Effect.flatMap(
-    db
-      .select(TURN_FIELDS)
-      .from(turns)
-      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
-      .where(and(eq(turns.userId, userId), inArray(turns.id, [...turnIds])))
-      .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
+    Database.use((db) =>
+      db
+        .select(TURN_FIELDS)
+        .from(turns)
+        .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+        .where(and(eq(turns.userId, userId), inArray(turns.id, [...turnIds])))
+        .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
+    ),
     (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
 }
@@ -874,7 +893,7 @@ const earlierDelegation = alias(asks, "earlier_delegation");
  */
 const noSteeredAsk = () =>
   notExists(
-    db
+    queryBuilder
       .select({ id: namingAsk.id })
       .from(namingAsk)
       .innerJoin(turns, eq(turns.id, namingAsk.turnId))
@@ -885,7 +904,7 @@ const noSteeredAsk = () =>
           sql`${namingAsk.clientId} in (${messages.clientId}, ${messages.metadata} ->> 'delegation_id')`,
           gt(namingAsk.createdAt, turns.startedAt),
           exists(
-            db
+            queryBuilder
               .select({ id: earlierDelegation.id })
               .from(earlierDelegation)
               .where(
@@ -920,26 +939,28 @@ const findSpokenAskRows = SqlSchema.findAll({
     fromMs: Schema.NullOr(Schema.Number),
   }),
   execute: ({ userId, conversationId, turnIds }) =>
-    db
-      .select({
-        turnId: messages.turnId,
-        clientId: messages.clientId,
-        voiceSessionId: sql<string | null>`${messages.metadata}->>'voice_session_id'`,
-        fromMs: SPOKEN_FROM_MS,
-      })
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.userId, userId),
-          eq(messages.conversationId, conversationId),
-          inArray(messages.turnId, [...turnIds]),
-          eq(messages.role, MESSAGE_ROLE.USER),
-          sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
-          noSteeredAsk(),
-        ),
-      )
-      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+    Database.use((db) =>
+      db
+        .select({
+          turnId: messages.turnId,
+          clientId: messages.clientId,
+          voiceSessionId: sql<string | null>`${messages.metadata}->>'voice_session_id'`,
+          fromMs: SPOKEN_FROM_MS,
+        })
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            inArray(messages.turnId, [...turnIds]),
+            eq(messages.role, MESSAGE_ROLE.USER),
+            sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
+            noSteeredAsk(),
+          ),
+        )
+        .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+    ),
 });
 
 /** One spoken line a turn took as its ask: the client id the voice's ledger minted for it, and, where its row says, the call it was said on and where on the call its words began. */
@@ -969,7 +990,7 @@ export function spokenAskRowsOf(
 ): Effect.Effect<
   ReadonlyMap<string, readonly SpokenAskRow[]>,
   MessageReadFailure,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   if (turnIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(findSpokenAskRows({ userId, conversationId, turnIds }), (rows) => {
@@ -997,24 +1018,26 @@ const findSpokenRows = SqlSchema.findAll({
   }),
   Result: SpokenRowSchema,
   execute: ({ userId, conversationId, voiceSessionIds }) =>
-    db
-      .select({
-        clientId: messages.clientId,
-        role: messages.role,
-        voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
-        fromMs: SPOKEN_FROM_MS,
-      })
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.userId, userId),
-          eq(messages.conversationId, conversationId),
-          inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
-          sql`${messages.metadata}->>'from_ms' is not null`,
-        ),
-      )
-      .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+    Database.use((db) =>
+      db
+        .select({
+          clientId: messages.clientId,
+          role: messages.role,
+          voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
+          fromMs: SPOKEN_FROM_MS,
+        })
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
+            sql`${messages.metadata}->>'from_ms' is not null`,
+          ),
+        )
+        .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
+    ),
 });
 
 /** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began, in the order they were said. */
@@ -1022,7 +1045,7 @@ export function spokenRowsOn(
   userId: string,
   conversationId: string,
   voiceSessionIds: readonly string[],
-): Effect.Effect<readonly SpokenRow[], MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<readonly SpokenRow[], MessageReadFailure, DatabaseServices> {
   if (voiceSessionIds.length === 0) return Effect.succeed([]);
   return findSpokenRows({ userId, conversationId, voiceSessionIds });
 }
@@ -1035,16 +1058,18 @@ const findTurnQueuedAt = SqlSchema.findOneOption({
   }),
   Result: Schema.Struct({ queuedAt: InstantColumnSchema }),
   execute: ({ userId, conversationId, turnId }) =>
-    db
-      .select({ queuedAt: turns.queuedAt })
-      .from(turns)
-      .where(
-        and(
-          eq(turns.userId, userId),
-          eq(turns.conversationId, conversationId),
-          eq(turns.id, turnId),
+    Database.use((db) =>
+      db
+        .select({ queuedAt: turns.queuedAt })
+        .from(turns)
+        .where(
+          and(
+            eq(turns.userId, userId),
+            eq(turns.conversationId, conversationId),
+            eq(turns.id, turnId),
+          ),
         ),
-      ),
+    ),
 });
 
 const findTurnsBefore = SqlSchema.findAll({
@@ -1056,24 +1081,26 @@ const findTurnsBefore = SqlSchema.findAll({
   }),
   Result: TurnRowSchema,
   execute: ({ userId, conversationId, limit, before }) =>
-    db
-      .select(TURN_FIELDS)
-      .from(turns)
-      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(turns.userId, userId),
-          eq(turns.conversationId, conversationId),
-          before === undefined
-            ? undefined
-            : or(
-                lt(turns.queuedAt, before.queuedAt),
-                and(eq(turns.queuedAt, before.queuedAt), lt(turns.id, before.id)),
-              ),
-        ),
-      )
-      .orderBy(desc(turns.queuedAt), desc(turns.id))
-      .limit(limit),
+    Database.use((db) =>
+      db
+        .select(TURN_FIELDS)
+        .from(turns)
+        .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(turns.userId, userId),
+            eq(turns.conversationId, conversationId),
+            before === undefined
+              ? undefined
+              : or(
+                  lt(turns.queuedAt, before.queuedAt),
+                  and(eq(turns.queuedAt, before.queuedAt), lt(turns.id, before.id)),
+                ),
+          ),
+        )
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
+        .limit(limit),
+    ),
 });
 
 /** A page of a conversation's turns, oldest first, and whether older ones stand. */
@@ -1093,7 +1120,7 @@ export function turnsBefore(
   conversationId: string,
   limit: number,
   before: string | undefined,
-): Effect.Effect<TurnPage, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<TurnPage, MessageReadFailure, DatabaseServices> {
   return Effect.gen(function* () {
     let place: { queuedAt: Date; id: string } | undefined;
     if (before !== undefined) {
@@ -1123,21 +1150,23 @@ const findJournalsCalling = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          eq(messages.role, MESSAGE_ROLE.ASSISTANT),
-          gt(messages.seq, options.seq),
-          sql`${messages.parts} @> ${JSON.stringify([{ type: options.partType }])}::jsonb`,
-        ),
-      )
-      .orderBy(asc(messages.seq))
-      .limit(options.limit),
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.role, MESSAGE_ROLE.ASSISTANT),
+            gt(messages.seq, options.seq),
+            sql`${messages.parts} @> ${JSON.stringify([{ type: options.partType }])}::jsonb`,
+          ),
+        )
+        .orderBy(asc(messages.seq))
+        .limit(options.limit),
+    ),
 });
 
 /**
@@ -1153,7 +1182,7 @@ export function listJournalsCalling(
   conversationId: string,
   tools: ToolSet,
   toolName: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const read: StoredMessageRecord[] = [];
     let seq = -1;

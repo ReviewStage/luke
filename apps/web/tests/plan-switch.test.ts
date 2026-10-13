@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { writePlanTemplate } from "@sidecar/database/models/account-store";
 import { createPlan, readPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -18,6 +18,7 @@ import { Effect, Option } from "effect";
 const RELAY = { name: "Teammate invitations" } as const;
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;

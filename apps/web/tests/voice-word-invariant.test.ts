@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type VoiceTarget, voiceWriter } from "@sidecar/database/models/voice-writer";
@@ -115,6 +116,7 @@ const sessionRecord = voiceSessionRecord(() => NOW);
 const writer = voiceWriter({ store });
 /** The one client the suite's runtime holds, provided to the service's fibers so every statement takes the same permit. */
 const sqlClient = await database.run(Effect.service(SqlClient.SqlClient));
+const drizzleDatabase = await database.run(Effect.service(Database));
 
 /** A user with a main conversation and the live session's row, all the fixture's own. */
 async function target(): Promise<VoiceTarget> {
@@ -176,7 +178,11 @@ class TurnOpeningBrain implements LiveBrain {
       );
       this.turns.set(ask.submissionId, turnId);
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: recorded.id };
-    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient), Effect.orDie);
+    }).pipe(
+      Effect.provideService(SqlClient.SqlClient, sqlClient),
+      Effect.provideService(Database, drizzleDatabase),
+      Effect.orDie,
+    );
   }
 
   /** The backend is not set exploring here: the words on record are the developer's asks alone. */
@@ -618,7 +624,10 @@ for (const gapMs of GAP_VALUES_MS) {
             ...expected.map((row) => decodeSpokenRowMetadata(row.metadata).to_ms),
           );
         }
-      }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
+      }).pipe(
+        Effect.provideService(SqlClient.SqlClient, sqlClient),
+        Effect.provideService(Database, drizzleDatabase),
+      ),
     );
   }
 }

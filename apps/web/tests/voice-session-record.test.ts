@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { user } from "@sidecar/database/schemas/auth";
@@ -30,6 +30,7 @@ const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const record = voiceSessionRecord(() => NOW);
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
@@ -49,7 +50,9 @@ const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
 const readVoiceSession = (liveSessionId: string) =>
   Effect.map(
-    db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
+    Database.use((db) =>
+      db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
+    ),
     (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
   );
 
@@ -59,6 +62,7 @@ const callWith = (
   segments: ReadonlyArray<readonly [VoiceSegmentRole, string]>,
 ) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const liveSessionId = `live_h_${randomUUID()}`;
     const voiceSessionId = yield* record.register({
       userId: input.userId,

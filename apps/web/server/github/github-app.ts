@@ -30,7 +30,7 @@
  */
 
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { account } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
@@ -273,7 +273,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     readonly GitHubInstallation[],
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /** The repositories the signed-in user reaches through the App, read on the user's own token: every installation they reach, each paged through. */
   readonly userRepositories: (
@@ -281,7 +281,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     GitHubUserRepositories,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * One repository by `owner/name`, where the user reaches it through the
@@ -296,7 +296,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * A token for one repository the user reaches through the App, minted by
@@ -313,7 +313,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * Whether a write token for the repository will read its pull requests'
@@ -323,7 +323,7 @@ export interface GitHubAppService {
   readonly repositoryCiReadable: (
     userId: string,
     fullName: string,
-  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | SqlClient.SqlClient>;
+  ) => Effect.Effect<boolean, GitHubUserReadFailure, HttpClient.HttpClient | DatabaseServices>;
   /**
    * The same mint with contents and pull requests write, which is what a
    * coding agent's push to its branch and its pull request need, and with CI
@@ -337,7 +337,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * The signed-in user as GitHub records them, read on their own token
@@ -345,11 +345,7 @@ export interface GitHubAppService {
    */
   readonly signedInUser: (
     userId: string,
-  ) => Effect.Effect<
-    GitHubUser,
-    GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
-  >;
+  ) => Effect.Effect<GitHubUser, GitHubUserReadFailure, HttpClient.HttpClient | DatabaseServices>;
   /**
    * The App's own bot user, the account GitHub attributes the App's actions
    * to, read on the signed-in user's token (`GET /users/<slug>[bot]`) since
@@ -361,7 +357,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     Option.Option<GitHubUser>,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
   /**
    * The user's GitHub App token, refreshed and re-sealed on its row when it
@@ -375,7 +371,7 @@ export interface GitHubAppService {
   ) => Effect.Effect<
     Redacted.Redacted,
     GitHubUserReadFailure,
-    HttpClient.HttpClient | SqlClient.SqlClient
+    HttpClient.HttpClient | DatabaseServices
   >;
 }
 
@@ -454,19 +450,21 @@ const lockGithubAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AccountTokenRowSchema,
   execute: (userId) =>
-    db
-      .select({
-        id: account.id,
-        accessToken: account.accessToken,
-        refreshToken: account.refreshToken,
-        accessTokenExpiresAt: account.accessTokenExpiresAt,
-        refreshTokenExpiresAt: account.refreshTokenExpiresAt,
-      })
-      .from(account)
-      .where(and(eq(account.userId, userId), eq(account.providerId, GITHUB_PROVIDER_ID)))
-      .orderBy(desc(account.updatedAt))
-      .limit(1)
-      .for("update"),
+    Database.use((db) =>
+      db
+        .select({
+          id: account.id,
+          accessToken: account.accessToken,
+          refreshToken: account.refreshToken,
+          accessTokenExpiresAt: account.accessTokenExpiresAt,
+          refreshTokenExpiresAt: account.refreshTokenExpiresAt,
+        })
+        .from(account)
+        .where(and(eq(account.userId, userId), eq(account.providerId, GITHUB_PROVIDER_ID)))
+        .orderBy(desc(account.updatedAt))
+        .limit(1)
+        .for("update"),
+    ),
 });
 
 const SealedTokensSchema = Schema.Struct({
@@ -481,16 +479,18 @@ const SealedTokensSchema = Schema.Struct({
 const writeSealedTokens = SqlSchema.void({
   Request: SealedTokensSchema,
   execute: (sealed) =>
-    db
-      .update(account)
-      .set({
-        accessToken: sealed.accessToken,
-        refreshToken: sealed.refreshToken,
-        accessTokenExpiresAt: sealed.accessTokenExpiresAt,
-        refreshTokenExpiresAt: sealed.refreshTokenExpiresAt,
-        updatedAt: sealed.updatedAt,
-      })
-      .where(eq(account.id, sealed.id)),
+    Database.use((db) =>
+      db
+        .update(account)
+        .set({
+          accessToken: sealed.accessToken,
+          refreshToken: sealed.refreshToken,
+          accessTokenExpiresAt: sealed.accessTokenExpiresAt,
+          refreshTokenExpiresAt: sealed.refreshTokenExpiresAt,
+          updatedAt: sealed.updatedAt,
+        })
+        .where(eq(account.id, sealed.id)),
+    ),
 });
 
 function base64url(value: string): string {
@@ -784,7 +784,7 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
 ): Effect.fn.Return<
   Redacted.Redacted,
   GitHubUnavailable | GitHubSignInRequired | StoreFailure,
-  HttpClient.HttpClient | SqlClient.SqlClient
+  HttpClient.HttpClient | DatabaseServices
 > {
   // A row without a refresh token is the OAuth App's from before the GitHub
   // App: its token reaches no installation, and only a new sign-in replaces it.

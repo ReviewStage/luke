@@ -2,9 +2,9 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 /**
- * The shared handle (`@sidecar/database/core/query`) builds statements that
- * are Effects on the fiber's `SqlClient`, so a statement is yielded, never
- * awaited. The vendored skills' examples await plain Drizzle, and this is the
+ * The `Database` service (`@sidecar/database/core/query`), read as `db`,
+ * builds statements that are Effects of Drizzle's Effect driver, so a
+ * statement is yielded, never awaited. The vendored skills' examples await plain Drizzle, and this is the
  * line an agent copying one would get wrong. `authDatabase`, Better Auth's
  * own promise-shaped handle, is not this handle and is left alone.
  */
@@ -46,7 +46,7 @@ export const noAwaitDrizzleStatementRule = defineRule({
     },
     messages: {
       awaitedStatement:
-        "A statement built on `db` is an Effect on the fiber's `SqlClient`: `yield*` it inside `Effect.gen`, never `await` it.",
+        "A statement built on `db` is an Effect from Drizzle's Effect driver: `yield*` it inside `Effect.gen`, never `await` it.",
     },
   },
   createOnce(context) {

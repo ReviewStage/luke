@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
   awaitingLinesOf,
   type CodingAgent,
@@ -39,8 +40,6 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -141,8 +140,8 @@ export interface TranscriptPage {
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
   A,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient | R
+  QueryError | Schema.SchemaError,
+  DatabaseServices | R
 >;
 
 /** The newest turn as a page reads it: which it is, and what it ran under and cost; nothing before the first. */

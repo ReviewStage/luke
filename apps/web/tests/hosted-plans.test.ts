@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   attachPlanConversation,
   createPlan,
@@ -76,6 +76,7 @@ const EMPTY_STATE_NOTES: readonly PlanNote[] = [
 ];
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
@@ -83,10 +84,12 @@ const openUser = Effect.gen(function* () {
 
 const openConversation = (userId: string) =>
   Effect.map(
-    db
-      .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.MAIN })
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .insert(conversations)
+        .values({ userId, kind: CONVERSATION_KIND.MAIN })
+        .returning({ id: conversations.id }),
+    ),
     (rows) => rows[0]?.id ?? assert.fail("the conversation insert returned no row"),
   );
 

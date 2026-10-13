@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -50,6 +50,7 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 async function conversation(userId: string): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(conversations)
         .values({ userId, kind: CONVERSATION_KIND.MAIN })

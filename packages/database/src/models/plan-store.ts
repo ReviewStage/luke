@@ -11,8 +11,7 @@ import {
 import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
@@ -42,10 +41,10 @@ import { readTemplateAt } from "./plan-template-revisions.js";
  * no database of its own.
  */
 
-export type PlanStoreFailure = SqlError | Schema.SchemaError;
+export type PlanStoreFailure = QueryError | Schema.SchemaError;
 
 /** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.SqlClient>;
+export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, DatabaseServices>;
 
 /** The plan is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
 export class PlanArchived extends Data.TaggedError("PlanArchived") {}
@@ -60,7 +59,7 @@ export interface PlanDeleteGuard<R> {
   /** Run under the plan's lock before anything is deleted, given the plan's conversation and each agent's. */
   readonly beforeDelete: (
     conversationIds: readonly string[],
-  ) => Effect.Effect<void, SqlError | Schema.SchemaError, R>;
+  ) => Effect.Effect<void, QueryError | Schema.SchemaError, R>;
 }
 
 /** One save a coding agent made, with the agent named as its row names it now. */
@@ -161,10 +160,12 @@ const findAgentLabels = SqlSchema.findAll({
     title: Schema.NullOr(Schema.String),
   }),
   execute: ({ userId, agentIds }) =>
-    db
-      .select({ id: codingAgent.id, model: codingAgent.model, title: codingAgent.title })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.id, agentIds))),
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, model: codingAgent.model, title: codingAgent.title })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.id, agentIds))),
+    ),
 });
 
 /**
@@ -302,35 +303,41 @@ const insertPlan = SqlSchema.findOne({
   }),
   Result: PlanRowSchema,
   execute: (write) =>
-    db
-      .insert(plan)
-      .values({
-        userId: write.userId,
-        name: write.name,
-        repository: write.repository,
-        document: write.document,
-        createdAt: write.now,
-        updatedAt: write.now,
-      })
-      .returning(PLAN_COLUMNS),
+    Database.use((db) =>
+      db
+        .insert(plan)
+        .values({
+          userId: write.userId,
+          name: write.name,
+          repository: write.repository,
+          document: write.document,
+          createdAt: write.now,
+          updatedAt: write.now,
+        })
+        .returning(PLAN_COLUMNS),
+    ),
 });
 
 const findPlans = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
   Result: PlanSummaryRowSchema,
   execute: ({ userId, includeArchived }) =>
-    db
-      .select(PLAN_SUMMARY_COLUMNS)
-      .from(plan)
-      .where(and(eq(plan.userId, userId), includeArchived ? undefined : isNull(plan.archivedAt)))
-      .orderBy(desc(plan.createdAt), desc(plan.id)),
+    Database.use((db) =>
+      db
+        .select(PLAN_SUMMARY_COLUMNS)
+        .from(plan)
+        .where(and(eq(plan.userId, userId), includeArchived ? undefined : isNull(plan.archivedAt)))
+        .orderBy(desc(plan.createdAt), desc(plan.id)),
+    ),
 });
 
 const findPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanRowSchema,
   execute: ({ userId, planId }) =>
-    db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).limit(1),
+    Database.use((db) =>
+      db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).limit(1),
+    ),
 });
 
 const replaceText = SqlSchema.findOneOption({
@@ -343,15 +350,17 @@ const replaceText = SqlSchema.findOneOption({
   }),
   Result: PlanRowSchema,
   execute: ({ userId, planId, text, agentEdits, now }) =>
-    db
-      .update(plan)
-      .set({
-        document: text,
-        ...(agentEdits ? { agentEdits } : undefined),
-        updatedAt: now,
-      })
-      .where(ownedPlan(userId, planId))
-      .returning(PLAN_COLUMNS),
+    Database.use((db) =>
+      db
+        .update(plan)
+        .set({
+          document: text,
+          ...(agentEdits ? { agentEdits } : undefined),
+          updatedAt: now,
+        })
+        .where(ownedPlan(userId, planId))
+        .returning(PLAN_COLUMNS),
+    ),
 });
 
 /** The plan row under its own lock, so a change and a save of the same plan run one after the other. */
@@ -359,7 +368,9 @@ const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanRowSchema,
   execute: ({ userId, planId }) =>
-    db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).for("update"),
+    Database.use((db) =>
+      db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).for("update"),
+    ),
 });
 
 /** The row changed: whichever of the name, the repository, the pin, and the archive the change names, in one statement. */
@@ -374,18 +385,22 @@ const applyChanges = SqlSchema.findOne({
   }),
   Result: PlanRowSchema,
   execute: ({ userId, planId, ...changes }) =>
-    db.update(plan).set(changes).where(ownedPlan(userId, planId)).returning(PLAN_COLUMNS),
+    Database.use((db) =>
+      db.update(plan).set(changes).where(ownedPlan(userId, planId)).returning(PLAN_COLUMNS),
+    ),
 });
 
 const findPlanOfConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: PlanRowSchema,
   execute: ({ userId, conversationId }) =>
-    db
-      .select(PLAN_COLUMNS)
-      .from(plan)
-      .where(and(eq(plan.userId, userId), eq(plan.conversationId, conversationId)))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select(PLAN_COLUMNS)
+        .from(plan)
+        .where(and(eq(plan.userId, userId), eq(plan.conversationId, conversationId)))
+        .limit(1),
+    ),
 });
 
 const PlanConversationRowSchema = Schema.Struct({
@@ -398,35 +413,41 @@ const lockPlanConversation = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanConversationRowSchema,
   execute: ({ userId, planId }) =>
-    db
-      .select({
-        conversationId: plan.conversationId,
-        conversationDeletedAt: conversations.deletedAt,
-      })
-      .from(plan)
-      .leftJoin(conversations, eq(conversations.id, plan.conversationId))
-      .where(ownedPlan(userId, planId))
-      .for("update", { of: plan }),
+    Database.use((db) =>
+      db
+        .select({
+          conversationId: plan.conversationId,
+          conversationDeletedAt: conversations.deletedAt,
+        })
+        .from(plan)
+        .leftJoin(conversations, eq(conversations.id, plan.conversationId))
+        .where(ownedPlan(userId, planId))
+        .for("update", { of: plan }),
+    ),
 });
 
 const insertPlanConversation = SqlSchema.findOne({
   Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
   Result: PlanIdRowSchema,
   execute: ({ userId, now }) =>
-    db
-      .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.PLAN, createdAt: now, lastActivityAt: now })
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .insert(conversations)
+        .values({ userId, kind: CONVERSATION_KIND.PLAN, createdAt: now, lastActivityAt: now })
+        .returning({ id: conversations.id }),
+    ),
 });
 
 const removePlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: Schema.Struct({ conversationId: Schema.NullOr(Schema.String) }),
   execute: ({ userId, planId }) =>
-    db
-      .delete(plan)
-      .where(ownedPlan(userId, planId))
-      .returning({ conversationId: plan.conversationId }),
+    Database.use((db) =>
+      db
+        .delete(plan)
+        .where(ownedPlan(userId, planId))
+        .returning({ conversationId: plan.conversationId }),
+    ),
 });
 
 const stampConversations = SqlSchema.findAll({
@@ -437,17 +458,19 @@ const stampConversations = SqlSchema.findAll({
   }),
   Result: PlanIdRowSchema,
   execute: ({ userId, conversationIds, now }) =>
-    db
-      .update(conversations)
-      .set({ deletedAt: now })
-      .where(
-        and(
-          inArray(conversations.id, conversationIds),
-          eq(conversations.userId, userId),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ deletedAt: now })
+        .where(
+          and(
+            inArray(conversations.id, conversationIds),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .returning({ id: conversations.id }),
+    ),
 });
 
 /**
@@ -459,15 +482,17 @@ const stampConversations = SqlSchema.findAll({
 const removeEndedCalls = SqlSchema.void({
   Request: PlanKeySchema,
   execute: ({ userId, planId }) =>
-    db
-      .delete(voiceSessions)
-      .where(
-        and(
-          eq(voiceSessions.userId, userId),
-          eq(voiceSessions.planId, planId),
-          isNotNull(voiceSessions.closedAt),
+    Database.use((db) =>
+      db
+        .delete(voiceSessions)
+        .where(
+          and(
+            eq(voiceSessions.userId, userId),
+            eq(voiceSessions.planId, planId),
+            isNotNull(voiceSessions.closedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
@@ -475,10 +500,12 @@ const findAgentConversations = SqlSchema.findAll({
   Request: PlanKeySchema,
   Result: Schema.Struct({ id: Schema.String, conversationId: Schema.String }),
   execute: ({ userId, planId }) =>
-    db
-      .select({ id: codingAgent.id, conversationId: codingAgent.conversationId })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.planId, planId), eq(codingAgent.userId, userId))),
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.planId, planId), eq(codingAgent.userId, userId))),
+    ),
 });
 
 /**
@@ -493,27 +520,29 @@ const setConversation = SqlSchema.findOneOption({
   }),
   Result: PlanIdRowSchema,
   execute: ({ userId, planId, conversationId }) =>
-    db
-      .update(plan)
-      .set({ conversationId })
-      .where(
-        and(
-          ownedPlan(userId, planId),
-          exists(
-            db
-              .select({ id: conversations.id })
-              .from(conversations)
-              .where(
-                and(
-                  eq(conversations.id, conversationId),
-                  eq(conversations.userId, userId),
-                  isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .update(plan)
+        .set({ conversationId })
+        .where(
+          and(
+            ownedPlan(userId, planId),
+            exists(
+              db
+                .select({ id: conversations.id })
+                .from(conversations)
+                .where(
+                  and(
+                    eq(conversations.id, conversationId),
+                    eq(conversations.userId, userId),
+                    isNull(conversations.deletedAt),
+                  ),
                 ),
-              ),
+            ),
           ),
-        ),
-      )
-      .returning({ id: plan.id }),
+        )
+        .returning({ id: plan.id }),
+    ),
 });
 
 /**
@@ -650,7 +679,7 @@ export function updatePlan(
   userId: string,
   planId: string,
   changes: PlanChanges,
-): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -701,7 +730,7 @@ export function deletePlan<R = never>(
   userId: string,
   planId: string,
   guard?: PlanDeleteGuard<R>,
-): Effect.Effect<boolean, PlanStoreFailure | PlanAgentUnstopped, SqlClient.SqlClient | R> {
+): Effect.Effect<boolean, PlanStoreFailure | PlanAgentUnstopped, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

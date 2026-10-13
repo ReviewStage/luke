@@ -15,10 +15,10 @@
  * than failing the start.
  */
 
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { defineSkill } from "eve/skills";
 import { GitHubApp } from "../../github/github-app.js";
 import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
@@ -43,7 +43,7 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
 ): Effect.fn.Return<
   readonly AgentSkill[],
   never,
-  GitHubApp | HttpClient.HttpClient | SqlClient.SqlClient
+  GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
   const app = yield* GitHubApp;
   const read = Effect.gen(function* () {

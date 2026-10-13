@@ -19,6 +19,7 @@
  * store failure's message may name a statement.
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { readCodingAgentOfConversation } from "@sidecar/database/models/coding-agent-store";
 import {
   INTEGRATION_PROVIDER_LIST,
@@ -26,8 +27,6 @@ import {
 } from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
@@ -46,8 +45,8 @@ const SERVERS_OFF: ServerStanding = { on: false };
 /** How the session a turn runs in is admitted: a root's own standing, or a worker's ownership alone. */
 type ServerAdmission = Effect.Effect<
   ConversationAdmission,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  DatabaseServices
 >;
 
 /** How an agent's edge reads the standing for one session: its own admission and policy, run where the edge runs effects. */
@@ -63,7 +62,7 @@ export type ServerStandingRead = (auth: SessionAuth, sessionId: string) => Promi
 export function turnServers(
   admission: ServerAdmission,
   policy: ConnectionPolicy,
-): Effect.Effect<ServerStanding, never, SqlClient.SqlClient> {
+): Effect.Effect<ServerStanding, never, DatabaseServices> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) return SERVERS_OFF;

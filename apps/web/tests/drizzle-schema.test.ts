@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
 import * as schema from "@sidecar/database/schemas";
-import { getTableColumns, getTableName, is } from "drizzle-orm";
-import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
+import { getColumns, getTableName, is } from "drizzle-orm";
+import { getTableConfig, PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
@@ -103,9 +103,12 @@ function declaredTables(): ReadonlyMap<string, Table> {
       for (const column of composite.columns) primaryKey.add(column.name);
     }
     const columns = new Map<string, Column>();
-    for (const column of Object.values(getTableColumns(exported))) {
+    for (const column of Object.values(getColumns(exported))) {
       if (column.primary) primaryKey.add(column.name);
-      columns.set(column.name, { type: column.getSQLType(), notNull: column.notNull });
+      // Note that v1 states an array column's dimensions apart from its type, which reads as the element's alone.
+      const dimensions = is(column, PgColumn) ? (column.dimensions ?? 0) : 0;
+      const type = `${column.getSQLType()}${"[]".repeat(dimensions)}`;
+      columns.set(column.name, { type, notNull: column.notNull });
     }
     tables.set(getTableName(exported), { columns, primaryKey });
   }

@@ -15,9 +15,8 @@ import {
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { planRevision } from "../schemas/plan-revision.js";
@@ -84,7 +83,7 @@ export interface PlanSaveRecord {
   readonly savedBefore: Option.Option<Date>;
 }
 
-type RevisionFailure = SqlError | Schema.SchemaError;
+type RevisionFailure = QueryError | Schema.SchemaError;
 
 const RevisionRowSchema = Schema.Struct({
   seq: Schema.Number,
@@ -102,20 +101,22 @@ const findNewestRevision = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RevisionRowSchema,
   execute: (planId) =>
-    db
-      .select({
-        seq: planRevision.seq,
-        actor: planRevision.actor,
-        agentId: planRevision.agentId,
-        liveSessionId: planRevision.liveSessionId,
-        changes: planRevision.changes,
-        at: planRevision.at,
-        restoredFrom: planRevision.restoredFrom,
-      })
-      .from(planRevision)
-      .where(eq(planRevision.planId, planId))
-      .orderBy(desc(planRevision.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          seq: planRevision.seq,
+          actor: planRevision.actor,
+          agentId: planRevision.agentId,
+          liveSessionId: planRevision.liveSessionId,
+          changes: planRevision.changes,
+          at: planRevision.at,
+          restoredFrom: planRevision.restoredFrom,
+        })
+        .from(planRevision)
+        .where(eq(planRevision.planId, planId))
+        .orderBy(desc(planRevision.seq))
+        .limit(1),
+    ),
 });
 
 const insertRevision = SqlSchema.void({
@@ -131,7 +132,7 @@ const insertRevision = SqlSchema.void({
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  execute: (revision) => db.insert(planRevision).values(revision),
+  execute: (revision) => Database.use((db) => db.insert(planRevision).values(revision)),
 });
 
 const moveRevisionOn = SqlSchema.void({
@@ -143,10 +144,12 @@ const moveRevisionOn = SqlSchema.void({
     at: Schema.Date,
   }),
   execute: ({ planId, seq, ...moved }) =>
-    db
-      .update(planRevision)
-      .set(moved)
-      .where(and(eq(planRevision.planId, planId), eq(planRevision.seq, seq))),
+    Database.use((db) =>
+      db
+        .update(planRevision)
+        .set(moved)
+        .where(and(eq(planRevision.planId, planId), eq(planRevision.seq, seq))),
+    ),
 });
 
 const LastEditRowSchema = Schema.Struct({
@@ -161,19 +164,21 @@ const findLastEdit = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: LastEditRowSchema,
   execute: (planId) =>
-    db
-      .select({
-        actor: planRevision.actor,
-        liveSessionId: planRevision.liveSessionId,
-        at: planRevision.at,
-        agentModel: codingAgent.model,
-        agentTitle: codingAgent.title,
-      })
-      .from(planRevision)
-      .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
-      .where(eq(planRevision.planId, planId))
-      .orderBy(desc(planRevision.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          actor: planRevision.actor,
+          liveSessionId: planRevision.liveSessionId,
+          at: planRevision.at,
+          agentModel: codingAgent.model,
+          agentTitle: codingAgent.title,
+        })
+        .from(planRevision)
+        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .where(eq(planRevision.planId, planId))
+        .orderBy(desc(planRevision.seq))
+        .limit(1),
+    ),
 });
 
 /** The revision a restore brought back, read beside the restore that names it. */
@@ -205,45 +210,50 @@ const findRevisionLines = SqlSchema.findAll({
   }),
   Result: RevisionLineRowSchema,
   execute: ({ userId, planId, before }) =>
-    db
-      .select({
-        actor: planRevision.actor,
-        liveSessionId: planRevision.liveSessionId,
-        at: planRevision.at,
-        agentModel: codingAgent.model,
-        agentTitle: codingAgent.title,
-        agentId: planRevision.agentId,
-        callId: voiceSessions.id,
-        seq: planRevision.seq,
-        startedAt: planRevision.startedAt,
-        changes: planRevision.changes,
-        restoredFrom: planRevision.restoredFrom,
-        restoredAt: restored.at,
-      })
-      .from(planRevision)
-      .innerJoin(plan, eq(plan.id, planRevision.planId))
-      .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
-      // The call a revision names by its Live API id, read as the transcript names it.
-      .leftJoin(
-        voiceSessions,
-        and(
-          eq(voiceSessions.liveSessionId, planRevision.liveSessionId),
-          eq(voiceSessions.userId, userId),
-        ),
-      )
-      .leftJoin(
-        restored,
-        and(eq(restored.planId, planRevision.planId), eq(restored.seq, planRevision.restoredFrom)),
-      )
-      .where(
-        and(
-          eq(planRevision.planId, planId),
-          eq(plan.userId, userId),
-          before === null ? undefined : lt(planRevision.seq, before),
-        ),
-      )
-      .orderBy(desc(planRevision.seq))
-      .limit(PLAN_HISTORY_BOUNDS.PAGE + 1),
+    Database.use((db) =>
+      db
+        .select({
+          actor: planRevision.actor,
+          liveSessionId: planRevision.liveSessionId,
+          at: planRevision.at,
+          agentModel: codingAgent.model,
+          agentTitle: codingAgent.title,
+          agentId: planRevision.agentId,
+          callId: voiceSessions.id,
+          seq: planRevision.seq,
+          startedAt: planRevision.startedAt,
+          changes: planRevision.changes,
+          restoredFrom: planRevision.restoredFrom,
+          restoredAt: restored.at,
+        })
+        .from(planRevision)
+        .innerJoin(plan, eq(plan.id, planRevision.planId))
+        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        // The call a revision names by its Live API id, read as the transcript names it.
+        .leftJoin(
+          voiceSessions,
+          and(
+            eq(voiceSessions.liveSessionId, planRevision.liveSessionId),
+            eq(voiceSessions.userId, userId),
+          ),
+        )
+        .leftJoin(
+          restored,
+          and(
+            eq(restored.planId, planRevision.planId),
+            eq(restored.seq, planRevision.restoredFrom),
+          ),
+        )
+        .where(
+          and(
+            eq(planRevision.planId, planId),
+            eq(plan.userId, userId),
+            before === null ? undefined : lt(planRevision.seq, before),
+          ),
+        )
+        .orderBy(desc(planRevision.seq))
+        .limit(PLAN_HISTORY_BOUNDS.PAGE + 1),
+    ),
 });
 
 const RevisionContentRowSchema = Schema.Struct({
@@ -261,20 +271,22 @@ const findRevisionContents = SqlSchema.findAll({
   }),
   Result: RevisionContentRowSchema,
   execute: ({ userId, planId, seqs }) =>
-    db
-      .select({
-        seq: planRevision.seq,
-        document: planRevision.document,
-      })
-      .from(planRevision)
-      .innerJoin(plan, eq(plan.id, planRevision.planId))
-      .where(
-        and(
-          eq(planRevision.planId, planId),
-          eq(plan.userId, userId),
-          inArray(planRevision.seq, [...seqs]),
+    Database.use((db) =>
+      db
+        .select({
+          seq: planRevision.seq,
+          document: planRevision.document,
+        })
+        .from(planRevision)
+        .innerJoin(plan, eq(plan.id, planRevision.planId))
+        .where(
+          and(
+            eq(planRevision.planId, planId),
+            eq(plan.userId, userId),
+            inArray(planRevision.seq, [...seqs]),
+          ),
         ),
-      ),
+    ),
 });
 
 const SectionRevisionRowSchema = Schema.Struct({
@@ -292,18 +304,20 @@ const findSectionRevisions = SqlSchema.findAll({
   Request: Schema.String,
   Result: SectionRevisionRowSchema,
   execute: (planId) =>
-    db
-      .select({
-        actor: planRevision.actor,
-        agentId: planRevision.agentId,
-        liveSessionId: planRevision.liveSessionId,
-        at: planRevision.at,
-        document: planRevision.document,
-      })
-      .from(planRevision)
-      .where(eq(planRevision.planId, planId))
-      .orderBy(desc(planRevision.seq))
-      .limit(PLAN_REVISION.SECTION_HISTORY + 1),
+    Database.use((db) =>
+      db
+        .select({
+          actor: planRevision.actor,
+          agentId: planRevision.agentId,
+          liveSessionId: planRevision.liveSessionId,
+          at: planRevision.at,
+          document: planRevision.document,
+        })
+        .from(planRevision)
+        .where(eq(planRevision.planId, planId))
+        .orderBy(desc(planRevision.seq))
+        .limit(PLAN_REVISION.SECTION_HISTORY + 1),
+    ),
 });
 
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
@@ -357,7 +371,7 @@ function joins(newest: RevisionRow, writer: PlanWriter, now: Date): boolean {
  */
 function recordEarlier(
   record: PlanSaveRecord,
-): Effect.Effect<number, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<number, RevisionFailure, DatabaseServices> {
   return Option.match(record.savedBefore, {
     onNone: () => Effect.succeed(0),
     onSome: (at) =>
@@ -396,7 +410,7 @@ function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
  */
 export function recordRevision(
   record: PlanSaveRecord,
-): Effect.Effect<void, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<void, RevisionFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { writer, after } = record;
@@ -433,7 +447,7 @@ export function recordRevision(
  */
 export function readLastEdit(
   planId: string,
-): Effect.Effect<Option.Option<PlanLastEdit>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<PlanLastEdit>, RevisionFailure, DatabaseServices> {
   return Effect.map(findLastEdit(planId), Option.map(lastEditOf));
 }
 
@@ -448,7 +462,7 @@ export function readLastEdit(
 export function readSectionWriters<E, R>(
   planId: string,
   started: Effect.Effect<string, E, R>,
-): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, SqlClient.SqlClient | R> {
+): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, DatabaseServices | R> {
   return Effect.gen(function* () {
     const rows = [...(yield* findSectionRevisions(planId))].reverse();
     const first = rows[0];
@@ -474,7 +488,7 @@ export function listRevisions(
   userId: string,
   planId: string,
   before?: number,
-): Effect.Effect<PlanRevisionsAnswer, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<PlanRevisionsAnswer, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionLines({ userId, planId, before: before ?? null }), (rows) => {
     const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
     const revisions = page.map(
@@ -502,7 +516,7 @@ export function readRevisionContent(
   userId: string,
   planId: string,
   seq: number,
-): Effect.Effect<Option.Option<string>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<string>, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
@@ -518,11 +532,7 @@ export function readRevision(
   userId: string,
   planId: string,
   seq: number,
-): Effect.Effect<
-  Option.Option<PlanRevisionAnswer["revision"]>,
-  RevisionFailure,
-  SqlClient.SqlClient
-> {
+): Effect.Effect<Option.Option<PlanRevisionAnswer["revision"]>, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {
       const row = rows.find((each) => each.seq === at);

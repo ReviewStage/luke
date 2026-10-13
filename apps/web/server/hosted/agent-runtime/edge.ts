@@ -13,8 +13,8 @@
  * `runWeb` in production, as `productionBrainHostSeams` is handed one.
  */
 
+import type { QueryError } from "@sidecar/database/core/query";
 import { Effect, Result, type Schema } from "effect";
-import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { WebAgentRun, WebAgentServices } from "../../runtime.js";
@@ -27,7 +27,7 @@ import { turnServers } from "./servers.js";
 import type { AgentSkill } from "./skills.js";
 
 /** How a door's read fails before the runner rejects with it. */
-type EdgeFailure = SqlError | Schema.SchemaError;
+type EdgeFailure = QueryError | Schema.SchemaError;
 
 /** What the doors need of a root's host: its admissions and its child relay, which both hosts carry alike. */
 interface EdgeHost {

@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
@@ -27,7 +28,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -99,7 +99,7 @@ export interface ProviderKeysAppSeams {
 
 type ProviderKeysRequirements =
   | HttpServerRequest.HttpServerRequest
-  | SqlClient.SqlClient
+  | DatabaseServices
   | HostedEnvironment
   | HttpClient.HttpClient;
 
@@ -213,7 +213,7 @@ const providerKeysEndpoint = /* @__PURE__ */ Effect.fn("web/providerKeysEndpoint
 /** The group: the one keys path, braked per instance, and the hosted vocabulary's own refusal for any other. */
 export function providerKeysApp(
   seams: ProviderKeysAppSeams,
-): WebRoutes<SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient> {
+): WebRoutes<DatabaseServices | HostedEnvironment | HttpClient.HttpClient> {
   const brake = makeRateBrake(SAVE_BRAKE);
   return Layer.mergeAll(
     HttpRouter.add(
@@ -228,7 +228,7 @@ export function providerKeysApp(
 /** The rotation's rewrap, asked by hand under the deployment's secret, over the ring the deployment holds. */
 const providerKeyRewrapEffect = /* @__PURE__ */ Effect.fn("web/providerKeyRewrapEffect")(function* (
   request: Request,
-): Effect.fn.Return<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+): Effect.fn.Return<Response, unknown, DatabaseServices | HostedEnvironment> {
   const environment = yield* HostedEnvironment;
   return yield* handleProviderKeyRewrap({
     request,
@@ -238,7 +238,7 @@ const providerKeyRewrapEffect = /* @__PURE__ */ Effect.fn("web/providerKeyRewrap
 });
 
 /** The rewrap's group: its one path, and the hosted vocabulary's own refusal for any other. */
-export function providerKeyRewrapApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+export function providerKeyRewrapApp(): WebRoutes<DatabaseServices | HostedEnvironment> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

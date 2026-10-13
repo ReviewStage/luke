@@ -9,9 +9,8 @@ import { PLAN_ACTOR, PLAN_HISTORY_BOUNDS, type PlanDocument } from "@sidecar/hos
 import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { planTemplateRevision } from "../schemas/plan-template-revision.js";
 import { InstantColumnSchema } from "./columns.js";
 import { PLAN_REVISION } from "./plan-revisions.js";
@@ -43,7 +42,7 @@ export interface TemplateSaveRecord {
   readonly restoredFrom?: number;
 }
 
-type RevisionFailure = SqlError | Schema.SchemaError;
+type RevisionFailure = QueryError | Schema.SchemaError;
 
 const RevisionRowSchema = Schema.Struct({
   seq: Schema.Number,
@@ -60,19 +59,21 @@ const findNewestRevision = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RevisionRowSchema,
   execute: (userId) =>
-    db
-      .select({
-        seq: planTemplateRevision.seq,
-        actor: planTemplateRevision.actor,
-        document: planTemplateRevision.document,
-        changes: planTemplateRevision.changes,
-        at: planTemplateRevision.at,
-        restoredFrom: planTemplateRevision.restoredFrom,
-      })
-      .from(planTemplateRevision)
-      .where(eq(planTemplateRevision.userId, userId))
-      .orderBy(desc(planTemplateRevision.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          seq: planTemplateRevision.seq,
+          actor: planTemplateRevision.actor,
+          document: planTemplateRevision.document,
+          changes: planTemplateRevision.changes,
+          at: planTemplateRevision.at,
+          restoredFrom: planTemplateRevision.restoredFrom,
+        })
+        .from(planTemplateRevision)
+        .where(eq(planTemplateRevision.userId, userId))
+        .orderBy(desc(planTemplateRevision.seq))
+        .limit(1),
+    ),
 });
 
 const insertRevision = SqlSchema.void({
@@ -86,7 +87,7 @@ const insertRevision = SqlSchema.void({
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  execute: (revision) => db.insert(planTemplateRevision).values(revision),
+  execute: (revision) => Database.use((db) => db.insert(planTemplateRevision).values(revision)),
 });
 
 const moveRevisionOn = SqlSchema.void({
@@ -98,10 +99,12 @@ const moveRevisionOn = SqlSchema.void({
     at: Schema.Date,
   }),
   execute: ({ userId, seq, ...moved }) =>
-    db
-      .update(planTemplateRevision)
-      .set(moved)
-      .where(and(eq(planTemplateRevision.userId, userId), eq(planTemplateRevision.seq, seq))),
+    Database.use((db) =>
+      db
+        .update(planTemplateRevision)
+        .set(moved)
+        .where(and(eq(planTemplateRevision.userId, userId), eq(planTemplateRevision.seq, seq))),
+    ),
 });
 
 /** Whether a revision is the built-in default, read without its text. */
@@ -131,7 +134,7 @@ const RevisionLineRowSchema = Schema.Struct({
 export function readTemplateAt(
   userId: string,
   at: Date,
-): Effect.Effect<Option.Option<string | null>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<string | null>, RevisionFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const held = yield* findTemplateHeldAt({ userId, at });
     const found = Option.isSome(held) ? held : yield* findFirstTemplate(userId);
@@ -149,33 +152,35 @@ const findRevisionLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, before: Schema.NullOr(Schema.Number) }),
   Result: RevisionLineRowSchema,
   execute: ({ userId, before }) =>
-    db
-      .select({
-        seq: planTemplateRevision.seq,
-        actor: planTemplateRevision.actor,
-        isDefault: isNullColumn,
-        changes: planTemplateRevision.changes,
-        startedAt: planTemplateRevision.startedAt,
-        at: planTemplateRevision.at,
-        restoredFrom: planTemplateRevision.restoredFrom,
-        restoredAt: restored.at,
-      })
-      .from(planTemplateRevision)
-      .leftJoin(
-        restored,
-        and(
-          eq(restored.userId, planTemplateRevision.userId),
-          eq(restored.seq, planTemplateRevision.restoredFrom),
-        ),
-      )
-      .where(
-        and(
-          eq(planTemplateRevision.userId, userId),
-          before === null ? undefined : lt(planTemplateRevision.seq, before),
-        ),
-      )
-      .orderBy(desc(planTemplateRevision.seq))
-      .limit(PLAN_HISTORY_BOUNDS.PAGE + 1),
+    Database.use((db) =>
+      db
+        .select({
+          seq: planTemplateRevision.seq,
+          actor: planTemplateRevision.actor,
+          isDefault: isNullColumn,
+          changes: planTemplateRevision.changes,
+          startedAt: planTemplateRevision.startedAt,
+          at: planTemplateRevision.at,
+          restoredFrom: planTemplateRevision.restoredFrom,
+          restoredAt: restored.at,
+        })
+        .from(planTemplateRevision)
+        .leftJoin(
+          restored,
+          and(
+            eq(restored.userId, planTemplateRevision.userId),
+            eq(restored.seq, planTemplateRevision.restoredFrom),
+          ),
+        )
+        .where(
+          and(
+            eq(planTemplateRevision.userId, userId),
+            before === null ? undefined : lt(planTemplateRevision.seq, before),
+          ),
+        )
+        .orderBy(desc(planTemplateRevision.seq))
+        .limit(PLAN_HISTORY_BOUNDS.PAGE + 1),
+    ),
 });
 
 const RevisionContentRowSchema = Schema.Struct({
@@ -188,12 +193,17 @@ const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, seqs: Schema.Array(Schema.Number) }),
   Result: RevisionContentRowSchema,
   execute: ({ userId, seqs }) =>
-    db
-      .select({ seq: planTemplateRevision.seq, document: planTemplateRevision.document })
-      .from(planTemplateRevision)
-      .where(
-        and(eq(planTemplateRevision.userId, userId), inArray(planTemplateRevision.seq, [...seqs])),
-      ),
+    Database.use((db) =>
+      db
+        .select({ seq: planTemplateRevision.seq, document: planTemplateRevision.document })
+        .from(planTemplateRevision)
+        .where(
+          and(
+            eq(planTemplateRevision.userId, userId),
+            inArray(planTemplateRevision.seq, [...seqs]),
+          ),
+        ),
+    ),
 });
 
 const TemplateWordsRowSchema = Schema.Struct({ document: Schema.NullOr(Schema.String) });
@@ -203,12 +213,14 @@ const findTemplateHeldAt = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, at: Schema.Date }),
   Result: TemplateWordsRowSchema,
   execute: ({ userId, at }) =>
-    db
-      .select({ document: planTemplateRevision.document })
-      .from(planTemplateRevision)
-      .where(and(eq(planTemplateRevision.userId, userId), lte(planTemplateRevision.at, at)))
-      .orderBy(desc(planTemplateRevision.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ document: planTemplateRevision.document })
+        .from(planTemplateRevision)
+        .where(and(eq(planTemplateRevision.userId, userId), lte(planTemplateRevision.at, at)))
+        .orderBy(desc(planTemplateRevision.seq))
+        .limit(1),
+    ),
 });
 
 /** The account's first template revision: the template it held when its history began. */
@@ -216,12 +228,14 @@ const findFirstTemplate = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: TemplateWordsRowSchema,
   execute: (userId) =>
-    db
-      .select({ document: planTemplateRevision.document })
-      .from(planTemplateRevision)
-      .where(eq(planTemplateRevision.userId, userId))
-      .orderBy(asc(planTemplateRevision.seq))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({ document: planTemplateRevision.document })
+        .from(planTemplateRevision)
+        .where(eq(planTemplateRevision.userId, userId))
+        .orderBy(asc(planTemplateRevision.seq))
+        .limit(1),
+    ),
 });
 
 /** The template's words as they read: its own, or the default's where it holds none. */
@@ -254,7 +268,7 @@ function joins(newest: RevisionRow, record: TemplateSaveRecord, now: Date): bool
  */
 export function recordTemplateRevision(
   record: TemplateSaveRecord,
-): Effect.Effect<void, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<void, RevisionFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { userId, before, after } = record;
@@ -303,7 +317,7 @@ export function recordTemplateRevision(
 export function listTemplateRevisions(
   userId: string,
   before?: number,
-): Effect.Effect<PlanTemplateRevisionsAnswer, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<PlanTemplateRevisionsAnswer, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionLines({ userId, before: before ?? null }), (rows) => {
     const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
     const revisions = page.map(
@@ -329,7 +343,7 @@ export function listTemplateRevisions(
 export function readTemplateRevisionContent(
   userId: string,
   seq: number,
-): Effect.Effect<Option.Option<string | null>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<string | null>, RevisionFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, seqs: [seq] }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
@@ -347,7 +361,7 @@ export function readTemplateRevision(
 ): Effect.Effect<
   Option.Option<PlanTemplateRevisionAnswer["revision"]>,
   RevisionFailure,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   return Effect.map(findRevisionContents({ userId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {

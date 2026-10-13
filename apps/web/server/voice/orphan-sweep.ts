@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type {
   DetachedVoiceSession,
   VoiceSessionRecord,
@@ -11,7 +12,6 @@ import {
   type SidebandCloseResult,
 } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
-import type { SqlClient } from "effect/sql";
 import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";
@@ -127,7 +127,7 @@ const unanswered = (
   seams: VoiceOrphanSweepSeams,
   orphan: DetachedVoiceSession,
   now: number,
-): Effect.Effect<OrphanEnding, unknown, SqlClient.SqlClient> =>
+): Effect.Effect<OrphanEnding, unknown, DatabaseServices> =>
   now - orphan.startedAt < VOICE_SESSION_LIMIT_MS
     ? Effect.as(seams.record.sweepLater({ sessionId: orphan.sessionId }), ORPHAN_ENDING.PENDING)
     : Effect.as(
@@ -140,7 +140,7 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
   seams: VoiceOrphanSweepSeams,
   orphan: DetachedVoiceSession,
   now: number,
-): Effect.fn.Return<OrphanEnding, unknown, SqlClient.SqlClient | Scope.Scope> {
+): Effect.fn.Return<OrphanEnding, unknown, DatabaseServices | Scope.Scope> {
   const { sessionId, userId } = orphan;
   const attached = yield* Effect.result(seams.upstream.attach(sessionId));
   if (Result.isFailure(attached)) {
@@ -174,7 +174,7 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
 export const sweepVoiceOrphans = /* @__PURE__ */ Effect.fn("web/sweepVoiceOrphans")(function* (
   seams: VoiceOrphanSweepSeams,
   options: { readonly now: number },
-): Effect.fn.Return<VoiceOrphanSweepOutcome, unknown, SqlClient.SqlClient> {
+): Effect.fn.Return<VoiceOrphanSweepOutcome, unknown, DatabaseServices> {
   const orphans = yield* seams.record.detached({
     detachedBefore: options.now - VOICE_DETACH_GRACE_MS,
     limit: VOICE_ORPHAN_SWEEP.MAX_SESSIONS,

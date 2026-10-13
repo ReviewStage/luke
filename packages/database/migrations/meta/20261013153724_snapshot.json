@@ -2196,7 +2196,7 @@
       "checkConstraints": {
         "inbox_attachment_bytes_bound": {
           "name": "inbox_attachment_bytes_bound",
-          "value": "octet_length(\"inbox_attachment\".\"bytes\") <= $1"
+          "value": "octet_length(\"bytes\") <= 1500000"
         }
       },
       "isRLSEnabled": false
@@ -3205,7 +3205,7 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"asks\".\"voice_session_id\" is not null",
+          "where": "\"voice_session_id\" is not null",
           "concurrently": false
         }
       },
@@ -3338,7 +3338,7 @@
           "isUnique": true,
           "with": {},
           "method": "btree",
-          "where": "\"conversations\".\"kind\" = 'main' and \"conversations\".\"deleted_at\" is null",
+          "where": "\"kind\" = 'main' and \"deleted_at\" is null",
           "concurrently": false
         },
         "conversations_deleted_at": {
@@ -3354,7 +3354,7 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"conversations\".\"deleted_at\" is not null",
+          "where": "\"deleted_at\" is not null",
           "concurrently": false
         },
         "conversations_user_kind": {
@@ -3510,7 +3510,7 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"messages\".\"revision\" is not null",
+          "where": "\"revision\" is not null",
           "concurrently": false
         }
       },
@@ -3737,7 +3737,7 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"turns\".\"status\" = 'running'",
+          "where": "\"status\" = 'running'",
           "concurrently": false
         }
       },
@@ -3988,7 +3988,7 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"voice_sessions\".\"closed_at\" is null and \"voice_sessions\".\"detached_at\" is not null",
+          "where": "\"closed_at\" is null and \"detached_at\" is not null",
           "concurrently": false
         }
       },

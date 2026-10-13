@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@sidecar/database/core/query";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
@@ -267,6 +268,7 @@ const standing = (
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, {
         ...NO_KEYS,

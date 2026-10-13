@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -90,6 +90,7 @@ function keyOf(headers: Headers): string {
 /** Two accounts behind their own bearers, a provider, and the group answering under the ring given. */
 const openAccounts = (options: { ring?: string; provider?: ProviderAnswers } = {}) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
     for (const id of [owner, other]) {
       yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
@@ -136,6 +137,7 @@ const answer = (
     // The handler runs on the router's own fiber, so it is handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment),
       seams.provider,
@@ -217,6 +219,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
 
   it.effect("no column of the row holds the key, or its base64, in the clear", () =>
     Effect.gen(function* () {
+      const db = yield* Database;
       const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
       keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
 

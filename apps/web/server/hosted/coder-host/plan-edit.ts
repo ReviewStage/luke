@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   NOTE_KIND,
   type PlanNote,
@@ -6,7 +7,6 @@ import {
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
 import {
   PLAN_SAVE_STATUS,
@@ -140,7 +140,7 @@ export function recordPlanEdit(
   author: PlanNoteAuthor,
   input: UnparsedWireValue,
   takenInTurn: number,
-): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient> {
+): Effect.Effect<PlanEditResult, never, DatabaseServices> {
   const notes = notesOf(input);
   if (notes === undefined) return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNREADABLE));
   if (takenInTurn + notes.length > PLAN_EDIT.MAX_NOTES_PER_TURN) {

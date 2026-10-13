@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
 import {
@@ -17,8 +18,6 @@ import {
 } from "@sidecar/voice/live-session";
 import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
@@ -124,7 +123,7 @@ export interface AttachedSession {
  */
 export type ExchangeAttachment = (
   session: AttachedSession,
-) => Effect.Effect<HostedLiveExchange | undefined, Error, Scope.Scope | SqlClient.SqlClient>;
+) => Effect.Effect<HostedLiveExchange | undefined, Error, Scope.Scope | DatabaseServices>;
 
 /**
  * How the exchange's scope lets go of the session it stands on: closing it,
@@ -162,7 +161,7 @@ export interface HostedLiveExchange {
  * the write landed.
  */
 function writeReport(
-  write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>,
+  write: Effect.Effect<VoiceWriteResult, QueryError | Schema.SchemaError>,
 ): Effect.Effect<string | undefined> {
   return write.pipe(
     Effect.map((result) =>
@@ -181,7 +180,7 @@ function writeReport(
 
 export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
-): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
+): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | DatabaseServices> {
   const { userId, liveSessionId, conversationId, writer, report } = options;
   const store = hostedStore();
   const target: VoiceTarget = {

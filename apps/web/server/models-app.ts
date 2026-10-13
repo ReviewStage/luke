@@ -1,7 +1,7 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { ownKeyProviders } from "./hosted/coder-host/account-keys.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -46,7 +46,7 @@ const modelsEndpoint = /* @__PURE__ */ Effect.fn("web/modelsEndpoint")(function*
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | ModelCatalog | SqlClient.SqlClient
+  HttpServerRequest.HttpServerRequest | ModelCatalog | DatabaseServices
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -65,7 +65,7 @@ const modelsEndpoint = /* @__PURE__ */ Effect.fn("web/modelsEndpoint")(function*
 });
 
 /** The group: the one models path, and the hosted vocabulary's own refusal for any other. */
-export function modelsApp(seams: ModelsAppSeams): WebRoutes<ModelCatalog | SqlClient.SqlClient> {
+export function modelsApp(seams: ModelsAppSeams): WebRoutes<ModelCatalog | DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

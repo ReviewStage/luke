@@ -1,5 +1,5 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import { DAY_MS } from "../core.js";
 import {
   ADMIN_TREND_DAYS,
@@ -182,7 +182,7 @@ export interface AdminUserOptions {
  */
 export function handleAdminUser(
   options: AdminUserOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
 
   const userId = adminUserId(request.url);

@@ -11,6 +11,7 @@
  * is unavailable.
  */
 
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { type GitHubRepositoriesAnswer, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { Effect, Layer, Option } from "effect";
 import {
@@ -19,7 +20,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -41,7 +41,7 @@ export interface GitHubRepositoriesAppSeams {
 }
 
 /** What the route may require of the function that stands it. */
-export type GitHubRepositoriesAppServices = SqlClient.SqlClient | GitHubApp | HttpClient.HttpClient;
+export type GitHubRepositoriesAppServices = DatabaseServices | GitHubApp | HttpClient.HttpClient;
 
 /** GET: the repositories the bearer's account reaches through the App. */
 const repositoriesEndpoint = /* @__PURE__ */ Effect.fn("web/githubRepositoriesEndpoint")(function* (

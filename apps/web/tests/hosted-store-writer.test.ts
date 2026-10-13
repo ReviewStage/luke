@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
 import {
   type ConversationTarget,
@@ -270,10 +270,12 @@ const CountersRowSchema = Schema.Struct({ message: EpochMillisColumnSchema });
 
 async function counters(target: ConversationTarget) {
   const [row] = await database.run(
-    db
-      .select({ message: conversations.nextMessageSeq })
-      .from(conversations)
-      .where(eq(conversations.id, target.conversationId)),
+    Database.use((db) =>
+      db
+        .select({ message: conversations.nextMessageSeq })
+        .from(conversations)
+        .where(eq(conversations.id, target.conversationId)),
+    ),
   );
   return row === undefined ? undefined : Schema.decodeUnknownSync(CountersRowSchema)(row);
 }

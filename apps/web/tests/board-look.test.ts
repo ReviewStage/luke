@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { writeDrawing, writeScene } from "@sidecar/database/models/board-store";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -30,6 +30,7 @@ const SCENE = [
 
 /** An account holding one plan, and the binding a planning call runs under. */
 const openPlan = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const started = yield* createPlan(userId, { name: "Teammate invitations" });

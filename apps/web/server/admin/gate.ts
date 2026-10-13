@@ -1,7 +1,7 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { catchAllButInterrupt, causeKind } from "@sidecar/runtime/effect";
 import { type Cause, Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-effect.js";
@@ -32,11 +32,11 @@ export function adminViewerGate(options: {
   handler: (
     viewer: AdminViewer,
     request: Request,
-  ) => Effect.Effect<Response, never, SqlClient.SqlClient>;
+  ) => Effect.Effect<Response, never, DatabaseServices>;
 }): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   never,
-  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  DatabaseServices | HttpServerRequest.HttpServerRequest
 > {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;

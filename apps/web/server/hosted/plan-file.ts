@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { type PlanStoreFailure, readPlan } from "@sidecar/database/models/plan-store";
 import {
   PLAN_FILE_REFUSAL,
@@ -7,7 +8,6 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
@@ -95,7 +95,7 @@ export function readPlanFile(
 ): Effect.Effect<
   Option.Option<PlanFileAnswer>,
   PlanStoreFailure,
-  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
     const stored = yield* readPlan(userId, planId);

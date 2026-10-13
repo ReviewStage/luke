@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
@@ -98,6 +98,7 @@ interface Answer {
 
 /** Two accounts behind their own bearers, and the group answering on the test's database and clock. */
 const openAccounts = Effect.gen(function* () {
+  const db = yield* Database;
   const [owner, other] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
   for (const id of [owner, other]) {
     yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
@@ -134,6 +135,7 @@ const answer = (app: ReturnType<typeof accountApp>, request: Request) =>
     // The handler runs on the router's own fiber, so it is handed the test's clock and services.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,

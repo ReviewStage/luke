@@ -1,5 +1,5 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { Clock, Effect } from "effect";
-import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -140,7 +140,7 @@ export interface AdminUsersOptions {
  */
 export function handleAdminUsers(
   options: AdminUsersOptions,
-): Effect.Effect<Response, never, SqlClient.SqlClient> {
+): Effect.Effect<Response, never, DatabaseServices> {
   const { request } = options;
 
   const windowDays = adminMetricsWindow(request.url);

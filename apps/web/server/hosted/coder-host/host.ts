@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   readCodingAgentOfConversation,
@@ -13,8 +14,6 @@ import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
@@ -101,10 +100,10 @@ import { CODER_TOOL } from "./tool-set.js";
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
-type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** How a checkout or a mint fails: the checkout's refusal, which the host's own refusal of a conversation that is no agent's is carried as, or the store's. */
-export type CheckoutFailure = CheckoutRefused | SqlError | Schema.SchemaError;
+export type CheckoutFailure = CheckoutRefused | QueryError | Schema.SchemaError;
 
 /** The prompt a session runs under and the content address its turns are recorded under, with the one fact of the repository it was composed on. */
 interface CoderSessionPrompt {
@@ -131,8 +130,8 @@ interface ScriptedCoderModel {
 /** What a delegation answers once admitted: the model and effort the worker runs on, or the one sentence refusing the agent's ask. */
 type DelegationEffect = Effect.Effect<
   Result.Result<ModelChoice, string>,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient | ModelCatalog
+  QueryError | Schema.SchemaError,
+  DatabaseServices | ModelCatalog
 >;
 
 export interface CoderHost extends HostAdmission {
@@ -152,8 +151,8 @@ export interface CoderHost extends HostAdmission {
     scripted: ScriptedCoderModel | undefined,
   ): Effect.Effect<
     Result.Result<CoderModelSelection, CoderRefusal>,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | ModelCatalog
+    QueryError | Schema.SchemaError,
+    DatabaseServices | ModelCatalog
   >;
   /**
    * A delegation under the call that makes it: the pair the agent asked for,
@@ -168,8 +167,8 @@ export interface CoderHost extends HostAdmission {
     scripted: ScriptedCoderModel | undefined,
   ): Effect.Effect<
     Result.Result<CoderModelSelection, CoderRefusal>,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | ModelCatalog
+    QueryError | Schema.SchemaError,
+    DatabaseServices | ModelCatalog
   >;
   /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI; the text itself is stored nowhere. */
   prompt(
@@ -200,7 +199,7 @@ export interface CoderHost extends HostAdmission {
   recordBranch(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<void, never, SqlClient.SqlClient>;
+  ): Effect.Effect<void, never, DatabaseServices>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -211,11 +210,7 @@ export interface CoderHost extends HostAdmission {
     event: MessageStreamEvent,
     session: SessionContext["session"],
     state: RelayStateStore,
-  ): Effect.Effect<
-    void,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
-  >;
+  ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
   /** The agent's title generated from its first exchange as one of its first turns ends, written where none stands; a later turn, a failed or empty answer, and a title already standing each leave the row as it is. */
   title(admitted: AdmittedConversation): HostEffect<void>;
   /** A worker's title generated from the task its call handed it and written on the child conversation the call recorded, where none stands; a call no delegation was recorded for, a failed call, and a title already standing each write nothing. */
@@ -225,12 +220,12 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     takenInTurn: number,
-  ): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient>;
+  ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
     admitted: AdmittedConversation,
     call: InboxCall,
-  ): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient>;
+  ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
    * Runs one of the agent's public reads, the planning model's own
    * (`../public-research.ts`): a search or a page read, under the turn's
@@ -249,7 +244,7 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
-  ): Effect.Effect<WireRecord, never, SqlClient.SqlClient>;
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -257,11 +252,7 @@ export interface CoderHost extends HostAdmission {
     session: SessionContext["session"],
     state: RelayStateStore,
     prompt: CoderSessionPromptRecord,
-  ): Effect.Effect<
-    void,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
-  >;
+  ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
 /** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */

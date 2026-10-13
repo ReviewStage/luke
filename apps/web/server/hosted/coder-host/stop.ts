@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   awaitingLinesOf,
   type CodingAgent,
@@ -10,7 +11,6 @@ import type { StoreWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
@@ -66,7 +66,7 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   (conversationId: string) => AgentTurnStanding,
   HostedRefusal,
-  SqlClient.SqlClient
+  DatabaseServices
 > {
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, conversationIds));
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOf(userId, conversationIds));
@@ -80,7 +80,7 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
-): Effect.fn.Return<CodingAgentSummary, HostedRefusal, SqlClient.SqlClient> {
+): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(userId, [agent.conversationId]);
   return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
 });
@@ -104,7 +104,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
   userId: string,
   agent: CodingAgent,
-): Effect.fn.Return<void, HostedRefusal, SqlClient.SqlClient | HttpClient.HttpClient> {
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId, conversationId: agent.conversationId };
   const turn = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return;
@@ -148,7 +148,7 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
   userId: string,
   agent: CodingAgent,
-): Effect.fn.Return<void, HostedRefusal, SqlClient.SqlClient | HttpClient.HttpClient> {
+): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   yield* stoppedTurn(reach, writer, request, userId, agent);
   const { status } = yield* summaryOf(userId, agent);
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {

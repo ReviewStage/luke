@@ -1,10 +1,10 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { settleMacCommand } from "@sidecar/database/models/mac-command-store";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { macCommandSettleRequestSchema } from "@sidecar/hosted/mac-command-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -46,7 +46,7 @@ const macCommandsEndpoint = /* @__PURE__ */ Effect.fn("web/macCommandsEndpoint")
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  HttpServerRequest.HttpServerRequest | DatabaseServices
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
@@ -70,7 +70,7 @@ const macCommandsEndpoint = /* @__PURE__ */ Effect.fn("web/macCommandsEndpoint")
 });
 
 /** The group: the one path, and the hosted vocabulary's own refusal for any other. */
-export function macCommandsApp(seams: MacCommandsAppSeams): WebRoutes<SqlClient.SqlClient> {
+export function macCommandsApp(seams: MacCommandsAppSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

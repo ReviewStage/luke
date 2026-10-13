@@ -12,7 +12,7 @@
  */
 
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { account, user } from "@sidecar/database/schemas/auth";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
@@ -278,6 +278,7 @@ export const standingGithubRow = (now: number): GitHubAccountRow => ({
  */
 export const openGithubUser = (standing?: GitHubAccountRow) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const now = yield* Clock.currentTimeMillis;
     const row = standing ?? standingGithubRow(now);
     const userId = `user-${randomUUID()}`;

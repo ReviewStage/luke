@@ -2,7 +2,7 @@ import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@sidecar/hosted/plan-
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { repositoryPin } from "../schemas/repository-pin.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -30,11 +30,13 @@ const findPins = SqlSchema.findAll({
   Request: Schema.String,
   Result: PinRowSchema,
   execute: (userId) =>
-    db
-      .select({ repository: repositoryPin.repository, pinnedAt: repositoryPin.pinnedAt })
-      .from(repositoryPin)
-      .where(eq(repositoryPin.userId, userId))
-      .orderBy(desc(repositoryPin.pinnedAt), asc(repositoryPin.repository)),
+    Database.use((db) =>
+      db
+        .select({ repository: repositoryPin.repository, pinnedAt: repositoryPin.pinnedAt })
+        .from(repositoryPin)
+        .where(eq(repositoryPin.userId, userId))
+        .orderBy(desc(repositoryPin.pinnedAt), asc(repositoryPin.repository)),
+    ),
 });
 
 /** The account's row, held for the transaction, which is what serializes one account's pins; nothing for an account gone. */
@@ -42,26 +44,32 @@ const lockAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (userId) =>
-    db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+    Database.use((db) =>
+      db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
+    ),
 });
 
 const insertPin = SqlSchema.void({
   Request: Schema.Struct({ ...PinKeySchema.fields, now: Schema.Date }),
   execute: (write) =>
-    db
-      .insert(repositoryPin)
-      .values({ userId: write.userId, repository: write.repository, pinnedAt: write.now })
-      .onConflictDoNothing(),
+    Database.use((db) =>
+      db
+        .insert(repositoryPin)
+        .values({ userId: write.userId, repository: write.repository, pinnedAt: write.now })
+        .onConflictDoNothing(),
+    ),
 });
 
 const deletePin = SqlSchema.void({
   Request: PinKeySchema,
   execute: (key) =>
-    db
-      .delete(repositoryPin)
-      .where(
-        and(eq(repositoryPin.userId, key.userId), eq(repositoryPin.repository, key.repository)),
-      ),
+    Database.use((db) =>
+      db
+        .delete(repositoryPin)
+        .where(
+          and(eq(repositoryPin.userId, key.userId), eq(repositoryPin.repository, key.repository)),
+        ),
+    ),
 });
 
 /** The account's pinned repositories, newest pinned first. */

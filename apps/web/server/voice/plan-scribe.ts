@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { readPlan, readStartedText, type StoredPlan } from "@sidecar/database/models/plan-store";
 import { spendHostedMeter } from "@sidecar/database/models/quota";
 import {
@@ -202,7 +203,7 @@ function developerWritten(stored: StoredPlan): readonly string[] {
 
 export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* (
   options: PlanScribeOptions,
-): Effect.fn.Return<PlanScribe, never, Scope.Scope | SqlClient.SqlClient> {
+): Effect.fn.Return<PlanScribe, never, Scope.Scope | DatabaseServices> {
   const sql = yield* SqlClient.SqlClient;
   const ledger = new TranscriptLedger({ mintRowId: options.createId });
   const notes: string[] = [];

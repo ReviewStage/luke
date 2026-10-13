@@ -1,9 +1,8 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { listRecentMessages } from "@sidecar/database/models/message-reads";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 
 /**
@@ -56,7 +55,7 @@ export function readRecentMessages(
   target: ConversationTarget,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<readonly StoredUIMessage[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<readonly StoredUIMessage[], QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(
     listRecentMessages(target.userId, target.conversationId, tools, limit),
     (read) => (read.ok ? read.value.map((record) => record.message) : []),

@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { readBoard } from "@sidecar/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
@@ -9,8 +10,6 @@ import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -136,7 +135,7 @@ function conversationSessionOf(session: Pick<SessionContext["session"], "id" | "
 }
 
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
-type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 export interface BrainHost extends HostAdmission {
   /** The kind of turn the current request opened, or nothing for a request that named none. */
@@ -159,8 +158,8 @@ export interface BrainHost extends HostAdmission {
     context: EveToolContext,
   ): Effect.Effect<
     WireRecord,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog
+    QueryError | Schema.SchemaError,
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
   /**
    * The model one inference runs on and the effort it is asked for, as a
@@ -178,11 +177,7 @@ export interface BrainHost extends HostAdmission {
     event: MessageStreamEvent,
     session: SessionContext["session"],
     state: RelayStateStore,
-  ): Effect.Effect<
-    void,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
-  >;
+  ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
   /**
    * A subagent's title generated from the first task it received, read from
    * the child conversation of the call that started it, and written there
@@ -201,8 +196,8 @@ export interface BrainHost extends HostAdmission {
     admitted: AdmittedConversation,
   ): Effect.Effect<
     readonly AgentSkill[],
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+    QueryError | Schema.SchemaError,
+    DatabaseServices | HttpClient.HttpClient | GitHubApp
   >;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
@@ -211,11 +206,7 @@ export interface BrainHost extends HostAdmission {
     session: SessionContext["session"],
     state: RelayStateStore,
     prompt: SessionPromptRecord,
-  ): Effect.Effect<
-    void,
-    SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
-  >;
+  ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
 /** The body a planning skill loads as: where it stands in the plan's repository, which \`run_in_repository\` reads, and then its own words. */

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { db } from "../../core/query.js";
+import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
@@ -18,6 +18,7 @@ import { delegationsOf, writeDelegation } from "../coding-agent-store.js";
  */
 
 const openAccount = Effect.gen(function* () {
+  const db = yield* Database;
   const id = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
   return id;
@@ -30,6 +31,7 @@ const openConversation = (
   createdAt?: Date,
 ) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const id = randomUUID();
     yield* db.insert(conversations).values({
       id,

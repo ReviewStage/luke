@@ -11,13 +11,12 @@
 
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
 import type { ConversationTarget } from "./writer.js";
 
-type ChildTitleEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type ChildTitleEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
 const fillTitle = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -28,19 +27,21 @@ const fillTitle = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, parentConversationId, childConversationId, title }) =>
-    db
-      .update(conversations)
-      .set({ title })
-      .where(
-        and(
-          eq(conversations.id, childConversationId),
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNull(conversations.title),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .returning({ id: conversations.id }),
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ title })
+        .where(
+          and(
+            eq(conversations.id, childConversationId),
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNull(conversations.title),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .returning({ id: conversations.id }),
+    ),
 });
 
 const findTitles = SqlSchema.findAll({
@@ -51,18 +52,20 @@ const findTitles = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ id: Schema.String, title: Schema.String }),
   execute: ({ userId, parentConversationId, childConversationIds }) =>
-    db
-      .select({ id: conversations.id, title: conversations.title })
-      .from(conversations)
-      .where(
-        and(
-          inArray(conversations.id, [...childConversationIds]),
-          eq(conversations.userId, userId),
-          eq(conversations.parentConversationId, parentConversationId),
-          isNotNull(conversations.title),
-          isNull(conversations.deletedAt),
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id, title: conversations.title })
+        .from(conversations)
+        .where(
+          and(
+            inArray(conversations.id, [...childConversationIds]),
+            eq(conversations.userId, userId),
+            eq(conversations.parentConversationId, parentConversationId),
+            isNotNull(conversations.title),
+            isNull(conversations.deletedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 /** The title written on this child of the account's conversation where it has none yet; answers whether it was written. */

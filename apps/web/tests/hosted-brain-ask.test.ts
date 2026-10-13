@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   ASK_DISPATCH_REFUSAL,
   type AskRecord,
@@ -254,6 +254,7 @@ async function conversation(
 ): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(conversations)
         .values({
@@ -283,6 +284,7 @@ async function turnRow(
 ): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .insert(turns)
         .values({
@@ -306,10 +308,12 @@ async function turnRow(
 function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
   return database.run(
     Effect.asVoid(
-      db
-        .update(conversations)
-        .set({ runtimeSessionId: sessionId })
-        .where(eq(conversations.id, conversationId)),
+      Database.use((db) =>
+        db
+          .update(conversations)
+          .set({ runtimeSessionId: sessionId })
+          .where(eq(conversations.id, conversationId)),
+      ),
     ),
   );
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { listPages, readPageVersion, writePage } from "@sidecar/database/models/plan-pages";
 import { createPlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
@@ -20,6 +20,7 @@ const CHART = { title: "Invite funnel", html: "<!doctype html><p>v1</p>" } as co
 const MOCKUP = { title: "Invite dialog", html: "<!doctype html><button>Invite</button>" } as const;
 
 const openAccount = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;

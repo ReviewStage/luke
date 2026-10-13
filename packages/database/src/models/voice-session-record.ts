@@ -1,9 +1,8 @@
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   VOICE_CLOSE_REASON,
@@ -58,8 +57,8 @@ import { readPlan } from "./plan-store.js";
  */
 type VoiceSessionRecordEffect<A> = Effect.Effect<
   A,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  DatabaseServices
 >;
 
 /** The session as its creation names it: the account, the live session, the plan the call is about, the connection that holds it, and the model it was created on. */
@@ -204,18 +203,20 @@ const RegisterRequestSchema = Schema.Struct({
 const registerSession = SqlSchema.void({
   Request: RegisterRequestSchema,
   execute: (row) =>
-    db
-      .insert(voiceSessions)
-      .values({
-        userId: row.userId,
-        liveSessionId: row.liveSessionId,
-        delegationMode: row.delegationMode,
-        planId: row.planId,
-        attachId: row.attachId,
-        model: row.model,
-        startedAt: row.startedAt,
-      })
-      .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
+    Database.use((db) =>
+      db
+        .insert(voiceSessions)
+        .values({
+          userId: row.userId,
+          liveSessionId: row.liveSessionId,
+          delegationMode: row.delegationMode,
+          planId: row.planId,
+          attachId: row.attachId,
+          model: row.model,
+          startedAt: row.startedAt,
+        })
+        .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
+    ),
 });
 
 const OwnedKeySchema = Schema.Struct({ userId: Schema.String, liveSessionId: Schema.String });
@@ -225,15 +226,17 @@ const findOwnedSession = SqlSchema.findOneOption({
   Request: OwnedKeySchema,
   Result: OwnedRowSchema,
   execute: (key) =>
-    db
-      .select({ id: voiceSessions.id, planId: voiceSessions.planId })
-      .from(voiceSessions)
-      .where(
-        and(
-          eq(voiceSessions.userId, key.userId),
-          eq(voiceSessions.liveSessionId, key.liveSessionId),
+    Database.use((db) =>
+      db
+        .select({ id: voiceSessions.id, planId: voiceSessions.planId })
+        .from(voiceSessions)
+        .where(
+          and(
+            eq(voiceSessions.userId, key.userId),
+            eq(voiceSessions.liveSessionId, key.liveSessionId),
+          ),
         ),
-      ),
+    ),
 });
 
 const EarlierCallsRequestSchema = Schema.Struct({
@@ -253,23 +256,25 @@ const findEarlierSegments = SqlSchema.findAll({
   Request: EarlierCallsRequestSchema,
   Result: EarlierSegmentSchema,
   execute: (request) =>
-    db
-      .select({
-        voiceSessionId: voiceTranscriptSegments.voiceSessionId,
-        role: voiceTranscriptSegments.role,
-        text: voiceTranscriptSegments.text,
-      })
-      .from(voiceTranscriptSegments)
-      .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-      .where(
-        and(eq(voiceSessions.userId, request.userId), eq(voiceSessions.planId, request.planId)),
-      )
-      .orderBy(
-        desc(voiceSessions.startedAt),
-        desc(voiceSessions.id),
-        desc(voiceTranscriptSegments.seq),
-      )
-      .limit(request.limit),
+    Database.use((db) =>
+      db
+        .select({
+          voiceSessionId: voiceTranscriptSegments.voiceSessionId,
+          role: voiceTranscriptSegments.role,
+          text: voiceTranscriptSegments.text,
+        })
+        .from(voiceTranscriptSegments)
+        .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
+        .where(
+          and(eq(voiceSessions.userId, request.userId), eq(voiceSessions.planId, request.planId)),
+        )
+        .orderBy(
+          desc(voiceSessions.startedAt),
+          desc(voiceSessions.id),
+          desc(voiceTranscriptSegments.seq),
+        )
+        .limit(request.limit),
+    ),
 });
 
 /** Segments read newest first, as lines oldest first: one speaker's adjacent words on one call joined untrimmed, as a spoken row's are. */
@@ -295,12 +300,14 @@ const NoteUsageRequestSchema = Schema.Struct({
 const noteSessionUsage = SqlSchema.void({
   Request: NoteUsageRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ usage: row.usage })
-      .where(
-        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
-      ),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ usage: row.usage })
+        .where(
+          and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+        ),
+    ),
 });
 
 const CloseRequestSchema = Schema.Struct({
@@ -313,12 +320,14 @@ const CloseRequestSchema = Schema.Struct({
 const closeSession = SqlSchema.void({
   Request: CloseRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage })
-      .where(
-        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
-      ),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage })
+        .where(
+          and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+        ),
+    ),
 });
 
 const AttachmentRequestSchema = Schema.Struct({
@@ -335,27 +344,31 @@ const DetachRequestSchema = Schema.Struct({
 const stampDetached = SqlSchema.void({
   Request: DetachRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ detachedAt: row.detachedAt })
-      .where(
-        and(
-          eq(voiceSessions.liveSessionId, row.liveSessionId),
-          eq(voiceSessions.attachId, row.attachId),
-          isNull(voiceSessions.closedAt),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: row.detachedAt })
+        .where(
+          and(
+            eq(voiceSessions.liveSessionId, row.liveSessionId),
+            eq(voiceSessions.attachId, row.attachId),
+            isNull(voiceSessions.closedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 const stampAttached = SqlSchema.void({
   Request: AttachmentRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ detachedAt: null, attachId: row.attachId })
-      .where(
-        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
-      ),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: null, attachId: row.attachId })
+        .where(
+          and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+        ),
+    ),
 });
 
 const RestampRequestSchema = Schema.Struct({
@@ -367,16 +380,18 @@ const RestampRequestSchema = Schema.Struct({
 const restampDetached = SqlSchema.void({
   Request: RestampRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ detachedAt: row.detachedAt })
-      .where(
-        and(
-          eq(voiceSessions.liveSessionId, row.liveSessionId),
-          isNull(voiceSessions.closedAt),
-          isNotNull(voiceSessions.detachedAt),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ detachedAt: row.detachedAt })
+        .where(
+          and(
+            eq(voiceSessions.liveSessionId, row.liveSessionId),
+            isNull(voiceSessions.closedAt),
+            isNotNull(voiceSessions.detachedAt),
+          ),
         ),
-      ),
+    ),
 });
 
 const DetachedRequestSchema = Schema.Struct({ before: Schema.Date, limit: Schema.Number });
@@ -390,22 +405,24 @@ const findDetached = SqlSchema.findAll({
   Request: DetachedRequestSchema,
   Result: DetachedRowSchema,
   execute: (request) =>
-    db
-      .select({
-        userId: voiceSessions.userId,
-        sessionId: voiceSessions.liveSessionId,
-        startedAt: voiceSessions.startedAt,
-      })
-      .from(voiceSessions)
-      .where(
-        and(
-          isNull(voiceSessions.closedAt),
-          isNotNull(voiceSessions.detachedAt),
-          lt(voiceSessions.detachedAt, request.before),
-        ),
-      )
-      .orderBy(asc(voiceSessions.detachedAt))
-      .limit(request.limit),
+    Database.use((db) =>
+      db
+        .select({
+          userId: voiceSessions.userId,
+          sessionId: voiceSessions.liveSessionId,
+          startedAt: voiceSessions.startedAt,
+        })
+        .from(voiceSessions)
+        .where(
+          and(
+            isNull(voiceSessions.closedAt),
+            isNotNull(voiceSessions.detachedAt),
+            lt(voiceSessions.detachedAt, request.before),
+          ),
+        )
+        .orderBy(asc(voiceSessions.detachedAt))
+        .limit(request.limit),
+    ),
 });
 
 const CloseLostRequestSchema = Schema.Struct({
@@ -417,12 +434,14 @@ const CloseLostRequestSchema = Schema.Struct({
 const closeLostSession = SqlSchema.void({
   Request: CloseLostRequestSchema,
   execute: (row) =>
-    db
-      .update(voiceSessions)
-      .set({ closedAt: row.closedAt, closeReason: row.closeReason })
-      .where(
-        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
-      ),
+    Database.use((db) =>
+      db
+        .update(voiceSessions)
+        .set({ closedAt: row.closedAt, closeReason: row.closeReason })
+        .where(
+          and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+        ),
+    ),
 });
 
 export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRecord {

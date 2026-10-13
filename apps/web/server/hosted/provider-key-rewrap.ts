@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import {
   type KeyRing,
@@ -9,7 +10,6 @@ import {
   rewrapProviderKeyRow,
 } from "@sidecar/database/models/provider-key-store";
 import { Effect, type Redacted, Result } from "effect";
-import type { SqlClient } from "effect/sql";
 import {
   bearerMatchesSecret,
   errorResponse,
@@ -80,7 +80,7 @@ export function rewrapProviderKeys(ring: KeyRing): PlanStoreEffect<ProviderKeyRe
 export const handleProviderKeyRewrap = /* @__PURE__ */ Effect.fn("web/handleProviderKeyRewrap")(
   function* (
     options: ProviderKeyRewrapOptions,
-  ): Effect.fn.Return<Response, unknown, SqlClient.SqlClient> {
+  ): Effect.fn.Return<Response, unknown, DatabaseServices> {
     const { request } = options;
     if (request.method !== "POST") {
       return errorResponse(

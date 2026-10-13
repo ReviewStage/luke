@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
@@ -12,7 +12,7 @@ import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
-import { count, eq } from "drizzle-orm";
+import { count, eq, getColumnTable } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
@@ -33,6 +33,7 @@ import { TestClock } from "effect/testing";
 const SONNET_AT_MAX = { model: "anthropic/claude-sonnet-5.5", effort: "max" } as const;
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
@@ -41,7 +42,9 @@ const openUser = Effect.gen(function* () {
 /** The account's own rows in the table one owning column belongs to. */
 const rowsOwnedBy = (column: PgColumn, userId: string) =>
   Effect.map(
-    db.select({ rows: count() }).from(column.table).where(eq(column, userId)),
+    Database.use((db) =>
+      db.select({ rows: count() }).from(getColumnTable(column)).where(eq(column, userId)),
+    ),
     (rows) => rows[0]?.rows ?? 0,
   );
 
@@ -96,6 +99,7 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
 
   it.effect("the delete takes the account's dependent rows and leaves another's standing", () =>
     Effect.gen(function* () {
+      const db = yield* Database;
       const erased = yield* openUser;
       const kept = yield* openUser;
       for (const userId of [erased, kept]) {

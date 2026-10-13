@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
@@ -12,7 +12,6 @@ import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
   MESSAGE_AUTHOR,
@@ -80,19 +79,21 @@ const SETTLE_INTERVAL_MS = 500;
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
 const ACCEPTED_SESSION = Schema.Struct({ sessionId: Schema.String });
 
-type Run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
+type Run = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Promise<A>;
 
 async function ensureLocalDevUser(run: Run): Promise<void> {
   await run(
     Effect.asVoid(
-      db
-        .insert(user)
-        .values({
-          id: LOCAL_DEV_PRINCIPAL,
-          name: "Local developer",
-          email: "local-dev@luke.test",
-        })
-        .onConflictDoNothing({ target: user.id }),
+      Database.use((db) =>
+        db
+          .insert(user)
+          .values({
+            id: LOCAL_DEV_PRINCIPAL,
+            name: "Local developer",
+            email: "local-dev@luke.test",
+          })
+          .onConflictDoNothing({ target: user.id }),
+      ),
     ),
   );
 }
@@ -103,6 +104,7 @@ function readConversationRuntimeSessionId(
 ): Promise<string | null> {
   return run(
     Effect.gen(function* () {
+      const db = yield* Database;
       const rows = yield* db
         .select({ runtimeSessionId: conversations.runtimeSessionId })
         .from(conversations)

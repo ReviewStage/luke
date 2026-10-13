@@ -20,6 +20,7 @@
  * the queue waits for a deployment that has one.
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import {
   nextSessionSandboxes,
   sessionSandboxDeferred,
@@ -29,8 +30,6 @@ import { readEither } from "@sidecar/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Context, Data, Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id. */
@@ -204,8 +203,8 @@ const endSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   now: Date,
 ): Effect.fn.Return<
   SessionEnding,
-  SqlError | Schema.SchemaError,
-  SessionSandboxes | SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  SessionSandboxes | DatabaseServices
 > {
   const sandboxes = yield* SessionSandboxes;
   const deleted = yield* Effect.result(sandboxes.deleteFor(sessionId));
@@ -224,8 +223,8 @@ export const sweepSessionSandboxes = /* @__PURE__ */ Effect.fn("web/sweepSession
     now: Date,
   ): Effect.fn.Return<
     SessionSandboxSweepOutcome,
-    SqlError | Schema.SchemaError,
-    SessionSandboxes | SqlClient.SqlClient
+    QueryError | Schema.SchemaError,
+    SessionSandboxes | DatabaseServices
   > {
     const queued = yield* nextSessionSandboxes(SESSION_SANDBOX_SWEEP.MAX_SESSIONS);
     const endings = yield* Effect.forEach(queued, (sessionId) => endSession(sessionId, now), {

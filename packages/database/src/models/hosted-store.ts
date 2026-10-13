@@ -1,7 +1,6 @@
 import type { ToolSet } from "ai";
 import type { Effect, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
+import type { DatabaseServices, QueryError } from "../core/query.js";
 import {
   type MessageListRead,
   readMessageByClientId,
@@ -13,14 +12,14 @@ import {
 import { purgeClearedConversations, purgeDeletedPlanCalls } from "./soft-delete.js";
 
 /** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
-type HostedStoreFailure = SqlError | Schema.SchemaError;
+type HostedStoreFailure = QueryError | Schema.SchemaError;
 
 /**
  * What every `HostedStore` method answers: an effect over the ambient client,
  * so a caller composes it into the transaction it already holds and the edge
  * that owns the connection is the one that runs it.
  */
-type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, SqlClient.SqlClient>;
+type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, DatabaseServices>;
 
 /**
  * The hosted store, over Postgres and keyed by user: the conversation rows

@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { childTitlesOf, fillChildTitle } from "@sidecar/database/models/child-titles";
 import {
   type CodingAgent,
@@ -13,8 +14,6 @@ import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import { failureKind } from "@sidecar/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -98,7 +97,7 @@ function excerptOf(message: StoredUIMessage | undefined): string {
  */
 function agentExchange(
   target: ConversationTarget,
-): Effect.Effect<string, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<string, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     const { userId, conversationId } = target;
     const opening = yield* listMessagesPast(
@@ -170,7 +169,7 @@ export function titleSubagent(
   parent: ConversationTarget,
   childConversationId: string,
   task: string,
-): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* childTitlesOf(parent, [childConversationId]);
     if (standing.has(childConversationId)) return;
@@ -192,7 +191,7 @@ export function titleCodingAgent(
   model: LanguageModel,
   target: ConversationTarget,
   agent: CodingAgent,
-): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
     if (agent.title !== null) return;
     const ran = yield* turnsBefore(

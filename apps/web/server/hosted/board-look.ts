@@ -1,8 +1,8 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { readBoardImage } from "@sidecar/database/models/board-store";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
 import type { ToolModelOutput } from "eve/tools";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
@@ -85,7 +85,7 @@ function takesNothing(input: UnparsedWireValue): boolean {
 export function runLookAtBoard(
   binding: PlanDocumentBinding,
   input: UnparsedWireValue,
-): Effect.Effect<LookAtBoardResult, never, SqlClient.SqlClient> {
+): Effect.Effect<LookAtBoardResult, never, DatabaseServices> {
   if (!takesNothing(input)) {
     return Effect.succeed({
       status: LOOK_AT_BOARD_STATUS.NOT_LOOKED,

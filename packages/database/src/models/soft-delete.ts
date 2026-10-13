@@ -1,8 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
 import { Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
-import { db } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
@@ -29,7 +28,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 /** How long a cleared conversation's rows stand before the purge takes them. */
 export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(30));
 
-type ClearFailure = SqlError | Schema.SchemaError;
+type ClearFailure = QueryError | Schema.SchemaError;
 
 /** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
 const DELETED_PLAN_CALLS_PER_SWEEP = 200;
@@ -40,10 +39,12 @@ const purgeRows = SqlSchema.findAll({
   Request: Schema.Date,
   Result: Schema.Struct({ id: Schema.String, runtimeSessionId: Schema.NullOr(Schema.String) }),
   execute: (edge) =>
-    db
-      .delete(conversations)
-      .where(lte(conversations.deletedAt, edge))
-      .returning({ id: conversations.id, runtimeSessionId: conversations.runtimeSessionId }),
+    Database.use((db) =>
+      db
+        .delete(conversations)
+        .where(lte(conversations.deletedAt, edge))
+        .returning({ id: conversations.id, runtimeSessionId: conversations.runtimeSessionId }),
+    ),
 });
 
 /**
@@ -55,7 +56,7 @@ const purgeRows = SqlSchema.findAll({
  */
 export function purgeClearedConversations(
   now: Date,
-): Effect.Effect<number, ClearFailure, SqlClient.SqlClient> {
+): Effect.Effect<number, ClearFailure, DatabaseServices> {
   const edge = new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS);
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -77,27 +78,29 @@ const purgeCallRows = SqlSchema.findAll({
   Request: Schema.Date,
   Result: IdRowSchema,
   execute: (liveEdge) =>
-    db
-      .delete(voiceSessions)
-      .where(
-        inArray(
-          voiceSessions.id,
-          db
-            .select({ id: voiceSessions.id })
-            .from(voiceSessions)
-            .where(
-              and(
-                isNotNull(voiceSessions.planId),
-                notExists(
-                  db.select({ id: plan.id }).from(plan).where(eq(plan.id, voiceSessions.planId)),
+    Database.use((db) =>
+      db
+        .delete(voiceSessions)
+        .where(
+          inArray(
+            voiceSessions.id,
+            db
+              .select({ id: voiceSessions.id })
+              .from(voiceSessions)
+              .where(
+                and(
+                  isNotNull(voiceSessions.planId),
+                  notExists(
+                    db.select({ id: plan.id }).from(plan).where(eq(plan.id, voiceSessions.planId)),
+                  ),
+                  or(isNotNull(voiceSessions.closedAt), lte(voiceSessions.startedAt, liveEdge)),
                 ),
-                or(isNotNull(voiceSessions.closedAt), lte(voiceSessions.startedAt, liveEdge)),
-              ),
-            )
-            .limit(DELETED_PLAN_CALLS_PER_SWEEP),
-        ),
-      )
-      .returning({ id: voiceSessions.id }),
+              )
+              .limit(DELETED_PLAN_CALLS_PER_SWEEP),
+          ),
+        )
+        .returning({ id: voiceSessions.id }),
+    ),
 });
 
 /**
@@ -107,6 +110,6 @@ const purgeCallRows = SqlSchema.findAll({
  */
 export function purgeDeletedPlanCalls(
   liveEdge: Date,
-): Effect.Effect<number, ClearFailure, SqlClient.SqlClient> {
+): Effect.Effect<number, ClearFailure, DatabaseServices> {
   return Effect.map(purgeCallRows(liveEdge), (rows) => rows.length);
 }

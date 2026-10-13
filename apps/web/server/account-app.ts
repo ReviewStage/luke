@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type {
   AccountPreferencesRow,
   AccountPreferencesWrite,
@@ -27,7 +28,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -213,7 +213,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   HostedRefusal,
   | HostedEnvironment
   | HttpClient.HttpClient
-  | SqlClient.SqlClient
+  | DatabaseServices
   | IntegrationConnect
   | HttpServerRequest.HttpServerRequest
 > {
@@ -235,7 +235,7 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEn
 ): Effect.fn.Return<
   ReturnType<typeof hostedJsonResponse>,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  HttpServerRequest.HttpServerRequest | DatabaseServices
 > {
   const userId = yield* resolvedUserId(seams);
   const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
@@ -251,7 +251,7 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountAppSeams,
   userId: string,
   value: UnparsedWireValue,
-): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | SqlClient.SqlClient> {
+): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | DatabaseServices> {
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const own = yield* hostedStoreOrUnavailable(seams.ownKeyProviders(userId));
@@ -277,7 +277,7 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
   ): Effect.fn.Return<
     ReturnType<typeof hostedJsonResponse>,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | ModelCatalog
+    HttpServerRequest.HttpServerRequest | DatabaseServices | ModelCatalog
   > {
     const userId = yield* resolvedUserId(seams);
     const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -311,7 +311,7 @@ const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("web/accountPrefere
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest | ModelCatalog
+    DatabaseServices | HttpServerRequest.HttpServerRequest | ModelCatalog
   > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* preferencesReadEndpoint(seams);
@@ -332,7 +332,7 @@ const planTemplateReadEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateRead
   ): Effect.fn.Return<
     ReturnType<typeof hostedJsonResponse>,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+    HttpServerRequest.HttpServerRequest | DatabaseServices
   > {
     const userId = yield* resolvedUserId(seams);
     const stored = yield* hostedStoreOrUnavailable(seams.readPlanTemplate(userId));
@@ -352,7 +352,7 @@ const planTemplateWriteEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateWri
   ): Effect.fn.Return<
     ReturnType<typeof hostedJsonResponse>,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+    HttpServerRequest.HttpServerRequest | DatabaseServices
   > {
     const userId = yield* resolvedUserId(seams);
     const body = yield* readJsonBodyEffect(MAXIMUM_PLAN_TEMPLATE_BODY_BYTES);
@@ -372,7 +372,7 @@ const accountPlanTemplateEndpoint = /* @__PURE__ */ Effect.fn("web/accountPlanTe
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+    DatabaseServices | HttpServerRequest.HttpServerRequest
   > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* planTemplateReadEndpoint(seams);
@@ -420,7 +420,7 @@ const planTemplateRevisionsEndpoint = /* @__PURE__ */ Effect.fn(
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  HttpServerRequest.HttpServerRequest | DatabaseServices
 > {
   yield* hostedMethod(HTTP_METHOD.GET);
   const userId = yield* resolvedUserId(seams);
@@ -436,7 +436,7 @@ const planTemplateRevisionEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplate
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+    HttpServerRequest.HttpServerRequest | DatabaseServices
   > {
     yield* hostedMethod(HTTP_METHOD.GET);
     const seq = yield* namedRevisionOf();
@@ -458,7 +458,7 @@ const planTemplateRestoreEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateR
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+    HttpServerRequest.HttpServerRequest | DatabaseServices
   > {
     yield* hostedMethod(HTTP_METHOD.POST);
     const seq = yield* namedRevisionOf();
@@ -489,11 +489,7 @@ function refusing<R>(
 export function accountApp(
   seams: AccountAppSeams,
 ): WebRoutes<
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | SqlClient.SqlClient
-  | ModelCatalog
-  | IntegrationConnect
+  HostedEnvironment | HttpClient.HttpClient | DatabaseServices | ModelCatalog | IntegrationConnect
 > {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),

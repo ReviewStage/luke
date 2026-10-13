@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import {
   codeLinesReadable,
   INBOX_ANSWER_LEAD,
@@ -18,7 +19,6 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result } from "effect";
-import type { SqlClient } from "effect/sql";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
 import {
   agentInboxItems,
@@ -186,7 +186,7 @@ function inboxOf(items: readonly InboxItem[]): readonly AgentInboxLine[] {
 }
 
 /** The agent's inbox as the call answers it. */
-function accepted(agent: InboxAgent): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
+function accepted(agent: InboxAgent): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   return Effect.map(agentInboxItems(agent), (items) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     inbox: inboxOf(items),
@@ -301,7 +301,7 @@ export function postToInbox(
   agent: PostingAgent,
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
-): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
+): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   const read = readPost(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
   const { repository, ...owner } = agent;
@@ -325,7 +325,7 @@ export function postToInbox(
 export function closeInInbox(
   agent: InboxAgent,
   input: UnparsedWireValue,
-): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
+): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   const read = readClose(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_CLOSE));
   return Effect.flatMap(closeInboxItem(agent, read.success.key, read.success.reason), (closed) =>
@@ -339,6 +339,6 @@ export function closeInInbox(
 /** Runs one read: the agent's inbox as it stands. */
 export function readOwnInbox(
   agent: InboxAgent,
-): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
+): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   return accepted(agent);
 }

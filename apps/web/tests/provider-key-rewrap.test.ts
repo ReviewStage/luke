@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import {
   type KeyRing,
   openProviderKey,
@@ -70,6 +70,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
     "moves every older key onto the current version, leaves the current and the unreadable as they were, and moves nothing twice",
     () =>
       Effect.gen(function* () {
+        const db = yield* Database;
         // A pass walks every account's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
         const [first, second] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
@@ -118,6 +119,7 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
     "the endpoint rewraps only for a POST under the deployment's secret, and answers the counts and the version they moved onto",
     () =>
       Effect.gen(function* () {
+        const db = yield* Database;
         yield* db.delete(accountProviderKey);
         const owner = `user-${randomUUID()}`;
         yield* db

@@ -1,3 +1,4 @@
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import type { AskDeliveryBinding } from "@sidecar/database/models/asks";
 import {
   answerMessageId,
@@ -7,8 +8,6 @@ import {
 } from "@sidecar/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,
@@ -200,7 +199,7 @@ export interface RelayStanding {
  * on. The relay runs nothing: `brainHost`'s `relay` composes this into the
  * effect it already answers, and a test runs it on its own database.
  */
-type RelayEffect<Value> = Effect.Effect<Value, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, DatabaseServices>;
 
 /** The ask record a planning turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
 interface RelayAskSeams {

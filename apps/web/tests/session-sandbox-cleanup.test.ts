@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { db } from "@sidecar/database/core/query";
+import { Database } from "@sidecar/database/core/query";
 import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -20,6 +20,7 @@ import { Effect } from "effect";
  */
 
 const openUser = Effect.gen(function* () {
+  const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
@@ -35,6 +36,7 @@ const openConversation = (
   },
 ) =>
   Effect.gen(function* () {
+    const db = yield* Database;
     const [row] = yield* db
       .insert(conversations)
       .values({

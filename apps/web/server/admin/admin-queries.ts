@@ -1,4 +1,4 @@
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { InstantColumnSchema, NumberFromBigIntColumn } from "@sidecar/database/models/columns";
 import { utcDayKey } from "@sidecar/database/models/quota";
 import { account, session, user } from "@sidecar/database/schemas/auth";
@@ -23,8 +23,7 @@ import {
   sum,
 } from "drizzle-orm";
 import { Duration, Effect, Option, Result, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
+import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
@@ -50,7 +49,7 @@ import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } 
 /** How many of the most active hosted-tier accounts the overview names. */
 const ADMIN_TOP_USERS_LIMIT = 10;
 
-type AdminQueryFailure = SqlError | Schema.SchemaError;
+type AdminQueryFailure = QueryError | Schema.SchemaError;
 
 /**
  * An aggregate as a row carries it. `count` and `sum` answer a bigint, which
@@ -100,7 +99,7 @@ const countOf = Option.match({ onNone: () => 0, onSome: (row: { value: number })
  * answer rather than the read's, because the health card is what reports it.
  */
 const probeDatabase = Effect.map(
-  Effect.timed(Effect.result(db.execute(sql`select 1`))),
+  Effect.timed(Effect.result(Database.use((db) => db.execute(sql`select 1`)))),
   ([elapsed, probed]) => ({
     reachable: Result.isSuccess(probed),
     latencyMs: Math.round(Duration.toMillis(elapsed)),
@@ -110,7 +109,8 @@ const probeDatabase = Effect.map(
 const findUserTotal = SqlSchema.findOneOption({
   Request: AdminMetricsScopeSchema,
   Result: Schema.Struct({ value: AggregateColumnSchema }),
-  execute: (scope) => db.select({ value: count() }).from(user).where(keptByScope(scope)),
+  execute: (scope) =>
+    Database.use((db) => db.select({ value: count() }).from(user).where(keptByScope(scope))),
 });
 
 const SignInLinkRowSchema = Schema.Struct({
@@ -127,11 +127,13 @@ const findSignInLinks = SqlSchema.findAll({
   Request: AdminMetricsScopeSchema,
   Result: SignInLinkRowSchema,
   execute: (scope) =>
-    db
-      .selectDistinct({ userId: account.userId, providerId: account.providerId })
-      .from(account)
-      .innerJoin(user, eq(user.id, account.userId))
-      .where(keptByScope(scope)),
+    Database.use((db) =>
+      db
+        .selectDistinct({ userId: account.userId, providerId: account.providerId })
+        .from(account)
+        .innerJoin(user, eq(user.id, account.userId))
+        .where(keptByScope(scope)),
+    ),
 });
 
 const DayCountRowSchema = Schema.Struct({ day: Schema.String, value: AggregateColumnSchema });
@@ -143,17 +145,19 @@ const findSignupsByDay = SqlSchema.findAll({
   Request: Schema.Struct({ fetchStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: DayCountRowSchema,
   execute: (request) =>
-    db
-      .select({ day: SIGNUP_DAY, value: count() })
-      .from(user)
-      .where(and(gte(user.createdAt, request.fetchStart), keptByScope(request.scope)))
-      .groupBy(SIGNUP_DAY),
+    Database.use((db) =>
+      db
+        .select({ day: SIGNUP_DAY, value: count() })
+        .from(user)
+        .where(and(gte(user.createdAt, request.fetchStart), keptByScope(request.scope)))
+        .groupBy(SIGNUP_DAY),
+    ),
 });
 
 const readUserMetrics = /* @__PURE__ */ Effect.fn("web/readUserMetrics")(function* (
   fetchStart: Date,
   scope: AdminMetricsScope,
-): Effect.fn.Return<AdminMetricsSource["users"], AdminQueryFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AdminMetricsSource["users"], AdminQueryFailure, DatabaseServices> {
   const [total, links, signups] = yield* Effect.all(
     [findUserTotal(scope), findSignInLinks(scope), findSignupsByDay({ fetchStart, scope })],
     { concurrency: "unbounded" },
@@ -183,23 +187,27 @@ const findUsageByDay = SqlSchema.findAll({
   Request: Schema.Struct({ fetchStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: DaySumRowSchema,
   execute: (request) =>
-    db
-      .select({ day: hostedUsage.day, calls: sum(hostedUsage.calls) })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(gte(hostedUsage.day, request.fetchStartDay), keptByScope(request.scope)))
-      .groupBy(hostedUsage.day),
+    Database.use((db) =>
+      db
+        .select({ day: hostedUsage.day, calls: sum(hostedUsage.calls) })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(gte(hostedUsage.day, request.fetchStartDay), keptByScope(request.scope)))
+        .groupBy(hostedUsage.day),
+    ),
 });
 
 const findActiveUsersOnDay = SqlSchema.findOneOption({
   Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    db
-      .select({ value: count() })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
+    Database.use((db) =>
+      db
+        .select({ value: count() })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
+    ),
 });
 
 /**
@@ -210,11 +218,13 @@ const findActiveUsersInWindow = SqlSchema.findOneOption({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    db
-      .select({ value: countDistinct(hostedUsage.userId) })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope))),
+    Database.use((db) =>
+      db
+        .select({ value: countDistinct(hostedUsage.userId) })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope))),
+    ),
 });
 
 const TopUserRowSchema = Schema.Struct({
@@ -239,23 +249,25 @@ const findTopUsers = SqlSchema.findAll({
   execute: (request) => {
     const activeDays = count();
     const calls = sum(hostedUsage.calls);
-    return db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        activeDays,
-        lastActiveDay: max(hostedUsage.day),
-        calls,
-      })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope)))
-      .groupBy(user.id, user.name, user.email, user.image, user.role)
-      .orderBy(desc(activeDays), desc(calls))
-      .limit(ADMIN_TOP_USERS_LIMIT);
+    return Database.use((db) =>
+      db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          activeDays,
+          lastActiveDay: max(hostedUsage.day),
+          calls,
+        })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope)))
+        .groupBy(user.id, user.name, user.email, user.image, user.role)
+        .orderBy(desc(activeDays), desc(calls))
+        .limit(ADMIN_TOP_USERS_LIMIT),
+    );
   },
 });
 
@@ -264,7 +276,7 @@ const readUsageMetrics = /* @__PURE__ */ Effect.fn("web/readUsageMetrics")(funct
   windowStartDay: string,
   fetchStartDay: string,
   scope: AdminMetricsScope,
-): Effect.fn.Return<AdminMetricsSource["usage"], AdminQueryFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AdminMetricsSource["usage"], AdminQueryFailure, DatabaseServices> {
   const [usageRows, activeToday, activeWindow, topUserRows] = yield* Effect.all(
     [
       findUsageByDay({ fetchStartDay, scope }),
@@ -320,11 +332,13 @@ const findCohortSizes = SqlSchema.findAll({
   Request: Schema.Struct({ oldestWeekStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: CohortSizeRowSchema,
   execute: (request) =>
-    db
-      .select({ week: SIGNUP_WEEK, value: count() })
-      .from(user)
-      .where(and(gte(user.createdAt, request.oldestWeekStart), keptByScope(request.scope)))
-      .groupBy(SIGNUP_WEEK),
+    Database.use((db) =>
+      db
+        .select({ week: SIGNUP_WEEK, value: count() })
+        .from(user)
+        .where(and(gte(user.createdAt, request.oldestWeekStart), keptByScope(request.scope)))
+        .groupBy(SIGNUP_WEEK),
+    ),
 });
 
 const CohortActivityRowSchema = Schema.Struct({
@@ -345,28 +359,30 @@ const findCohortActivity = SqlSchema.findAll({
   }),
   Result: CohortActivityRowSchema,
   execute: (request) =>
-    db
-      .select({
-        signupWeek: SIGNUP_WEEK,
-        activityWeek: ACTIVITY_WEEK,
-        value: countDistinct(hostedUsage.userId),
-      })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(
-        and(
-          gte(user.createdAt, request.oldestWeekStart),
-          gte(hostedUsage.day, request.oldestWeekStartDay),
-          keptByScope(request.scope),
-        ),
-      )
-      .groupBy(SIGNUP_WEEK, ACTIVITY_WEEK),
+    Database.use((db) =>
+      db
+        .select({
+          signupWeek: SIGNUP_WEEK,
+          activityWeek: ACTIVITY_WEEK,
+          value: countDistinct(hostedUsage.userId),
+        })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(
+          and(
+            gte(user.createdAt, request.oldestWeekStart),
+            gte(hostedUsage.day, request.oldestWeekStartDay),
+            keptByScope(request.scope),
+          ),
+        )
+        .groupBy(SIGNUP_WEEK, ACTIVITY_WEEK),
+    ),
 });
 
 const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics")(function* (
   now: number,
   scope: AdminMetricsScope,
-): Effect.fn.Return<AdminMetricsSource["retention"], AdminQueryFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<AdminMetricsSource["retention"], AdminQueryFailure, DatabaseServices> {
   const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
   const oldestWeekStartDay = weekKeys[0] ?? utcWeekStartKey(now);
   const oldestWeekStart = new Date(`${oldestWeekStartDay}T00:00:00.000Z`);
@@ -423,7 +439,7 @@ export function readAdminMetricsSource(input: {
   analyticsConsoleUrl?: string | undefined;
   scope: AdminMetricsScope;
   windowDays: AdminMetricsWindow;
-}): Effect.Effect<AdminMetricsSource, AdminQueryFailure, SqlClient.SqlClient> {
+}): Effect.Effect<AdminMetricsSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const health = yield* probeDatabase;
     if (!health.reachable) {
@@ -468,35 +484,41 @@ const findAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AccountRowSchema,
   execute: (userId) =>
-    db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        createdAt: user.createdAt,
-      })
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1),
+    Database.use((db) =>
+      db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          createdAt: user.createdAt,
+        })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
+    ),
 });
 
 const findSignInMethods = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({ providerId: Schema.String }),
   execute: (userId) =>
-    db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, userId)),
+    Database.use((db) =>
+      db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, userId)),
+    ),
 });
 
 const findUsageSince = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, sinceDay: Schema.String }),
   Result: Schema.Struct({ day: Schema.String, calls: AggregateColumnSchema }),
   execute: (request) =>
-    db
-      .select({ day: hostedUsage.day, calls: hostedUsage.calls })
-      .from(hostedUsage)
-      .where(and(eq(hostedUsage.userId, request.userId), gte(hostedUsage.day, request.sinceDay))),
+    Database.use((db) =>
+      db
+        .select({ day: hostedUsage.day, calls: hostedUsage.calls })
+        .from(hostedUsage)
+        .where(and(eq(hostedUsage.userId, request.userId), gte(hostedUsage.day, request.sinceDay))),
+    ),
 });
 
 const findAllTimeUsage = SqlSchema.findOneOption({
@@ -508,15 +530,17 @@ const findAllTimeUsage = SqlSchema.findOneOption({
     calls: NullableAggregateColumnSchema,
   }),
   execute: (userId) =>
-    db
-      .select({
-        activeDays: count(),
-        firstActiveDay: min(hostedUsage.day),
-        lastActiveDay: max(hostedUsage.day),
-        calls: sum(hostedUsage.calls),
-      })
-      .from(hostedUsage)
-      .where(eq(hostedUsage.userId, userId)),
+    Database.use((db) =>
+      db
+        .select({
+          activeDays: count(),
+          firstActiveDay: min(hostedUsage.day),
+          lastActiveDay: max(hostedUsage.day),
+          calls: sum(hostedUsage.calls),
+        })
+        .from(hostedUsage)
+        .where(eq(hostedUsage.userId, userId)),
+    ),
 });
 
 const DayAccountRowSchema = Schema.Struct({
@@ -534,20 +558,22 @@ const findDayAccounts = SqlSchema.findAll({
   Request: DayScopeSchema,
   Result: DayAccountRowSchema,
   execute: (request) =>
-    db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        calls: hostedUsage.calls,
-      })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope)))
-      .orderBy(desc(hostedUsage.calls), asc(user.id))
-      .limit(ADMIN_DAY_ACCOUNTS_LIMIT),
+    Database.use((db) =>
+      db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          calls: hostedUsage.calls,
+        })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope)))
+        .orderBy(desc(hostedUsage.calls), asc(user.id))
+        .limit(ADMIN_DAY_ACCOUNTS_LIMIT),
+    ),
 });
 
 const findDayTotals = SqlSchema.findOneOption({
@@ -557,11 +583,13 @@ const findDayTotals = SqlSchema.findOneOption({
     calls: NullableAggregateColumnSchema,
   }),
   execute: (request) =>
-    db
-      .select({ accounts: count(), calls: sum(hostedUsage.calls) })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
+    Database.use((db) =>
+      db
+        .select({ accounts: count(), calls: sum(hostedUsage.calls) })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
+    ),
 });
 
 /**
@@ -596,7 +624,8 @@ function nullableSearch(search: string | undefined): string | null {
 const findRosterTotal = SqlSchema.findOneOption({
   Request: RosterFilterSchema,
   Result: CountRowSchema,
-  execute: (request) => db.select({ value: count() }).from(user).where(keptByRoster(request)),
+  execute: (request) =>
+    Database.use((db) => db.select({ value: count() }).from(user).where(keptByRoster(request))),
 });
 
 const findSessionsSeen = SqlSchema.findAll({
@@ -606,12 +635,14 @@ const findSessionsSeen = SqlSchema.findAll({
     seenAt: Schema.NullOr(InstantColumnSchema),
   }),
   execute: (request) =>
-    db
-      .select({ userId: session.userId, seenAt: max(session.updatedAt) })
-      .from(session)
-      .innerJoin(user, eq(user.id, session.userId))
-      .where(keptByRoster(request))
-      .groupBy(session.userId),
+    Database.use((db) =>
+      db
+        .select({ userId: session.userId, seenAt: max(session.updatedAt) })
+        .from(session)
+        .innerJoin(user, eq(user.id, session.userId))
+        .where(keptByRoster(request))
+        .groupBy(session.userId),
+    ),
 });
 
 const findUsageSeen = SqlSchema.findAll({
@@ -621,12 +652,14 @@ const findUsageSeen = SqlSchema.findAll({
     lastUsageDay: Schema.NullOr(Schema.String),
   }),
   execute: (request) =>
-    db
-      .select({ userId: hostedUsage.userId, lastUsageDay: max(hostedUsage.day) })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(keptByRoster(request))
-      .groupBy(hostedUsage.userId),
+    Database.use((db) =>
+      db
+        .select({ userId: hostedUsage.userId, lastUsageDay: max(hostedUsage.day) })
+        .from(hostedUsage)
+        .innerJoin(user, eq(user.id, hostedUsage.userId))
+        .where(keptByRoster(request))
+        .groupBy(hostedUsage.userId),
+    ),
 });
 
 const RosterRowSchema = Schema.Struct({
@@ -664,32 +697,34 @@ const findRosterRows = SqlSchema.findAll({
     // a descending null first by default and an account never active inside
     // the window belongs at the tail. The builder has no spelling for it.
     const mostRecentlyActiveFirst = sql`${lastActiveDay} desc nulls last`;
-    return db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-        createdAt: user.createdAt,
-        activeDays: count(hostedUsage.day),
-        lastActiveDay,
-        calls: sum(hostedUsage.calls),
-        favorite: VIEWER_STARRED,
-      })
-      .from(user)
-      .leftJoin(
-        hostedUsage,
-        and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, request.windowStartDay)),
-      )
-      .leftJoin(
-        adminFavorite,
-        and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, request.viewerId)),
-      )
-      .where(keptByRoster(request))
-      .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
-      .orderBy(mostRecentlyActiveFirst, desc(user.createdAt))
-      .limit(ADMIN_USERS_LIMIT);
+    return Database.use((db) =>
+      db
+        .select({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          role: user.role,
+          createdAt: user.createdAt,
+          activeDays: count(hostedUsage.day),
+          lastActiveDay,
+          calls: sum(hostedUsage.calls),
+          favorite: VIEWER_STARRED,
+        })
+        .from(user)
+        .leftJoin(
+          hostedUsage,
+          and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, request.windowStartDay)),
+        )
+        .leftJoin(
+          adminFavorite,
+          and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, request.viewerId)),
+        )
+        .where(keptByRoster(request))
+        .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
+        .orderBy(mostRecentlyActiveFirst, desc(user.createdAt))
+        .limit(ADMIN_USERS_LIMIT),
+    );
   },
 });
 
@@ -702,24 +737,31 @@ const FavoriteSchema = Schema.Struct({
 const findFavoriteTarget = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: (userId) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1),
+  execute: (userId) =>
+    Database.use((db) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1)),
 });
 
 const insertFavorite = SqlSchema.void({
   Request: FavoriteSchema,
   execute: (write) =>
-    db
-      .insert(adminFavorite)
-      .values({ adminId: write.adminId, userId: write.userId })
-      .onConflictDoNothing(),
+    Database.use((db) =>
+      db
+        .insert(adminFavorite)
+        .values({ adminId: write.adminId, userId: write.userId })
+        .onConflictDoNothing(),
+    ),
 });
 
 const deleteFavorite = SqlSchema.void({
   Request: FavoriteSchema,
   execute: (write) =>
-    db
-      .delete(adminFavorite)
-      .where(and(eq(adminFavorite.adminId, write.adminId), eq(adminFavorite.userId, write.userId))),
+    Database.use((db) =>
+      db
+        .delete(adminFavorite)
+        .where(
+          and(eq(adminFavorite.adminId, write.adminId), eq(adminFavorite.userId, write.userId)),
+        ),
+    ),
 });
 
 /**
@@ -733,7 +775,7 @@ export function readAdminUserSource(input: {
   userId: string;
   now: number;
   windowDays: AdminMetricsWindow;
-}): Effect.Effect<AdminUserSource | undefined, AdminQueryFailure, SqlClient.SqlClient> {
+}): Effect.Effect<AdminUserSource | undefined, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     // The daily rows read from the wider bound so the builder's trends hold both runs.
     const fetchStartDay =
@@ -811,7 +853,7 @@ export function readAdminUserSource(input: {
 export function readAdminDaySource(input: {
   day: string;
   scope: AdminMetricsScope;
-}): Effect.Effect<AdminDaySource, AdminQueryFailure, SqlClient.SqlClient> {
+}): Effect.Effect<AdminDaySource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const [accountRows, totals] = yield* Effect.all(
       [findDayAccounts(input), findDayTotals(input)],
@@ -857,7 +899,7 @@ export function readAdminUsersSource(input: {
   search: string | undefined;
   viewerId: string;
   windowDays: AdminMetricsWindow;
-}): Effect.Effect<AdminUserListSource, AdminQueryFailure, SqlClient.SqlClient> {
+}): Effect.Effect<AdminUserListSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
     const kept = { scope: input.scope, search: nullableSearch(input.search) };
@@ -913,7 +955,7 @@ export function writeAdminFavorite(input: {
   adminId: string;
   userId: string;
   favorite: boolean;
-}): Effect.Effect<boolean, AdminQueryFailure, SqlClient.SqlClient> {
+}): Effect.Effect<boolean, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const target = yield* findFavoriteTarget(input.userId);
     if (Option.isNone(target)) return false;

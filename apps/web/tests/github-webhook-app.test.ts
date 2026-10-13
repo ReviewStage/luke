@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database, type DatabaseServices } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   createCodingAgent,
@@ -114,6 +115,7 @@ const answer = (github: FakeGitHub, secret: string | undefined, request: Request
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, environment(secret)),
       github.layer,
@@ -186,7 +188,7 @@ const openAgent = (pull: PullRequestFixture) =>
     const kept = (): Effect.Effect<
       CodingAgentPullRequest | null | undefined,
       unknown,
-      SqlClient.SqlClient
+      DatabaseServices
     > =>
       Effect.map(
         listPublishedCodingAgents(owner, [plan.id]),

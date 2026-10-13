@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { SqlClient } from "effect/sql";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,
@@ -272,14 +272,14 @@ export class VoiceService {
   readonly #sockets: WebSocketServer;
   /** Every session under way, one fiber each, so a close can wait for each to finalize. */
   readonly #fibers: FiberSet.FiberSet<void>;
-  readonly #begin: (session: Effect.Effect<void, never, SqlClient.SqlClient>) => void;
+  readonly #begin: (session: Effect.Effect<void, never, DatabaseServices>) => void;
 
   private constructor(
     options: VoiceServiceOptions,
     upstream: LiveUpstream | undefined,
     sockets: WebSocketServer,
     fibers: FiberSet.FiberSet<void>,
-    begin: (session: Effect.Effect<void, never, SqlClient.SqlClient>) => void,
+    begin: (session: Effect.Effect<void, never, DatabaseServices>) => void,
   ) {
     this.#options = options;
     this.#log = options.log ?? standardOutputLog;
@@ -316,12 +316,12 @@ export class VoiceService {
    */
   static make(
     options: VoiceServiceOptions,
-  ): Effect.Effect<VoiceService, never, Scope.Scope | SqlClient.SqlClient> {
+  ): Effect.Effect<VoiceService, never, Scope.Scope | DatabaseServices> {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
       // Each session runs over the client the service was built on, so the
       // session's own effect asks for it rather than a runner of its own.
-      const fork = yield* FiberSet.runtime(fibers)<SqlClient.SqlClient>();
+      const fork = yield* FiberSet.runtime(fibers)<DatabaseServices>();
       const sockets = yield* Effect.acquireRelease(
         Effect.sync(
           () =>
@@ -421,10 +421,7 @@ export class VoiceService {
    * rejection before this was a fiber, and it says nothing of the session but
    * that one of its own rows did not land.
    */
-  #session(
-    socket: WebSocket,
-    admission: Admission,
-  ): Effect.Effect<void, never, SqlClient.SqlClient> {
+  #session(socket: WebSocket, admission: Admission): Effect.Effect<void, never, DatabaseServices> {
     return Effect.catch(Effect.scoped(this.#serve(socket, admission)), () =>
       Effect.sync(() => {
         this.#log({ event: LOG_EVENT.SESSION_FAILED });
@@ -456,7 +453,7 @@ export class VoiceService {
   #leaveToSweep(session: {
     sessionId: string;
     attachId: string;
-  }): Effect.Effect<void, never, SqlClient.SqlClient> {
+  }): Effect.Effect<void, never, DatabaseServices> {
     return this.#written(this.#record.detach(session));
   }
 
@@ -608,7 +605,7 @@ export class VoiceService {
       // Both consumers listen now: what the session spoke since the attach is read here, by both.
       yield* Effect.sync(() => sideband.resume());
       const opening = openingInstruction(opened);
-      const summary = yield* relaySession<SqlClient.SqlClient>({
+      const summary = yield* relaySession<DatabaseServices>({
         device,
         upstream: pipe,
         closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
@@ -694,7 +691,7 @@ export class VoiceService {
    */
   #attachExchange(
     session: AttachedSession,
-  ): Effect.Effect<StandingExchange | { refused: true }, never, Scope.Scope | SqlClient.SqlClient> {
+  ): Effect.Effect<StandingExchange | { refused: true }, never, Scope.Scope | DatabaseServices> {
     const attachment = this.#options.exchange;
     if (attachment === undefined) return Effect.succeed(NO_EXCHANGE);
     return Effect.gen({ self: this }, function* () {
@@ -758,7 +755,7 @@ export class VoiceService {
     userId: string,
     sessionId: string,
     seconds: number,
-  ): Effect.Effect<void, SessionFailure, SqlClient.SqlClient> {
+  ): Effect.Effect<void, SessionFailure, DatabaseServices> {
     return Effect.map(this.#accounts.recordSeconds({ userId, sessionId, seconds }), (outcome) => {
       this.#log({ event: LOG_EVENT.USAGE_RECORDED, seconds, outcome });
     });

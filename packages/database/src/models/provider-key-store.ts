@@ -7,7 +7,7 @@ import {
 import { and, asc, eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { db } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect } from "./plan-store.js";
@@ -64,21 +64,25 @@ const findRows = SqlSchema.findAll({
   Request: Schema.String,
   Result: SealedRowSchema,
   execute: (userId) =>
-    db
-      .select(ROW_COLUMNS)
-      .from(accountProviderKey)
-      .where(eq(accountProviderKey.userId, userId))
-      .orderBy(asc(accountProviderKey.provider)),
+    Database.use((db) =>
+      db
+        .select(ROW_COLUMNS)
+        .from(accountProviderKey)
+        .where(eq(accountProviderKey.userId, userId))
+        .orderBy(asc(accountProviderKey.provider)),
+    ),
 });
 
 const findEveryRow = SqlSchema.findAll({
   Request: Schema.Void,
   Result: OwnedRowSchema,
   execute: () =>
-    db
-      .select({ userId: accountProviderKey.userId, ...ROW_COLUMNS })
-      .from(accountProviderKey)
-      .orderBy(asc(accountProviderKey.userId), asc(accountProviderKey.provider)),
+    Database.use((db) =>
+      db
+        .select({ userId: accountProviderKey.userId, ...ROW_COLUMNS })
+        .from(accountProviderKey)
+        .orderBy(asc(accountProviderKey.userId), asc(accountProviderKey.provider)),
+    ),
 });
 
 const upsertRow = SqlSchema.void({
@@ -100,27 +104,31 @@ const upsertRow = SqlSchema.void({
       statusAt: write.now,
       createdAt: write.now,
     };
-    return db
-      .insert(accountProviderKey)
-      .values({ userId: write.userId, provider: write.provider, ...row })
-      .onConflictDoUpdate({
-        target: [accountProviderKey.userId, accountProviderKey.provider],
-        set: row,
-      });
+    return Database.use((db) =>
+      db
+        .insert(accountProviderKey)
+        .values({ userId: write.userId, provider: write.provider, ...row })
+        .onConflictDoUpdate({
+          target: [accountProviderKey.userId, accountProviderKey.provider],
+          set: row,
+        }),
+    );
   },
 });
 
 const deleteRow = SqlSchema.void({
   Request: KeySchema,
   execute: (key) =>
-    db
-      .delete(accountProviderKey)
-      .where(
-        and(
-          eq(accountProviderKey.userId, key.userId),
-          eq(accountProviderKey.provider, key.provider),
+    Database.use((db) =>
+      db
+        .delete(accountProviderKey)
+        .where(
+          and(
+            eq(accountProviderKey.userId, key.userId),
+            eq(accountProviderKey.provider, key.provider),
+          ),
         ),
-      ),
+    ),
 });
 
 const updateStatus = SqlSchema.void({
@@ -131,16 +139,18 @@ const updateStatus = SqlSchema.void({
     now: Schema.Date,
   }),
   execute: (write) =>
-    db
-      .update(accountProviderKey)
-      .set({ status: write.status, statusAt: write.now })
-      .where(
-        and(
-          eq(accountProviderKey.userId, write.userId),
-          eq(accountProviderKey.provider, write.provider),
-          eq(accountProviderKey.sealedKey, write.sealedKey),
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ status: write.status, statusAt: write.now })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.sealedKey, write.sealedKey),
+          ),
         ),
-      ),
+    ),
 });
 
 /** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
@@ -154,18 +164,20 @@ const rewrapRow = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ provider: ProviderSchema }),
   execute: (write) =>
-    db
-      .update(accountProviderKey)
-      .set({ keyVersion: write.keyVersion, sealedDataKey: write.sealedDataKey })
-      .where(
-        and(
-          eq(accountProviderKey.userId, write.userId),
-          eq(accountProviderKey.provider, write.provider),
-          eq(accountProviderKey.keyVersion, write.fromVersion),
-          eq(accountProviderKey.sealedKey, write.sealedKey),
-        ),
-      )
-      .returning({ provider: accountProviderKey.provider }),
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({ keyVersion: write.keyVersion, sealedDataKey: write.sealedDataKey })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.keyVersion, write.fromVersion),
+            eq(accountProviderKey.sealedKey, write.sealedKey),
+          ),
+        )
+        .returning({ provider: accountProviderKey.provider }),
+    ),
 });
 
 /** The account's stored keys, sealed, in the providers' order. */

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import type {
   EarlierCallLine,
   VoiceSessionRecord,
@@ -6,8 +7,6 @@ import type {
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import type { WebSocket } from "ws";
 import {
   HOSTED_API_ERROR,
@@ -112,9 +111,9 @@ function refused(reason: HostedApiError): Refusal {
  * the service makes on the session's behalf, and nothing else — every other
  * refusal is a frame the device is answered with.
  */
-export type SessionFailure = SqlError | Schema.SchemaError;
+export type SessionFailure = QueryError | Schema.SchemaError;
 
-export type SessionEffect<A> = Effect.Effect<A, SessionFailure, SqlClient.SqlClient | Scope.Scope>;
+export type SessionEffect<A> = Effect.Effect<A, SessionFailure, DatabaseServices | Scope.Scope>;
 
 /**
  * The Mac's input as the session is created with it: refused past the
@@ -327,7 +326,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
   const admitAccount = (
     admission: Admission,
     planId: string,
-  ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> =>
+  ): Effect.Effect<AdmittedAccount, SessionFailure, DatabaseServices> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
       if (Option.isNone(account)) return refused(HOSTED_API_ERROR.INVALID_TOKEN);

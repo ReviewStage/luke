@@ -1,3 +1,4 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { sweepAbandonedTurns } from "@sidecar/database/models/abandoned-turns";
 import { hostedStore } from "@sidecar/database/models/hosted-store";
 import { recordVoiceSeconds } from "@sidecar/database/models/quota";
@@ -5,7 +6,6 @@ import { voiceSessionRecord } from "@sidecar/database/models/voice-session-recor
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { effectPassthrough, hostedNotFoundRoute } from "./hosted/http-effect.js";
@@ -35,7 +35,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 ): Effect.fn.Return<
   Response,
   unknown,
-  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
 > {
   const environment = yield* HostedEnvironment;
   const sandboxes = Layer.provide(
@@ -81,7 +81,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
  * since `vercel.json` sends the function only its own path.
  */
 export function maintenanceApp(): WebRoutes<
-  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient
 > {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`: the handler decides its own method refusal, so a

@@ -29,11 +29,10 @@
  * Disconnect takes effect from the next step, whatever the SDK cached.
  */
 
+import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import { causeKind } from "@sidecar/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
-import type { SqlClient } from "effect/sql";
-import type { SqlError } from "effect/sql/SqlError";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
 import type { ConversationAdmission } from "./brain-host/conversation.js";
@@ -75,8 +74,8 @@ interface IntegrationTokenResult {
 /** How a host admits the session a connection is opened under: the root's own standing, or a worker's ownership alone. */
 export type IntegrationAdmission = Effect.Effect<
   ConversationAdmission,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  QueryError | Schema.SchemaError,
+  DatabaseServices
 >;
 
 /** What the token read answers: the credential, or the sentence saying why there is none. */
@@ -132,7 +131,7 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 export function integrationAccessToken(
   provider: IntegrationProvider,
   admission: IntegrationAdmission,
-): Effect.Effect<IntegrationTokenAnswer, never, SqlClient.SqlClient | IntegrationConnect> {
+): Effect.Effect<IntegrationTokenAnswer, never, DatabaseServices | IntegrationConnect> {
   return Effect.gen(function* () {
     const admitted = yield* admission;
     if (Result.isFailure(admitted)) {

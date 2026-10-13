@@ -1,0 +1,276 @@
+diff --git a/cache/core/cache-effect.cjs b/cache/core/cache-effect.cjs
+index 695cb9579ce1f040f1c931428fd6c6a59f49cc96..b89b9383b47ebd9c10eb683c384cd6db19aefff8 100644
+--- a/cache/core/cache-effect.cjs
++++ b/cache/core/cache-effect.cjs
+@@ -100,7 +100,7 @@ function make(cache) {
+ * This error is thrown when any cache operation (get, put, onMutate) fails.
+ * The original error is available in the `cause` property.
+ */
+-var EffectCacheError = class extends effect_Schema.TaggedErrorClass()("EffectCacheError", { cause: effect_Schema.Unknown }) {
++var EffectCacheError = class extends effect_Schema.TaggedError()("EffectCacheError", { cause: effect_Schema.Unknown }) {
+ 	static [__entity_ts.entityKind] = "EffectCacheError";
+ };
+ 
+diff --git a/cache/core/cache-effect.js b/cache/core/cache-effect.js
+index f778fffdda7a4545285498f655018a1478741436..0e671ef4216bb80bde1a3d4fe2f69edb32e8f053 100644
+--- a/cache/core/cache-effect.js
++++ b/cache/core/cache-effect.js
+@@ -94,7 +94,7 @@ function make(cache) {
+ * This error is thrown when any cache operation (get, put, onMutate) fails.
+ * The original error is available in the `cause` property.
+ */
+-var EffectCacheError = class extends Schema$1.TaggedErrorClass()("EffectCacheError", { cause: Schema$1.Unknown }) {
++var EffectCacheError = class extends Schema$1.TaggedError()("EffectCacheError", { cause: Schema$1.Unknown }) {
+ 	static [entityKind] = "EffectCacheError";
+ };
+ 
+diff --git a/effect-core/errors.cjs b/effect-core/errors.cjs
+index 9ec5bab6a265fbdb694e4fffa639ebea7be3a6cc..657ff333dbd8453ae8219d6e5c3d6af65587f93b 100644
+--- a/effect-core/errors.cjs
++++ b/effect-core/errors.cjs
+@@ -5,13 +5,13 @@ let effect_Schema = require("effect/Schema");
+ effect_Schema = require_runtime.__toESM(effect_Schema);
+ 
+ //#region src/effect-core/errors.ts
+-var EffectDrizzleError = class extends effect_Schema.TaggedErrorClass()("EffectDrizzleError", {
++var EffectDrizzleError = class extends effect_Schema.TaggedError()("EffectDrizzleError", {
+ 	message: effect_Schema.String,
+ 	cause: effect_Schema.Unknown
+ }) {
+ 	static [__entity_ts.entityKind] = "EffectDrizzleError";
+ };
+-var EffectDrizzleQueryError = class EffectDrizzleQueryError extends effect_Schema.TaggedErrorClass()("EffectDrizzleQueryError", {
++var EffectDrizzleQueryError = class EffectDrizzleQueryError extends effect_Schema.TaggedError()("EffectDrizzleQueryError", {
+ 	query: effect_Schema.String,
+ 	params: effect_Schema.Array(effect_Schema.Any).pipe(effect_Schema.mutable),
+ 	cause: effect_Schema.Unknown
+@@ -25,11 +25,11 @@ var EffectDrizzleQueryError = class EffectDrizzleQueryError extends effect_Schem
+ 		Error.captureStackTrace(this, EffectDrizzleQueryError);
+ 	}
+ };
+-var EffectTransactionRollbackError = class extends effect_Schema.TaggedErrorClass()("EffectTransactionRollbackError", {}) {
++var EffectTransactionRollbackError = class extends effect_Schema.TaggedError()("EffectTransactionRollbackError", {}) {
+ 	static [__entity_ts.entityKind] = "EffectTransactionRollbackError";
+ 	message = "Rollback";
+ };
+-var MigratorInitError = class extends effect_Schema.TaggedErrorClass()("MigratorInitError", { exitCode: effect_Schema.Literals(["databaseMigrations", "localMigrations"]) }) {
++var MigratorInitError = class extends effect_Schema.TaggedError()("MigratorInitError", { exitCode: effect_Schema.Literals(["databaseMigrations", "localMigrations"]) }) {
+ 	static [__entity_ts.entityKind] = "MigratorInitError";
+ };
+ 
+diff --git a/effect-core/errors.js b/effect-core/errors.js
+index 290da3a291c8919c16f1092c74e0a7f4a5feaf53..82ca43e630749baa622cc2e2afe5b84eeb936cbb 100644
+--- a/effect-core/errors.js
++++ b/effect-core/errors.js
+@@ -2,13 +2,13 @@ import { entityKind } from "../entity.js";
+ import * as Schema$1 from "effect/Schema";
+ 
+ //#region src/effect-core/errors.ts
+-var EffectDrizzleError = class extends Schema$1.TaggedErrorClass()("EffectDrizzleError", {
++var EffectDrizzleError = class extends Schema$1.TaggedError()("EffectDrizzleError", {
+ 	message: Schema$1.String,
+ 	cause: Schema$1.Unknown
+ }) {
+ 	static [entityKind] = "EffectDrizzleError";
+ };
+-var EffectDrizzleQueryError = class EffectDrizzleQueryError extends Schema$1.TaggedErrorClass()("EffectDrizzleQueryError", {
++var EffectDrizzleQueryError = class EffectDrizzleQueryError extends Schema$1.TaggedError()("EffectDrizzleQueryError", {
+ 	query: Schema$1.String,
+ 	params: Schema$1.Array(Schema$1.Any).pipe(Schema$1.mutable),
+ 	cause: Schema$1.Unknown
+@@ -22,11 +22,11 @@ var EffectDrizzleQueryError = class EffectDrizzleQueryError extends Schema$1.Tag
+ 		Error.captureStackTrace(this, EffectDrizzleQueryError);
+ 	}
+ };
+-var EffectTransactionRollbackError = class extends Schema$1.TaggedErrorClass()("EffectTransactionRollbackError", {}) {
++var EffectTransactionRollbackError = class extends Schema$1.TaggedError()("EffectTransactionRollbackError", {}) {
+ 	static [entityKind] = "EffectTransactionRollbackError";
+ 	message = "Rollback";
+ };
+-var MigratorInitError = class extends Schema$1.TaggedErrorClass()("MigratorInitError", { exitCode: Schema$1.Literals(["databaseMigrations", "localMigrations"]) }) {
++var MigratorInitError = class extends Schema$1.TaggedError()("MigratorInitError", { exitCode: Schema$1.Literals(["databaseMigrations", "localMigrations"]) }) {
+ 	static [entityKind] = "MigratorInitError";
+ };
+ 
+diff --git a/effect-pglite/migrator.d.cts b/effect-pglite/migrator.d.cts
+index f4fbcf84c1c7ed931d57a109423b43ff5ac10118..2a7185a25e3d8de823b744571a98b90c6c097a73 100644
+--- a/effect-pglite/migrator.d.cts
++++ b/effect-pglite/migrator.d.cts
+@@ -3,7 +3,7 @@ import { EffectPgDatabase } from "./driver.cjs";
+ import { MigrationConfig } from "../migrator.cjs";
+ import { AnyRelations } from "../relations.cjs";
+ import * as effect_Effect0 from "effect/Effect";
+-import * as effect_unstable_sql_SqlError0 from "effect/unstable/sql/SqlError";
++import * as effect_unstable_sql_SqlError0 from "effect/sql/SqlError";
+ 
+ //#region src/effect-pglite/migrator.d.ts
+ declare function migrate<TRelations extends AnyRelations>(db: EffectPgDatabase<TRelations>, config: MigrationConfig): effect_Effect0.Effect<undefined, MigratorInitError | EffectDrizzleQueryError | effect_unstable_sql_SqlError0.SqlError, never>;
+diff --git a/effect-pglite/migrator.d.ts b/effect-pglite/migrator.d.ts
+index bbb53a44c498e8bfd2d5e16ec6dcfc97b0be22dd..80d3ab3a66e6fac706aa582ca026447099d91cea 100644
+--- a/effect-pglite/migrator.d.ts
++++ b/effect-pglite/migrator.d.ts
+@@ -3,7 +3,7 @@ import { EffectPgDatabase } from "./driver.js";
+ import { MigrationConfig } from "../migrator.js";
+ import * as effect_Effect0 from "effect/Effect";
+ import { AnyRelations } from "../relations.js";
+-import * as effect_unstable_sql_SqlError0 from "effect/unstable/sql/SqlError";
++import * as effect_unstable_sql_SqlError0 from "effect/sql/SqlError";
+ 
+ //#region src/effect-pglite/migrator.d.ts
+ declare function migrate<TRelations extends AnyRelations>(db: EffectPgDatabase<TRelations>, config: MigrationConfig): effect_Effect0.Effect<undefined, MigratorInitError | EffectDrizzleQueryError | effect_unstable_sql_SqlError0.SqlError, never>;
+diff --git a/effect-pglite/session.d.cts b/effect-pglite/session.d.cts
+index d4e65251230ee5df8250a9a287276a0b15830273..7a67cc54c056145aff9492298a9746aa6dc51cc2 100644
+--- a/effect-pglite/session.d.cts
++++ b/effect-pglite/session.d.cts
+@@ -7,7 +7,7 @@ import { PgDialect } from "../pg-core/dialect.cjs";
+ import { PgQueryResultHKT, PreparedQueryConfig } from "../pg-core/session.cjs";
+ import * as Effect from "effect/Effect";
+ import { EffectCacheShape } from "../cache/core/cache-effect.cjs";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectDrizzleQueryError } from "../effect-core/errors.cjs";
+ import { EffectLoggerShape } from "../effect-core/logger.cjs";
+ import { QueryEffectHKTBase } from "../effect-core/query-effect.cjs";
+diff --git a/effect-pglite/session.d.ts b/effect-pglite/session.d.ts
+index b8c57e3f65fb227eab53a02a3021ace5f628a9f6..c3a435685c79d8000ce3a58af0d46b91e421fc78 100644
+--- a/effect-pglite/session.d.ts
++++ b/effect-pglite/session.d.ts
+@@ -11,7 +11,7 @@ import { PgEffectPreparedQuery, PgEffectSession, PgEffectTransaction } from "../
+ import { PgliteClient } from "@effect/sql-pglite/PgliteClient";
+ import { WithCacheConfig } from "../cache/core/types.js";
+ import { PgQueryResultHKT, PreparedQueryConfig } from "../pg-core/session.js";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectLoggerShape } from "../effect-core/logger.js";
+ 
+ //#region src/effect-pglite/session.d.ts
+diff --git a/effect-postgres/migrator.d.cts b/effect-postgres/migrator.d.cts
+index a86d21826ae60833cb93e667e822427b564662ef..53f69e12edc4ad1c1314de0913484c3fdfa173a8 100644
+--- a/effect-postgres/migrator.d.cts
++++ b/effect-postgres/migrator.d.cts
+@@ -3,7 +3,7 @@ import { EffectPgDatabase } from "./driver.cjs";
+ import { MigrationConfig } from "../migrator.cjs";
+ import { AnyRelations } from "../relations.cjs";
+ import * as effect_Effect0 from "effect/Effect";
+-import * as effect_unstable_sql_SqlError0 from "effect/unstable/sql/SqlError";
++import * as effect_unstable_sql_SqlError0 from "effect/sql/SqlError";
+ 
+ //#region src/effect-postgres/migrator.d.ts
+ declare function migrate<TRelations extends AnyRelations>(db: EffectPgDatabase<TRelations>, config: MigrationConfig): effect_Effect0.Effect<undefined, MigratorInitError | EffectDrizzleQueryError | effect_unstable_sql_SqlError0.SqlError, never>;
+diff --git a/effect-postgres/migrator.d.ts b/effect-postgres/migrator.d.ts
+index eea591bc6c0d80e997a5f9dd07375db2f1a93ab5..e3aea8f8c4d8866168df9659ec468b1fa6598202 100644
+--- a/effect-postgres/migrator.d.ts
++++ b/effect-postgres/migrator.d.ts
+@@ -3,7 +3,7 @@ import { EffectPgDatabase } from "./driver.js";
+ import { MigrationConfig } from "../migrator.js";
+ import * as effect_Effect0 from "effect/Effect";
+ import { AnyRelations } from "../relations.js";
+-import * as effect_unstable_sql_SqlError0 from "effect/unstable/sql/SqlError";
++import * as effect_unstable_sql_SqlError0 from "effect/sql/SqlError";
+ 
+ //#region src/effect-postgres/migrator.d.ts
+ declare function migrate<TRelations extends AnyRelations>(db: EffectPgDatabase<TRelations>, config: MigrationConfig): effect_Effect0.Effect<undefined, MigratorInitError | EffectDrizzleQueryError | effect_unstable_sql_SqlError0.SqlError, never>;
+diff --git a/effect-postgres/session.d.cts b/effect-postgres/session.d.cts
+index 0eebb3e23209eba709cdb9fa39d89fcf859de61a..85d26442d16660ff60790995371cf4f2d7885f28 100644
+--- a/effect-postgres/session.d.cts
++++ b/effect-postgres/session.d.cts
+@@ -7,7 +7,7 @@ import { PgDialect } from "../pg-core/dialect.cjs";
+ import { PgQueryResultHKT, PreparedQueryConfig } from "../pg-core/session.cjs";
+ import * as Effect from "effect/Effect";
+ import { EffectCacheShape } from "../cache/core/cache-effect.cjs";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectDrizzleQueryError } from "../effect-core/errors.cjs";
+ import { EffectLoggerShape } from "../effect-core/logger.cjs";
+ import { QueryEffectHKTBase } from "../effect-core/query-effect.cjs";
+diff --git a/effect-postgres/session.d.ts b/effect-postgres/session.d.ts
+index cc5696137920c1e08d79508b8eb459ff543a26b1..8662fdcfaf6765101bacb947b5a609b4d955114c 100644
+--- a/effect-postgres/session.d.ts
++++ b/effect-postgres/session.d.ts
+@@ -11,7 +11,7 @@ import { PgClient } from "@effect/sql-pg/PgClient";
+ import { PgEffectPreparedQuery, PgEffectSession, PgEffectTransaction } from "../pg-core/effect/session.js";
+ import { WithCacheConfig } from "../cache/core/types.js";
+ import { PgQueryResultHKT, PreparedQueryConfig } from "../pg-core/session.js";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectLoggerShape } from "../effect-core/logger.js";
+ 
+ //#region src/effect-postgres/session.d.ts
+diff --git a/pg-core/effect/db.d.cts b/pg-core/effect/db.d.cts
+index 39194869128146f82d749c7e377a6367ba0a6175..7dc76403f304f846327c3a9311210b4e5327de89 100644
+--- a/pg-core/effect/db.d.cts
++++ b/pg-core/effect/db.d.cts
+@@ -19,7 +19,7 @@ import { PgViewBase } from "../view-base.cjs";
+ import { PgDialect } from "../dialect.cjs";
+ import { Effect } from "effect";
+ import { EffectCacheShape } from "../../cache/core/cache-effect.cjs";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { QueryEffectHKTBase } from "../../effect-core/query-effect.cjs";
+ import { PgEffectCountBuilder } from "./count.cjs";
+ import { PgEffectInsertHKT } from "./insert.cjs";
+diff --git a/pg-core/effect/db.d.ts b/pg-core/effect/db.d.ts
+index 720878cd3f183790088df7f6f5ceb4349d3bae04..7aef8a4329626a0b73278b17e05ba2b1421a7128 100644
+--- a/pg-core/effect/db.d.ts
++++ b/pg-core/effect/db.d.ts
+@@ -25,7 +25,7 @@ import { PgEffectInsertHKT } from "./insert.js";
+ import { PgEffectSelectBuilder } from "./select.js";
+ import { PgInsertBuilder } from "../query-builders/insert.js";
+ import { RelationalQueryBuilder } from "../query-builders/query.js";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ 
+ //#region src/pg-core/effect/db.d.ts
+ declare class PgEffectDatabase<TEffectHKT extends QueryEffectHKTBase, TQueryResult extends PgQueryResultHKT, TRelations extends AnyRelations = EmptyRelations> {
+diff --git a/pg-core/effect/session.cjs b/pg-core/effect/session.cjs
+index 621b1452ab3bfcdc6ce66f04439fe5b460ef0a73..ee7c4856293ddc86bbdf9ced38c650634870552f 100644
+--- a/pg-core/effect/session.cjs
++++ b/pg-core/effect/session.cjs
+@@ -69,7 +69,7 @@ var PgEffectPreparedQuery = class extends require_pg_core_session.PgBasePrepared
+ 		}).pipe(effect_Effect.provideService(__cache_core_cache_effect_ts.EffectCache, this.cache), effect_Effect.catch((e) => {
+ 			return effect_Effect.fail(new __effect_core_errors_ts.EffectDrizzleQueryError({
+ 				query: queryString,
+-				params,
++				params: [],
+ 				cause: effect_Cause.fail(e)
+ 			}));
+ 		}));
+diff --git a/pg-core/effect/session.d.cts b/pg-core/effect/session.d.cts
+index c8652feef873a4a4647c77f70b27a8777ad7542e..5b94d7739475f6be5c3b29533029e9e936b2fcce 100644
+--- a/pg-core/effect/session.d.cts
++++ b/pg-core/effect/session.d.cts
+@@ -8,7 +8,7 @@ import { AnyRelations, EmptyRelations } from "../../relations.cjs";
+ import { WithCacheConfig } from "../../cache/core/types.cjs";
+ import * as Effect from "effect/Effect";
+ import { EffectCacheShape } from "../../cache/core/cache-effect.cjs";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectTransactionRollbackError, MigratorInitError } from "../../effect-core/errors.cjs";
+ import { EffectLoggerShape } from "../../effect-core/logger.cjs";
+ import { QueryEffectHKTBase, QueryEffectKind } from "../../effect-core/query-effect.cjs";
+diff --git a/pg-core/effect/session.d.ts b/pg-core/effect/session.d.ts
+index 877f9efa7d4f8e4e893f99034d8bb309b88ed63e..597ee7fd98b961c03e010cf2fa0334048d00c4c5 100644
+--- a/pg-core/effect/session.d.ts
++++ b/pg-core/effect/session.d.ts
+@@ -10,7 +10,7 @@ import { AnyRelations, EmptyRelations } from "../../relations.js";
+ import { QueryEffectHKTBase, QueryEffectKind } from "../../effect-core/query-effect.js";
+ import { EffectTransactionRollbackError, MigratorInitError } from "../../effect-core/errors.js";
+ import { WithCacheConfig } from "../../cache/core/types.js";
+-import { SqlError } from "effect/unstable/sql/SqlError";
++import { SqlError } from "effect/sql/SqlError";
+ import { EffectLoggerShape } from "../../effect-core/logger.js";
+ 
+ //#region src/pg-core/effect/session.d.ts
+diff --git a/pg-core/effect/session.js b/pg-core/effect/session.js
+index 73f189cf949d4c3589c9851062e4f917636d5d64..0f98c67c964ee969854ea7faa4b58ecd52f2881e 100644
+--- a/pg-core/effect/session.js
++++ b/pg-core/effect/session.js
+@@ -65,7 +65,7 @@ var PgEffectPreparedQuery = class extends PgBasePreparedQuery {
+ 		}).pipe(Effect.provideService(EffectCache, this.cache), Effect.catch((e) => {
+ 			return Effect.fail(new EffectDrizzleQueryError({
+ 				query: queryString,
+-				params,
++				params: [],
+ 				cause: Cause.fail(e)
+ 			}));
+ 		}));

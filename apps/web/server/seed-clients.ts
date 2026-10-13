@@ -1,11 +1,9 @@
 import { pathToFileURL } from "node:url";
-import { db } from "@sidecar/database/core/query";
+import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
 import { jwks as jwksTable, oauthClient as oauthClientTable } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";
-import type * as SqlClient from "effect/sql/SqlClient";
-import type { SqlError } from "effect/sql/SqlError";
 import { authSecrets } from "./auth-deployment.js";
 import { DESKTOP_OAUTH_CLIENT, type OAuthClient, oauthClientRecord } from "./oauth-clients.js";
 import { disposeWebRuntime, runWeb } from "./runtime.js";
@@ -18,7 +16,7 @@ import { disposeWebRuntime, runWeb } from "./runtime.js";
 export function seedOAuthClient(
   client: OAuthClient,
   now = new Date(),
-): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError, DatabaseServices> {
   const record = oauthClientRecord(client, now);
   // Note that the conflicting update sets the values the insert carried
   // rather than reading them back out of `excluded`, because a single-row
@@ -42,10 +40,12 @@ export function seedOAuthClient(
     requirePKCE: record.requirePKCE,
   };
   return Effect.asVoid(
-    db
-      .insert(oauthClientTable)
-      .values({ id: record.id, createdAt: record.createdAt, ...written })
-      .onConflictDoUpdate({ target: oauthClientTable.clientId, set: written }),
+    Database.use((db) =>
+      db
+        .insert(oauthClientTable)
+        .values({ id: record.id, createdAt: record.createdAt, ...written })
+        .onConflictDoUpdate({ target: oauthClientTable.clientId, set: written }),
+    ),
   );
 }
 
@@ -73,8 +73,9 @@ function opensUnder(sessionSecret: Redacted.Redacted, privateKey: string): Effec
  */
 export function dropUnreadableJwks(
   sessionSecret: Redacted.Redacted,
-): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError, DatabaseServices> {
   return Effect.gen(function* () {
+    const db = yield* Database;
     const keys = yield* db
       .select({ id: jwksTable.id, privateKey: jwksTable.privateKey })
       .from(jwksTable);
@@ -90,7 +91,7 @@ export function dropUnreadableJwks(
 /** What every deployment build seeds: the desktop client, and then a key set this deployment can sign with. */
 function seedDeployment(
   variables: Record<string, string | undefined>,
-): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
+): Effect.Effect<void, QueryError, DatabaseServices> {
   const { sessionSecret } = authSecrets(variables);
   // Note that a build without a session secret drops nothing, because the
   // deployment it builds signs nothing, and `auth.ts` says so as it loads.

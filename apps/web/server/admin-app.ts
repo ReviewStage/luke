@@ -1,6 +1,6 @@
+import type { DatabaseServices } from "@sidecar/database/core/query";
 import { type Cause, type Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { SqlClient } from "effect/sql";
 import type { AdminViewer } from "./admin/admin-access.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin/admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin/admin-favorite.js";
@@ -49,11 +49,11 @@ function gate(
   handler: (
     viewer: AdminViewer,
     request: Request,
-  ) => Effect.Effect<Response, never, SqlClient.SqlClient>,
+  ) => Effect.Effect<Response, never, DatabaseServices>,
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   never,
-  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  DatabaseServices | HttpServerRequest.HttpServerRequest
 > {
   return adminViewerGate({ methods, resolveViewer: seams.resolveViewer, handler });
 }
@@ -69,7 +69,7 @@ const adminNotFoundRoute = HttpRouter.add(
 );
 
 /** The group, which is the dashboard's five addresses and the refusal anywhere else. */
-export function adminApp(seams: AdminSeams): WebRoutes<SqlClient.SqlClient> {
+export function adminApp(seams: AdminSeams): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,
