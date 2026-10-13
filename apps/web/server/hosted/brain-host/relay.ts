@@ -1,3 +1,11 @@
+import type { AskDeliveryBinding } from "@sidecar/database/models/asks";
+import {
+  answerMessageId,
+  hostTurnId,
+  reasoningItemId,
+  receivedMessageId,
+} from "@sidecar/database/models/ids";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -33,8 +41,6 @@ import {
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";
-import type { AskDeliveryBinding } from "../store/asks.js";
-import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
@@ -42,7 +48,6 @@ import {
   RELAY_TURN,
   type RelayTurn,
 } from "./bounds.js";
-import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services
@@ -233,8 +238,13 @@ const TURN_ORIGIN_OF_HOST_TURN = {
 const TOOL_CALL_KIND = "tool-call";
 /** eve's own kind of action for a call to a declared subagent, named by the tool eve lowers the subagent into, which is the name its result carries. */
 const SUBAGENT_CALL_KIND = "subagent-call";
+/** eve's own kind of action for a load of one of the session's skills, which the model calls as `load_skill` and the record names so. */
+const LOAD_SKILL_KIND = "load-skill";
+const LOAD_SKILL_TOOL = "load_skill";
 
 const TOOL_RESULT_KIND = "tool-result";
+/** The result of a skill's load: the skill's body, or why it did not load. */
+const LOAD_SKILL_RESULT_KIND = "load-skill-result";
 const EVE_ACTION_COMPLETED = "completed";
 
 type RequestedAction = Extract<
@@ -251,6 +261,8 @@ function requestedCallOf(
       return { callId: action.callId, name: action.toolName };
     case SUBAGENT_CALL_KIND:
       return { callId: action.callId, name: action.name };
+    case LOAD_SKILL_KIND:
+      return { callId: action.callId, name: LOAD_SKILL_TOOL };
     default:
       return undefined;
   }
@@ -502,6 +514,20 @@ export class StreamRelay {
       }
       case "action.result": {
         const result = event.data.result;
+        if (result.kind === LOAD_SKILL_RESULT_KIND) {
+          return this.#toolResult(
+            event.data.turnId,
+            result.callId,
+            LOAD_SKILL_TOOL,
+            settlementOf(
+              event.data.status,
+              result.isError,
+              unparsedWire(result.output),
+              event.data.error?.message,
+            ),
+            standing,
+          );
+        }
         if (result.kind !== TOOL_RESULT_KIND) return Effect.void;
         // A nested call the record left out leaves its result out with it.
         const held = heldCallName(standing.state.get(), event.data.turnId, result.callId);

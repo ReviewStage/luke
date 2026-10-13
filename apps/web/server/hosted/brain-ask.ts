@@ -1,4 +1,18 @@
 import {
+  ASK_DISPATCH_REFUSAL,
+  type AskRecord,
+  type AskRow,
+  type AskVoice,
+} from "@sidecar/database/models/asks";
+import type { HostedStore } from "@sidecar/database/models/hosted-store";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
+import {
+  conversationReachableBy,
+  recordedRuntimeSession,
+} from "@sidecar/database/models/recorded-session";
+import type { StoreWriter } from "@sidecar/database/models/writer";
+import {
   Cause,
   Clock,
   Duration,
@@ -19,12 +33,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
-import { hostTurnId } from "./brain-host/ids.js";
-import { conversationReachableBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
-import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
-import type { HostedStore, StoredTurnRecord } from "./store/index.js";
-import type { StoreWriter } from "./store/writer.js";
 
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before
@@ -40,7 +49,7 @@ import type { StoreWriter } from "./store/writer.js";
  * eve: one ask, one delivery. A Stop on a turn eve is running is eve's
  * cancel of that turn, named by the eve turn id the relay wrote on its row at
  * the start; a Stop on an ask still waiting is a stamp on the record,
- * honoured when its turn starts. Every id read here is one `ids.ts` mints.
+ * honoured when its turn starts. Every id read here is one `@sidecar/database/models/ids` mints.
  *
  * The ask and the standing read answer effects over the ambient SQL client,
  * as the record they are handed does: a caller composes them into the one

@@ -6,7 +6,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
-import type { NavigationHistory } from "../navigation-history";
+import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
@@ -18,10 +18,11 @@ import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
 import { useColumnDock } from "./column-dock";
+import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { DesktopVersionHistory } from "./desktop-version-history";
+import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
@@ -59,8 +60,9 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * plan, Settings, the Keyboard shortcuts page that lists them all, and back
- * and forward, which answer whether or not their buttons are drawn.
+ * plan, Settings, the Inbox, the Keyboard shortcuts page that lists them
+ * all, and back and forward, which answer whether or not their buttons are
+ * drawn.
  */
 function usePlaceCommands(
   pastGate: boolean,
@@ -85,6 +87,15 @@ function usePlaceCommands(
       : undefined,
   );
   useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
+  useAppCommand(
+    APP_COMMAND.INBOX,
+    pastGate && plans.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          plans.inboxView.onOpen();
+        }
+      : undefined,
+  );
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
     pastGate
@@ -143,7 +154,8 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * mirror of the sidebar's, at the window's top right on a plan's page, so
  * neither pane carries the button that moves it. A plan's version history
  * takes the whole window as Settings does, its versions listed where the
- * sidebar was, and leaves the same way; it is still a stay on the plan, so
+ * sidebar was, and leaves the same way; the Inbox stands in the plan's
+ * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
  * opening, shutting, or growing the side panel, or the plan's summary pinned
@@ -171,7 +183,7 @@ export function DesktopShell({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
-  history: NavigationHistory;
+  history: WindowHistory;
   sidebar: SidebarCollapse;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
   call: CallCardInput | undefined;
@@ -189,10 +201,13 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${sidebar.collapsed}`,
   );
+  // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
   const looks = usePlanLooks(
-    tab === PANEL_TAB.PLANS && region.kind === DOCUMENT_REGION.READY ? region.plan : undefined,
+    tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
+      ? region.plan
+      : undefined,
   );
   if (gated) {
     return (
@@ -232,9 +247,10 @@ export function DesktopShell({
         <DesktopVersionHistory
           sidebar={sidebar}
           history={history}
-          plans={plans}
+          subject={planVersionSubject(plans)}
           account={account}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
+          onRestored={history.onLeaveVersionHistory}
         />
         <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
         <CaptionStrip {...captions} />
@@ -242,8 +258,10 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then.
-  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT;
+  // toolbar beneath it leaves the toggle room then and only then. The Inbox
+  // stands in the plan's place, so it draws no panel to toggle.
+  const inboxOpen = plans.inboxView.open;
+  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !inboxOpen;
   const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
@@ -270,12 +288,16 @@ export function DesktopShell({
         call={sidebar.collapsed ? undefined : call}
       />
       <main className="desktop-main">
-        <DesktopPlans
-          plans={plans}
-          looks={looks}
-          captions={captionsInColumn ? captionStrip : undefined}
-          summary={summary}
-        />
+        {inboxOpen ? (
+          <DesktopInbox plans={plans} />
+        ) : (
+          <DesktopPlans
+            plans={plans}
+            looks={looks}
+            captions={captionsInColumn ? captionStrip : undefined}
+            summary={summary}
+          />
+        )}
       </main>
       {captionsInColumn ? null : captionStrip}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}

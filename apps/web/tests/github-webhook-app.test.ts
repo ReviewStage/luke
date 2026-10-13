@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
+  type CodingAgent,
+  createCodingAgent,
+  listPublishedCodingAgents,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { listWorkspaces } from "@sidecar/database/models/workspace-store";
+import { getTestDB } from "@sidecar/database/testing";
+import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
@@ -11,23 +20,15 @@ import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { githubWebhookApp } from "../server/github-webhook-app";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  listPublishedCodingAgents,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { syncInstallations } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { listWorkspaces } from "../server/hosted/workspace-store";
 import {
   type FakeGitHub,
   githubReaching,
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
@@ -217,7 +218,7 @@ const openAgent = (pull: PullRequestFixture) =>
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
+it.layer(getTestDB())("the GitHub App's webhook", (it) => {
   it.effect(
     "a deployment holding no secret refuses every delivery, and a delivery whose signature does not hold is refused, each before GitHub is asked",
     () =>

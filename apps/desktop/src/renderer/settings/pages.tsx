@@ -5,7 +5,7 @@ import {
   DisplayIcon,
   DocumentIcon,
   KeyboardIcon,
-  KeyIcon,
+  PlugIcon,
   SpeakerIcon,
   TerminalIcon,
 } from "@sidecar/panel";
@@ -41,9 +41,9 @@ export const SETTINGS_PAGE = {
     title: "Coding agents",
     icon: <TerminalIcon />,
   },
-  [SETTINGS_VIEW.API_KEYS]: {
-    title: "API keys",
-    icon: <KeyIcon />,
+  [SETTINGS_VIEW.INTEGRATIONS]: {
+    title: "Integrations",
+    icon: <PlugIcon />,
   },
 };
 

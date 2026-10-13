@@ -1,12 +1,24 @@
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@sidecar/database/models/account-store";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  discardCodingAgent,
+} from "@sidecar/database/models/coding-agent-store";
+import { readPlan } from "@sidecar/database/models/plan-store";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { failureKind } from "@sidecar/runtime/effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
-import { readAccountPreferences, writeAccountPreferences } from "../account-store.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -14,7 +26,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type CodingAgent, createCodingAgent, discardCodingAgent } from "../coding-agent-store.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -23,11 +34,10 @@ import {
 } from "../http-effect.js";
 import {
   acceptedModelChoice,
-  CODING_AGENT_DEFAULT_CHOICE,
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
-import { readPlan } from "../plan-store.js";
+import { ownKeyProviders } from "./account-keys.js";
 
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
@@ -53,13 +63,14 @@ import { readPlan } from "../plan-store.js";
  * (`coder-host/channel.ts`).
  */
 
-/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, and the task where the agent is handed one in the plan's place, with the files attached to it. */
+/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, the task where the agent is handed one in the plan's place, with the files attached to it, and the MCP servers its draft switched off. */
 export interface StartAsk {
   readonly planId: string;
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
   readonly task: string | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -73,7 +84,9 @@ export type StartServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
 
 /**
  * The choice an agent runs on: the one named where one is, the account's
- * default otherwise, either checked against the catalog. A catalog that
+ * default otherwise, either checked against the catalog as the account is
+ * offered it, so a fast version its own key withholds is refused here
+ * rather than at the agent's first step. A catalog that
  * could not be read is an outage; a choice it refuses is its own refusal.
  */
 export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -88,11 +101,12 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     named ??
     (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent ??
     CODING_AGENT_DEFAULT_CHOICE;
-  return yield* acceptedModelChoice(choice).pipe(
+  const own = yield* hostedStoreOrUnavailable(ownKeyProviders(userId));
+  return yield* acceptedModelChoice(choice, own).pipe(
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
-        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-      ),
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
 });
@@ -124,6 +138,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       ...brief,
       repository,
+      disabledServers: ask.disabledServers,
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

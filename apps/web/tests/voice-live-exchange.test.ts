@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  createPlan,
+  deletePlan,
+  openPlanConversation,
+  readPlan,
+} from "@sidecar/database/models/plan-store";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
@@ -16,7 +26,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,
@@ -25,9 +34,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { deletePlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -38,7 +44,6 @@ import {
 } from "../server/live";
 import { EXCHANGE_ENDING, hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -170,6 +175,9 @@ function fakeEve(): FakeEve {
     },
     cancel() {
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
+    },
+    reset() {
+      return Effect.die(new Error("this suite retires no session"));
     },
   };
   return eve;

@@ -1,10 +1,10 @@
+import type { PlanArchived } from "@sidecar/database/models/plan-store";
 import { Effect, type Layer, type Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
-import type { PlanArchived } from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**

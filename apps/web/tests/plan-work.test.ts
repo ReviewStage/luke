@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { db } from "@sidecar/database/core/query";
+import { askRecord } from "@sidecar/database/models/asks";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { listJournals } from "@sidecar/database/models/message-reads";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { TURN_ENDING } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -16,11 +24,8 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { db } from "../server/db/query";
-import { messages, turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
-import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
@@ -31,21 +36,16 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { fillChildTitle } from "../server/hosted/child-titles";
 import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
-import { openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
-import { listJournals } from "../server/hosted/store/message-reads";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";

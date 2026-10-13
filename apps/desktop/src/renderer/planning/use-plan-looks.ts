@@ -79,7 +79,7 @@ interface Visit {
   readonly changed: ReadonlySet<string>;
 }
 
-/** The open plan's sections changed since the last look, each by its field or its heading, and the dismissal that clears them. */
+/** The open plan's sections changed since the last look, each by its heading, and the dismissal that clears them. */
 export interface PlanLooks {
   readonly changed: ReadonlySet<string>;
   readonly dismiss: () => void;

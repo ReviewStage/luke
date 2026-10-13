@@ -22,6 +22,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
@@ -202,6 +203,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       },
       composer,
       model,
+      servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => {
@@ -298,7 +300,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       ].filter(
         (each) =>
           !each.matches(
-            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .dictate-button, .attached-file-face, .attached-file-remove",
+            ".plan-compose-chip, .agent-model-button, .agent-servers-button, .agent-composer-attach, .dictate-button, .attached-file-face, .corner-dismiss",
           ),
       );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
@@ -611,6 +613,8 @@ test("the model button is the pair alone and a chevron: no mark before it, the e
   assert.equal(button.firstElementChild?.matches(".model-label"), true, "the words come first");
   assert.equal(button.lastElementChild?.matches("svg"), true, "the chevron comes last");
   assert.equal(button.querySelectorAll("svg").length, 1, "the chevron is its one glyph");
+  act(() => button.click());
+  assertOpensWhatItNames(button);
 });
 
 test("the chip's menu ends on one muted line with what the agent has cost: tokens and dollars, tokens alone where the service priced none, and nothing before a turn settled", async () => {
@@ -703,11 +707,9 @@ test("once a step has ended, a ring stands beside the model chip, coloured by ho
   const button = ring();
   assert.ok(button);
   assert.equal(
-    button
-      .closest(".agent-context")
-      ?.previousElementSibling?.classList.contains("agent-model-chip"),
+    button.closest(".agent-context")?.previousElementSibling?.classList.contains("agent-servers"),
     true,
-    "the ring stands right after the model chip",
+    "the ring stands right after the MCP servers button",
   );
   assert.equal(button.dataset.level, "room");
   act(() => {
@@ -827,7 +829,7 @@ test("each composer popover opens right above the button that opened it, from it
   }
 });
 
-test("the foot reads as its keys go: the + at its left, then at its right the model, the context ring, the microphone, and the round button", async () => {
+test("the foot reads as its keys go: the + at its left, then at its right the model, the MCP servers, the context ring, the microphone, and the round button", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   await tab.stand({ context: CONTEXT });
   const name = (button: HTMLButtonElement) =>
@@ -838,12 +840,14 @@ test("the foot reads as its keys go: the + at its left, then at its right the mo
   assert.deepEqual(presses(".agent-composer form"), [
     "Attach files",
     "model",
+    "MCP servers",
     "Context usage",
     "Dictate",
     "Stop",
   ]);
   assert.deepEqual(presses(".agent-composer-actions"), [
     "model",
+    "MCP servers",
     "Context usage",
     "Dictate",
     "Stop",

@@ -6,9 +6,9 @@ import ts from "typescript";
 import { test } from "vitest";
 
 /**
- * No code path writes a message, a turn, or an event except the store writer:
+ * No code path writes a message or a turn except the store writer:
  * the invariant the writer establishes, stated over the server's own sources.
- * A module that could write one of the three tables has to reach it, and
+ * A module that could write one of the two tables has to reach it, and
  * there are two ways to reach one: name it in the text of a statement the
  * `SqlClient` runs, or hold the Drizzle table the query builder renders from,
  * which a module can only come by through an import. So the modules that
@@ -26,28 +26,37 @@ import { test } from "vitest";
  * resolved against the modules that declare the tables, so an alias
  * (`messages as rows`), a namespace (`schema.messages`), and a re-export are
  * each the table they name and nothing launders one. What the sweep cannot
- * follow is a table reached through a bare package specifier or a dynamic
- * import, and a name in `WRITTEN_TABLES` imported from anywhere in the tree
+ * follow is a table reached through any other bare package specifier or a
+ * dynamic import, and a name in `WRITTEN_TABLES` imported from anywhere in the tree
  * is taken as its table for that reason, whatever module handed it over.
  */
 
-/** Every server module lives under `server/`; the functions Vercel deploys are emitted from it and nothing is committed under `api/`. */
-const SERVER_ROOTS = ["server"].map((root) =>
-  fileURLToPath(new URL(`../${root}/`, import.meta.url)),
+/**
+ * Every server module lives under `server/`; the functions Vercel deploys are
+ * emitted from it and nothing is committed under `api/`. The tables they reach
+ * are declared in `@sidecar/database`, whose sources are read beside them so
+ * an import of a table resolves to the module that declares it.
+ */
+const DATABASE_SOURCES = "../../packages/database/src";
+
+const SERVER_ROOTS = ["server/", `${DATABASE_SOURCES}/`].map((root) =>
+  fileURLToPath(new URL(`../${root}`, import.meta.url)),
 );
 
-const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "events"]);
+const DATABASE_PACKAGE = "@sidecar/database/";
 
-const WRITER = "server/hosted/store/writer.ts";
+const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 
-/** What the writer writes: every guarded table but `events`, which nothing on the server writes now. */
+const WRITER = `${DATABASE_SOURCES}/models/writer.ts`;
+
+/** What the writer writes: every guarded table. */
 const WRITER_TABLES: ReadonlySet<string> = new Set(["messages", "turns"]);
 
 /** The read module: the message and turn reads the brain and the voice make select from those tables and insert into none. */
-const READER = "server/hosted/store/message-reads.ts";
+const READER = `${DATABASE_SOURCES}/models/message-reads.ts`;
 
 /** The abandoned-turns module: lists the turns still running past the bound and settles each through the writer. */
-const ABANDONED_TURNS_READER = "server/hosted/store/abandoned-turns.ts";
+const ABANDONED_TURNS_READER = `${DATABASE_SOURCES}/models/abandoned-turns.ts`;
 
 /** The tables each module reaches at all, in either dialect. */
 const TABLES_REACHED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
@@ -56,13 +65,13 @@ const TABLES_REACHED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [ABANDONED_TURNS_READER, new Set(["turns"])],
 ]);
 
-/** The modules that may write one of the three tables, which is the writer and nothing else. */
+/** The modules that may write one of the two tables, which is the writer and nothing else. */
 const TABLE_WRITERS: ReadonlySet<string> = new Set([WRITER]);
 
 /** A table as a statement spells it: unquoted or quoted, bare or schema-qualified, in any case. */
-const STATEMENT_TABLE_NAME = `(?:public\\.)?"?(messages|turns|events)\\b"?`;
+const STATEMENT_TABLE_NAME = `(?:public\\.)?"?(messages|turns)\\b"?`;
 
-/** A statement's write over one of the three tables, and the clauses that merely name one. */
+/** A statement's write over one of the two tables, and the clauses that merely name one. */
 const STATEMENT_WRITE = new RegExp(
   `\\b(?:insert\\s+into|update|delete\\s+from|truncate(?:\\s+table)?)\\s+${STATEMENT_TABLE_NAME}`,
   "gi",
@@ -98,8 +107,16 @@ function matchedTables(text: string, pattern: RegExp): readonly string[] {
   );
 }
 
-/** A module specifier as a key of the source set: relative, `.js` as the `.ts` it is emitted from. */
+/**
+ * A module specifier as a key of the source set: relative, `.js` as the `.ts`
+ * it is emitted from, or a `@sidecar/database` subpath as the source its
+ * `exports` names.
+ */
 function resolveSpecifier(importer: string, specifier: string): string | undefined {
+  if (specifier.startsWith(DATABASE_PACKAGE)) {
+    const subpath = specifier.slice(DATABASE_PACKAGE.length);
+    return `${DATABASE_SOURCES}/${subpath === "schemas" ? "schemas/index" : subpath}.ts`;
+  }
   if (!specifier.startsWith(".")) return undefined;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
   return resolved.replace(/\.js$/, ".ts");
@@ -121,7 +138,7 @@ function moduleSpecifier(node: ts.ImportDeclaration | ts.ExportDeclaration): str
   return specifier !== undefined && ts.isStringLiteral(specifier) ? specifier.text : undefined;
 }
 
-/** The table a declaration declares, when it is `pgTable("<name>", …)` over one of the three. */
+/** The table a declaration declares, when it is `pgTable("<name>", …)` over one of the two. */
 function declaredTable(declaration: ts.VariableDeclaration): string | undefined {
   const initializer = declaration.initializer;
   if (initializer === undefined || !ts.isCallExpression(initializer)) return undefined;
@@ -307,7 +324,7 @@ function readable(
   );
 }
 
-test("the writer and the two readers are the server modules that reach the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the two readers are the server modules that reach the messages or turns table, and only the writer writes one", async () => {
   const reach = tableReach(await serverSources());
   const reached = new Map([...reach].map(([file, found]) => [file, found.reached]));
   const writers = [...reach]
@@ -327,15 +344,14 @@ test("the writer and the two readers are the server modules that reach the messa
  */
 const SCHEMA_SOURCES: ReadonlyMap<string, string> = new Map([
   [
-    "server/db/storage-schema.ts",
+    `${DATABASE_SOURCES}/schemas/storage.ts`,
     `import { pgTable, text, uuid } from "drizzle-orm/pg-core";
      export const conversations = pgTable("conversations", { id: uuid("id") });
      export const messages = pgTable("messages", { id: uuid("id") });
-     export const turns = pgTable("turns", { id: uuid("id") });
-     export const events = pgTable("events", { id: uuid("id") });`,
+     export const turns = pgTable("turns", { id: uuid("id") });`,
   ],
-  ["server/db/schema.ts", `export * from "./storage-schema.js";`],
-  ["server/db/auth-schema.ts", `export const user = pgTable("user", {});`],
+  [`${DATABASE_SOURCES}/schemas/index.ts`, `export * from "./storage.js";`],
+  [`${DATABASE_SOURCES}/schemas/auth.ts`, `export const user = pgTable("user", {});`],
 ]);
 
 interface DetectionCase {
@@ -348,28 +364,28 @@ interface DetectionCase {
 const DETECTION_CASES: readonly DetectionCase[] = [
   {
     name: "a builder insert over an imported table",
-    source: `import { messages } from "../db/schema.js";
+    source: `import { messages } from "@sidecar/database/schemas";
       export const write = (db) => db.insert(messages).values({ id: "1" });`,
     reached: ["messages"],
     written: ["messages"],
   },
   {
     name: "a builder update over a table imported under another name",
-    source: `import { turns as turnRows } from "../db/storage-schema.js";
+    source: `import { turns as turnRows } from "@sidecar/database/schemas/storage";
       export const settle = (db) => db.update(turnRows).set({ status: "done" });`,
     reached: ["turns"],
     written: ["turns"],
   },
   {
     name: "a builder delete over a namespace member",
-    source: `import * as schema from "../db/schema.js";
-      export const purge = (db) => db.delete(schema.events);`,
-    reached: ["events"],
-    written: ["events"],
+    source: `import * as schema from "@sidecar/database/schemas";
+      export const purge = (db) => db.delete(schema.turns);`,
+    reached: ["turns"],
+    written: ["turns"],
   },
   {
     name: "a builder select and join reach without writing",
-    source: `import { messages, turns } from "../db/schema.js";
+    source: `import { messages, turns } from "@sidecar/database/schemas";
       export const read = (db) =>
         db.select().from(messages).innerJoin(turns, eq(messages.turnId, turns.id));`,
     reached: ["messages", "turns"],
@@ -377,7 +393,7 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   },
   {
     name: "a select for update is a lock, not a write",
-    source: `import { turns } from "../db/schema.js";
+    source: `import { turns } from "@sidecar/database/schemas";
       export const lock = (db) => db.select().from(turns).for("update");`,
     reached: ["turns"],
     written: [],
@@ -391,7 +407,7 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   },
   {
     name: "a type-only import writes nothing",
-    source: `import type { messages } from "../db/schema.js";
+    source: `import type { messages } from "@sidecar/database/schemas";
       export type Row = typeof messages.$inferSelect;`,
     reached: [],
     written: [],
@@ -399,9 +415,9 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   {
     name: "a raw statement's write",
     source: `export const write = (sql) =>
-        sql\`insert into events (user_id, seq) values (\${id}, \${seq})\`;`,
-    reached: ["events"],
-    written: ["events"],
+        sql\`insert into messages (user_id, seq) values (\${id}, \${seq})\`;`,
+    reached: ["messages"],
+    written: ["messages"],
   },
   {
     name: "a raw statement's write, quoted, qualified, and in upper case",
@@ -446,7 +462,7 @@ const DETECTION_CASES: readonly DetectionCase[] = [
   },
 ];
 
-const RELAY_SOURCE = `export { messages as rows } from "../db/storage-schema.js";`;
+const RELAY_SOURCE = `export { messages as rows } from "@sidecar/database/schemas/storage";`;
 
 test("the detection reads a write in either dialect and passes over what only reads or only says one", () => {
   for (const detection of DETECTION_CASES) {

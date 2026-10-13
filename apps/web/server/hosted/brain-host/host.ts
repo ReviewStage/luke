@@ -1,5 +1,12 @@
+import { askRecord } from "@sidecar/database/models/asks";
+import { readBoard } from "@sidecar/database/models/board-store";
+import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import { readPlanOfConversation } from "@sidecar/database/models/plan-store";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
-import { isTextUIPart, type LanguageModel } from "ai";
+import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -17,24 +24,16 @@ import {
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
-import type { ModelCatalog } from "../model-catalog.js";
-import { readPlanOfConversation } from "../plan-store.js";
+import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
-import { askRecord } from "../store/asks.js";
-import { toolSetHashOf } from "../store/content-addressed.js";
-import {
-  type ConversationTarget,
-  listMessagesPast,
-  type MessageCursor,
-  promptHashOf,
-} from "../store/index.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
   BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
   RELAY_TURN,
@@ -49,8 +48,7 @@ import {
   SESSION_STANDING,
 } from "./conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
-import { childConversationId, hostTurnId } from "./ids.js";
-import { meteredModel, openAiBrainModel, summarizedReasoningModel } from "./model.js";
+import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -169,8 +167,13 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
-  /** The model one inference runs on, the meter spent for the caller first; nothing when the deployment holds no key. */
-  model(admitted: AdmittedConversation): LanguageModel | undefined;
+  /**
+   * The model one inference runs on and the effort it is asked for, as a
+   * coding agent's step is told its own, the meter spent for the account
+   * first; or why none runs: the deployment holds no key, or names a model
+   * outside the providers Luke runs.
+   */
+  model(admitted: AdmittedConversation): Result.Result<CoderModelSelection, string>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /**
@@ -237,14 +240,23 @@ function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> 
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
 
-  /** The caller's metered model, or nothing while the deployment holds no key. */
-  const modelFor = (admitted: AdmittedConversation): LanguageModel | undefined => {
+  /** The caller's metered model and its effort, or why none runs. */
+  const modelFor = (admitted: AdmittedConversation): Result.Result<CoderModelSelection, string> => {
     const access = seams.openAi();
-    if (!access) return undefined;
-    return meteredModel(summarizedReasoningModel(openAiBrainModel(access.apiKey, access.modelId)), {
+    if (!access) return Result.fail(BRAIN_HOST_REFUSAL.NO_MODEL);
+    return brainModelSelection(access, {
       spend: () => seams.spend(admitted.caller),
       report: (message) => console.warn(message),
     });
+  };
+
+  /** The web search's access: Luke's key and the brain's model as OpenAI's own API names it; nothing without a key. */
+  const researchAccess = () => {
+    const access = seams.openAi();
+    const named = access === undefined ? undefined : providerModelOf(access.choice.model);
+    return access === undefined || named === undefined
+      ? undefined
+      : { apiKey: access.apiKey, modelId: named.modelId };
   };
 
   /** The plan the admitted conversation belongs to, as the caller reaches it now; nothing once it is deleted or out of reach. */
@@ -266,9 +278,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
   ) =>
     Effect.gen(function* () {
+      // The turn row names the model and effort the inferences are asked for, as a coding
+      // agent's does; the fixture's own id under the scripted model, which is asked no effort.
+      const choice = seams.scriptedModel() ? undefined : seams.openAi()?.choice;
       const model = seams.scriptedModel()
         ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
-        : seams.openAi()?.modelId;
+        : choice?.model;
       // The tool set's hash is taken as each turn starts, from the same
       // declarations the tools resolver hands eve, so the hash names what
       // the model is offered and not a list kept beside it.
@@ -313,6 +328,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       yield* relay.handle(event, {
         ...standing,
         ...(model !== undefined ? { model } : undefined),
+        ...(choice !== undefined ? { reasoningEffort: choice.effort } : undefined),
         ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
       });
     });
@@ -403,7 +419,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,
-                  openAi: seams.openAi(),
+                  openAi: researchAccess(),
                   spend: Effect.tryPromise({
                     try: () => seams.spend(caller),
                     catch: (cause) => new MeterUnavailable({ cause }),
@@ -466,8 +482,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     titleChild: (session) =>
       Effect.gen(function* () {
         const parent = session.parent;
-        const model = seams.titleModel();
-        if (parent === undefined || model === undefined) return;
+        if (parent === undefined) return;
         // Admitted on reach alone, as the relay of the same session is.
         const admitted = yield* admitConversation(session.auth, {
           id: session.id,
@@ -475,6 +490,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         });
         if (Result.isFailure(admitted)) return;
         const { target } = admitted.success;
+        const model = seams.titleModel(target.userId);
+        if (model === undefined) return;
         const childId = childConversationId(target.conversationId, parent.callId);
         // Note that the task named is the child's first, whichever task woke this, because a
         // later task's call racing the first one's must not name the worker for the later.

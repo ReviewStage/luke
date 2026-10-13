@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { readBoard, writeScene } from "@sidecar/database/models/board-store";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import {
+  createPlan,
+  deletePlan,
+  openPlanConversation,
+  readPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
+import { storeWriter } from "@sidecar/database/models/writer";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -42,11 +56,8 @@ import {
   scriptedModel,
 } from "../eve/scripted-model";
 import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { GitHubApp } from "../server/github/github-app";
 import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
-import { readBoard, writeScene } from "../server/hosted/board-store";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -57,11 +68,9 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
@@ -71,12 +80,6 @@ import {
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
-import {
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-} from "../server/hosted/plan-store";
 import {
   READ_WEB_PAGE_TOOL,
   SEARCH_WEB_STATUS,
@@ -89,7 +92,6 @@ import {
   RUN_IN_REPOSITORY_TOOL,
 } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import {
   GITHUB_APP_SETTINGS,
@@ -101,7 +103,6 @@ import {
 import { noNetwork } from "./support/no-network";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -194,7 +195,10 @@ function searchService(answered: boolean) {
   );
 }
 
-const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
+const TEST_OPENAI = () => ({
+  apiKey: Redacted.make("sk-test-planning"),
+  choice: { model: "openai/gpt-test", effort: "medium" },
+});
 
 /** The repository the reading scenarios' plan is about, and the installation the developer reaches it through. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
@@ -516,7 +520,7 @@ const windowDocument = (userId: string, planId: string) =>
     }),
   );
 
-it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
+it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
   it.effect(
     "a plan's conversation is opened once, attached, and read back as the one it resumes in",
     () =>

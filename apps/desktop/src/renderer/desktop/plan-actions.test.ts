@@ -6,11 +6,12 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { sheetStyle } from "#testing/css-rules";
+import { sheetStyle, withKeyboardOn } from "#testing/css-rules";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
@@ -141,7 +142,6 @@ function sidebarPlan(
       plan,
       current,
       unread: false,
-      repositoryShown: true,
       now: plan.updatedAt,
       onOpen: () => asked.opened.push(plan.id),
     }),
@@ -311,7 +311,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
 
   assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
-  assert.equal(other.textContent, "Billing exportnowacme/billing");
+  assert.equal(other.textContent, "Billing exportnow");
 });
 
 test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin, rename, or repository", () => {
@@ -421,12 +421,7 @@ test("hovered or reached from the keyboard, a sidebar plan's time steps out and 
   item.dataset.hovered = "true";
   const hovered = shown();
   delete item.dataset.hovered;
-  // Tab reaches the row, as the keyboard would.
-  act(() => {
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    row.focus();
-  });
-  const focused = shown();
+  const focused = withKeyboardOn(row, shown);
 
   assert.deepEqual(resting, ["visible", "0"]);
   assert.deepEqual(hovered, ["hidden", "1"]);
@@ -1036,6 +1031,65 @@ test("Command-Shift-A archives the open plan, and an archived plan leaves the ch
 
   assert.equal(chord(window, { key: "a", code: "KeyA", shiftKey: true }), false);
   assert.deepEqual(asked.marked, [[PLAN.id, PLAN_MARK.ARCHIVE]]);
+});
+
+/** The open plan's column on `tab`, the window's chords heard, Copy plan's presses counted into `copies`. */
+function PlanOnTab({
+  plans,
+  tab,
+  copies,
+}: {
+  plans: PlansControl;
+  tab: MainTab;
+  copies: MainTab[];
+}): React.JSX.Element {
+  useAppKeymap(true);
+  return createElement(DesktopPlans, {
+    summary: UNPINNED_SUMMARY,
+    looks: NO_LOOKS,
+    plans: {
+      ...plans,
+      mainTabs: { ...plans.mainTabs, tabs: [MAIN_TAB.PLAN, AGENT_TAB, MAIN_TAB.INBOX], tab },
+      copy: { onPress: () => copies.push(tab) },
+    },
+  });
+}
+
+const AGENT_TAB: MainTab = { agent: "agent-1" };
+
+test("Start and the ⋯ stand only on the plan's own tab, while the plan's chords copy, archive, and ask to delete from an agent's tab and the Inbox alike", async () => {
+  const { plans, asked } = openTab();
+  const copies: MainTab[] = [];
+  const container = mount(createElement(PlanOnTab, { plans, tab: MAIN_TAB.PLAN, copies }));
+  const root = roots.at(-1);
+  assert.ok(root);
+  const drawn = () =>
+    ["Start a coding agent", "Plan actions"].filter(
+      (label) => container.querySelector(`.desktop-toolbar [aria-label="${label}"]`) !== null,
+    );
+  assert.deepEqual(drawn(), ["Start a coding agent", "Plan actions"]);
+  // A menu open as the tab changes goes with the button it dropped from.
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  openMenu(more);
+  assert.ok(labels().length > 0);
+
+  for (const tab of [AGENT_TAB, MAIN_TAB.INBOX]) {
+    act(() => root.render(createElement(PlanOnTab, { plans, tab, copies })));
+    assert.deepEqual(drawn(), [], `nothing of the plan's on ${JSON.stringify(tab)}`);
+    assert.deepEqual(labels(), [], "no menu left without its button");
+    assert.ok(container.querySelector('.desktop-toolbar [aria-label="Toggle pinned summary"]'));
+    assert.equal(chord(window, { key: "c", code: "KeyC", shiftKey: true }), true);
+    assert.equal(chord(window, { key: "a", code: "KeyA", shiftKey: true }), true);
+  }
+  assert.deepEqual(copies, [AGENT_TAB, MAIN_TAB.INBOX]);
+  assert.deepEqual(asked.marked, [
+    [PLAN.id, PLAN_MARK.ARCHIVE],
+    [PLAN.id, PLAN_MARK.ARCHIVE],
+  ]);
+  assert.equal(chord(window, { key: "Backspace" }), true);
+  await confirmDelete();
+  assert.deepEqual(asked.deleted, [PLAN.id]);
 });
 
 test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {

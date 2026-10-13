@@ -1,3 +1,5 @@
+import type { IntegrationProvider } from "./integration-wire.js";
+
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
@@ -26,29 +28,39 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PLAN_TEMPLATE: "/api/account/plan-template",
   /**
+   * The template's history: a page of its revisions, newest first, or with a
+   * `before` query the page before that revision (GET).
+   * `plan-document-template.ts` declares the answer.
+   */
+  ACCOUNT_PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.
    */
   DICTATION: "/api/dictation",
-  /** Where the account's Linear connection stands (GET). `linear-wire.ts` declares the answer. */
-  ACCOUNT_LINEAR: "/api/account/linear",
-  /** Begins a browser sign-in to Linear for the account (POST), answering the address the browser opens. */
-  ACCOUNT_LINEAR_CONNECT: "/api/account/linear/connect",
-  /** Ends the account's Linear connection (POST); what agents already wrote to Linear stands. */
-  ACCOUNT_LINEAR_DISCONNECT: "/api/account/linear/disconnect",
+  /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
+  ACCOUNT_INTEGRATIONS: "/api/account/integrations",
   /**
-   * Where Vercel Connect returns the browser from a Linear sign-in (GET),
-   * with the sign-in's own state: the route settles it and sends the
-   * browser on to the landing page `linear-wire.ts` names.
+   * Where Vercel Connect returns the browser from an integration's sign-in
+   * (GET), with the sign-in's own state, which names the provider too: the
+   * route settles it and sends the browser on to the landing page
+   * `integration-wire.ts` names.
    */
-  ACCOUNT_LINEAR_CONNECTED: "/api/account/linear/connected",
+  ACCOUNT_INTEGRATIONS_CONNECTED: "/api/account/integrations/connected",
   /**
    * What waits on the developer across the account's plans: every open
    * inbox item, past a cursor (GET), held open while nothing changed, as a
    * plan's inbox is. `account-inbox-wire.ts` declares the answer.
    */
   INBOX: "/api/inbox",
+  /**
+   * The shell commands the account's agents asked to run on the developer's
+   * Mac: the ones waiting, held open while none is, each claimed for the
+   * Mac that read it (GET), and one's result (POST). `mac-command-wire.ts`
+   * declares the bodies.
+   */
+  MAC_COMMANDS: "/api/mac-commands",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -117,6 +129,21 @@ export const VOICE_SERVICE_PATH = {
   SESSIONS: "/api/voice/sessions",
 } as const;
 
+/** Begins a browser sign-in to one provider for the account (POST), answering the address the browser opens. */
+export function integrationConnectPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/connect`;
+}
+
+/** The tools one provider's server offers the account's agents (GET), read from the server now or shortly before. */
+export function integrationToolsPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/tools`;
+}
+
+/** Ends the account's connection to one provider (POST); what agents already did there stands. */
+export function integrationDisconnectPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
+}
+
 /** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function planPath(planId: string): string {
   return `${HOSTED_SERVICE_PATH.PLANS}/${encodeURIComponent(planId)}`;
@@ -127,7 +154,7 @@ export function planBoardPath(planId: string): string {
   return `${planPath(planId)}/board`;
 }
 
-/** The developer's edit of one field of one plan (POST). */
+/** The developer's edit of one plan's document (POST). */
 export function planEditPath(planId: string): string {
   return `${planPath(planId)}/edit`;
 }
@@ -182,6 +209,11 @@ export function planTreePath(
   return query.size === 0 ? path : `${path}?${query}`;
 }
 
+/** The skills a developer may choose of one plan's repository, as GitHub holds it now (GET). */
+export function planSkillsPath(planId: string): string {
+  return `${planPath(planId)}/skills`;
+}
+
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
 export function planRevisionsPath(planId: string, before?: number): string {
   const path = `${planPath(planId)}/revisions`;
@@ -198,6 +230,16 @@ export function planRevisionPath(planId: string, seq: number): string {
 /** One revision of one plan put back as its content (POST). */
 export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
+}
+
+/** One revision of the account's plan template: its text beside the text before it (GET). */
+export function planTemplateRevisionPath(seq: number): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS}/${seq}`;
+}
+
+/** One revision of the account's plan template put back as the template (POST). */
+export function planTemplateRestorePath(seq: number): string {
+  return `${planTemplateRevisionPath(seq)}/restore`;
 }
 
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
@@ -258,4 +300,9 @@ export function agentStopPath(agentId: string): string {
 /** What one agent published (GET): the branch it pushed and the pull request from it, as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
 export function agentPullRequestPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
+}
+
+/** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentChangesPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/changes`;
 }

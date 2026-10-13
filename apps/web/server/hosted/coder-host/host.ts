@@ -1,3 +1,13 @@
+import {
+  type CodingAgent,
+  readCodingAgentOfConversation,
+  readDelegation,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
+import { promptHashOf } from "@sidecar/database/models/content-addressed";
+import { childConversationId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -18,19 +28,9 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { childConversationId } from "../brain-host/ids.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import {
-  type CodingAgent,
-  readCodingAgentOfConversation,
-  readDelegation,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { promptHashOf } from "../store/index.js";
 import { logStoreFailure } from "../store-failure.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
@@ -62,6 +62,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import { agentSkills, type CoderSkill } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
@@ -175,6 +176,11 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
+  /** The skills the agent's repository keeps, offered to the session as it starts; none where they could not be read (`skills.ts`). */
+  skills(
+    admitted: AdmittedConversation,
+    agent: CodingAgent,
+  ): Effect.Effect<readonly CoderSkill[], never, CheckoutServices>;
   /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
   checkOut(
     admitted: AdmittedConversation,
@@ -439,6 +445,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         promptOf(agent, ciReadable),
       ),
 
+    skills: (admitted, agent) => agentSkills(admitted.target, agent),
+
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
         checkOutAgentRepository(admitted.target, agent, sandbox),
@@ -528,7 +536,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     title: (admitted) =>
       Effect.gen(function* () {
-        const model = seams.titleModel();
+        const model = seams.titleModel(admitted.target.userId);
         if (model === undefined) return;
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return;
@@ -537,7 +545,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
-        const model = seams.titleModel();
+        const model = seams.titleModel(admitted.target.userId);
         if (model === undefined) return;
         // A call no delegation was recorded for opened no child, so the fill finds no row to write.
         const childId = childConversationId(admitted.target.conversationId, callId);

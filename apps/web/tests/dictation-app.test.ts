@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import {
@@ -13,13 +17,9 @@ import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { hostedUsage } from "../server/db/usage-schema";
 import { dictationApp } from "../server/dictation-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * A dictated clip answered by the group the way a function answers it, over
@@ -170,7 +170,7 @@ function formOf(call: RecordedRequest): FormData {
 
 const refusal = (status: number, error: string) => ({ status, body: { error } });
 
-it.layer(testSqlClient)("the dictation route", (it) => {
+it.layer(getTestDB())("the dictation route", (it) => {
   it.effect(
     "a clip is sent to the transcription model with its words on Luke's key, and answered with what it said",
     () =>

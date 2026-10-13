@@ -1,3 +1,20 @@
+import { childTitlesOf } from "@sidecar/database/models/child-titles";
+import {
+  archiveCodingAgent,
+  type CodingAgent,
+  listCodingAgents,
+  readCodingAgent,
+  renameCodingAgent,
+  updateCodingAgentChoice,
+  updateCodingAgentServers,
+} from "@sidecar/database/models/coding-agent-store";
+import { childConversationId } from "@sidecar/database/models/ids";
+import { readPlan } from "@sidecar/database/models/plan-store";
+import {
+  type ConversationTarget,
+  type StoreWriter,
+  storeWriter,
+} from "@sidecar/database/models/writer";
 import {
   base64Chars,
   CODING_AGENT_BOUNDS,
@@ -5,12 +22,13 @@ import {
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
-  type CodingAgentSummary,
+  type CodingAgentPullRequestAnswer,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -26,7 +44,7 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cache, Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -41,18 +59,9 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
-import type { GitHubApp } from "./github/github-app.js";
+import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import {
-  describeUnreachable,
-  EVE_CANCEL_OUTCOME,
-  EVE_MOUNT,
-  type EveSessions,
-  eveSessions,
-} from "./hosted/brain-host/eve-sessions.js";
-import { childConversationId } from "./hosted/brain-host/ids.js";
-import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
-import { childTitlesOf } from "./hosted/child-titles.js";
+import { pullRequestFiles } from "./github/pull-requests.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
@@ -60,8 +69,16 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
+import { codingAgentSummary } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
+import {
+  type EveReach,
+  eveFor,
+  standingsOf,
+  stoppedForGood,
+  stoppedTurn,
+  summaryOf,
+} from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   cursorOfWire,
@@ -73,18 +90,6 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
-import {
-  archiveCodingAgent,
-  awaitingLinesOfReached,
-  type CodingAgent,
-  type CodingAgentLatestTurn,
-  latestTurnsOfReached,
-  listCodingAgents,
-  RUNNING_TURN_STATUSES,
-  readCodingAgent,
-  renameCodingAgent,
-  updateCodingAgentChoice,
-} from "./hosted/coding-agent-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -105,8 +110,6 @@ import {
   withdrawInboxAnswer,
 } from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
-import { readPlan } from "./hosted/plan-store.js";
-import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
 import { logStoreFailure } from "./hosted/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -165,11 +168,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * branch and pull request its own transcript names, as GitHub holds them
  * now (`hosted/coder-host/published.ts`), kept per agent for a short while
  * so a tab asking beside every held page does not ask GitHub as often.
+ * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
+ * the pull request that answer names, read from GitHub afresh on each ask
+ * (`github/pull-requests.ts`), each with its patch, or none where the
+ * agent has opened none yet.
  * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
  * agent's transcript carries: the child conversation is a function of the
- * two (`brain-host/ids.ts`), and only a delegation recorded under an
+ * two (`@sidecar/database/models/ids`), and only a delegation recorded under an
  * agent the account reaches answers, so a call of any other agent reads as
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the
@@ -189,6 +196,8 @@ const AGENTS_PATH = {
   STOP: "/api/agents/stop",
   /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST: "/api/agents/pull-request",
+  /** GET reads the agent's changes, its pull request's files; the rewrite moves the path's agent id into the `id` query. */
+  CHANGES: "/api/agents/changes",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
@@ -241,12 +250,8 @@ const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 const MAXIMUM_MESSAGE_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
 
-export interface CodingAgentsAppSeams {
+export interface CodingAgentsAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
-  /** The origin eve answers on; nothing where the deployment names none, which refuses every Start and Stop as unavailable. */
-  eveOrigin: () => string | undefined;
-  /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
-  eve?: (authorization: Redacted.Redacted) => EveSessions;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -347,42 +352,6 @@ function transcriptResponse(
   });
 }
 
-/** eve as the developer reaches it, or unavailable where the deployment names no origin for eve. */
-const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  request: Request,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-  if (seams.eve !== undefined) return seams.eve(authorization);
-  const origin = seams.eveOrigin();
-  if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* eveSessions({ origin, caller: { authorization }, mount: EVE_MOUNT.CODER });
-});
-
-/** Where each of the agents' conversations named stands now, read by id since the agents passed the plan's gate: its newest turn, and whether a line of the developer's awaits one. */
-const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  conversationIds: readonly string[],
-): Effect.fn.Return<
-  (conversationId: string) => AgentTurnStanding,
-  HostedRefusal,
-  SqlClient.SqlClient
-> {
-  const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
-  const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
-  return (conversationId) => ({
-    turn: turns.get(conversationId),
-    lineAwaits: awaiting.has(conversationId),
-  });
-});
-
-/** The agent's summary with its status read now. */
-const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentSummary, HostedRefusal, SqlClient.SqlClient> {
-  const standing = yield* standingsOf([agent.conversationId]);
-  return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
-});
-
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
   effect: Effect.Effect<A, E | ModelChoiceRefused, R>,
@@ -403,7 +372,8 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, task, attachments } = asked.success;
+  const { idempotencyKey, model, effort, contextWindow, task, attachments, disabledServers } =
+    asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
   if (
@@ -423,6 +393,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       choice,
       task,
       attachments,
+      disabledServers,
     }),
   );
   if (!created) {
@@ -591,56 +562,6 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
   },
 );
 
-/** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
-function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgentLatestTurn & {
-  readonly eveTurnId: string;
-} {
-  return (
-    turn !== undefined &&
-    RUNNING_TURN_STATUSES.has(turn.status) &&
-    turn.eveTurnId !== null &&
-    turn.cancelRequestedAt === null
-  );
-}
-
-/** eve's cancel of the agent's turn under way, then the row's stamp; nothing where no turn runs that a Stop has to stop. */
-const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: CodingAgentsAppSeams,
-  writer: Effect.Effect<StoreWriter>,
-  request: Request,
-  agent: CodingAgent,
-  target: ConversationTarget,
-): Effect.fn.Return<void, HostedRefusal, AgentsServices> {
-  const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
-  if (!stoppable(turn)) return;
-  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return;
-  // The cancel names the turn the row was written for, never the session's turn under way, so a
-  // turn that ended between the read above and eve's answer is answered `no_active_turn` and
-  // nothing newer is stopped in its place.
-  const eve = yield* eveFor(seams, request);
-  const cancelled = yield* eve
-    .cancel(sessionId, turn.eveTurnId)
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to stop a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          { outcome: EVE_CANCEL_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
-        ),
-      ),
-    );
-  if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  const at = yield* DateTime.nowAsDate;
-  const stamped = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) => write.requestTurnCancel(target, { turnId: turn.id, at })),
-  );
-  if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-});
-
 /**
  * PATCH changes the agent for what follows, and answers it as it then
  * stands. A body naming a title renames it: the title written whole on the
@@ -651,7 +572,9 @@ const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * against the catalog as a Start checks its own,
  * written on the row the steps read; the account's default is untouched.
  * A body naming `archived` archives the agent, stopping a turn still
- * running first as a Stop does, or brings it back.
+ * running first as a Stop does, or brings it back. A body naming
+ * `disabledServers` replaces the list of MCP servers switched off for the
+ * agent, which its next turn reads as it starts.
  */
 const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -662,7 +585,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent, target } = yield* reachedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
   const rename = readEither(codingAgentRenameRequestSchema)(body);
   if (Result.isSuccess(rename)) {
@@ -680,15 +603,19 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const { archived } = archive.success;
     if (archived) {
       // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedTurn(seams, writer, request, agent, target);
-      // A session still coming up, or a line awaiting the turn it opens, has no turn a Stop can
-      // name yet, so nothing is archived until there is one to stop or it has ended.
-      const { status } = yield* summaryOf(agent);
-      if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
-        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-      }
+      yield* stoppedForGood(seams, writer, request, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
+    if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(changed.value),
+    });
+  }
+  const servers = readEither(codingAgentServersRequestSchema)(body);
+  if (Result.isSuccess(servers)) {
+    const changed = yield* hostedStoreOrUnavailable(
+      updateCodingAgentServers(userId, agent.id, servers.success.disabledServers),
+    );
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       agent: yield* summaryOf(changed.value),
@@ -716,29 +643,21 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent, target } = yield* reachedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, agent, target);
+  const { agent } = yield* reachedAgent(seams, request);
+  yield* stoppedTurn(seams, writer, request, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
 });
 
-/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
-const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
+/** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
+const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: PublishedCache,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* reachedAgent(seams, request);
+  userId: string,
+  agent: CodingAgent,
+): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
   const { status } = yield* summaryOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
-  const answer = yield* Cache.get(
-    published,
-    new PublishedKey({ userId, agentId: agent.id, ended }),
-  ).pipe(
+  return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
         // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
@@ -754,7 +673,49 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
       }
     }),
   );
+});
+
+/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
+const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* reachedAgent(seams, request);
+  const answer = yield* keptPublished(published, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
+/**
+ * GET reads the agent's changes: the files of the pull request its kept
+ * published answer names, read from GitHub afresh on the developer's own
+ * token, or none where it names no pull request yet.
+ */
+const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* reachedAgent(seams, request);
+  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
+  const listed = yield* githubUserReadOrRefusal(
+    Effect.gen(function* () {
+      const token = yield* (yield* GitHubApp).userToken(userId);
+      return yield* pullRequestFiles(token, agent.repository, pullRequest);
+    }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    pullRequest: { url: pullRequest.url, ...listed },
+  });
 });
 
 /** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */
@@ -925,7 +886,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrUndefined(answered);
 });
 
-/** The group: the nine paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the ten paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -947,6 +908,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.PULL_REQUEST,
           hostedRefusing(pullRequestEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.CHANGES,
+          hostedRefusing(changesEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,

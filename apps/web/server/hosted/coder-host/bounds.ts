@@ -89,6 +89,10 @@ export const CODER_REFUSAL = {
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
   NO_FAST_VERSION:
     "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
+  FAST_ON_OWN_KEY:
+    "Not run: Fast isn't available on your own API key; Luke runs Fast on its own Anthropic key alone. Choose the model with Fast off.",
+  FAST_NOT_ENABLED:
+    "Not run: Fast mode isn't enabled for this Anthropic organization. Choose the model with Fast off.",
   ACCOUNT_KEY_UNREADABLE:
     "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
   ACCOUNT_KEY_REFUSED:

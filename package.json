@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "node scripts/check.mjs",
+    "db:generate": "pnpm --filter @sidecar/database db:generate",
     "discarded-effect": "node scripts/discarded-effect.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",

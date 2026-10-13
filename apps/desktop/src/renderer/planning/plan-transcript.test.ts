@@ -10,6 +10,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanTranscript } from "./plan-transcript";
@@ -131,6 +133,67 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
   assert.doesNotMatch(drawn, /<img/u);
   assert.doesNotMatch(drawn, /example\.test/u);
   assert.match(drawn, /Look at/u);
+});
+
+test("a link in a spoken line opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and an address the browser should not open is words that go nowhere", () => {
+  const sent = installActBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const region: TranscriptRegion = {
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: [
+      {
+        key: "call-1",
+        startedAt: 1_000,
+        live: false,
+        lukeEnded: false,
+        messages: [
+          {
+            id: "0",
+            role: TRANSCRIPT_SPEAKER.ASSISTANT,
+            parts: [
+              {
+                type: TRANSCRIPT_PART_TYPE.TEXT,
+                text: `See [the pull request](https://github.com/acme/relay/pull/7), [the docs](https://example.test/docs), [a script](javascript:alert(1)), [a file](file:///etc/passwd), [mail](mailto:dean@example.test), [an app](luke://plan/7), and [a long one](https://example.test/?q=${"a".repeat(2_048)}).`,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
+
+  // Note that Streamdown blocks a script's, a file's, and an app's scheme
+  // before the link is ours to draw; a mail address and an address past the
+  // act's cap are ours to refuse.
+  assert.deepEqual(
+    [...container.querySelectorAll("a")].map((link) => link.getAttribute("href")),
+    ["https://github.com/acme/relay/pull/7", "https://example.test/docs"],
+  );
+  assert.deepEqual(
+    [...container.querySelectorAll(".agent-link-inert")].map((inert) => inert.textContent),
+    ["mail", "a long one"],
+  );
+  assert.equal(
+    container.querySelector(".agent-link-inert")?.getAttribute("title"),
+    "mailto:dean@example.test",
+  );
+  const clicks = [...container.querySelectorAll<HTMLAnchorElement>("a")].map((link) => {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(click);
+    });
+    return click.defaultPrevented;
+  });
+  assert.deepEqual(clicks, [true, true]);
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+    { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
+  ]);
 });
 
 test("the empty and failed states each say where the transcript stands, the empty one under the Transcript tab's glyph drawn large, and a failure offers Retry", () => {

@@ -209,7 +209,15 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.TOGGLE_SPEAKER),
       ],
     },
-    { label: "Go", submenu: [commandItem(APP_COMMAND.BACK), commandItem(APP_COMMAND.FORWARD)] },
+    {
+      label: "Go",
+      submenu: [
+        commandItem(APP_COMMAND.INBOX),
+        SEPARATOR,
+        commandItem(APP_COMMAND.BACK),
+        commandItem(APP_COMMAND.FORWARD),
+      ],
+    },
     {
       // The role makes this macOS's own Window menu, which adds the window
       // list and, on macOS 15, its tiling items; ⌘` cycles the windows.

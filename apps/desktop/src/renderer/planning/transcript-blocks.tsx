@@ -5,13 +5,14 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
+  BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
   CircleDotIcon,
   CircleIcon,
   CircleStopIcon,
+  CodeXmlIcon,
   EyeIcon,
-  FileCodeIcon,
   FilePenIcon,
   FileTextIcon,
   GlobeIcon,
@@ -28,6 +29,7 @@ import {
   SearchIcon,
   SendIcon,
   TerminalIcon,
+  WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
@@ -54,6 +56,7 @@ import {
 import { cn } from "../ai-elements/utils";
 import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
+import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -69,6 +72,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "./turn-rows";
+import { opensAsLink, useOpenLink } from "./use-open-link";
 import { WorkingTime } from "./working-time";
 
 /**
@@ -78,7 +82,7 @@ import { WorkingTime } from "./working-time";
  * (`transcript-model.ts`, `work-model.ts`, `coding-agent-model.ts` with
  * `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
- * markdown at the panel's scale, reasoning folded under one quiet line
+ * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
  * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
@@ -90,29 +94,62 @@ import { WorkingTime } from "./working-time";
  */
 
 /**
- * How a transcript's markdown is drawn: at the panel's scale, its code and
- * tables as `transcript-markdown.tsx` draws them, but never as an image,
- * because an image is a request to wherever its address points the moment
- * the tab opens, and nothing said on a call or written by a model should
- * make one.
+ * A link in a transcript's words. A web page, such as the pull request an
+ * agent opened or the docs it read, opens in the browser over the act
+ * channel (`use-open-link.ts`); any other address is drawn as words that go
+ * nowhere, with the address as its hint.
+ * Note that the press is ours rather than Streamdown's, because Streamdown's
+ * link asks in a modal of its own and then calls `window.open`, which the
+ * window denies (`hardened-window.ts`), so its link opened nothing.
  */
-export const TRANSCRIPT_COMPONENTS: Components = {
+function TranscriptLink({
+  href,
+  children,
+}: {
+  href: string | undefined;
+  children: ReactNode;
+}): ReactNode {
+  const openLink = useOpenLink();
+  if (href === undefined || !opensAsLink(href)) {
+    return (
+      <span className="agent-link-inert" title={href}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className="agent-link"
+      onClick={(event) => {
+        event.preventDefault();
+        openLink(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+/**
+ * How a transcript's markdown is drawn: at the panel's scale, its code and
+ * tables as `transcript-markdown.tsx` draws them, its links as
+ * {@link TranscriptLink}, but never as an image, because an image is a
+ * request to wherever its address points the moment the tab opens, and
+ * nothing said on a call or written by a model should make one.
+ */
+const TRANSCRIPT_COMPONENTS: Components = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
+  a: ({ href, children }) => <TranscriptLink href={href}>{children}</TranscriptLink>,
   img: () => null,
 };
 
 /** A turn's words as markdown. */
-export function TranscriptWords({
-  text,
-  components = TRANSCRIPT_COMPONENTS,
-}: {
-  text: string;
-  components?: Components;
-}): ReactNode {
+export function TranscriptWords({ text }: { text: string }): ReactNode {
   return (
     <TranscriptMarkdownSource markdown={text}>
-      <MessageResponse mode="static" components={components}>
+      <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
         {text}
       </MessageResponse>
     </TranscriptMarkdownSource>
@@ -158,7 +195,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for the agents read (`CodingAgentsIcon`), never the terminal a shell command wears. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.READ_FILE]: FileTextIcon,
@@ -167,7 +204,8 @@ const CALL_ICON = {
   [CALL_KIND.SEARCH]: SearchIcon,
   [CALL_KIND.WEB_SEARCH]: SearchIcon,
   [CALL_KIND.WEB_PAGE]: GlobeIcon,
-  [CALL_KIND.SHOW_CODE]: FileCodeIcon,
+  [CALL_KIND.LOAD_SKILL]: BookOpenIcon,
+  [CALL_KIND.SHOW_CODE]: CodeXmlIcon,
   [CALL_KIND.DRAW_ON_BOARD]: PencilLineIcon,
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
@@ -180,8 +218,8 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
-  [CALL_KIND.LIST_AGENTS]: BotIcon,
-  [CALL_KIND.READ_AGENT]: BotIcon,
+  [CALL_KIND.LIST_AGENTS]: WorkflowIcon,
+  [CALL_KIND.READ_AGENT]: WorkflowIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
@@ -191,7 +229,7 @@ const CALL_ICON = {
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
-    /** For a command, the plain words the model said it is for, which the row says alone; the command is the body's. */
+    /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
@@ -201,10 +239,10 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 
 /**
  * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened. An undescribed command is the
- * closed row's preview, dropped once the body under it shows the command
- * whole behind its prompt; a description stays, since the body does not say
- * it.
+ * input and answer under it once opened. A command is the closed row's
+ * preview, dropped once the body under it shows the command whole behind
+ * its prompt, or by a find, which draws that body hidden; a description
+ * stays, since the body does not say it.
  */
 export function TranscriptTool({
   state,
@@ -227,7 +265,7 @@ export function TranscriptTool({
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}
-        subjectInBody={command && description === undefined && input.kind === TOOL_BLOCK.COMMAND}
+        subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
       />
       <ToolContent>
         <ToolInput block={input} />
@@ -365,7 +403,8 @@ export function TranscriptTodos({
  * item it is at, which opens onto the whole list. Closed by default, as
  * VS Code's collapses to the item in progress, so it costs the log one
  * line. It is a card on the plan card's look, since it stands outside the
- * log, and it is drawn by the caller only while the list is worked.
+ * log, and it is drawn by the caller only while the list is worked. It
+ * opens upward off the composer, as one sheet (planning.css).
  */
 export function TranscriptTodosDock({
   todos,
@@ -384,7 +423,7 @@ export function TranscriptTodosDock({
       data-todos-dock=""
       aria-label="To-dos"
     >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:-outline-offset-2">
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:[--focus-ring-offset:calc(var(--focus-ring-width)*-1)]">
         <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="shrink-0 text-muted-foreground">{summary}</span>
         {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}
@@ -419,18 +458,18 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
 };
 
-/** The subagent's glyph: the mark of the harness its model runs in, or the worker's robot where no catalog entry names the model, in the muted ink whether it runs or not, since the row's working mark says which. */
+/** The subagent's glyph: the mark of the harness its model runs in, read from the model's id as its tab reads it (`SubagentMark`), or the worker's robot where the model is no provider's Luke runs, in the muted ink whether it runs or not, since the row's working mark says which. */
 function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode {
-  const listed = pair?.models.find((model) => model.id === pair.choice.model);
-  if (listed === undefined) {
+  const provider = pair === undefined ? undefined : providerOf(pair.choice.model);
+  if (provider === undefined) {
     return <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
   }
   return (
     <span
       className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-      data-subagent-harness={listed.provider}
+      data-subagent-harness={provider}
     >
-      <HarnessMark provider={listed.provider} />
+      <HarnessMark provider={provider} />
     </span>
   );
 }
@@ -439,8 +478,9 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
  * or finished: one line drawn as a call's row is, in its muted ink, wearing
  * the mark of the harness its model runs in (the worker's robot where the
- * model is unknown), the job, fading where the line cuts it, the model and
- * effort it runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
+ * model is unknown), the job in the full ink as a call's verb is, fading
+ * where the line cuts it, the model and effort it runs on as every pair is
+ * drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
  * the one button that opens the subagent's tab, which is where its steps
@@ -462,7 +502,11 @@ export function TranscriptSubagent({
   const line = (
     <>
       <SubagentGlyph pair={pair} />
-      <span ref={words} className="subagent-job min-w-0 flex-1" data-overflow={String(clipped)}>
+      <span
+        ref={words}
+        className="subagent-job min-w-0 flex-1 text-foreground"
+        data-overflow={String(clipped)}
+      >
         {job}
       </span>
       {pair === undefined ? null : (
@@ -508,7 +552,12 @@ export function TranscriptSubagent({
   );
 }
 
-/** A line that folds the rows beneath it: a run of calls, or a finished turn's lead. */
+/**
+ * A line that folds the rows beneath it: a run of calls, or a finished
+ * turn's lead. Note that it stays in the muted ink, summary and all,
+ * unlike a call's line, because it counts rows rather than saying what one
+ * did, and the rows it opens onto are what a reader scans.
+ */
 function TurnFold({
   icon,
   summary,

@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import {
+  type KeyRing,
+  openProviderKey,
+  parseKeyRing,
+  sealProviderKey,
+} from "@sidecar/database/models/provider-key-seal";
+import { listProviderKeyRows, saveProviderKey } from "@sidecar/database/models/provider-key-store";
+import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
-import { accountProviderKey } from "../server/db/account-provider-key-schema";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   handleProviderKeyRewrap,
   type ProviderKeyRewrapOptions,
   rewrapProviderKeys,
 } from "../server/hosted/provider-key-rewrap";
-import {
-  type KeyRing,
-  openProviderKey,
-  parseKeyRing,
-  sealProviderKey,
-} from "../server/hosted/provider-key-seal";
-import { listProviderKeyRows, saveProviderKey } from "../server/hosted/provider-key-store";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The rotation's rewrap over a real dialect: every stored key wrapped under
@@ -65,7 +65,7 @@ const openedUnder = (keys: KeyRing, userId: string) =>
     }),
   );
 
-it.layer(testSqlClient)("the provider key rewrap", (it) => {
+it.layer(getTestDB())("the provider key rewrap", (it) => {
   it.effect(
     "moves every older key onto the current version, leaves the current and the unreadable as they were, and moves nothing twice",
     () =>

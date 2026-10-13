@@ -24,6 +24,7 @@ import {
   choiceModelId,
   choiceOn,
   closesComposer,
+  delegates,
   effortFor,
   endLine,
   followsAgent,
@@ -32,7 +33,6 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
-  opensOnGitHub,
   orderedModels,
   publishedUrl,
   pullRequestPillLabel,
@@ -42,11 +42,13 @@ import {
   START_NEEDS_REPOSITORY,
   settledPlanEdits,
   showsPublishedRow,
+  startedAgentOf,
   startFailureNote,
   unreadSentLines,
   unsearchedModels,
   WORKING_PHASE,
 } from "./coding-agent-model";
+import { CALL_KIND } from "./turn-rows";
 
 function message(id: string, text: string): CodingAgentMessage {
   return { id, role: "assistant", parts: [{ type: "text", text }] };
@@ -141,6 +143,7 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
       input: { command: "pnpm check" },
       output: undefined,
       errorText: "exit 1",
+      said: undefined,
     },
     {
       kind: AGENT_PART.TOOL,
@@ -150,6 +153,7 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
       input: {},
       output: "ok",
       errorText: undefined,
+      said: undefined,
     },
     { kind: AGENT_PART.TEXT, text: "Done." },
     { kind: AGENT_PART.OTHER },
@@ -157,10 +161,7 @@ test("a stored message's parts are read for drawing: text, reasoning, a tool cal
   ]);
 });
 
-test("only a page on GitHub opens from the transcript, and each Start refusal has its own words", () => {
-  assert.equal(opensOnGitHub("https://github.com/acme/relay/pull/7"), true);
-  assert.equal(opensOnGitHub("https://example.com/github.com/x"), false);
-  assert.equal(opensOnGitHub("javascript:alert(1)"), false);
+test("each Start refusal has its own words", () => {
   assert.equal(startFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY), START_NEEDS_REPOSITORY);
   const notes = new Set(Object.values(CODING_AGENT_CALL_FAILURE).map(startFailureNote));
   assert.equal(notes.size, Object.values(CODING_AGENT_CALL_FAILURE).length);
@@ -540,7 +541,7 @@ test("the plan edits that have answered are counted, not the ones still out or t
 test("a turn failed on the account's own API key ends saying so and where to replace it", () => {
   assert.equal(
     endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
-    "Failed: your API key was refused or can't be read; check Settings › API keys",
+    "Failed: your API key was refused or can't be read; check Settings › Coding agents › API keys",
   );
 });
 
@@ -582,4 +583,55 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([plan, closed], false), WORKING_PHASE.WORKING);
   assert.equal(agentWorkingPhase([plan, calling, line], false), WORKING_PHASE.WORKING);
   assert.equal(agentWorkingPhase([plan, opened, line], false), WORKING_PHASE.THINKING);
+});
+
+test("a part says what its wire read its call as, and one naming a kind this build does not know says nothing; a planning worker is a delegation, and a start names the agent it began only once it answered one", () => {
+  const [worker, started, refused, unknown, coding] = agentParts({
+    id: "turn-1",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      {
+        type: "tool-worker",
+        toolCallId: "w",
+        state: TOOL_STATE.INPUT_AVAILABLE,
+        input: { message: "Compare the queues." },
+        said: { kind: CALL_KIND.WORKER, subject: "Compare the queues." },
+      },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "s",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: { task: "Fix the invite emails." },
+        output: { status: "accepted", agent: { id: "agent-1" } },
+        said: { kind: CALL_KIND.START_AGENT, subject: "Fix the invite emails." },
+      },
+      {
+        type: "tool-start_coding_agent",
+        toolCallId: "r",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: {},
+        output: { status: "rejected", reason: "The plan has no repository." },
+        said: { kind: CALL_KIND.START_AGENT },
+      },
+      {
+        type: "tool-summon",
+        toolCallId: "u",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        input: {},
+        said: { kind: "summon", subject: "a reviewer" },
+      },
+      { type: "tool-bash", toolCallId: "b", state: TOOL_STATE.OUTPUT_AVAILABLE, input: {} },
+    ],
+  });
+  assert.ok(worker?.kind === AGENT_PART.TOOL && started?.kind === AGENT_PART.TOOL);
+  assert.ok(refused?.kind === AGENT_PART.TOOL && unknown?.kind === AGENT_PART.TOOL);
+  assert.ok(coding?.kind === AGENT_PART.TOOL);
+  assert.deepEqual(worker.said, { kind: CALL_KIND.WORKER, subject: "Compare the queues." });
+  assert.equal(delegates(worker), true);
+  assert.equal(delegates(coding), false);
+  assert.equal(startedAgentOf(started), "agent-1");
+  assert.equal(startedAgentOf(refused), undefined);
+  assert.equal(startedAgentOf(worker), undefined);
+  assert.equal(unknown.said, undefined);
+  assert.equal(coding.said, undefined);
 });

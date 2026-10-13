@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { listRevisions } from "@sidecar/database/models/plan-revisions";
+import { createPlan, type NewPlan, readPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
-import { listRevisions } from "../server/hosted/plan-revisions";
-import { readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan, type TestPlan } from "./support/workspaces";
 
 /**
@@ -128,7 +128,7 @@ const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswe
     return { scribe, asked, pace, reports, drafts, writing };
   });
 
-it.layer(testSqlClient)("the plan's notetaker", (it) => {
+it.layer(getTestDB())("the plan's notetaker", (it) => {
   it.effect(
     "what the developer said is written into the plan once they have been quiet a beat",
     () =>

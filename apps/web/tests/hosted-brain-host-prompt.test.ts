@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -15,7 +17,6 @@ import {
   runtimeSessionReachableBy,
 } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   PLANNING_INSTRUCTIONS,
   planningToolDeclarations,
@@ -23,8 +24,6 @@ import {
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
-import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { noNetwork } from "./support/no-network";

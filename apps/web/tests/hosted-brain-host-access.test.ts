@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   actedForAccount,
   conversationIdOf,
@@ -44,8 +46,6 @@ import {
   EVE_SEND_OUTCOME,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { openPlanConversation } from "../server/hosted/plan-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 import { joinWorkspace, startPlan } from "./support/workspaces";

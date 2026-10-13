@@ -1,3 +1,14 @@
+import {
+  type PlanWriter,
+  readRevisionContent,
+  recordRevision,
+  writerOf,
+} from "@sidecar/database/models/plan-revisions";
+import {
+  readPlanForUpdate,
+  type StoredPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
 import { changedSections, withSectionWriters } from "@sidecar/hosted/plan-document";
 import { applyDocumentEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import {
@@ -15,13 +26,6 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import {
-  type PlanWriter,
-  readRevisionContent,
-  recordRevision,
-  writerOf,
-} from "./plan-revisions.js";
-import { readPlanForUpdate, type StoredPlan, savePlanText } from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**

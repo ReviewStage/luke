@@ -14,6 +14,7 @@ import {
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
+import { useDisclosure } from "../use-disclosure";
 import type { MenuAction } from "./action-menu";
 import { MenuTab } from "./tab-strip";
 
@@ -222,6 +223,7 @@ export function AddTabButton({
   onAnswered: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -265,7 +267,7 @@ export function AddTabButton({
           type="button"
           className="icon-button tab-add"
           aria-label={label}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           onClick={() => {
@@ -281,8 +283,10 @@ export function AddTabButton({
           <PlusIcon />
         </button>
       </Tooltip>
-      {open ? (
+      {drawn.mounted ? (
         <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
           id={menuId}
           className="tab-add-menu"
           label={label}

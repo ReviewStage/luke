@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@sidecar/database/github-installation-vocabulary";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import { member, organization, user } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
 import {
   WORKSPACE_ROLE,
   type WorkspacesAnswer,
@@ -12,13 +17,8 @@ import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { member, organization, user } from "../server/db/auth-schema";
-import { githubInstallation } from "../server/db/github-installation-schema";
-import { GITHUB_INSTALLATION_STATUS } from "../server/db/github-installation-vocabulary";
-import { db } from "../server/db/query";
 import { setInstallationStatus } from "../server/hosted/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import type { WorkspaceSeams } from "../server/hosted/workspace-seams";
 import { workspacesApp } from "../server/workspaces-app";
 import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
 import { openWorkspacePlugin } from "./support/workspace-plugin";

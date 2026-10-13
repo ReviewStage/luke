@@ -10,10 +10,13 @@ export const SETTINGS_PAGE = {
   SHORTCUTS: "shortcuts",
   /** The Markdown the account's new plans start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
-  /** The coding agents' default model and effort, which are the account's on the service rather than a stored setting. */
+  /**
+   * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
+   * the service rather than stored settings, and the stored switch that notifies as an agent ends.
+   */
   CODING_AGENTS: "coding-agents",
-  /** The account's own provider API keys a coding agent runs on, held sealed on the service rather than as a stored setting. */
-  API_KEYS: "api-keys",
+  /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
+  INTEGRATIONS: "integrations",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];

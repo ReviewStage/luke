@@ -6,6 +6,7 @@ import { ModelMenu, settledChoice } from "../planning/model-menu";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { useDisclosure } from "../use-disclosure";
 
 /**
  * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
@@ -19,13 +20,14 @@ import { Tooltip } from "../tooltip";
  * shows the catalog as it stands and the default the last change wrote. A
  * plan with no repository has nothing for an agent to check out, so Start
  * is unavailable and says why on hover instead. The menu closes on a pick,
- * on Escape, and on focus leaving it; Escape stops there, so it closes the
- * menu and not the plan behind it.
+ * on Escape, on a press of the main part, and on focus leaving the button;
+ * Escape stops there, so it closes the menu and not the plan behind it.
  */
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
   const { start } = control;
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -81,7 +83,11 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     });
   };
 
+  // A press of the main part closes the menu whether or not it starts
+  // anything: the main part sits inside the button, so the focus moving to it
+  // is not focus leaving, and nothing else would close the menu.
   const press = () => {
+    setOpen(false);
     if (unavailable || start.busy) return;
     start.onPress();
   };
@@ -119,7 +125,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           type="button"
           className="icon-button start-agent-chevron"
           aria-label="Choose a model to start with"
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           aria-disabled={unavailable ? "true" : undefined}
@@ -131,8 +137,10 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           <ChevronDownIcon />
         </button>
       </div>
-      {open ? (
+      {drawn.mounted ? (
         <ModelMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
           id={menuId}
           className="start-agent-menu"
           models={models}

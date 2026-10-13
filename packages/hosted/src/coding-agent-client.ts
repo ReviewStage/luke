@@ -21,6 +21,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -32,6 +33,10 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
@@ -43,13 +48,16 @@ import {
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
   type CodingAgentRenameRequest,
+  type CodingAgentServersRequest,
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
@@ -69,6 +77,8 @@ import {
 } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
+  planTemplateRevisionAnswerSchema,
+  planTemplateRevisionsAnswerSchema,
   planTemplateWriteRequestSchema,
 } from "./plan-document-template.js";
 import {
@@ -77,6 +87,7 @@ import {
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
 import {
+  agentChangesPath,
   agentMessagesPath,
   agentPath,
   agentPullRequestPath,
@@ -87,6 +98,8 @@ import {
   inboxItemPath,
   planAgentsPath,
   planInboxPath,
+  planTemplateRestorePath,
+  planTemplateRevisionPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -318,6 +331,43 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** A page of the account's plan template history, the newest or the one before a revision. */
+  readPlanTemplateRevisions(
+    params: PlanTemplateRevisionsParams,
+  ): Effect.Effect<PlanTemplateRevisionsAnswerView, never, HttpClient.HttpClient> {
+    const path = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS;
+    const query = new URLSearchParams(
+      params.before === undefined ? {} : { before: String(params.before) },
+    );
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: query.size === 0 ? path : `${path}?${query}`,
+      }),
+      (answer) => readAnswer(answer, planTemplateRevisionsAnswerSchema, {}),
+    );
+  }
+
+  /** One revision of the account's plan template beside the one before it. */
+  readPlanTemplateRevision(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateRevisionAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: planTemplateRevisionPath(params.seq) }),
+      (answer) => readAnswer(answer, planTemplateRevisionAnswerSchema, {}),
+    );
+  }
+
+  /** One revision of the account's plan template put back as the template, answering it as then kept. */
+  restorePlanTemplate(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.POST, path: planTemplateRestorePath(params.seq) }),
+      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    );
+  }
+
   /** The account's own provider keys, as hints and statuses. */
   readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
@@ -487,6 +537,23 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
+  switchServers(
+    agentId: string,
+    request: CodingAgentServersRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(codingAgentServersRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
   /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */
   archive(
     agentId: string,
@@ -517,6 +584,16 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's changes: the files of its pull request as GitHub holds them now. */
+  changes(
+    agentId: string,
+  ): Effect.Effect<CodingAgentChangesAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
     );
   }
 

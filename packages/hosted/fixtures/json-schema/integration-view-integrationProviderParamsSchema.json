@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "notion",
+        "sentry",
+        "slack"
+      ]
+    }
+  },
+  "required": [
+    "provider"
+  ],
+  "additionalProperties": false
+}

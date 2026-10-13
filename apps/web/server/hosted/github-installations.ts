@@ -1,21 +1,24 @@
-import type { AvailableWorkspace } from "@sidecar/hosted/workspace-wire";
-import { and, asc, eq, inArray, ne, not, or } from "drizzle-orm";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import type { HttpClient } from "effect/unstable/http";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import { organization } from "../db/auth-schema.js";
-import { githubInstallation } from "../db/github-installation-schema.js";
+import { db } from "@sidecar/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
   type GitHubAccountType,
   type GitHubInstallationStatus,
-} from "../db/github-installation-vocabulary.js";
-import { db } from "../db/query.js";
+} from "@sidecar/database/github-installation-vocabulary";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  createLinkedOrganization,
+  memberOfWorkspace,
+} from "@sidecar/database/models/workspace-store";
+import { organization } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
+import type { AvailableWorkspace } from "@sidecar/hosted/workspace-wire";
+import { and, asc, eq, inArray, ne, not, or } from "drizzle-orm";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import type { HttpClient } from "effect/unstable/http";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import { GitHubApp, type GitHubUserReadFailure } from "../github/github-app.js";
 import type { StoreFailure } from "./store-failure.js";
-import type { WorkspaceSeams } from "./workspace-seams.js";
-import { createLinkedOrganization, memberOfWorkspace } from "./workspace-store.js";
 
 /**
  * github-installations.ts -- the workspaces that stand for installations of the Luke GitHub App.

@@ -216,7 +216,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   of Start, with the composer's menu: a pick is saved through
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A plan can be
   used without a repository; the planning model then says it has none.
-- **The plan's menu**, from the toolbar's ⋯ and from a right-click on the
+- **The plan's menu**, from the toolbar's ⋯ (drawn while the plan's own tab
+  is chosen, not on an agent's tab or the Inbox) and from a right-click on the
   plan in the sidebar alike: Copy plan (the open plan alone), Rename, Pin or
   Unpin and Archive (an archived plan offers Unarchive alone), Change
   repository… (opens the repository picker, hung from the toolbar, opening
@@ -224,10 +225,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   (`https://github.com/owner/repository`, for a plan with a repository), and
   Permanently delete, last and red, which asks first in a dialog that points
   a plan not yet archived at Archive instead. ⇧⌘A archives the open plan and
-  ⌘⌫ asks to delete it.
+  ⌘⌫ asks to delete it, from any of its tabs.
 - An archived plan opened from under Archived reads and works as any other,
   under a quiet line, "This plan is archived", with Unarchive beside it.
-- **Start**, a split button (`desktop/start-agent-button.tsx`). Its main
+- **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
+  while the plan's own tab is chosen, as the ⋯ is. Its main
   part starts a coding agent on the plan with the account's default model and
   effort; its chevron drops the searchable picker over the models the service
   offers, grouped by provider with the newest first, each under its provider's
@@ -238,7 +240,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).
 - **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
-  toolbar's. It is always enabled, however much of the plan is written, and
+  toolbar's, heard on every tab of the plan. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
@@ -519,7 +521,7 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 
 - **The record.** The service keeps each call's words as timed fragments
   (`voice_transcript_segments`) and answers them at
-  `GET /api/plans/{id}/transcript` (`hosted/transcript-store.ts`), grouped
+  `GET /api/plans/{id}/transcript` (`packages/database/src/models/transcript-store.ts`), grouped
   into turns by the same ledger the captions use, so a call that ended reads
   back in the lines its captions drew. Each turn is answered as an AI SDK
   `UIMessage` (`packages/hosted/src/transcript-wire.ts`): its place on the
@@ -570,9 +572,8 @@ moves nothing forward.
 The answer is notes, the way a person takes notes on a call, never the text
 written out again:
 
-- `add` puts a new point at the end of a section, under the heading its
-  field names, or opens that section at the end of the text where it has
-  none.
+- `add` puts a new point at the end of a section, under the heading it
+  names, or opens that section at the end of the text where it has none.
 - `replace` corrects a phrase copied exactly from the text, standing once in
   it and touching no heading, and `remove` strikes the line holding one.
 
@@ -645,7 +646,7 @@ The service lays each save over what Luke wrote meanwhile
   edit never flickers back out (each `plan.draft` frame names the save it
   was drawn over).
 - **What Luke is told.** The planning model's standing context names the
-  sections the developer last wrote, by heading, under `[fields the
+  sections the developer last wrote, by heading, under `[sections the
   developer wrote]`, as their decisions; the notetaker is told the same
   sections and never rewords or strikes them unless the call says to. A
   section the notetaker writes again leaves that list. The voice is not told
@@ -666,7 +667,7 @@ The service lays each save over what Luke wrote meanwhile
 ### History
 
 Every save that changes the plan is kept as a revision
-(`apps/web/server/hosted/plan-revisions.ts`, table `plan_revision`): the
+(`packages/database/src/models/plan-revisions.ts`, table `plan_revision`): the
 plan's text as it stood after it, who wrote it (the
 developer, editing the text or restoring the earlier revision `restored_from`
 names; the notetaker, on the call it listens to; or a coding agent, by its
@@ -691,8 +692,8 @@ line reads.
 Version history, in the plan's ⋯ menu (the toolbar's and the sidebar row's
 right-click alike) and behind the "Edited by" line, takes the whole window
 the way Settings does (`desktop/desktop-version-history.tsx`): a column as
-wide as the sidebar, with Back at its head, "Version history" and the
-plan's name, and the revisions newest first, fifty a page
+wide as the sidebar, with Back at its head, "Version history", and the
+revisions newest first, fifty a page
 (`GET /api/plans/{id}/revisions`), each as who wrote it ("Luke", "You", or a
 coding agent by its row), whether on a call, how many changes it made, and
 how long ago; the newest is labelled "Current", and the plan from before
@@ -704,7 +705,12 @@ moment, older pages read until one shows it, and the newest where one cannot
 be read), is read with the content before it
 (`GET /api/plans/{id}/revisions/{seq}`), and drawn read-only under the plan's
 name as it stands, beside the list (`planning/version-view.tsx`), under a bar with its moment and Restore this
-version; the up and down arrows step through the list. Every version, the
+version; the up and down arrows step through the list. A row's ⋯, standing
+in its time's place while the row is hovered or focused, and its right-click
+offer what applies: Show changes (its sections, for a revision of several
+changes), the Open that goes where it was written, and Restore this version.
+Over a revision's sections, who wrote it is the one control that opens where
+it was written. Every version, the
 current one included, is drawn against the one just before it, which is what
 the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
@@ -713,7 +719,10 @@ with jsdiff (`planning/plan-history-model.ts`), sections paired by their
 headings, the assumptions among them as the section they are. The first
 version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
 whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
-it was left, its side panel untouched.
+it was left, its side panel untouched. Whatever is opened from it — a
+version's Open, a tab from ⌘K — is a visit after it, so ⌘[ comes back to the
+view on the version and the sections it was left on, and ⌘] goes on to what
+was opened.
 
 Restore this version asks first, in the window's dialog, and then puts the
 revision's text back through the plan's one locked save
@@ -773,7 +782,7 @@ coding-agent chain beside the account's default model. A template past
 page goes that fail to save are said in a toast with a Retry. Reset to
 default asks first, waits for any save already out, and writes null, and
 stands only while the account holds its own. The template is written in
-the plan's own document editor (`plan-template-editor.tsx`), under
+the plan's own document editor (`settings/plan-template-page.tsx`), under
 `ph-no-capture`, with no title and no merged answer to take; Esc leaves it
 as focus leaving does. It is built once on the text it opens with and again
 only for words it did not write, as a reset's, and should its bundle fail to
@@ -1067,7 +1076,7 @@ admins."
 The model treats the correction first, before its own line of questioning:
 
 - It rewrites the assumption to "Members and admins can both invite."
-- It updates every field where "admin" was assumed.
+- It updates every section where "admin" was assumed.
 - It reopens the question the correction affects: "Then who can withdraw an
   invite: the member who sent it, any admin, or both?" It adds that question
   to `Open questions` until it is answered.
@@ -1102,7 +1111,7 @@ spoken conversation.
 
 The plan is done when the document is enough for a separate agent to build
 the change without coming back with a question, not when every branch of the
-design tree has been asked about: every core field holds an answer or an
+design tree has been asked about: every core section holds an answer or an
 agreed reason it does not apply, every hard part says how the change
 behaves, nothing open would change what gets built, and every choice the
 developer does not mind either way is stated as an assumption. The planning
@@ -1117,7 +1126,7 @@ leave it open.
 That, or the developer saying "I think that's everything", starts the review:
 Luke reviews the document aloud before it is copied. It covers:
 
-- every field still "Unanswered";
+- every section still holding only its template's guidance;
 - every assumption, one at a time ("I assumed invites expire after 7 days.
   Keep that?");
 - anything left in `Open questions`;
@@ -1133,12 +1142,14 @@ assumption.
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
 toolbar reads `Copied`. The
-clipboard holds the current document as readable Markdown: the body as saved,
-every section of the template in order, then the assumption list, which
-reads `_None recorded_` while the list is empty:
+clipboard holds the current document as readable Markdown: the plan's name
+as a `#` title over its document exactly as saved, whose assumptions are a
+section like any other (`packages/hosted/src/plan-markdown.ts`):
 
 ```markdown
-<body exactly as saved>
+# Teammate invitations
+
+<the document exactly as saved>
 
 ## Assumptions
 
@@ -1191,14 +1202,13 @@ the exact shape.
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace joined, its members read and removed, and one left (`workspace.join`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
-| Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/hosted/src/plan-markdown.ts`). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `planning/tab-strip-model.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/hosted/src/plan-document-template.ts`), the headings and notes it is written in (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 
@@ -1248,30 +1258,21 @@ changes when a check is run, not when one is planned.
     deleting the call's plan or signing out ends it;
   - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
-  - the fixed template (LUKE-352), through the tool against a real store: a
-    new plan's untouched template, an incomplete draft saving and resuming in
-    its sections, the body's order independent of key order, field text
-    unable to open a section, an optional field left out until it holds
-    something and again once cleared, a renamed field, an extra key, a blank answer, a freeform body, and an oversized
-    formatted body each leaving the saved document, a scripted proposal,
-    assent, correction, and agreed non-applicable field, and a handoff
-    prompt refused as a field the template does not name; these hold data
-    flow, not model understanding;
   - the talk key, pressed while a plan is open, speaking into the open
     plan's call.
 - The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four
   tabs, the list and document pages, Back leaving the plan, the plans read
   again each time the tab shows, and the host keeping the open plan through
   the tab going away, with nothing read on a clock.
-  Its regions render as static markup: a read-only assumption list, no composer and
-  no approve controls, a new plan's untouched template with its empty
-  assumptions section, and the failed, missing, and not-connected states.
+  Its regions render as static markup: no composer and no approve controls,
+  a new plan's untouched template, and the failed, missing, and
+  not-connected states.
 
 ### Not validated
 
 - **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
   `./scripts/verify.sh` has not been run on the integrated application. The
-  Plans tab in the panel, the fixed template's presentation (LUKE-352), the
+  Plans tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
   the microphone row, and the captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the window

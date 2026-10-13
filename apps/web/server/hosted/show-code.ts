@@ -4,6 +4,7 @@ import {
   codeNoteSchema,
   codeRefSchema,
   codeWindow,
+  commitShaSchema,
   SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
@@ -75,9 +76,10 @@ const { PATH: SANDBOX_PATH, VARIABLE: SANDBOX_VARIABLE } = REPOSITORY_SANDBOX_CO
 /**
  * The file's facts, as `shown-file.ts` decides on them, printed on one line:
  * whether it is a regular file inside the checkout, its bytes, whether a
- * NUL stands among its first bytes, and how many lines it has, counted as
- * the screen counts them, one more than its newlines. The path is resolved
- * with every link followed and must land inside the checkout root, and
+ * NUL stands among its first bytes, how many lines it has, counted as the
+ * screen counts them, one more than its newlines, and the commit the
+ * checkout stands at, which the File tab reads the file at. The path is
+ * resolved with every link followed and must land inside the checkout root, and
  * nothing of it is spliced into shell text: the script reads it from its
  * variable. A file that is no regular file inside the checkout prints
  * nothing else, and a file past the size bound is not counted.
@@ -90,20 +92,21 @@ const FILE_PROBE_SCRIPT = [
   'bytes="$(wc -c < "$target")"',
   `if [ "$(head -c ${SHOWN_FILE_BOUNDS.TEXT_PROBE_BYTES} -- "$target" | tr -d '\\000' | wc -c)" -eq "$(head -c ${SHOWN_FILE_BOUNDS.TEXT_PROBE_BYTES} -- "$target" | wc -c)" ]; then binary=0; else binary=1; fi`,
   `if [ "$bytes" -le ${SHOWN_FILE_BOUNDS.MAX_FILE_BYTES} ]; then lines=$(( $(wc -l < "$target") + 1 )); else lines=0; fi`,
-  'echo 1 "$bytes" "$binary" "$lines"',
+  'echo 1 "$bytes" "$binary" "$lines" "$(git rev-parse HEAD 2>/dev/null)"',
 ].join("\n");
 
-/** The probe's line read back: the facts it found, and the line count, or nothing where it does not read. */
+const readCommit = Schema.decodeUnknownResult(commitShaSchema);
+
+/** The probe's line read back: the facts it found, the line count, and the commit where it named one, or nothing where it does not read. */
 function probedFacts(
   path: string,
   stdout: string,
-): { facts: ShownFileFacts; lineCount: number } | undefined {
-  const fields = stdout
-    .trim()
-    .split(/\s+/u)
-    .map((field) => Number.parseInt(field, 10));
+): { facts: ShownFileFacts; lineCount: number; commit: string | undefined } | undefined {
+  const words = stdout.trim().split(/\s+/u);
+  const fields = words.slice(0, 4).map((field) => Number.parseInt(field, 10));
   const [regular, bytes, binary, lineCount] = fields;
-  if (fields.length !== 4 || fields.some((field) => !Number.isInteger(field))) return undefined;
+  if (words.length < 4 || words.length > 5) return undefined;
+  if (fields.some((field) => !Number.isInteger(field))) return undefined;
   if (
     regular === undefined ||
     bytes === undefined ||
@@ -112,7 +115,13 @@ function probedFacts(
   ) {
     return undefined;
   }
-  return { facts: { path, regular: regular === 1, bytes, binary: binary === 1 }, lineCount };
+  // Note that the lines are shown even where git names no commit, and the File tab then reads the default branch.
+  const commit = Result.getOrUndefined(readCommit(words[4]));
+  return {
+    facts: { path, regular: regular === 1, bytes, binary: binary === 1 },
+    lineCount,
+    commit,
+  };
 }
 
 /** The words the model reads for each reason the shared rule refuses a file. */
@@ -227,7 +236,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
   }
   const refusal = shownFileRefusal(probedFile.facts);
   if (refusal !== undefined) return yield* new ShowCodeRefusal({ reason: REFUSAL_WORDS[refusal] });
-  const { lineCount } = probedFile;
+  const { lineCount, commit } = probedFile;
   if (lineCount < 1) return yield* new ShowCodeRefusal({ reason: SHOW_CODE_REFUSAL.READ_FAILED });
   const window = codeWindow(ref, lineCount);
   const read = yield* runInSandbox(
@@ -249,6 +258,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
   return {
     ref,
     repository,
+    ...(commit === undefined ? undefined : { commit }),
     firstLine: window.first,
     lineCount,
     lines: shownLines(read.stdout, window.last - window.first + 1),

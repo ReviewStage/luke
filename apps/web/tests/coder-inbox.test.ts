@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { deletePlan, readPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -16,9 +22,6 @@ import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../server/core";
-import { user } from "../server/db/auth-schema";
-import { inboxAttachment } from "../server/db/inbox-attachment-schema";
-import { db } from "../server/db/query";
 import {
   closeInInbox,
   INBOX_REFUSAL,
@@ -30,10 +33,7 @@ import {
   INBOX_IMAGE_REFUSAL,
   type InboxSandboxDoor,
 } from "../server/hosted/coder-host/inbox-image";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { answerInboxItem, planInboxItems, readInboxAttachment } from "../server/hosted/inbox-store";
-import { deletePlan, readPlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -190,7 +190,7 @@ const SHOT = {
   response: { type: INBOX_RESPONSE.APPROVAL },
 };
 
-it.layer(testSqlClient)("the coding agent's inbox", (it) => {
+it.layer(getTestDB())("the coding agent's inbox", (it) => {
   it.effect(
     "a post is one open item the plan's inbox reads; posting under the same key again replaces it, moves its revision on, and opens it again once answered",
     () =>

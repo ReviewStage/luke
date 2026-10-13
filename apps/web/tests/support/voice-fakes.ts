@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { VOICE_SECONDS_OUTCOME } from "@sidecar/database/models/quota";
+import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import type { VoiceCloseReason } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
-import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
-import type { VoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this

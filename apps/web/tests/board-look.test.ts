@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { writeDrawing, writeScene } from "@sidecar/database/models/board-store";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import {
   BOARD_LOOK_WAIT,
   LOOK_AT_BOARD_REFUSAL,
@@ -15,9 +18,7 @@ import {
   runLookAtBoard,
   storedLookOutput,
 } from "../server/hosted/board-look";
-import { writeDrawing, writeScene } from "../server/hosted/board-store";
 import { driven, forkClockDriven } from "./support/clock-driven";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -45,7 +46,7 @@ const openPlan = Effect.gen(function* () {
   return { userId, planId: started.id, binding: { userId, planId: started.id } };
 });
 
-it.layer(testSqlClient)("look_at_board", (it) => {
+it.layer(getTestDB())("look_at_board", (it) => {
   it.effect("a look answers the image the Mac's save of the latest drawing carried", () =>
     Effect.gen(function* () {
       const { userId, planId, binding } = yield* openPlan;

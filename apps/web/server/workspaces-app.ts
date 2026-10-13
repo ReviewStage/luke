@@ -1,3 +1,9 @@
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  ensurePersonalWorkspace,
+  listWorkspaces,
+  type Workspace,
+} from "@sidecar/database/models/workspace-store";
 import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
 import {
   WORKSPACE_MEMBERS_QUERY,
@@ -42,12 +48,6 @@ import {
   membershipOf,
   removeMember,
 } from "./hosted/workspace-members.js";
-import type { WorkspaceSeams } from "./hosted/workspace-seams.js";
-import {
-  ensurePersonalWorkspace,
-  listWorkspaces,
-  type Workspace,
-} from "./hosted/workspace-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**

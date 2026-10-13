@@ -86,6 +86,27 @@ test("a file read and a search say the path and the pattern, and answer with the
   });
 });
 
+test("a skill load says the skill it loaded, and answers with the skill's instructions as words", () => {
+  const body = "# Release\n\nTag the commit, then publish the notes.";
+  const view = toolCallView({
+    tool: "load_skill",
+    input: { skill: "release-notes" },
+    output: body,
+  });
+  assert.equal(view.kind, CALL_KIND.LOAD_SKILL);
+  assert.equal(view.subject, "release-notes");
+  assert.deepEqual(view.input, { kind: TOOL_BLOCK.TEXT, text: "release-notes" });
+  assert.deepEqual(view.output, { kind: TOOL_BLOCK.TEXT, text: body });
+
+  const loading = toolCallView({
+    tool: "load_skill",
+    input: { skill: "release-notes" },
+    output: undefined,
+  });
+  assert.equal(loading.subject, "release-notes");
+  assert.equal(loading.output, undefined);
+});
+
 test("a patch names the first file it touches and how many more, carries the patch to draw as a diff, and answers with the files it changed", () => {
   const patchText = [
     "*** Begin Patch",
@@ -279,5 +300,38 @@ test("an inbox call that did nothing shows why, so a refused post never reads as
   assert.deepEqual(view.output, {
     kind: TOOL_BLOCK.TEXT,
     text: "Not posted: you hold 20 open items already.",
+  });
+});
+
+test("a call its wire already read is drawn as the wire said it: its kind, subject, and purpose, a command behind its prompt, other input as it came, and its answer as it came", () => {
+  const command = toolCallView({
+    tool: "run_in_repository",
+    input: { command: "ls src", description: "List the sources" },
+    output: "queue.ts",
+    said: { kind: CALL_KIND.COMMAND, subject: "ls src", description: "List the sources" },
+  });
+  assert.deepEqual(command, {
+    kind: CALL_KIND.COMMAND,
+    subject: "ls src",
+    description: "List the sources",
+    input: { kind: TOOL_BLOCK.COMMAND, text: "ls src" },
+    output: { kind: TOOL_BLOCK.TEXT, text: "queue.ts" },
+  });
+  // A tool a coding agent also has is still drawn as said, not read again from its input.
+  const question = toolCallView({
+    tool: "bash",
+    input: { question: "Who can invite?" },
+    output: { status: "queued" },
+    said: { kind: CALL_KIND.QUEUE_QUESTION, subject: "Who can invite?" },
+  });
+  assert.equal(question.kind, CALL_KIND.QUEUE_QUESTION);
+  assert.equal(question.subject, "Who can invite?");
+  assert.deepEqual(question.input, {
+    kind: TOOL_BLOCK.JSON,
+    text: JSON.stringify({ question: "Who can invite?" }, null, 2),
+  });
+  assert.deepEqual(question.output, {
+    kind: TOOL_BLOCK.JSON,
+    text: JSON.stringify({ status: "queued" }, null, 2),
   });
 });

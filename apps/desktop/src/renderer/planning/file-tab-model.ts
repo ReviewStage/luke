@@ -92,16 +92,24 @@ export function refusalLine(
   return FILE_REFUSAL_LINE[refusal];
 }
 
+/** Whether lines Luke showed are the lines a tab reads: any of his showings for a read of the default branch, and one read at the same commit for a read pinned to one. */
+function shownWhereRead(code: PlanCode, commit: string | undefined): boolean {
+  return commit === undefined || code.commit === commit;
+}
+
 /**
  * The lines Luke showed of a File tab's file, which the tab draws where
  * the file itself cannot be: the newest showing of the lines the tab was
- * opened on, or else the newest of the file at all.
+ * opened on, or else the newest of the file at all, of those read where
+ * the tab reads.
  */
 export function snippetOf(
   shown: readonly PlanCodeShowing[] | undefined,
   file: OpenFile,
 ): PlanCode | undefined {
-  const ofFile = (shown ?? []).filter((each) => each.code.ref.path === file.path);
+  const ofFile = (shown ?? []).filter(
+    (each) => each.code.ref.path === file.path && shownWhereRead(each.code, file.commit),
+  );
   const opened = ofFile.findLast(
     ({ code: { ref } }) =>
       ref.startLine === file.range?.startLine && ref.endLine === file.range?.endLine,
@@ -122,13 +130,14 @@ export interface FileNote {
  * The notes Luke wrote on a File tab's file, one a range, in the file's
  * order: the newest showing of each range speaks for it, since the newer
  * note is the one he meant last. A showing of the whole file, one from
- * another repository than the tab reads, and one from before notes were
- * asked for leave no note.
+ * another repository or commit than the tab reads, and one from before
+ * notes were asked for leave no note.
  */
 export function notesOf(
   shown: readonly PlanCodeShowing[] | undefined,
   path: string,
   repository: string | null,
+  commit: string | undefined,
 ): readonly FileNote[] {
   const notes: FileNote[] = [];
   for (const { callId, shownAt, code } of (shown ?? []).toReversed()) {
@@ -136,6 +145,7 @@ export function notesOf(
     if (code.ref.path !== path || code.note === undefined) continue;
     if (startLine === undefined || endLine === undefined) continue;
     if (repository !== null && code.repository !== repository) continue;
+    if (!shownWhereRead(code, commit)) continue;
     if (notes.some((each) => each.startLine === startLine && each.endLine === endLine)) continue;
     notes.push({ callId, shownAt, startLine, endLine, note: code.note });
   }

@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
+import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
+import * as schema from "@sidecar/database/schemas";
 import { getTableColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
-import * as schema from "../server/db/schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
- * The drift check between the restored schema modules and the database the
- * migrations actually build. `drizzle-kit` no longer generates one from the
- * other — `drizzle/meta/` stops at 0025 and the modules are hand-maintained
- * beside hand-written SQL — so a migration that renames a column, drops one,
- * widens one, or makes one nullable leaves a module that still type-checks
- * and lies, and every query built on it is wrong in a way the compiler
- * approves of. The store suites catch that only where a query covers the
+ * The drift check between the schema modules and the database the
+ * migrations actually build. `drizzle-kit` generates each migration from the
+ * modules (`packages/database/src/schemas/__tests__/migrations.test.ts` holds
+ * that it was), but a migration edited by hand afterwards — a backfill, a
+ * rename drizzle-kit asked about — can still rename a column, drop one, widen
+ * one, or make one nullable, and leave a module that type-checks and lies, so
+ * every query built on it is wrong in a way the compiler approves of. The store suites catch that only where a query covers the
  * column; this catches it whether one does or not.
  *
  * So the comparison runs both ways over the whole public schema, against a
@@ -25,7 +25,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * the module declares and the database has not fails, and so does a column
  * the database has and no module declares, which is the direction that
  * catches the migration nobody folded in. Better Auth's tables are compared
- * with the rest: `auth-schema.ts` is in the barrel, and nothing else holds it
+ * with the rest: `schemas/auth.ts` is in the barrel, and nothing else holds it
  * to the database.
  *
  * What is compared is name, type, nullability, and primary key. Not
@@ -72,13 +72,20 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
  * on the migration that drops it. Drizzle names every declared column in an
  * insert, and a deployment migrates while the one before it still serves, so
  * a column leaves its module one deployment before it leaves the database.
- * An entry goes in the same PR as its drop, which the last test below holds
+ * An entry goes in the same PR as its drop, which the last tests below hold
  * by failing on an entry the database no longer carries.
  */
 const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   // Migration 0088 moved the fixed kinds into `blocks` and `response`.
   ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
 ]);
+
+/**
+ * Tables the database still carries that no module declares, on the same
+ * terms as `PENDING_DROP`: nothing reads or writes them, and they leave the
+ * database one deployment after they left their modules.
+ */
+const PENDING_DROP_TABLES: ReadonlySet<string> = new Set([]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
@@ -220,7 +227,9 @@ test("the schema modules and the migrated database hold the same tables", () => 
   assert.deepEqual(
     {
       declaredAndNotMigrated: surplus(DECLARED.keys(), MIGRATED),
-      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED),
+      migratedAndNotDeclared: surplus(MIGRATED.keys(), DECLARED).filter(
+        (name) => !PENDING_DROP_TABLES.has(name),
+      ),
     },
     { declaredAndNotMigrated: [], migratedAndNotDeclared: [] },
   );
@@ -286,4 +295,8 @@ test("every column waiting on its drop is still in the migrated database", () =>
     }
   }
   assert.deepEqual(dropped, []);
+});
+
+test("every table waiting on its drop is still in the migrated database", () => {
+  assert.deepEqual(surplus(PENDING_DROP_TABLES, MIGRATED), []);
 });

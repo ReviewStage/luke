@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
+import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -16,16 +23,10 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import { user } from "../../server/db/auth-schema";
-import { db } from "../../server/db/query";
-import { sqlClientOverUrl } from "../../server/db/sql-client";
-import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
-import { childConversationId, hostTurnId } from "../../server/hosted/brain-host/ids";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
-import { type CodingAgent, createCodingAgent } from "../../server/hosted/coding-agent-store";
 import {
   readMessagesByConversationTyped,
   readTurnById,
@@ -36,6 +37,8 @@ import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_DELEGATED_REPLY,
+  SCRIPTED_SKILL_REPLY,
+  SCRIPTED_SKILLS,
   SCRIPTED_TODOS,
   SCRIPTED_TODOS_REPLY,
   SCRIPTED_WORKER_CHOICE,
@@ -53,7 +56,8 @@ import {
  * worker's session is recorded under the child conversation that call
  * names, on that pair, and the worker's answer is read back. Handed
  * to-dos, it writes the list, which eve holds to the schema the model is
- * shown and the writer keeps as a tool part the agent's tab draws. The
+ * shown and the writer keeps as a tool part the agent's tab draws. Told
+ * a skill's `/name`, it loads the skill the session was offered. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -286,6 +290,31 @@ export default defineEval({
       assert.ok(
         listingAnswer.parts.some(
           (part) => isTextUIPart(part) && part.text === SCRIPTED_TODOS_REPLY,
+        ),
+      );
+
+      // A `/name` the developer types names one of the skills the session
+      // is offered: the agent loads it with eve's own `load_skill`, a tool
+      // part of its answer holding the skill's body, and follows it.
+      const skilled = await startAgent(run, plan.id);
+      const [skill] = SCRIPTED_SKILLS;
+      const named = await openSession(skilled.conversationId, `/${skill.name} for this week`);
+      (await t.target.attachSession(named.sessionId)).succeeded();
+      const skilledAnswer = (await readMessagesByConversationTyped(run, skilled.conversationId)).at(
+        -1,
+      );
+      assert.ok(skilledAnswer);
+      const load = skilledAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(load);
+      assert.equal(load.type, `tool-${CODER_TOOL.LOAD_SKILL}`);
+      assert.equal(load.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.deepEqual(load.input, { skill: skill.name });
+      assert.equal(load.output, skill.markdown);
+      assert.ok(
+        skilledAnswer.parts.some(
+          (part) =>
+            isTextUIPart(part) &&
+            part.text === `${SCRIPTED_SKILL_REPLY} Write one line per change, newest first.`,
         ),
       );
     } finally {

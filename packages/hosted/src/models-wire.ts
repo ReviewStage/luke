@@ -29,6 +29,12 @@ import { countedNumber } from "./service-wire.js";
  * does not know, is sent none for the default.
  */
 
+/** What a first-time account starts an agent on, until it chooses. */
+export const CODING_AGENT_DEFAULT_CHOICE = {
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+} as const;
+
 /** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
 export const MODEL_PROVIDER = {
   ANTHROPIC: "anthropic",
@@ -36,6 +42,12 @@ export const MODEL_PROVIDER = {
 } as const;
 
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
+
+/** Why the service withholds a model's fast version from the account asking, where the catalog lists one. */
+export const FAST_WITHHELD = {
+  /** The account runs the model's provider on its own API key, and Luke runs Fast on its own key alone. */
+  OWN_KEY: "own-key",
+} as const;
 
 /** A model id or an effort as the wire carries it, bounded as a Start bounds them. */
 const choiceText = EffectSchema.Trim.check(
@@ -58,7 +70,7 @@ export const contextWindowsSchema = EffectSchema.Struct({
 
 export type ContextWindows = typeof contextWindowsSchema.Type;
 
-/** One model the service offers: its catalog id, its name, its provider, the efforts it lists, and its two windows where it offers them. */
+/** One model the service offers: its catalog id, its name, its provider, the efforts it lists, its two windows where it offers them, and why its fast version is withheld where it is. */
 export const catalogModelSchema = EffectSchema.Struct({
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   id: choiceText,
@@ -68,6 +80,8 @@ export const catalogModelSchema = EffectSchema.Struct({
   efforts: EffectSchema.Array(choiceText).check(EffectSchema.isMinLength(1)),
   /** Absent for a model with one window, which every choice of it runs on. */
   contextWindows: EffectSchema.optionalKey(contextWindowsSchema),
+  /** Why this model's fast version is not offered to the account, where the catalog lists one; absent otherwise, and from a service older than it. */
+  fastWithheld: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(FAST_WITHHELD))),
 });
 
 export type CatalogModel = typeof catalogModelSchema.Type;

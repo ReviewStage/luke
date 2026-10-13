@@ -15,7 +15,9 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { finishAll, installAnimations, MOTION, motion, running } from "#testing/animations";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, selectable, selectedText, sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { useAppKeymap } from "../app-commands";
 import type { FileTreeProps } from "../file-tree/contract";
@@ -60,6 +62,7 @@ window.lukeFileTree = {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installAnimations();
   tree.props = undefined;
   tree.reveals = [];
   tree.narrowed = [];
@@ -68,6 +71,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  running.splice(0);
+  document.documentElement.removeAttribute("style");
   vi.unstubAllGlobals();
 });
 
@@ -127,6 +132,7 @@ function shownLines(
   endLine: number,
   note: string | undefined,
   repository = REPOSITORY,
+  commit?: string,
 ): PlanCodeShowing {
   return {
     callId,
@@ -135,6 +141,7 @@ function shownLines(
     code: {
       ref: { path: FILE, startLine, endLine },
       repository,
+      ...(commit === undefined ? undefined : { commit }),
       firstLine: 1,
       lineCount: 40,
       lines: [[]],
@@ -292,6 +299,11 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
     ),
     ["Back", "Forward", "Open on GitHub", "File actions", "Show files"],
   );
+  assert.equal(
+    view.container.querySelector(".file-view-commit"),
+    null,
+    "no commit pins a read of main",
+  );
   assert.equal(view.container.querySelector(".file-tree-pane"), null, "the tree starts closed");
   await view.press(view.button("Show files"));
   assert.equal(view.button("Hide files")?.getAttribute("aria-expanded"), "true");
@@ -301,6 +313,143 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
     1,
     "the tree has no bar of its own",
   );
+});
+
+/** The keyframes of the slide running on the tree's pane, as transforms; none while none runs. */
+function treeSlide(container: HTMLElement): readonly (string | undefined)[] | undefined {
+  const pane = container.querySelector(".file-tree-pane");
+  const slide = running.find((each) => each.element === pane);
+  return slide?.keyframes.map((frame) => frame.transform?.toString());
+}
+
+test("the tree slides in from the view's right edge on the pane's motion, and hidden it leaves the layout at once, sliding out over the file out of reach until the slide has played", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+
+  await view.press(view.button("Show files"));
+  assert.deepEqual(treeSlide(view.container), ["translateX(100%)", "none"]);
+  finishAll();
+
+  await view.press(view.button("Hide files"));
+  const leaving = view.container.querySelector<HTMLElement>(".file-tree-pane");
+  assert.ok(leaving, "the tree is held drawn through its slide out");
+  assert.equal(
+    leaving.hasAttribute("data-leaving"),
+    true,
+    "drawn over the file, out of the layout",
+  );
+  assert.equal(leaving.hasAttribute("inert"), true, "and out of reach");
+  assert.deepEqual(treeSlide(view.container), ["none", "translateX(100%)"]);
+  finishAll();
+  assert.equal(
+    view.container.querySelector(".file-tree-pane"),
+    null,
+    "let go once it has slid out",
+  );
+});
+
+test("a tree shown again part way through its slide out comes back from where it had got to, and stays", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  finishAll();
+  await view.press(view.button("Hide files"));
+  const pane = view.container.querySelector<HTMLElement>(".file-tree-pane");
+  assert.ok(pane);
+  // Note that jsdom computes no animation, so the slide's reach is stood in for on the pane itself.
+  pane.style.transform = "translateX(40px)";
+
+  await view.press(view.button("Show files"));
+  assert.equal(
+    view.container.querySelector(".file-tree-pane"),
+    pane,
+    "the same pane, never drawn anew",
+  );
+  assert.equal(pane.hasAttribute("data-leaving"), false);
+  assert.deepEqual(treeSlide(view.container), ["translateX(40px)", "none"]);
+  finishAll();
+  assert.ok(view.container.querySelector(".file-tree-pane"), "the tree stands");
+});
+
+test("a tree shown again once motion was reduced part way through its slide out stands in place, the slide stopped", async () => {
+  motion(MOTION.ON);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  finishAll();
+  await view.press(view.button("Hide files"));
+  assert.notEqual(treeSlide(view.container), undefined, "sliding out");
+
+  motion(MOTION.REDUCED);
+  await view.press(view.button("Show files"));
+  const pane = view.container.querySelector(".file-tree-pane");
+  assert.ok(pane);
+  assert.equal(pane.hasAttribute("data-leaving"), false);
+  assert.equal(treeSlide(view.container), undefined, "no slide left holding it past the edge");
+});
+
+test("under reduced motion the tree shows and hides at once, with nothing played", async () => {
+  motion(MOTION.REDUCED);
+  const view = mounted();
+  await view.draw(FILE);
+  await view.press(view.button("Show files"));
+  assert.ok(view.container.querySelector(".file-tree-pane"));
+  await view.press(view.button("Hide files"));
+  assert.equal(view.container.querySelector(".file-tree-pane"), null);
+  assert.deepEqual(running, []);
+});
+
+test("the crumbs are in the window's own type, as a tab's name is, while the file's lines stay in code type", async () => {
+  const style = await sheetStyle();
+  const view = mounted();
+  await view.draw(FILE);
+  // Code type is base.css's one stack, which the design check refuses spelled any other way.
+  const codeType = /var\(--font-mono\)/u;
+  const crumbs = [...view.container.querySelectorAll(".file-breadcrumb")];
+  assert.ok(crumbs.length > 0);
+  for (const crumb of crumbs) {
+    assert.doesNotMatch(style(crumb, "font-family") ?? "", codeType);
+  }
+  const line = view.container.querySelector(".code-lines");
+  assert.ok(line);
+  assert.match(style(line, "font-family") ?? "", codeType);
+});
+
+test("the file's lines select and copy as text, the gutter's numbers left out and a blank line kept as one; Luke's note over them selects too, its header no part of it", async () => {
+  const style = await sheetStyle();
+  const lines = [[{ text: "const seats = 3;" }], [], [{ text: "  return " }, { text: "seats;" }]];
+  const view = mounted(
+    [shownLines("call-guard", 3, 3, "The seats are counted here.")],
+    undefined,
+    () =>
+      Promise.resolve({
+        file: {
+          path: FILE,
+          repository: REPOSITORY,
+          branch: "main",
+          firstLine: 1,
+          lineCount: 3,
+          lines,
+        },
+      }),
+  );
+  await view.draw(FILE, { startLine: 3, endLine: 3 });
+
+  const rows = [...view.container.querySelectorAll(".file-tab-lines .code-line")];
+  // Note that each line leaves text in the copy, because a line that leaves
+  // none is closed up by the browser's copy, blank lines and all.
+  assert.deepEqual(
+    rows.map((row) => selectedText(style, row)),
+    ["const seats = 3;", "\n", "  return seats;"],
+  );
+  const card = view.container.querySelector(".file-note");
+  assert.ok(card);
+  assert.equal(selectedText(style, card), "The seats are counted here.");
+  const header = card.querySelector(".file-note-header");
+  assert.ok(header);
+  assert.equal(selectable(style, header), false);
 });
 
 test("each crumb hangs the tree over the folder it stands in, through the view's listings, the tab's file revealed and taking the keyboard; the chevrons between are no controls; a file the tree opens is browsed to from the repository's root, and takes the tree down", async () => {
@@ -385,7 +534,7 @@ test("the GitHub button opens the file on the branch it was read on, its lit lin
   assert.equal(refused.button("Open on GitHub")?.disabled, true);
 });
 
-test("a file opened at a commit is read at it, opened on GitHub there, and said missing there in the commit's words; opened at another commit it is read afresh, no line of the first kept", async () => {
+test("a file opened at a commit is read at it, named quietly in the bar by its short SHA, opened on GitHub there, and said missing there in the commit's words; opened at another commit it is read afresh, no line of the first kept", async () => {
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -417,6 +566,7 @@ test("a file opened at a commit is read at it, opened on GitHub there, and said 
   };
   const view = mounted([], undefined, readFile);
   await view.draw(FILE, { startLine: 2, endLine: 2 }, 1, first);
+  assert.equal(view.container.querySelector(".file-view-commit")?.textContent, "0123456");
   await view.press(view.button("Open on GitHub"));
   assert.deepEqual(view.github, [
     `https://github.com/acme/relay/blob/${first}/apps/web/server/plans-app.ts#L2`,
@@ -827,21 +977,22 @@ test("a range Luke showed with a note stands his note over its first line: his m
   assert.equal(card?.nextElementSibling?.getAttribute("data-pointed"), "true");
 });
 
-test("a file opened at a commit, as an inbox item's code opens it, stands none of Luke's notes, since his lines are his own checkout's", async () => {
+test("a file opened at a commit stands only the notes Luke wrote on lines his checkout read at that commit", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const other = "89abcdef0123456789abcdef0123456789abcdef";
   const view = mounted(
-    [shownLines("call-guard", 4, 6, "The invite guard.")],
+    [
+      shownLines("call-here", 4, 6, "The invite guard.", REPOSITORY, commit),
+      shownLines("call-before", 10, 12, "Read before commits were recorded."),
+      shownLines("call-elsewhen", 14, 14, "Read at another commit.", REPOSITORY, other),
+    ],
     undefined,
     numberedFile(40),
   );
-  await view.draw(
-    FILE,
-    { startLine: 4, endLine: 6 },
-    1,
-    "0123456789abcdef0123456789abcdef01234567",
-  );
+  await view.draw(FILE, { startLine: 4, endLine: 6 }, 1, commit);
 
   assert.ok(view.container.querySelector(".code-line"), "the file is drawn");
-  assert.deepEqual(noteCards(view.container), []);
+  assert.deepEqual(noteCards(view.container), ["Luke's note on lines 4–6 over 4"]);
 });
 
 it.effect(
@@ -886,6 +1037,16 @@ test("every range of the file with a note stands its own card, in the file's ord
     view.container.querySelectorAll(".file-note-words")[1]?.textContent ?? "",
     /now twice/u,
   );
+});
+
+test("the keyboard's ring on a note's fold is drawn whole, inside the fold, since the note's card clips it", async () => {
+  const styled = await sheetStyle();
+  const view = mounted([shownLines("call-guard", 4, 6, "The guard.")], undefined, numberedFile(40));
+  await view.draw(FILE, { startLine: 4, endLine: 6 });
+  const fold = view.container.querySelector<HTMLElement>(".file-note-fold");
+  assert.ok(fold);
+
+  assert.equal(ringClipping(styled, fold), undefined);
 });
 
 test("a note folds to its header, its words cut to one line there, as the tab holds it, and opens again; its link asks for the call's card in the Code tab", async () => {

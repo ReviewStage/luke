@@ -6,6 +6,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import {
   type CatalogModel,
+  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -26,9 +27,10 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringInside, sheetStyle } from "#testing/css-rules";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { CodingAgentsSection } from "./coding-agents-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 
 const MODELS: readonly CatalogModel[] = [
   {
@@ -130,6 +132,19 @@ function answer(request: Act): Promise<ActOutcome> {
           })),
         }),
       );
+    case ACT_KIND.PROVIDER_KEYS_SAVE:
+      ownKeys = [...ownKeys, request.payload.provider];
+      return Promise.resolve(
+        done({
+          keys: ownKeys.map((provider) => ({
+            provider,
+            hint: "sk-…test",
+            addedAt: 1,
+            status: ownKeyStatus,
+            statusAt: 1,
+          })),
+        }),
+      );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
         return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE }));
@@ -177,7 +192,7 @@ async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElem
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const page = createElement(CodingAgentsSection, { signedIn });
+  const page = createElement(CodingAgentsPage, { signedIn });
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;
@@ -228,8 +243,8 @@ test("the page reads the default and the models as it opens, and draws the model
     sent.map((request) => request.kind),
     [
       ACT_KIND.CODING_AGENTS_DEFAULT_READ,
-      ACT_KIND.PROVIDER_KEYS_READ,
       ACT_KIND.CODING_AGENTS_MODELS,
+      ACT_KIND.PROVIDER_KEYS_READ,
     ],
   );
   assert.equal(chip(page).textContent, "Opus 5.5");
@@ -328,6 +343,18 @@ test("arrows and Enter pick from the keyboard, and Escape closes the menu withou
   assert.equal(document.activeElement, chip(page));
   assert.ok(!reachedWindow.includes("Escape"));
   window.removeEventListener("keydown", listen);
+});
+
+test("the keyboard's ring on an effort's segment is drawn inside it, since its trough leaves no room around it", async () => {
+  const styled = await sheetStyle();
+  const page = await mount();
+  const segments = [...page.querySelectorAll<HTMLElement>(".settings-segment")];
+
+  assert.ok(segments.length > 1);
+  assert.deepEqual(
+    segments.filter((segment) => !ringInside(styled, segment)).map((each) => each.textContent),
+    [],
+  );
 });
 
 test("choosing an effort writes the default once and draws what the service kept", async () => {
@@ -459,6 +486,35 @@ test("a write the service refused leaves the default as it was and says so under
   assert.match(page.querySelector('[role="alert"]')?.textContent ?? "", /could not be saved/u);
 });
 
+/** What the model row says under its name, if anything. */
+function modelNote(page: HTMLElement): string | undefined {
+  return (
+    page.querySelector(".settings-picker")?.closest(".settings-row")?.querySelector("small")
+      ?.textContent ?? undefined
+  );
+}
+
+test("a key saved in the API keys group is what the model row says at once", async () => {
+  const page = await mount();
+  const note = () => modelNote(page);
+  assert.equal(note(), undefined, "on Luke's key the row says nothing");
+
+  const add = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) =>
+      each.textContent === "Add key" &&
+      each.closest(".menu-row")?.textContent?.includes("Anthropic"),
+  );
+  act(() => add?.click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  field.value = "sk-ant-api03-synthetic-0000000000000000wxyz";
+  const form = field.closest("form") ?? assert.fail("no form around the field");
+  act(() => form.requestSubmit());
+  await settle();
+  assert.equal(note(), "Runs on your own Anthropic key.");
+});
+
 test("with no account signed in the page asks nothing and says to sign in", async () => {
   const page = await mount(false);
   assert.deepEqual(sent, []);
@@ -503,6 +559,38 @@ test("the model menu lists base models only, and the Fast switch under it stores
   );
 });
 
+test("a key of the account's own saved on the page reads the models again, and the Fast switch rests saying the service withholds it for that key", async () => {
+  const page = await mount();
+  assert.equal(fastSwitch(page).disabled, false, "on Luke's key Opus offers Fast");
+
+  // The service answers an account that runs Anthropic on its own key with no Anthropic fast version.
+  catalog = MODELS.filter((model) => !model.id.endsWith("-fast")).map((model) =>
+    model.id === "anthropic/claude-opus-5.5"
+      ? { ...model, fastWithheld: FAST_WITHHELD.OWN_KEY }
+      : model,
+  );
+  const add = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) =>
+      each.textContent === "Add key" &&
+      each.closest(".menu-row")?.textContent?.includes("Anthropic"),
+  );
+  act(() => add?.click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
+    assert.fail("no Anthropic field");
+  field.value = "sk-ant-api03-synthetic-0000000000000000wxyz";
+  const form = field.closest("form") ?? assert.fail("no form around the field");
+  act(() => form.requestSubmit());
+  await settle();
+
+  assert.equal(fastSwitch(page).disabled, true);
+  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
+  assert.match(
+    fastSwitch(page).closest(".settings-row")?.textContent ?? "",
+    /Fast isn't available on your own API key\./u,
+  );
+});
+
 test("the model row says the default runs on the account's own key where the provider accepted one, and that one it did not needs a hand", async () => {
   ownKeys = [MODEL_PROVIDER.ANTHROPIC];
   const own = await mount();
@@ -512,13 +600,7 @@ test("the model row says the default runs on the account's own key where the pro
   ownKeyStatus = PROVIDER_KEY_STATUS.UNREADABLE;
   const unusable = await mount();
 
-  const note = (page: HTMLElement) =>
-    page.querySelector(".settings-picker-row .settings-copy small, .settings-copy small")
-      ?.textContent;
-  assert.equal(note(own), "What a click on Start runs an agent on, on your own Anthropic key.");
-  assert.equal(note(luke), "What a click on Start runs an agent on.");
-  assert.equal(
-    note(unusable),
-    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
-  );
+  assert.equal(modelNote(own), "Runs on your own Anthropic key.");
+  assert.equal(modelNote(luke), undefined);
+  assert.equal(modelNote(unusable), "Your Anthropic key needs attention under API keys.");
 });

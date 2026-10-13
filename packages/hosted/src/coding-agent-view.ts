@@ -3,10 +3,12 @@ import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
+  codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
@@ -20,8 +22,11 @@ import {
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
+  planTemplateRevisionAnswerSchema,
+  planTemplateRevisionsAnswerSchema,
   planTemplateWriteRequestSchema,
 } from "./plan-document-template.js";
+import { planRevisionSeqSchema } from "./plan-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   providerKeySaveRequestSchema,
@@ -131,6 +136,34 @@ export const planTemplateWriteParamsSchema = planTemplateWriteRequestSchema;
 
 export type PlanTemplateWriteParams = typeof planTemplateWriteParamsSchema.Type;
 
+/** A page of the template's history, as the window asks it: the newest, or the one before a revision. */
+export const planTemplateRevisionsParamsSchema = EffectSchema.Struct({
+  before: EffectSchema.optionalKey(planRevisionSeqSchema),
+});
+
+export type PlanTemplateRevisionsParams = typeof planTemplateRevisionsParamsSchema.Type;
+
+/** A page of the template's history, as the window hears it read: the page, or why there is none. */
+export const planTemplateRevisionsAnswerViewSchema = EffectSchema.Union([
+  planTemplateRevisionsAnswerSchema,
+  failed,
+]);
+
+export type PlanTemplateRevisionsAnswerView = typeof planTemplateRevisionsAnswerViewSchema.Type;
+
+/** One revision of the template, as the window asks it read or restored: its number. */
+export const planTemplateRevisionParamsSchema = EffectSchema.Struct({ seq: planRevisionSeqSchema });
+
+export type PlanTemplateRevisionParams = typeof planTemplateRevisionParamsSchema.Type;
+
+/** One revision of the template, as the window hears it read: the revision beside the one before it, or why there is none. */
+export const planTemplateRevisionAnswerViewSchema = EffectSchema.Union([
+  planTemplateRevisionAnswerSchema,
+  failed,
+]);
+
+export type PlanTemplateRevisionAnswerView = typeof planTemplateRevisionAnswerViewSchema.Type;
+
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;
 
@@ -207,6 +240,14 @@ export const codingAgentRenameParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentRenameParams = typeof codingAgentRenameParamsSchema.Type;
 
+/** One agent's MCP servers switched, as the window asks it: the agent and the whole list of those off. */
+export const codingAgentServersParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentServersRequestSchema.fields,
+});
+
+export type CodingAgentServersParams = typeof codingAgentServersParamsSchema.Type;
+
 /** One agent archived or brought back, as the window asks it: the agent and which. */
 export const codingAgentArchiveParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -236,6 +277,14 @@ export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPullRequestAnswerView = typeof codingAgentPullRequestAnswerViewSchema.Type;
+
+/** One agent's changes, as the window hears them: its pull request's files, why there are none yet, or why there is no answer. */
+export const codingAgentChangesAnswerViewSchema = EffectSchema.Union([
+  codingAgentChangesAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChangesAnswerView = typeof codingAgentChangesAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

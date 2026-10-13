@@ -194,10 +194,18 @@ test("in the floating window a press on a button acts without taking focus, and 
   assert.equal(pressOn(title), false);
 
   const rules = cssRules(await builtStylesheet());
+  // A selector the sheet wraps over two lines is read as one.
   const declared = (selector: string, property: string) =>
-    rules.find((rule) => rule.selectors.includes(selector))?.declarations.get(property);
+    rules
+      .find((rule) => rule.selectors.some((each) => each.replace(/\s+/gu, " ") === selector))
+      ?.declarations.get(property);
+  // Every window's rule, the call window's included: until the keyboard moves
+  // focus, nothing but a field rings.
   assert.equal(
-    declared('html.call-window:not([data-keyboard="true"]) :focus-visible', "outline"),
+    declared(
+      ':root:not([data-keyboard="true"]) :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"]))',
+      "outline",
+    ),
     "none",
   );
   assert.equal(

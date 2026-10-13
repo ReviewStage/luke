@@ -1,5 +1,4 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
-import { DocumentIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -14,20 +13,21 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
+import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
 import { ConfirmDialog } from "../settings/confirm-dialog";
+import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
-import { PlanActionsButton } from "./plan-actions";
+import { PlanActions } from "./plan-actions";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
 import { useTabViews } from "./strip-tabs";
-import { Tab, TabStrip } from "./tab-strip";
 
 /**
  * The work column while Plans is chosen: the open plan's column, its
@@ -49,10 +49,12 @@ import { Tab, TabStrip } from "./tab-strip";
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
  * showing its transcript and its composer at the document's measure, and
- * the draft agent's. The toolbar's actions are the plan's, and so is the call
- * bar, so both stand on every tab: a call is about the plan whichever tab is
- * read. The document stays laid out while an agent's tab is shown, so
- * coming back to it finds it where it was left.
+ * the draft agent's. Start and the ⋯ menu are the plan's, not an agent's,
+ * so only the plan's own tab draws them, while their chords (Copy plan,
+ * Archive, Permanently delete) answer on every tab; the call bar is the
+ * plan's too, and stands on every tab: a call is about the plan whichever
+ * tab is read. The document stays laid out while an agent's tab is shown,
+ * so coming back to it finds it where it was left.
  *
  * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
  * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
@@ -108,13 +110,12 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
-/** What a press on the stand-in tab does: nothing, since it is the column's one tab while no plan is drawn. */
-const CHOOSE_PLAN = () => undefined;
-
 /**
- * The open plan's region: its column, or the state standing in its place,
- * whose strip holds a stand-in for the plan's tab, so the row does not move
- * when the plan is drawn. The captions, handed in while the plan is drawn,
+ * The open plan's region: its column, or the state standing in its place.
+ * While the plan is read, its strip holds one tab-shaped skeleton where the
+ * plan's tab will stand, so the row does not move when the plan is drawn,
+ * and no name is guessed before the read says it; a plan that could not be
+ * drawn has no tab at all. The captions, handed in while the plan is drawn,
  * stand just above the call bar.
  */
 function PlanDocument({
@@ -131,7 +132,8 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
-  const { act, tell } = useAct();
+  const { act } = useAct();
+  const openLink = useOpenLink();
   const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const inbox = usePlanInbox({
     planId: inboxPlanId,
@@ -170,6 +172,12 @@ function PlanDocument({
   useEffect(() => {
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
+  // What waits on the Inbox tab counts as read while the tab is on screen (`inbox-reads.ts`).
+  const inboxOnScreen = planId !== undefined && plans.inboxShown === planId;
+  const { onSeen } = plans.inboxReads;
+  useEffect(() => {
+    if (planId !== undefined && inboxOnScreen && inbox.read) onSeen(planId, waiting);
+  }, [planId, inboxOnScreen, inbox.read, waiting, onSeen]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
@@ -188,9 +196,11 @@ function PlanDocument({
       <>
         <Toolbar
           heading={
-            <TabStrip label="Plan" className="desktop-toolbar-heading">
-              <Tab icon={<DocumentIcon />} label="Plan" selected quiet onSelect={CHOOSE_PLAN} />
-            </TabStrip>
+            <div className="desktop-toolbar-heading">
+              {region.kind === DOCUMENT_REGION.READING ? (
+                <Skeleton className="tab-skeleton" />
+              ) : null}
+            </div>
           }
         />
         <section className="desktop-empty">
@@ -232,6 +242,9 @@ function PlanDocument({
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   const { tab } = mainTabs;
+  // Start and the ⋯ button are the plan's, not an agent's, so only the
+  // plan's own tab draws them; the plan's chords stand on every tab.
+  const onPlanTab = tab === MAIN_TAB.PLAN;
   // A delegation's row in an agent's transcript opens its worker in the side
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (
@@ -243,6 +256,8 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
+  // An agent's Changes chip opens its pull request's changes in the side panel, beside its tab.
+  const openChanges = (agentId: string) => sidePanel.onChoose({ changes: agentId });
   // A coding agent's start on the Work tab opens the agent's tab in this
   // column, which a panel filling the window over it first gives way to,
   // and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -306,10 +321,10 @@ function PlanDocument({
                   onChoose={chooseRepository}
                   openRequest={menuRequest}
                 />
-                <StartAgentButton control={agents} />
+                {onPlanTab ? <StartAgentButton control={agents} /> : null}
               </>
             )}
-            <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
+            <PlanActions plans={plans} plan={plan} button={onPlanTab} onRename={rename.begin} />
           </Fragment>
           <SummaryButton layout={summaryLayout} cardId={summaryCard} />
         </Toolbar>
@@ -341,6 +356,7 @@ function PlanDocument({
                       onEdit: (request) => plans.edit(plan.id, request),
                       // The title renames as the chip's field does, so a refusal is said beside it.
                       onRename: (name) => rename.end({ name, byKey: true }),
+                      onDraftName: (name) => plans.onDraftName(plan.id, name),
                     })}
                 looks={looks}
               />
@@ -351,7 +367,7 @@ function PlanDocument({
                   control={inbox}
                   agents={agents}
                   onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
-                  openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+                  openLink={openLink}
                   code={{
                     repository: plan.repository,
                     readFile: (window) =>
@@ -374,11 +390,18 @@ function PlanDocument({
                   shown={plans.shown && !sidePanel.fullScreen}
                   views={views}
                   onOpenDelegation={openDelegation}
+                  onOpenChanges={openChanges}
                 />
               </section>
             )}
           </FindScope>
-          <PlanSummary plans={plans} layout={summaryLayout} cardId={summaryCard} />
+          <PlanSummary
+            plans={plans}
+            layout={summaryLayout}
+            cardId={summaryCard}
+            inbox={inbox.board}
+            held={views.held}
+          />
         </div>
         {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}

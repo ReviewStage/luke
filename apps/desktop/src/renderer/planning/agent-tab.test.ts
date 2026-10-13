@@ -17,6 +17,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -24,11 +25,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { PublishedChip, PublishedRow } from "./agent-published";
-import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
+import { ChangesChip, PublishedChip, type PublishedDoors, PublishedRow } from "./agent-published";
+import { AgentGlyph, AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -224,6 +227,7 @@ function tabElement(
       note: undefined,
       choose: ignore,
     },
+    servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
     published: undefined,
     doors: SHUT,
     onStop: () => Promise.resolve(),
@@ -244,17 +248,12 @@ function drawn(
       failed: false,
       working,
       onRetry: ignore,
-      openGitHub: ignore,
     }),
   );
 }
 
 /** The transcript mounted live, so a row can be opened. */
-function mounted(
-  messages: readonly CodingAgentMessage[],
-  openGitHub: (url: string) => void = ignore,
-  registry?: AtomRegistry,
-): HTMLElement {
+function mounted(messages: readonly CodingAgentMessage[], registry?: AtomRegistry): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -266,7 +265,6 @@ function mounted(
       failed: false,
       working: false,
       onRetry: ignore,
-      openGitHub,
     });
     root.render(registry === undefined ? view : onRegistry(registry, view));
   });
@@ -304,7 +302,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with its harness's mark where the catalog names its model and the muted robot where it does not; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, the working mark while the worker runs and no mark once it answered, leading with the mark of the harness its model's id names, listed in the catalog or not yet; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -323,7 +321,6 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
         failed: false,
         working: true,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   });
@@ -352,15 +349,11 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
   assert.ok(running.querySelector('[data-tool-state="input-available"] svg.working-mark'));
-  assert.equal(
-    running.querySelector("[data-subagent-harness]"),
-    null,
-    "Opus is not in the catalog",
-  );
   assert.ok(
-    running.querySelector("svg.lucide-bot.text-muted-foreground"),
-    "the robot in the muted ink, since the working mark says it runs",
+    running.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'),
+    "Clawd, though Opus is not in the catalog",
   );
+  assert.equal(running.querySelector("svg.lucide-bot") === null, true, "no robot");
   for (const row of rows) {
     assert.equal(row.tagName, "BUTTON", "the whole row is the button");
     assert.equal(row.closest("details"), null, "nothing to expand");
@@ -407,7 +400,6 @@ test("a delegation refused before its worker began says why in red under its row
         failed: false,
         working: false,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   });
@@ -431,12 +423,8 @@ function open(container: HTMLElement, selector: string): HTMLDetailsElement {
 }
 
 /** The transcript mounted with every run of calls and folded lead opened, as a reader opens them to reach the rows. */
-function unfolded(
-  messages: readonly CodingAgentMessage[],
-  openGitHub: (url: string) => void = ignore,
-  registry?: AtomRegistry,
-): HTMLElement {
-  const container = mounted(messages, openGitHub, registry);
+function unfolded(messages: readonly CodingAgentMessage[], registry?: AtomRegistry): HTMLElement {
+  const container = mounted(messages, registry);
   for (;;) {
     const fold = container.querySelector<HTMLDetailsElement>("[data-turn-fold]:not([open])");
     if (fold === null) return container;
@@ -611,7 +599,6 @@ test("an older list opens on a click onto the list as it stood, and folds once a
           failed: false,
           working: false,
           onRetry: ignore,
-          openGitHub: ignore,
         }),
       ),
     );
@@ -812,6 +799,16 @@ test("the reasoning folds under one quiet line previewing its words and opens on
   );
 });
 
+test("an agent whose harness Luke does not know wears the Coding agents glyph, never a terminal", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(AgentGlyph, {
+      agent: { model: "mistral/large-3", status: CODING_AGENT_STATUS.COMPLETED },
+    }),
+  );
+  assert.ok(drawn.includes(renderToStaticMarkup(createElement(CodingAgentsIcon))));
+  assert.doesNotMatch(drawn, /terminal/u);
+});
+
 test("the plan is a card across the top of the transcript, folded under its title, not a bubble", () => {
   const markup = drawn([PLAN, TURN]);
   assert.match(
@@ -825,25 +822,34 @@ test("the plan is a card across the top of the transcript, folded under its titl
   const card = open(container, "[data-plan-card]");
   assert.equal(card.querySelector("h1")?.textContent, "Teammate invitations");
   assert.ok(card.textContent?.includes("Invite a teammate by email."));
+  const glyph = renderToStaticMarkup(createElement(DocumentIcon));
+  assert.ok(
+    [...card.querySelectorAll("summary svg")].some((svg) => svg.outerHTML === glyph),
+    "the plan's own glyph, as the plan's tab wears it",
+  );
 });
 
-test("the words are markdown, with the pull request's link opening on GitHub in the browser rather than in the window", () => {
+test("the words are markdown, with the pull request's link opening on GitHub and any other web page opening in the browser rather than in the window", () => {
   const markup = drawn([TURN]);
   assert.match(markup, /<a href="https:\/\/github\.com\/acme\/relay\/pull\/7" class="agent-link"/u);
-  // A link off GitHub is drawn as words that go nowhere.
-  assert.doesNotMatch(markup, /href="https:\/\/example\.com\/docs"/u);
-  assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
+  assert.match(markup, /<a href="https:\/\/example\.com\/docs" class="agent-link"/u);
+  assert.doesNotMatch(markup, /agent-link-inert/u);
 
-  const opened: string[] = [];
-  const container = unfolded([TURN], (url) => opened.push(url));
-  const link = container.querySelector<HTMLAnchorElement>("a.agent-link");
-  assert.ok(link);
-  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-  act(() => {
-    link.dispatchEvent(click);
-  });
-  assert.equal(click.defaultPrevented, true);
-  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
+  const sent = installActBridge();
+  const container = unfolded([TURN]);
+  const links = [...container.querySelectorAll<HTMLAnchorElement>("a.agent-link")];
+  assert.equal(links.length, 2);
+  for (const link of links) {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(click);
+    });
+    assert.equal(click.defaultPrevented, true);
+  }
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+    { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
+  ]);
 });
 
 test("the tab wears no head: it opens on the transcript, what the agent runs on is the chip at the box's foot, and a stopped or failed turn ends the transcript on one quiet line saying so", () => {
@@ -884,7 +890,6 @@ test("with nothing held the tab says the agent is starting, or how it ended befo
         working: false,
         ended,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
@@ -912,7 +917,6 @@ it.effect(
               failed: false,
               working: false,
               onRetry: ignore,
-              openGitHub: ignore,
             }),
           ),
         ),
@@ -993,7 +997,6 @@ test("the working line says the agent is starting before its turn opens and thin
       working: true,
       sessionStarting: true,
       onRetry: ignore,
-      openGitHub: ignore,
     }),
   );
   assert.equal(line(starting), "Starting…");
@@ -1030,7 +1033,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const clipboard = installClipboard();
-      const container = unfolded([PLAN, TURN], ignore, yield* registryOnTestClock);
+      const container = unfolded([PLAN, TURN], yield* registryOnTestClock);
       const copy = container.querySelector<HTMLButtonElement>(
         '.is-assistant button[aria-label="Copy"]',
       );
@@ -1103,6 +1106,28 @@ test("a press of the chip opens the pull request on GitHub, or the branch compar
   assert.equal(menuItems().length, 0, "a press drops no menu");
 });
 
+test("the Changes chip stands beside a pull request's chip and opens its changes; a branch alone, no answer yet, or no panel to open them in wears none", () => {
+  let asked = 0;
+  const doors = { ...SHUT, openChanges: () => (asked += 1) };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(ChangesChip, { published: PUBLISHED, doors })));
+  const chip = container.querySelector<HTMLButtonElement>('button[aria-label="Show changes"]');
+  assert.ok(chip);
+  act(() => chip.click());
+  assert.equal(asked, 1);
+
+  const drawn = (
+    published: CodingAgentPullRequestAnswer | undefined,
+    open: PublishedDoors = doors,
+  ) => renderToStaticMarkup(createElement(ChangesChip, { published, doors: open }));
+  assert.equal(drawn({ ...PUBLISHED, pullRequest: null }), "");
+  assert.equal(drawn(undefined), "");
+  assert.equal(drawn(PUBLISHED, SHUT), "");
+});
+
 test("a right-click on the chip offers copying the branch and its checkout command word for word, each with its toast, and no menu where there is no branch", () => {
   const opened: string[] = [];
   const copied: string[][] = [];
@@ -1164,7 +1189,6 @@ test("a finished transcript ends on the pull request's row: its number and title
         failed: false,
         working: false,
         onRetry: ignore,
-        openGitHub: ignore,
         footer: createElement(PublishedRow, { pullRequest, openGitHub: ignore }),
       }),
     );

@@ -212,6 +212,7 @@ function mountComposer(initial: string, registry?: AtomRegistry) {
       models: undefined,
       readModels: ignore,
       usage: undefined,
+      servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => Promise.resolve(),

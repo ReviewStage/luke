@@ -308,8 +308,10 @@ export const planNotesSchema = EffectSchema.Struct({
  * headings still takes them so, and the journal keeps the ones it took, so
  * they are read still, as the note under that field's heading, a correction
  * or a strike kept within its section (`noteOf`).
- * TODO: delete once no journal row holds one and no agent started before
- * heading notes can still be running.
+ * TODO: delete, with `plan-agent-edits-migration.test.ts`, once migration
+ * `20261013054758_plan_agent_edits_headings` is live (it rewrites every
+ * journaled field note under its heading) and it is past 2026-10-14 00:00Z,
+ * when no agent started before heading notes (#2275) can still be running.
  */
 const NOTE_FIELD = EffectSchema.Literals(Object.values(PLAN_FIELD));
 

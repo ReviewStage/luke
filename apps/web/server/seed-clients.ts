@@ -1,12 +1,12 @@
 import { pathToFileURL } from "node:url";
+import { db } from "@sidecar/database/core/query";
+import { jwks as jwksTable, oauthClient as oauthClientTable } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { authSecrets } from "./auth-deployment.js";
-import { jwks as jwksTable, oauthClient as oauthClientTable } from "./db/auth-schema.js";
-import { db } from "./db/query.js";
 import { DESKTOP_OAUTH_CLIENT, type OAuthClient, oauthClientRecord } from "./oauth-clients.js";
 import { disposeWebRuntime, runWeb } from "./runtime.js";
 

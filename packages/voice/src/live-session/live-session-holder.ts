@@ -23,7 +23,7 @@ import {
   type LiveSessionClosed,
   liveErrorFields,
 } from "@sidecar/live";
-import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
 import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from "effect";
 import {
   createdOf,
@@ -213,7 +213,8 @@ export class LiveSessionHolder {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
       const tasks = yield* serialQueue({
-        onDefect: (cause) => Effect.logError("a live session task could not be started", cause),
+        onDefect: (cause) =>
+          Effect.logError(`a live session task could not be started: ${causeKind(cause)}`),
       });
       const scope = yield* Effect.scope;
       return new LiveSessionHolder(

@@ -5,8 +5,11 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
-import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
+import {
+  PROVIDER_KEY_STATUS,
+  type ProviderKeyStatus,
+  type ProviderKeySummary,
+} from "@sidecar/hosted/provider-key-wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -18,6 +21,7 @@ import {
   effortLabel,
   effortsOf,
   FAST_WORD,
+  fastRestingNote,
   longWindowNote,
   modelLabel,
   offeredModels,
@@ -30,19 +34,26 @@ import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { Spinner, SpinnerRegion } from "../spinner";
+import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
+import { SettingsGroup } from "./settings-group";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
  *
- * The one value is the account's, kept on the service beside the settings
- * preferences and written by this page and by a Start that named a model
- * alike, so the page reads it afresh as it opens and shows what the last
- * Start wrote. The model row is the same picker every settings row uses,
+ * The page is three groups under their own headings: this file's Default
+ * model, then the account's own API keys (`api-keys-section.tsx`) and the
+ * notification as an agent ends (`notifications-section.tsx`), drawn by the
+ * panel in that order. The first two share the one read of the keys, so a
+ * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
+ * on the service beside the settings preferences and written by this page
+ * and by a Start that named a model alike, so the page reads it afresh as it
+ * opens and shows what the last Start wrote. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked. Under it a Fast
- * switch runs the model's fast version, resting where the model has none;
+ * switch runs the model's fast version, resting where the model has none
+ * or the service withholds it for the account's own key, saying which;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -69,21 +80,21 @@ const PROVIDER_NAME = {
 } as const satisfies Record<ModelProvider, string>;
 
 /**
- * What the model row says under its name: that the default runs on the
- * account's own key where the provider last accepted it, and that the key
- * needs a hand where it did not, since such a key fails the agent's steps
- * rather than letting them fall back to Luke's.
+ * What the model row says under its name, where the key it runs on is the
+ * account's own: that it runs there while the provider last accepted it, and
+ * that the key needs a hand where it did not, since such a key fails the
+ * agent's steps rather than letting them fall back to Luke's. On Luke's key
+ * the row says nothing, there being nothing the developer did to remember.
  */
 function modelRowNote(
   provider: ModelProvider | undefined,
   status: ProviderKeyStatus | undefined,
-): string {
-  const plain = "What a click on Start runs an agent on.";
-  if (provider === undefined || status === undefined) return plain;
+): string | undefined {
+  if (provider === undefined || status === undefined) return undefined;
   const name = PROVIDER_NAME[provider];
   return status === PROVIDER_KEY_STATUS.VERIFIED
-    ? `What a click on Start runs an agent on, on your own ${name} key.`
-    : `${plain} Your ${name} key needs attention in Settings › API keys.`;
+    ? `Runs on your own ${name} key.`
+    : `Your ${name} key needs attention under API keys.`;
 }
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
@@ -105,12 +116,15 @@ function DefaultRows({
 }): React.JSX.Element {
   const listed = models?.find((model) => model.id === choice.model);
   const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
+  const note = modelRowNote(listed?.provider, ownKey);
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
   const efforts = offered.length === 0 ? [choice.effort] : offered;
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
+  const fastNote =
+    base === undefined ? undefined : fastRestingNote(base.model.id, base, models ?? []);
   const unsearched = unsearchedModels(models ?? [], read.base);
   const windows = contextWindowsOf(models ?? [], choice.model);
   const window = windowOf(models ?? [], choice);
@@ -127,11 +141,11 @@ function DefaultRows({
   return (
     <>
       <PickerRow
-        label="Default model"
+        label="Model"
         copy={
           <>
-            <strong>Default model</strong>
-            <small>{modelRowNote(listed?.provider, ownKey)}</small>
+            <strong>Model</strong>
+            {note === undefined ? null : <small>{note}</small>}
           </>
         }
         value={read.base}
@@ -173,11 +187,7 @@ function DefaultRows({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>{FAST_WORD}</strong>
-          <small>
-            {base !== undefined && base.fast === undefined
-              ? `No fast version of ${modelLabel(base.model.id, models)}.`
-              : "Run the model's fast version."}
-          </small>
+          {fastNote === undefined ? null : <small>{`${fastNote}.`}</small>}
         </span>
         <button
           type="button"
@@ -197,14 +207,13 @@ function DefaultRows({
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}
       <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">
-          <strong>Default effort</strong>
-          <small>How hard the model thinks.</small>
+          <strong>Effort</strong>
         </span>
         <fieldset
           className="settings-segments"
           {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
         >
-          <legend className="visually-hidden">Default effort</legend>
+          <legend className="visually-hidden">Effort</legend>
           {efforts.map((effort) => (
             <button
               key={effort}
@@ -224,11 +233,11 @@ function DefaultRows({
       {windows === undefined ? null : (
         <div className="settings-row settings-row-wrapping">
           <span className="settings-copy">
-            <strong>Default context</strong>
+            <strong>Context</strong>
             <small>{longWindowNote(windows)}</small>
           </span>
           <fieldset className="settings-segments">
-            <legend className="visually-hidden">Default context</legend>
+            <legend className="visually-hidden">Context</legend>
             {[
               { id: CONTEXT_WINDOW.STANDARD, tokens: windows.standardTokens },
               { id: CONTEXT_WINDOW.LONG, tokens: windows.longTokens },
@@ -253,7 +262,15 @@ function DefaultRows({
   );
 }
 
-export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+/** The Default model group: the model, Fast, effort, and context rows, or why they cannot be drawn. */
+function CodingAgentsSection({
+  signedIn,
+  ownKeys,
+}: {
+  signedIn: boolean;
+  /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them. */
+  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
+}): React.JSX.Element {
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
@@ -262,9 +279,8 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
-  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
 
-  // The page opening reads the default the service holds now, which a Start may just have written, and the models beside it.
+  // The page opening reads the default the service holds now, which a Start may just have written.
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
@@ -283,15 +299,17 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
         if (live) setReadFailed(true);
       },
     );
-    // Which providers run on the account's own key, for the model row's note; a read that fails says nothing.
-    setOwnKeys(new Map());
-    act(ACT_KIND.PROVIDER_KEYS_READ).then(
-      (answer) => {
-        if (live && !("failure" in answer))
-          setOwnKeys(new Map(answer.keys.map((key) => [key.provider, key.status])));
-      },
-      () => undefined,
-    );
+    return () => {
+      live = false;
+    };
+  }, [act, signedIn, attempt]);
+
+  const ownAnthropic = ownKeys.has(MODEL_PROVIDER.ANTHROPIC);
+  const ownOpenAi = ownKeys.has(MODEL_PROVIDER.OPENAI);
+  // The models are read as the page opens, and again as a key of the account's own is saved or removed, since the service withholds a fast version for one.
+  useEffect(() => {
+    if (!signedIn) return;
+    let live = true;
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
         if (!live) return;
@@ -305,7 +323,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
     return () => {
       live = false;
     };
-  }, [act, signedIn, attempt]);
+  }, [act, signedIn, attempt, ownAnthropic, ownOpenAi]);
 
   const write = useCallback(
     (next: ModelChoice) => {
@@ -326,12 +344,9 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   );
 
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
+    <SettingsGroup title="Default model">
       {!signedIn ? (
-        <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+        <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined ? (
         <>
           <DefaultRows
@@ -349,15 +364,36 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
           ) : null}
         </>
       ) : readFailed ? (
-        <>
+        <div className="settings-card-line">
           <p className="error-message" role="alert">
             {PAGE_LINE.FAILED}
           </p>
           <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
-        </>
+        </div>
       ) : (
-        <SpinnerRegion label="Loading your default" />
+        <div className="settings-card-line">
+          <SpinnerRegion label="Loading your default" />
+        </div>
       )}
-    </section>
+    </SettingsGroup>
+  );
+}
+
+/**
+ * The Default model and API keys groups, over the keys the API keys group
+ * holds: the model row's note says which provider runs on the account's own
+ * key, so it reads them from the group that changes them rather than from a
+ * read of its own that a save below would leave behind.
+ */
+export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
+  const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
+    setOwnKeys(new Map(keys.map((key) => [key.provider, key.status])));
+  }, []);
+  return (
+    <>
+      <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} />
+      <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
+    </>
   );
 }

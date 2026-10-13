@@ -51,10 +51,9 @@
 }
 
 /* A plan is a document rather than a message, so its sections breathe. Every
-   unit after the header block opens on a section or field heading. Note that
-   the gap is the body's children's rather than `.plan-unit`'s own, because a
-   unit is drawn inside a wrapper where it can be edited or carries a byline,
-   and an editor stands in its place while it is open. */
+   unit after the header block opens on a section heading. Note that the gap
+   is the body's children's rather than `.plan-unit`'s own, because a unit is
+   drawn inside a wrapper where it carries a byline. */
 .plan-body > * + * {
   margin-top: 1.1em;
 }
@@ -91,7 +90,7 @@
   animation-play-state: var(--loop-motion);
 }
 
-/* The field the caret is typing in: a small ring in the accent turning after
+/* The unit the caret is typing in: a small ring in the accent turning after
    its heading on the window's one spinner turn (`spinner.tsx`), held by
    `--loop-motion` like every animation with no end of its own and still
    reading as work under way while held. */
@@ -110,7 +109,7 @@
   content: "";
 }
 
-/* A unit or assumption as it settles: a tint behind it that fades, on
+/* A unit as it settles: a tint behind it that fades, on
    opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
    leave nothing lit. */
 .plan-fresh {
@@ -250,7 +249,7 @@ button.plan-unit-byline:focus-visible {
 }
 
 .plan-document-block:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the tint below marks the block */
 }
 
 .plan-document-block:focus-visible::before {
@@ -263,10 +262,30 @@ button.plan-unit-byline:focus-visible {
   pointer-events: none;
 }
 
+/* A title that is not edited, with what stands at its right end on its line,
+   as a page's actions stand at the end of its title. */
+.plan-title-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.plan-title-line > .plan-title {
+  min-width: 0;
+}
+
+.plan-title-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .plan-title-text {
   caret-color: var(--accent);
-  outline: none;
+  outline: none; /* no ring: the caret alone, edited where it is drawn */
   overflow-wrap: anywhere;
 }
 
@@ -292,7 +311,7 @@ button.plan-unit-byline:focus-visible {
 .plan-document-text {
   --plan-section-gap: 1.5em;
   caret-color: var(--accent);
-  outline: none;
+  outline: none; /* no ring: a document, or a well that rings for it */
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -374,6 +393,13 @@ button.plan-unit-byline:focus-visible {
   font-size: 11.5px;
 }
 
+/* The file's type icon leads its path, at the size the file tree's rows draw it. */
+.code-card-header > svg:first-child {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
 /* The path is cut from its left, so the file's own name stays in sight;
    the `bdi` inside keeps the path itself reading left to right. On a card
    it is also the button that opens the file, drawn as the words alone. */
@@ -386,7 +412,7 @@ button.plan-unit-byline:focus-visible {
   color: var(--text-primary);
   direction: rtl;
   font: inherit;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -465,10 +491,15 @@ button.code-card-path:hover {
   flex-direction: column;
 }
 
+/* The tree slides in past the view's right edge and out over the file, so
+   the body clips what stands past it, with `clip` rather than `hidden`,
+   which would make a scroller a focus could scroll sideways. */
 .file-view-body {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
+  overflow: clip;
 }
 
 .file-view-body > .file-tab {
@@ -506,15 +537,23 @@ button.code-card-path:hover {
   height: var(--control-glyph);
 }
 
-/* A plan with no repository names the file plainly, cut from its left. */
+/* A plan with no repository names the file plainly, cut from its left, in
+   the window's own type as the breadcrumbs are. */
 .file-view-path {
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
   direction: rtl;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-align: left;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The commit a pinned read is at, quiet beside the path. */
+.file-view-commit {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 
@@ -556,7 +595,6 @@ button.code-card-path:hover {
   background: none;
   color: var(--text-secondary);
   font: inherit;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition:
@@ -593,11 +631,11 @@ button.code-card-path:hover {
   display: flex;
   max-height: calc(100vh - 16px);
   flex-direction: column;
-  padding: var(--space-4);
+  padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   -webkit-app-region: no-drag;
 }
 
@@ -606,12 +644,14 @@ button.code-card-path:hover {
 }
 
 .file-crumb-tree[data-placed="true"] {
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 /* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
 .file-crumb-tree:focus {
-  outline: none;
+  outline: none; /* no ring: the tree's own row carries it */
 }
 
 .file-crumb-notice {
@@ -635,6 +675,150 @@ button.code-card-path:hover {
   flex: 0 0 auto;
   flex-direction: column;
   border-left: 1px solid var(--hairline);
+}
+
+/* A tree on its way out has left the layout, the file already standing in
+   its room, and slides out over the file's edge on its own ground
+   (file-view.tsx). */
+.file-tree-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  background: var(--desktop-well);
+}
+
+/* An agent's Changes tab (agent-changes-tab.tsx): a File tab's bar and its
+   tree to the right, the chosen file's unified diff in the file's place. */
+.changes-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.changes-count {
+  color: var(--text-primary);
+}
+
+.changes-truncated,
+.changes-notice {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.changes-truncated {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.changes-failed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.changes-diff {
+  min-width: 0;
+}
+
+.changes-diff-head {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--code-text);
+  font-size: 12px;
+}
+
+.changes-diff-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  direction: rtl;
+  font-family: var(--font-mono);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What became of the file, as an editor's source control letters it. */
+.changes-status {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.changes-status[data-status="added"] {
+  color: var(--state-complete);
+}
+
+.changes-status[data-status="deleted"] {
+  color: var(--danger-text);
+}
+
+/* The diff's rows: the old side's number, the new side's, then the line,
+   added rows on a green ground and removed rows on a red one. */
+/* A diff selects and copies as `.code-lines` does, its numbers left out. */
+.diff-lines {
+  padding: 0 0 var(--space-6);
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.diff-line,
+.diff-hunk-header {
+  display: flex;
+}
+
+.diff-hunk-header {
+  margin-top: var(--space-6);
+  background: var(--code-pointed);
+  color: var(--code-line-number);
+}
+
+.diff-line[data-kind="added"] {
+  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
+}
+
+.diff-line[data-kind="removed"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.diff-line[data-kind="note"] .diff-line-text {
+  color: var(--code-line-number);
+  font-style: italic;
+}
+
+.diff-line-number {
+  flex: 0 0 auto;
+  width: 40px;
+  padding: 0 var(--space-6) 0 0;
+  color: var(--code-line-number);
+  text-align: right;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.diff-line-text {
+  min-width: 0;
+  padding: 0 var(--content-inset) 0 var(--space-6);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* The tree's search field and its filter, in one row over the tree: the
@@ -682,7 +866,9 @@ button.code-card-path:hover {
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
-   the panel's own list, beside a File tab and under a crumb alike. */
+   the panel's own list, beside a File tab and under a crumb alike. The ring
+   is the window's width drawn inside the row, because the tree's scroller
+   lays its rows edge to edge with no room for one outside. */
 .file-tree-host {
   --trees-bg-override: transparent;
   --trees-bg-muted-override: var(--raised);
@@ -693,12 +879,22 @@ button.code-card-path:hover {
   --trees-selected-focused-border-color-override: var(--focus-ring);
   --trees-border-color-override: var(--hairline);
   --trees-focus-ring-color-override: var(--focus-ring);
+  --trees-focus-ring-width-override: var(--focus-ring-width);
+  --trees-focus-ring-offset-override: calc(var(--focus-ring-width) * -1);
   --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --trees-font-size-override: 12.5px;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* The tree rings whichever row holds focus, a pressed one too, so until the
+   keyboard has moved focus its ring is drawn in no colour at all, as every
+   other control's is drawn not at all (base.css). */
+:root:not([data-keyboard="true"]) .file-tree-host {
+  --trees-focus-ring-color-override: transparent;
+  --trees-selected-focused-border-color-override: transparent;
 }
 
 .file-tree-host > *,
@@ -759,10 +955,17 @@ button.code-card-path:hover {
   color: var(--text-tertiary);
   font: inherit;
   text-align: left;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .file-tab-edge:hover:not(:disabled) {
   color: var(--text-secondary);
+}
+
+/* The edges run the lines' whole width, so their ring is drawn inside them. */
+.file-tab-edge:focus-visible {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -786,6 +989,7 @@ button.code-card-path:hover {
   left: var(--space-12);
 }
 
+/* The note's words select with the lines around it; its header is the card's controls. */
 .file-note-header {
   display: flex;
   min-width: 0;
@@ -793,6 +997,8 @@ button.code-card-path:hover {
   gap: var(--space-6);
   padding: var(--space-2) var(--space-8) var(--space-2) var(--space-2);
   font-size: 11.5px;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .file-note-fold {
@@ -812,6 +1018,11 @@ button.code-card-path:hover {
 
 .file-note-fold:hover {
   background: var(--raised);
+}
+
+/* The note's card clips what it holds, so its fold's ring is drawn inside. */
+.file-note-fold:focus-visible {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .file-note-fold > svg:first-child {
@@ -880,6 +1091,8 @@ button.code-card-path:hover {
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .code-card-header:has(+ .code-card-note) {
@@ -887,13 +1100,18 @@ button.code-card-path:hover {
   padding-bottom: 0;
 }
 
-/* Lines wrap rather than scroll sideways, so no card takes a swipe from the feed. */
+/* Lines wrap rather than scroll sideways, so no card takes a swipe from the
+   feed. Note that they opt back into selection, because the window selects
+   nothing by default (`base.css`): a File tab's, a card's, and an inbox
+   item's code is read to be copied, the gutter's numbers left out of it. */
 .code-lines {
   padding: var(--space-6) 0;
   color: var(--code-text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .code-line {
@@ -912,6 +1130,7 @@ button.code-card-path:hover {
   padding: 0 var(--space-12) 0 0;
   color: var(--code-line-number);
   text-align: right;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -969,7 +1188,7 @@ button.code-card-path:hover {
 .transcript-code-language {
   min-width: 0;
   overflow: hidden;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -981,7 +1200,7 @@ button.code-card-path:hover {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   color: var(--code-text);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.6;
   overflow-wrap: normal;
@@ -998,7 +1217,7 @@ button.code-card-path:hover {
   padding: 0.1em 0.35em;
   border-radius: 4px;
   background: var(--raised-strong);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 
@@ -1087,7 +1306,7 @@ button.code-card-path:hover {
 
 .agent-note {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -1126,6 +1345,75 @@ button.code-card-path:hover {
   padding: 0 16px 8px;
 }
 
+/* The list opens upward, since the composer under it holds the card's foot
+   down. Opening, the card's top edge rises from where it stood to where the
+   open card puts it, and its line and the list under it rise with that edge
+   as one sheet, the list fading in as it comes up out of the card's foot;
+   closing, the sheet sinks back the same way as the list fades. The distance
+   is the list's height, measured as the press lands (`--disclosure-rise`,
+   `use-disclosure.ts`). Note that the list travels with the line rather than
+   standing still under it, because the card's ground is translucent and a
+   line passing over a list would show it through. */
+[data-todos-dock][data-disclosure="opening"] {
+  animation: todos-dock-unroll var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="opening"] > summary {
+  animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="opening"] > .disclosure-body {
+  animation:
+    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] {
+  animation: todos-dock-roll-up var(--duration-exit) var(--motion-exit) forwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] > summary {
+  animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+}
+
+[data-todos-dock][data-disclosure="closing"] > .disclosure-body {
+  animation:
+    disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+}
+
+/* Note that each clip names both ends, because a clip cannot be interpolated
+   to or from none: it would flip halfway through instead. */
+@keyframes todos-dock-unroll {
+  from {
+    clip-path: inset(var(--disclosure-rise) 0 0 round var(--radius-lg));
+  }
+  to {
+    clip-path: inset(0 round var(--radius-lg));
+  }
+}
+
+@keyframes todos-dock-roll-up {
+  from {
+    clip-path: inset(0 round var(--radius-lg));
+  }
+  to {
+    clip-path: inset(var(--disclosure-rise) 0 0 round var(--radius-lg));
+  }
+}
+
+@keyframes todos-dock-rise {
+  from {
+    transform: translateY(var(--disclosure-rise));
+  }
+}
+
+@keyframes todos-dock-sink {
+  to {
+    transform: translateY(var(--disclosure-rise));
+  }
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the
@@ -1143,6 +1431,80 @@ button.code-card-path:hover {
   align-items: center;
   gap: 8px;
   padding-left: 4px;
+}
+
+/* The box's words over the layer that draws a chosen skill's chip
+   (`skill-picker.tsx`): the layer is set in the field's own type at the
+   field's own insets, its words transparent, so each pill lies exactly
+   under its `/name`; the field stands over it, clear. */
+.agent-composer-field {
+  position: relative;
+}
+
+.agent-composer-input {
+  position: relative;
+  z-index: 1;
+}
+
+.skill-chips {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 1rem 1rem 0.5rem;
+  color: transparent;
+  font-size: var(--composer-type);
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.skill-chip {
+  border-radius: 4px;
+  background: var(--raised-strong);
+  box-shadow: 0 0 0 2px var(--raised-strong);
+  color: transparent;
+}
+
+/* The list a `/` opens: the window's menu, standing over the caret's line
+   at the left the line put it, inside the box. Named with the menu's own
+   class, since the menu's rule opens it under a trigger and is read later. */
+.plan-compose-menu.skill-menu {
+  top: auto;
+  z-index: 3;
+  width: 320px;
+  max-width: 100%;
+}
+
+.skill-menu .plan-compose-menu-row:hover {
+  background: none;
+}
+
+.skill-menu .plan-compose-menu-row[aria-selected="true"] {
+  background: var(--raised-strong);
+}
+
+.skill-menu .plan-compose-menu-name {
+  flex: none;
+}
+
+.skill-menu-description {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-menu-none {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-menu-hint {
+  font-size: 11.5px;
 }
 
 /* The foot's right: the model chip, the context ring, the microphone, and
@@ -1417,32 +1779,6 @@ button.attached-file-face:hover img {
   color: var(--file-icon-mauve);
 }
 
-/* Its way off sits on the chip's corner, as a feedback screenshot's does. */
-.attached-file-remove {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  display: flex;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 50%;
-  background: var(--surface-popover);
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.attached-file-remove:hover {
-  color: var(--text-primary);
-}
-
-.attached-file-remove svg {
-  width: 8px;
-  height: 8px;
-}
-
 /* A file opened over the window (attachment-viewer.tsx): the dialog's
    dimmed window and card, the file's name and its buttons along the top,
    and the file under them, an image fitted to the window, a text file's
@@ -1459,11 +1795,13 @@ button.attached-file-face:hover img {
   background: var(--surface-popover);
   box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .attachment-viewer:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .attachment-viewer[data-view="text"] {
@@ -1599,8 +1937,8 @@ button.attached-file-face:hover img {
   flex: none;
 }
 
-/* A link in the transcript: the pull request opens in the browser, drawn
-   as a link; any other address is drawn as words that go nowhere. */
+/* A link in the transcript: a web page opens in the browser, drawn as a
+   link; any other address is drawn as words that go nowhere. */
 .agent-link {
   color: var(--state-working);
   text-decoration: underline;
@@ -1612,12 +1950,13 @@ button.attached-file-face:hover img {
   text-underline-offset: 2px;
 }
 
-/* The chips along the box's foot: the model chip and the context ring,
-   each the box its popover hangs from (`anchored-popover.tsx`), above
-   itself since the box stands at the panel's foot, and after them what the
-   agent published, in the same chip style, the pull request's wearing its
+/* The chips along the box's foot: the model chip, the MCP button, and the
+   context ring, each the box its popover hangs from (`anchored-popover.tsx`),
+   above itself since the box stands at the panel's foot, and after them what
+   the agent published, in the same chip style, the pull request's wearing its
    state's colour, the branch's its name in the code face. */
 .agent-model-chip,
+.agent-servers,
 .agent-context {
   position: relative;
   display: flex;
@@ -1664,7 +2003,135 @@ button.attached-file-face:hover img {
   color: var(--text-tertiary);
 }
 
-/* The context ring beside the model chip: the window's one icon button
+/* The MCP servers popover: the model menu's surface and rows, one per
+   server, each its mark and its name, how many tools it offers right after
+   the name, and at its end its switch or the button that connects it. A
+   row with nothing to press is dimmed as the menu's other disabled rows
+   are, and takes no fill; no row is one press, since each holds its own
+   controls. */
+.agent-servers-list {
+  display: block;
+  padding: 0 0 var(--space-4);
+}
+
+.agent-servers-menu .agent-servers-row:hover {
+  background: none;
+}
+
+.agent-servers-row .plan-compose-menu-name {
+  flex: 0 1 auto;
+}
+
+.agent-servers-tools {
+  display: flex;
+  flex: none;
+}
+
+/* The count follows the server's name, in the menu's muted detail type, and
+   lifts to the body's colour while its list is open, which is while its row
+   is hovered or the count focused, as a menu row opens its submenu; the
+   switch or the button keeps the row's end. */
+.agent-servers-tools-count {
+  padding: 0 var(--space-4);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-count {
+  color: var(--text-body);
+}
+
+.agent-servers-switch {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border-radius: var(--menu-row-radius);
+  background: none;
+}
+
+.agent-servers-connect {
+  flex: none;
+  margin-left: auto;
+}
+
+/* The tools stand beside the popover, on its leading side since it hangs
+   from the composer's trailing edge, up from the row's foot since it stands
+   at the panel's foot, and scroll inside themselves past a bounded height:
+   each its name in the code face, with the first line of what it does
+   under it in the muted type, cut where the list's width ends. */
+.agent-servers-menu .agent-servers-tools-menu {
+  display: none;
+  right: calc(100% + var(--menu-inset) + 9px);
+  width: 280px;
+  max-height: 320px;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.agent-servers-row:is(:hover, :focus-within) .agent-servers-tools-menu {
+  display: block;
+}
+
+/* The list stands outside the row, past the popover's inset and a gap, so a
+   strip of its own reaches back across both: the pointer crossing to the
+   list never leaves the row whose hover keeps it drawn. */
+.agent-servers-tools-menu::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: calc(var(--menu-inset) + 9px + 2px);
+  content: "";
+}
+
+.agent-servers-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-4) var(--row-inset);
+}
+
+.agent-servers-tool-name {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.agent-servers-tool-description {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The foot: the note on its own line, and Settings one quiet press away. */
+.agent-servers-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-bottom: var(--space-4);
+}
+
+.agent-servers-settings {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--row-inset);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-servers-settings:hover {
+  color: var(--text-primary);
+}
+
+/* The context ring beside the MCP button: the window's one icon button
    holding a ring a glyph's size, its track faint and its fill muted with
    room to spare, amber within a tenth of the window of eve's compaction,
    and red at or past it. */
@@ -1703,17 +2170,19 @@ button.attached-file-face:hover img {
   flex-direction: column;
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16) var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-size: 12.5px;
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .agent-context-popover:focus-visible {
-  outline: none;
+  outline: none; /* no ring: a popover holding focus for its controls */
 }
 
 .agent-context-head {
@@ -1865,7 +2334,7 @@ button.attached-file-face:hover img {
 
 .agent-branch-name {
   max-width: 180px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
 }
 
@@ -1893,11 +2362,6 @@ button.attached-file-face:hover img {
 
 .agent-published-row:hover {
   background: var(--raised);
-}
-
-.agent-published-row:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 .agent-published-row[data-state="merged"] .account-mark {
@@ -1985,11 +2449,6 @@ button.subagent-line:hover {
   background: var(--raised-strong);
 }
 
-button.subagent-line:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 .subagent-job {
   overflow: hidden;
   white-space: nowrap;
@@ -1999,7 +2458,8 @@ button.subagent-line:focus-visible {
 
 /* A choice's option on the Inbox tab (`inbox-board.tsx`): a row the width of
    its card, its label over its trade-off, picked the way Settings' segments
-   are (`.settings-segment`), the fill of a chosen segment once pressed. The
+   are (`.settings-segment`), the fill of a chosen segment once pressed, ringed
+   so it reads apart from the hover that shares the fill. The
    one control of the tab with no kin elsewhere, since no other pick-one
    carries a line of detail. */
 .inbox-option {
@@ -2016,7 +2476,7 @@ button.subagent-line:focus-visible {
 }
 
 .inbox-option:hover:not(:disabled) {
-  background: var(--selected);
+  background: var(--raised-strong);
 }
 
 .inbox-option[aria-pressed="true"] {
@@ -2026,11 +2486,6 @@ button.subagent-line:focus-visible {
 
 .inbox-option:disabled {
   opacity: 0.4;
-}
-
-.inbox-option:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 /* An image block on the Inbox tab (`inbox-board.tsx`): the picture the
@@ -2054,9 +2509,11 @@ button.subagent-line:focus-visible {
   height: auto;
 }
 
-.inbox-image:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+/* A form's text field takes Settings' well, but in the card's body type:
+   Settings' tracking is for a key's characters, not an answer's words. */
+.inbox-field-input {
+  font-size: 13px;
+  letter-spacing: 0;
 }
 
 .inbox-image-pending {

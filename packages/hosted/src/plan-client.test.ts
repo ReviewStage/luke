@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import {
   CODE_PATH_MAX_CHARS,
   PLAN_BOUNDS,
   PLAN_FILE_REFUSAL,
+  PLAN_SKILL_BOUNDS,
   PLAN_TREE_ENTRY,
 } from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
@@ -547,6 +548,38 @@ it.effect(
         `GET /api/plans/${PLAN_ID}/tree?path=gone`,
         `GET /api/plans/${PLAN_ID}/tree?recursive=1`,
       ]);
+    }),
+);
+
+it.effect(
+  "a repository's skills are asked of the plan and read as the service answers them, a refusal included; an answer naming more skills than the wire carries, or none where the plan is not found, reads as nothing",
+  () =>
+    Effect.gen(function* () {
+      const skill = { name: "release", description: "Cut a release of the web app." };
+      const read = (answer: JsonValue, status?: number) =>
+        Effect.provide(
+          client().readSkills(PLAN_ID),
+          fakeCloudApi({
+            [`GET /api/plans/${PLAN_ID}/skills`]: {
+              answer: () => answer,
+              ...(status === undefined ? undefined : { status }),
+            },
+          }).layer,
+        );
+      const skills = (count: number) => ({
+        skills: {
+          repository: "acme/web",
+          branch: "main",
+          skills: Array.from({ length: count }, () => skill),
+        },
+      });
+
+      assert.deepEqual(yield* read(skills(1)), skills(1));
+      assert.deepEqual(yield* read({ refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE }), {
+        refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE,
+      });
+      assert.equal(yield* read(skills(PLAN_SKILL_BOUNDS.MAX_SKILLS + 1)), undefined);
+      assert.equal(yield* read({ error: "not-found" }, HTTP_STATUS.NOT_FOUND), undefined);
     }),
 );
 

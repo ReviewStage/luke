@@ -39,6 +39,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_TREE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", path: "src" },
   },
+  [ACT_KIND.PLANNING_SKILLS]: {
+    kind: ACT_KIND.PLANNING_SKILLS,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     kind: ACT_KIND.PLANNING_COLOUR_CODE,
     payload: { language: "ts", code: "export const seats = 3;" },
@@ -103,6 +107,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.GITHUB_OPEN,
     payload: { url: "https://github.com/acme/relay" },
   },
+  [ACT_KIND.WEB_OPEN]: {
+    kind: ACT_KIND.WEB_OPEN,
+    payload: { url: "https://example.com/docs" },
+  },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.WORKSPACE_JOIN]: {
     kind: ACT_KIND.WORKSPACE_JOIN,
@@ -130,9 +138,19 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.CODING_AGENTS_MODELS]: { kind: ACT_KIND.CODING_AGENTS_MODELS },
   [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: { kind: ACT_KIND.CODING_AGENTS_DEFAULT_READ },
-  [ACT_KIND.LINEAR_STATUS]: { kind: ACT_KIND.LINEAR_STATUS },
-  [ACT_KIND.LINEAR_CONNECT]: { kind: ACT_KIND.LINEAR_CONNECT },
-  [ACT_KIND.LINEAR_DISCONNECT]: { kind: ACT_KIND.LINEAR_DISCONNECT },
+  [ACT_KIND.INTEGRATIONS_STATUS]: { kind: ACT_KIND.INTEGRATIONS_STATUS },
+  [ACT_KIND.INTEGRATIONS_CONNECT]: {
+    kind: ACT_KIND.INTEGRATIONS_CONNECT,
+    payload: { provider: "linear" },
+  },
+  [ACT_KIND.INTEGRATIONS_TOOLS]: {
+    kind: ACT_KIND.INTEGRATIONS_TOOLS,
+    payload: { provider: "linear" },
+  },
+  [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
+    kind: ACT_KIND.INTEGRATIONS_DISCONNECT,
+    payload: { provider: "linear" },
+  },
   [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: {
     kind: ACT_KIND.CODING_AGENTS_DEFAULT_WRITE,
     payload: { model: "anthropic/claude-opus-5.5", effort: "high" },
@@ -161,6 +179,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
   },
+  [ACT_KIND.CODING_AGENTS_CHANGES]: {
+    kind: ACT_KIND.CODING_AGENTS_CHANGES,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+  },
   [ACT_KIND.PROVIDER_KEYS_READ]: { kind: ACT_KIND.PROVIDER_KEYS_READ },
   [ACT_KIND.PROVIDER_KEYS_SAVE]: {
     kind: ACT_KIND.PROVIDER_KEYS_SAVE,
@@ -174,6 +196,15 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.PLAN_TEMPLATE_WRITE]: {
     kind: ACT_KIND.PLAN_TEMPLATE_WRITE,
     payload: { template: "## Context\n\nWhy this work exists.\n" },
+  },
+  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: { kind: ACT_KIND.PLAN_TEMPLATE_REVISIONS, payload: {} },
+  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
+    kind: ACT_KIND.PLAN_TEMPLATE_REVISION,
+    payload: { seq: 2 },
+  },
+  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
+    kind: ACT_KIND.PLAN_TEMPLATE_RESTORE,
+    payload: { seq: 2 },
   },
   [ACT_KIND.DICTATION_TRANSCRIBE]: {
     kind: ACT_KIND.DICTATION_TRANSCRIBE,
@@ -190,6 +221,10 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.CODING_AGENTS_RENAME]: {
     kind: ACT_KIND.CODING_AGENTS_RENAME,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", title: "Sign-out button" },
+  },
+  [ACT_KIND.CODING_AGENTS_SERVERS]: {
+    kind: ACT_KIND.CODING_AGENTS_SERVERS,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", disabledServers: ["linear"] },
   },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     kind: ACT_KIND.CODING_AGENTS_STOP,

@@ -1,4 +1,24 @@
+import { readBoard, writeScene } from "@sidecar/database/models/board-store";
+import { listCodingAgents } from "@sidecar/database/models/coding-agent-store";
+import { listPages, readPageVersion } from "@sidecar/database/models/plan-pages";
+import { listRevisions, readRevision } from "@sidecar/database/models/plan-revisions";
+import {
+  createPlan,
+  deletePlan,
+  listPlans,
+  readPlan,
+  updatePlan,
+} from "@sidecar/database/models/plan-store";
+import { standingSessionsOf } from "@sidecar/database/models/recorded-session";
+import { readTranscript } from "@sidecar/database/models/transcript-store";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  ensurePersonalWorkspace,
+  isWorkspaceMember,
+} from "@sidecar/database/models/workspace-store";
+import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import { pageVersionNumberSchema } from "@sidecar/hosted/page-wire";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_BOUNDS,
@@ -27,7 +47,8 @@ import {
 } from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { readBoard, writeScene } from "./hosted/board-store.js";
+import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
+import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { installationOfWorkspace } from "./hosted/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -49,13 +70,10 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./hosted/plan-notes.js";
-import { listRevisions, readRevision } from "./hosted/plan-revisions.js";
-import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
+import { readPlanSkills } from "./hosted/plan-skills.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
-import { readTranscript } from "./hosted/transcript-store.js";
-import type { WorkspaceSeams } from "./hosted/workspace-seams.js";
-import { ensurePersonalWorkspace, isWorkspaceMember } from "./hosted/workspace-store.js";
+import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -67,12 +85,14 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * about plans the caller does not hold. The developer writes a document in
  * two ways here, each through the plan's one write (`hosted/plan-notes.ts`)
  * that the notetaker and the coding agents save their notes through: `POST
- * /api/plans/{id}/edit` is their edit of one field, saved, or answered as a
- * conflict with what the field holds now where Luke wrote it meanwhile and
+ * /api/plans/{id}/edit` is their edit of the document, saved, or answered as
+ * a conflict with the text as it stands now where Luke wrote it meanwhile and
  * the edit no longer lands, with nothing saved; and a restore puts back an
  * earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
- * nothing: the list stands newest started first whatever is opened. Each
+ * nothing: the list stands newest started first whatever is opened. Its
+ * `DELETE` stops every coding agent of the plan first, through the one Stop
+ * (`hosted/coder-host/stop.ts`), and only then deletes the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
  * they published, in brief, where it has any (`hosted/plan-agents.ts`). A pin
  * and an archive are changes like a rename, and the list leaves the archived
@@ -81,9 +101,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`hosted/board-store.ts`). `/api/plans/{id}/transcript` is what was
+ * winning (`@sidecar/database/models/board-store`). `/api/plans/{id}/transcript` is what was
  * said on the plan's calls, read and never written here
- * (`hosted/transcript-store.ts`). `/api/plans/{id}/work` is what Luke's
+ * (`@sidecar/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
  * planning model wrote and ran on them, a page at a time, and every code he
  * showed, read back from the plan's conversation
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
@@ -91,12 +111,18 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * stands now, or at the commit an inbox item's code reference pins, through
  * the App, under the rule `show_code` is held to (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
- * (`hosted/plan-tree.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * (`hosted/plan-tree.ts`); `/api/plans/{id}/skills` is the skills a
+ * developer may choose of that repository, read where and as the file is
+ * (`hosted/plan-skills.ts`). `/api/plans/{id}/revisions` is the plan's history
  * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's, answered with the
- * plan (`hosted/plan-revisions.ts`).
+ * plan (`@sidecar/database/models/plan-revisions`). `/api/plans/{id}/pages`
+ * is the pages agents wrote for the plan, each by its newest version, and
+ * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
+ * answered inside JSON so no page is ever a document of this origin
+ * (`@sidecar/database/models/plan-pages`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -134,14 +160,20 @@ const PLANS_PATH = {
   FILE: "/api/plans/file",
   /** GET lists one folder of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   TREE: "/api/plans/tree",
+  /** GET reads the skills a developer may choose of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  SKILLS: "/api/plans/skills",
   /** GET reads a page of the plan's history, before the revision `before` names where it names one; the rewrite moves the path's id into the `id` query. */
   REVISIONS: "/api/plans/revisions",
   /** GET reads one revision's content and the one before it; the rewrite moves the path's id and number into the `id` and `seq` queries. */
   REVISION: "/api/plans/revision",
   /** POST restores one revision as the plan's content; the rewrite moves the path's id and number into the `id` and `seq` queries. */
   RESTORE: "/api/plans/restore",
-  /** POST saves the developer's edit of one field; the rewrite moves the path's id into the `id` query. */
+  /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
+  /** GET lists the plan's pages; the rewrite moves the path's id into the `id` query. */
+  PAGES: "/api/plans/pages",
+  /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
+  PAGE: "/api/plans/page",
 } as const;
 
 const HTTP_METHOD = {
@@ -159,6 +191,12 @@ const BEFORE_TURN_QUERY = "before";
 
 /** The query naming one revision of the plan by its number. */
 const REVISION_SEQ_QUERY = "seq";
+
+/** The queries naming one version of one page: the page's id, and the version's number. */
+const PAGE_QUERY = {
+  PAGE: "page",
+  VERSION: "version",
+} as const;
 
 /** The queries naming a window of a file: its path, and its first and last line. */
 const FILE_QUERY = {
@@ -186,7 +224,7 @@ const MAXIMUM_EDIT_BODY_BYTES = PLAN_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
-export interface PlansAppSeams {
+export interface PlansAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
   /** The plugin's write that makes an account's personal workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
@@ -376,9 +414,50 @@ const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
   HTTP_METHOD.DELETE,
 ]);
 
+/**
+ * DELETE: every coding agent of the plan stopped for good first, as a Stop
+ * and an archive stop one, so none works on for a plan that is gone; then
+ * the plan's eve sessions and its agents' retired (`retire-sessions.ts`);
+ * then the plan. An eve that refuses a Stop, an agent with a turn still coming
+ * that no Stop can name yet, or an agent started while the others were
+ * stopped, leaves the plan standing and refused.
+ */
+const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: PlansAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  planId: string,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const agents = yield* hostedStoreOrUnavailable(
+    listCodingAgents(userId, planId, { includeArchived: true }),
+  );
+  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
+    discard: true,
+  });
+  const stopped = new Set(agents.map(({ id }) => id));
+  const deleted = yield* hostedStoreOrUnavailable(
+    deletePlan(userId, planId, {
+      stoppedAgentIds: stopped,
+      // Note that the sessions are retired under the plan's lock and before its conversations are
+      // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
+      // agent started meanwhile refuses retires nothing.
+      beforeDelete: (conversationIds) =>
+        Effect.flatMap(standingSessionsOf(userId, conversationIds), (sessions) =>
+          retireSessions((mount) => eveFor(seams, request, mount), sessions),
+        ),
+    }).pipe(Effect.catchTag("PlanAgentUnstopped", () => Effect.succeed(undefined))),
+  );
+  // An agent started while the others were stopped is one this delete has not stopped yet.
+  if (deleted === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+  if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+});
+
 /** GET opens one plan with its saved document; PATCH changes it; DELETE deletes it. */
 const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
   seams: PlansAppSeams,
+  writer: Effect.Effect<StoreWriter>,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (!ONE_PLAN_METHODS.has(incoming.method)) {
@@ -393,9 +472,7 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: opened.value.plan });
   }
   if (incoming.method === HTTP_METHOD.PATCH) return yield* updateEndpoint(userId, planId);
-  const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
-  if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+  return yield* deleteEndpoint(seams, writer, request, userId, planId);
 });
 
 /** GET reads the plan's board; PUT writes the Mac's scene whole. */
@@ -569,6 +646,22 @@ const treeEndpoint = /* @__PURE__ */ Effect.fn("web/planTreeEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, tree.value);
 });
 
+/** GET reads the skills a developer may choose of the plan's repository, or why they are not read. */
+const skillsEndpoint = /* @__PURE__ */ Effect.fn("web/planSkillsEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const skills = yield* hostedStoreOrUnavailable(readPlanSkills(userId, planId));
+  if (Option.isNone(skills)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, skills.value);
+});
+
 /**
  * The revision number the query `name` holds, named once, or nothing where
  * it is absent. A number that is not a whole number from one names no
@@ -672,9 +765,8 @@ const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedR
 ]);
 
 /**
- * POST saves the developer's edit of one field, or of a document plan's
- * whole text: answered with the plan as saved, with the field or the text
- * as it now stands where the edit conflicts with it,
+ * POST saves the developer's edit of the plan's document: answered with the
+ * plan as saved, with the text as it now stands where the edit conflicts with it,
  * or as refused where the plan would be longer than a plan may be. An
  * archived plan is refused outright, as no plan is, since a desktop that
  * knows archiving draws no editor on one.
@@ -706,20 +798,69 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
+/** GET lists the plan's pages, the most recently written first; a plan id the account does not own answers none, as the history does. */
+const pagesEndpoint = /* @__PURE__ */ Effect.fn("web/planPagesEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const pages = yield* hostedStoreOrUnavailable(listPages(userId, planId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pages });
+});
+
+/** The version number the path names, once; one that is not a whole number from one is refused as a request that does not read. */
+const pageVersionOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<number, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(PAGE_QUERY.VERSION);
+  const read = readEither(pageVersionNumberSchema)(unparsedWire(Number(named[0])));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** GET reads one version of one page with its HTML, inside JSON. */
+const pageEndpoint = /* @__PURE__ */ Effect.fn("web/planPageEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const pageId = yield* idOf(request, PAGE_QUERY.PAGE);
+  const version = yield* pageVersionOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const page = yield* hostedStoreOrUnavailable(readPageVersion(userId, planId, pageId, version));
+  if (Option.isNone(page)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { page: page.value });
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
+  const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COLLECTION, hostedRefusing(collectionEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams, writer))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TREE, hostedRefusing(treeEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.SKILLS, hostedRefusing(skillsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISIONS, hostedRefusing(revisionsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGES, hostedRefusing(pagesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.PAGE, hostedRefusing(pageEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

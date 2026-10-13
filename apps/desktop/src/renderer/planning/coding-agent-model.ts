@@ -25,6 +25,7 @@ import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
+  FAST_WITHHELD,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
@@ -33,7 +34,15 @@ import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/w
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { AGENT_TOOL, todosView } from "./tool-call-model";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
+import {
+  CALL_KIND,
+  type CallKind,
+  ROW_PART,
+  type RowReading,
+  type SaidCall,
+  type TurnRow,
+  turnRows,
+} from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -99,8 +108,12 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
   [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › API keys",
+    "your API key was refused or can't be read; check Settings › Coding agents › API keys",
   [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
+  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
+    "Fast isn't available on your own API key; choose the model with Fast off",
+  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
+    "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -209,6 +222,9 @@ export const STOP_FAILED = "The agent could not be stopped. Try again.";
 
 /** What the toast says when the service did not rename an agent, whose old name is drawn again. */
 export const RENAME_FAILED = "The agent could not be renamed. Try again.";
+
+/** What the toast says when the service did not switch an agent's MCP servers, whose switches fall back. */
+export const SERVERS_FAILED = "The agent's MCP servers could not be changed. Try again.";
 
 /** What an agent's archive says once it landed, and what it says refused. */
 const ARCHIVED_WORDS = {
@@ -403,6 +419,9 @@ export function orderedModels(models: readonly CatalogModel[]): readonly Catalog
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
 
+/** What the Fast row says where the service withholds the model's fast version because the account runs its provider on its own key. */
+const FAST_OWN_KEY_NOTE = "Fast isn't available on your own API key";
+
 /** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
 const CHOICE_WORD_SEPARATOR = " ";
 
@@ -456,6 +475,17 @@ export function unsearchedModels(
   }
   if (leads.size === 0) return new Set(offered);
   return new Set([...leads.values(), ...(chosen === undefined ? [] : [chosen])]);
+}
+
+/** Why the Fast row rests for the base model chosen, or nothing where its fast version is offered: withheld for the account's own key, or none listed. */
+export function fastRestingNote(
+  baseId: string,
+  offered: OfferedModel | undefined,
+  models: readonly CatalogModel[],
+): string | undefined {
+  if (offered?.fast !== undefined) return undefined;
+  if (offered?.model.fastWithheld === FAST_WITHHELD.OWN_KEY) return FAST_OWN_KEY_NOTE;
+  return `No fast version of ${modelLabel(baseId, models)}`;
 }
 
 /** Whether the id is the fast version of a model the catalog offers. */
@@ -712,6 +742,8 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
+const CALL_KINDS: ReadonlySet<string> = new Set(Object.values(CALL_KIND));
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
@@ -725,6 +757,8 @@ export type AgentPart =
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
+      /** The call as its wire already read it, where it did (`SaidCall`). */
+      readonly said: SaidCall | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER };
@@ -734,6 +768,20 @@ function toolState(value: WireValue | undefined): ToolState {
   return isWireString(value) && TOOL_STATES.has(value)
     ? (value as ToolState)
     : TOOL_STATE.INPUT_AVAILABLE;
+}
+
+/** What a part says its wire read its call as, or nothing where it says nothing this build reads. */
+function saidOf(value: WireValue | undefined): SaidCall | undefined {
+  if (!isRecord(value) || !isWireString(value.kind) || !CALL_KINDS.has(value.kind)) {
+    return undefined;
+  }
+  // SAFETY: membership in the set built from CALL_KIND's values is what the union names.
+  const kind = value.kind as CallKind;
+  return {
+    kind,
+    ...(isWireString(value.subject) ? { subject: value.subject } : undefined),
+    ...(isWireString(value.description) ? { description: value.description } : undefined),
+  };
 }
 
 /**
@@ -759,6 +807,7 @@ function agentPart(part: WireValue): AgentPart {
       input: part.input,
       output: part.output,
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
+      said: saidOf(part.said),
     };
   }
   return { kind: AGENT_PART.OTHER };
@@ -781,11 +830,27 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
     ).length;
 }
 
-/** Whether a tool part is a delegation to a worker, which the tab draws as a subagent's row rather than a call's. */
+/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
+  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.said?.kind === CALL_KIND.WORKER;
+}
+
+/** Whether a part is a delegation to a worker (`delegates`). */
 export function isDelegation(
   part: AgentPart,
 ): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
-  return part.kind === AGENT_PART.TOOL && part.tool === CODING_AGENT_DELEGATE_TOOL;
+  return part.kind === AGENT_PART.TOOL && delegates(part);
+}
+
+/**
+ * The coding agent a call started, read off its answer, which is the agent
+ * its row opens; nothing for any other call, one still running, or a start
+ * refused, which answers no agent.
+ */
+export function startedAgentOf(part: AgentPart): string | undefined {
+  if (part.kind !== AGENT_PART.TOOL || part.said?.kind !== CALL_KIND.START_AGENT) return undefined;
+  const agent = isRecord(part.output) ? part.output.agent : undefined;
+  return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
@@ -831,13 +896,14 @@ export function dockedTodos(
   return open ? standing : undefined;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
+    if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
     return isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
@@ -1048,14 +1114,6 @@ export function agentLines(
   sent: readonly SentLine[],
 ): readonly CodingAgentMessage[] {
   return [...messages, ...sent.map(sentLineMessage)];
-}
-
-/** Where a pull request lives: GitHub's own pages, which are the one address the tab opens in the browser. */
-const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
-
-/** Whether a link in the transcript is one the tab opens: a page on GitHub, such as the pull request the agent opened. */
-export function opensOnGitHub(href: string): boolean {
-  return GITHUB_ADDRESS.test(href);
 }
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row. */

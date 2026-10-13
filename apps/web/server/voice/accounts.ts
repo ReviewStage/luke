@@ -1,5 +1,5 @@
+import type { QuotaEffect, VoiceSecondsOutcome } from "@sidecar/database/models/quota";
 import type { UserIdResolver } from "../hosted/http-effect.js";
-import type { QuotaEffect, VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
  * What the voice function asks of the account side of this same deployment,

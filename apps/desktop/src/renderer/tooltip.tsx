@@ -24,7 +24,15 @@
  * down; like theirs, it is the pointer's preview, which the keyboard never
  * enters, so what a card's buttons do is offered elsewhere too. One tooltip
  * stands in the window at a time: the next to show takes a lingering card
- * down at once.
+ * down at once. A card hung from a row may name the row (`cardRegion`):
+ * the row's other controls, a list row's Pin and Archive, are then part of
+ * its control, so the pointer crossing onto them leaves the card standing
+ * and their own pills yield to it, while a press anywhere in the row takes
+ * it down.
+ *
+ * Taken down once it has shown, a pill or a card is held drawn through its
+ * exit, inert, and only then taken out; one taken down while it still
+ * waited was never seen, and goes at once.
  *
  * Its words are text like any other, so the session recording masks them
  * with the rest; nothing of it rides an attribute, and a card is left out
@@ -41,6 +49,7 @@ import {
   type PointerEventHandler,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useId,
@@ -49,8 +58,10 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { APP_SHORTCUTS, type KeyedCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
+import { APP_SHORTCUTS, type KeyedCommand, shortcutAria } from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
+import { Shortcut } from "./shortcut";
+import { useDisclosure } from "./use-disclosure";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
@@ -81,6 +92,8 @@ const TOOLTIP_SIDE = {
   ABOVE: "above",
   /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
   END: "end",
+  /** Beside the control, before its start: a row's card where the window ends past the row, as the plan's summary at its right edge hangs one. */
+  START: "start",
 } as const;
 
 type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
@@ -90,6 +103,9 @@ let warmUntil = 0;
 
 /** The way to take down the one tooltip standing in the window, while one stands. */
 let standingHide: (() => void) | undefined;
+
+/** The row the standing card was hung from, whose other controls raise nothing of their own while it stands. */
+let standingRegion: HTMLElement | undefined;
 
 /**
  * A card's linger, as an atom whose work is the wait: it takes the card down
@@ -126,6 +142,20 @@ interface Shown {
   describes: boolean;
 }
 
+/** A pill drawn: what it stands for, and the words it says, kept through its exit. */
+interface Drawn {
+  shown: Shown;
+  label: string;
+}
+
+/** How a pill is on its way out: fading, having been seen, or at once, having never been. */
+const PILL_LEAVING = {
+  SEEN: "seen",
+  UNSEEN: "unseen",
+} as const;
+
+type PillLeaving = (typeof PILL_LEAVING)[keyof typeof PILL_LEAVING];
+
 interface PillPlace {
   left: number;
   top: number;
@@ -140,7 +170,9 @@ function clampTo(value: number, size: number, room: number): number {
  * Where a pill of this size goes for its control: below it, or above where
  * the window ends; centred on it, or from its start for a card. A card hung
  * beside its control stands past the control's end, level with its top and
- * held inside the window.
+ * held inside the window, or before its start where the window ends past
+ * the control, as a menu turns at the screen's edge, so it never covers the
+ * control it describes.
  */
 function pillPlace(
   shown: Shown,
@@ -150,11 +182,13 @@ function pillPlace(
 ): PillPlace {
   const anchor = shown.anchor.getBoundingClientRect();
   if (card?.beside === true) {
-    return {
-      left: clampTo(anchor.right + TOOLTIP_GAP, width, window.innerWidth),
-      top: clampTo(anchor.top, height, window.innerHeight),
-      side: TOOLTIP_SIDE.END,
-    };
+    const top = clampTo(anchor.top, height, window.innerHeight);
+    const past = anchor.right + TOOLTIP_GAP;
+    const before = anchor.left - TOOLTIP_GAP - width;
+    if (past + width > window.innerWidth - TOOLTIP_MARGIN && before >= TOOLTIP_MARGIN) {
+      return { left: before, top, side: TOOLTIP_SIDE.START };
+    }
+    return { left: clampTo(past, width, window.innerWidth), top, side: TOOLTIP_SIDE.END };
   }
   const below = anchor.bottom + TOOLTIP_GAP;
   const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
@@ -164,26 +198,6 @@ function pillPlace(
     top: fits ? below : anchor.top - TOOLTIP_GAP - height,
     side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
   };
-}
-
-/** The chord as its muted glyphs, the way a menu prints it. Hidden from readers: the control says it in `aria-keyshortcuts`. */
-export function ShortcutGlyphs({
-  command,
-  className,
-}: {
-  command: KeyedCommand;
-  className?: string;
-}): React.JSX.Element {
-  return (
-    <span
-      className={className ? `shortcut-glyphs ${className}` : "shortcut-glyphs"}
-      aria-hidden="true"
-    >
-      {shortcutGlyphs(APP_SHORTCUTS[command].chord).map((glyph) => (
-        <span key={glyph}>{glyph}</span>
-      ))}
-    </span>
-  );
 }
 
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
@@ -204,6 +218,8 @@ function TooltipPill({
   command,
   card,
   cardBeside,
+  leaving,
+  ref: hold,
   onCard,
   onCardPress,
   onCardChoice,
@@ -214,6 +230,10 @@ function TooltipPill({
   command: KeyedCommand | undefined;
   card: ReactNode;
   cardBeside: boolean;
+  /** How it is on its way out, while it is: inert, and fading or already hidden. */
+  leaving: PillLeaving | undefined;
+  /** Hands its element to the hold that draws it through its exit. */
+  ref: (element: HTMLElement | null) => void;
   /** The pointer arriving on the card, or leaving it. */
   onCard: (over: boolean) => void;
   /** A press begun on the card. */
@@ -222,6 +242,13 @@ function TooltipPill({
   onCardChoice: () => void;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      element.current = node;
+      hold(node);
+    },
+    [hold],
+  );
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
   const carded = card !== undefined;
 
@@ -231,19 +258,27 @@ function TooltipPill({
     // Note that its layout size is read rather than its box, because the box
     // is still scaled short by the fade it waits to play.
     const placed = carded ? { beside: cardBeside } : undefined;
-    setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+    const measure = () => setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+    measure();
+    // Note that it is placed again whenever it resizes, because a card grows
+    // as a read it made lands, and must stay inside the window as it does.
+    const observer = new ResizeObserver(measure);
+    observer.observe(drawn);
+    return () => observer.disconnect();
   }, [shown, label, carded, cardBeside]);
 
   return createPortal(
     // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a card's own button's or link's, bubbled up, which its keys press as well.
     <div
-      ref={element}
+      ref={drawn}
       id={id}
       role="tooltip"
       className={carded ? "tooltip tooltip-card ph-no-capture" : "tooltip"}
       data-placed={String(at !== undefined)}
       data-side={at?.side ?? TOOLTIP_SIDE.BELOW}
       data-instant={String(shown.instant)}
+      data-leaving={leaving}
+      inert={leaving !== undefined}
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
       onPointerEnter={carded ? () => onCard(true) : undefined}
       onPointerLeave={carded ? () => onCard(false) : undefined}
@@ -259,7 +294,7 @@ function TooltipPill({
       }
     >
       {carded ? card : label}
-      {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
+      {command === undefined || carded ? null : <Shortcut chord={APP_SHORTCUTS[command].chord} />}
     </div>,
     document.body,
   );
@@ -274,37 +309,60 @@ function TooltipPill({
  * place, and its focus, while it does. `card`, while given, is drawn in the
  * pill's place, and always describes the control, since it says more than
  * the control's name; `cardBeside` hangs it past the control's end rather
- * than under it, as a list row's card hangs. A card's buttons and links
+ * than under it, as a list row's card hangs, or before its start where the
+ * window ends past the control. A card's buttons and links
  * take it down once chosen, and stay the pointer's alone, so the card is a
- * description the keyboard never enters.
+ * description the keyboard never enters. `cardRegion` is the row the
+ * control stands in, the whole of which counts as the control while its
+ * card stands.
  */
 export function Tooltip({
   label,
   command,
   card,
   cardBeside = false,
+  cardRegion,
   children,
 }: {
   label: string | undefined;
   command?: KeyedCommand;
   card?: ReactNode;
   cardBeside?: boolean;
+  cardRegion?: RefObject<HTMLElement | null>;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
   const [shown, setShown, latest] = useStateWithRef<Shown | undefined>(undefined);
+  const carded = card !== undefined;
+  // The row a card counts as its control, where it names one; a pill has none.
+  const region = useCallback(
+    () => (carded ? (cardRegion?.current ?? undefined) : undefined),
+    [carded, cardRegion],
+  );
   const linger = useAtomSet(cardLingerAtom);
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
   const overCard = useRef(false);
   const pressingCard = useRef(false);
+  // The pill is drawn through its exit as it last stood, and as seen or not.
+  const asked = shown === undefined || label === undefined ? undefined : { shown, label };
+  const [drawn, setDrawn] = useState<Drawn | undefined>(asked);
+  if (asked !== undefined && (asked.shown !== drawn?.shown || asked.label !== drawn.label)) {
+    setDrawn(asked);
+  }
+  const [seen, setSeen] = useState(false);
+  const pill = useDisclosure(asked !== undefined);
   // A pill that was on screen warms the window for the next; one still
   // waiting leaves it as it was.
   const hide = useCallback(() => {
     const standing = latest();
     if (standing === undefined) return;
+    setSeen(visible(standing));
     if (visible(standing)) warmUntil = performance.now() + WARM_MS;
-    if (standingHide === hide) standingHide = undefined;
+    if (standingHide === hide) {
+      standingHide = undefined;
+      standingRegion = undefined;
+    }
     overCard.current = false;
     linger(Atom.Interrupt);
     setShown(undefined);
@@ -316,6 +374,8 @@ export function Tooltip({
       linger(Atom.Interrupt);
       return;
     }
+    // A control in the standing card's row is part of that row, and leaves the card standing.
+    if (standingHide !== hide && standingRegion?.contains(anchor) === true) return;
     if (standingHide !== hide) standingHide?.();
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
@@ -326,14 +386,15 @@ export function Tooltip({
       describes: card !== undefined || name !== label,
     });
     standingHide = hide;
+    standingRegion = region();
   };
   // A card on screen lingers for the pointer crossing to it; a pill, or a
   // card still waiting, goes at once.
-  const leave = () => {
+  const leave = useCallback(() => {
     const standing = latest();
-    if (card !== undefined && standing !== undefined && visible(standing)) linger({ leave: hide });
+    if (carded && standing !== undefined && visible(standing)) linger({ leave: hide });
     else hide();
-  };
+  }, [carded, latest, linger, hide]);
   // A selection dragged past the card's edge leaves it standing until the
   // press ends, and the pointer then off the card lets it linger.
   const onCard = (over: boolean) => {
@@ -357,6 +418,7 @@ export function Tooltip({
     () => () => {
       if (standingHide !== hide) return;
       standingHide = undefined;
+      standingRegion = undefined;
       linger(Atom.Interrupt);
     },
     [hide, linger],
@@ -367,9 +429,9 @@ export function Tooltip({
   // the window's: the pill is no layer of its own to take one. Only a card
   // the pointer is on lets a key other than Escape pass, since that key is
   // most likely the copy of what was selected on it.
-  const standing = shown !== undefined;
+  const up = shown !== undefined;
   useEffect(() => {
-    if (!standing) return;
+    if (!up) return;
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" || !overCard.current) hide();
     };
@@ -381,7 +443,32 @@ export function Tooltip({
       window.removeEventListener("scroll", hide, true);
       window.removeEventListener("blur", hide);
     };
-  }, [standing, hide]);
+  }, [up, hide]);
+
+  // While a card hung from a row stands, the pointer leaving the row, not
+  // its control, is what lets it linger, the pointer back anywhere in the
+  // row keeps it, and a press anywhere in the row, on the control or one of
+  // its siblings, takes it down. Note that these are the row's own events,
+  // because the row is no element of this one's, and that the pointer
+  // leaving the row onto the card lets nothing linger, because React has
+  // told the card the pointer arrived before the window tells the row it
+  // left.
+  useEffect(() => {
+    const row = region();
+    if (!up || row === undefined) return;
+    const out = () => {
+      if (!overCard.current) leave();
+    };
+    const back = () => linger(Atom.Interrupt);
+    row.addEventListener("pointerleave", out);
+    row.addEventListener("pointerenter", back);
+    row.addEventListener("pointerdown", hide);
+    return () => {
+      row.removeEventListener("pointerleave", out);
+      row.removeEventListener("pointerenter", back);
+      row.removeEventListener("pointerdown", hide);
+    };
+  }, [up, region, leave, linger, hide]);
 
   const own = children.props;
   const anchor = cloneElement(children, {
@@ -396,7 +483,8 @@ export function Tooltip({
     },
     onPointerLeave: (event) => {
       own.onPointerLeave?.(event);
-      leave();
+      // A card hung from a row lingers once the pointer leaves the row instead.
+      if (region() === undefined) leave();
     },
     onPointerDown: (event) => {
       own.onPointerDown?.(event);
@@ -417,14 +505,16 @@ export function Tooltip({
   return (
     <>
       {anchor}
-      {shown === undefined || label === undefined ? null : (
+      {!pill.mounted || drawn === undefined ? null : (
         <TooltipPill
           id={id}
-          shown={shown}
-          label={label}
+          shown={drawn.shown}
+          label={drawn.label}
           command={command}
           card={card}
           cardBeside={cardBeside}
+          leaving={pill.leaving ? (seen ? PILL_LEAVING.SEEN : PILL_LEAVING.UNSEEN) : undefined}
+          ref={pill.ref}
           onCard={onCard}
           onCardPress={onCardPress}
           onCardChoice={hide}

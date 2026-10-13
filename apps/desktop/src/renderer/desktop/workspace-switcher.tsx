@@ -96,10 +96,10 @@ export function WorkspaceSwitcher({
         <span className="sidebar-workspace-name">{listed.name}</span>
         <ChevronDownIcon />
       </button>
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Workspaces"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={workspaceMenuGroups(listed, plans, onOpenMembers)}
           onClose={menu.close}
         />

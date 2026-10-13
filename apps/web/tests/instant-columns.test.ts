@@ -3,10 +3,10 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { PGlite } from "@electric-sql/pglite";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * One convention for every stored instant: `timestamp with time zone`, which
@@ -20,7 +20,7 @@ import { testSqlClient } from "./support/sql-client";
  * happens to sit in.
  */
 
-const MIGRATIONS = fileURLToPath(new URL("../drizzle", import.meta.url));
+const MIGRATIONS = fileURLToPath(new URL("../../../packages/database/migrations", import.meta.url));
 const INSTANTS_MIGRATION = "0026_instants_timestamptz";
 const SESSION_ZONE = "Asia/Tokyo";
 const COLUMN_TYPE = {
@@ -33,7 +33,7 @@ const ColumnRowSchema = Schema.Struct({
   column_name: Schema.String,
 });
 
-it.layer(testSqlClient)("the migrated schema's instant columns", (it) => {
+it.layer(getTestDB())("the migrated schema's instant columns", (it) => {
   it.effect("holds no timestamp without time zone column", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

@@ -62,13 +62,16 @@ const PROBE_BOUNDS = { MAX_FILE_BYTES: 1024 * 1024, TEXT_PROBE_BYTES: 8192 } as 
 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
+/** The commit a checkout stands at unless a test says otherwise: synthetic, whole, as git names one. */
+export const CHECKOUT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
 /**
  * The file probe's answer, the facts the script prints on one line: whether
  * the path is a regular file inside the checkout, its bytes, whether a NUL
- * stands among its first bytes, and its line count where it is under the
- * bound.
+ * stands among its first bytes, its line count where it is under the
+ * bound, and the commit the checkout stands at, empty where git names none.
  */
-function probeFile(files: CheckoutFiles, path: string): SandboxCommandResult {
+function probeFile(files: CheckoutFiles, path: string, commit: string): SandboxCommandResult {
   const text = files[path];
   // A path that leaves the checkout resolves to no file of it.
   if (text === undefined || path.startsWith("/") || path.split("/").includes("..")) {
@@ -77,7 +80,7 @@ function probeFile(files: CheckoutFiles, path: string): SandboxCommandResult {
   const bytes = Buffer.from(text);
   const binary = bytes.subarray(0, PROBE_BOUNDS.TEXT_PROBE_BYTES).includes(0) ? 1 : 0;
   const lines = bytes.length <= PROBE_BOUNDS.MAX_FILE_BYTES ? text.split("\n").length : 0;
-  return result(EXIT.OK, `1 ${bytes.length} ${binary} ${lines}\n`);
+  return result(EXIT.OK, `1 ${bytes.length} ${binary} ${lines} ${commit}\n`);
 }
 
 /** The window read's answer: the lines first to last as sed prints them, each with its newline. */
@@ -97,9 +100,15 @@ function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResul
 /** A sandbox over the command table and the checkout's files, with a firewall whose policy can be set. */
 export function sandboxDouble(
   commands: CommandTable,
-  options: { readonly firewall?: boolean; readonly files?: CheckoutFiles } = {},
+  options: {
+    readonly firewall?: boolean;
+    readonly files?: CheckoutFiles;
+    /** The commit the checkout stands at; empty for a checkout git names no commit of. */
+    readonly commit?: string;
+  } = {},
 ): SandboxDouble {
   const files = options.files ?? {};
+  const commit = options.commit ?? CHECKOUT_COMMIT;
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
   let policy: SandboxNetworkPolicy = OPEN_INTERNET;
   const double: SandboxDouble = {
@@ -164,7 +173,7 @@ export function sandboxDouble(
       const last = env?.[VARIABLE.LAST_LINE];
       if (run.workingDirectory === PATH.CHECKOUT && file !== undefined) {
         if (first === undefined || last === undefined)
-          return Promise.resolve(probeFile(files, file));
+          return Promise.resolve(probeFile(files, file, commit));
         return Promise.resolve(windowOf(files, file, Number(first), Number(last)));
       }
       return Promise.reject(new Error(`the sandbox double was handed a run it does not know`));

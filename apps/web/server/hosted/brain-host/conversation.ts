@@ -1,23 +1,22 @@
+import { db } from "@sidecar/database/core/query";
+import { conversationReachableBy } from "@sidecar/database/models/recorded-session";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
-import { db } from "../../db/query.js";
-import { conversations } from "../../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
-
-import { conversationReachableBy } from "./recorded-session.js";
 
 export {
   claimRuntimeSession,
   conversationReachableBy,
   runtimeSessionReachableBy,
-} from "./recorded-session.js";
+} from "@sidecar/database/models/recorded-session";
 
 /**
  * The host's own check of who a session is for. eve authenticates a request

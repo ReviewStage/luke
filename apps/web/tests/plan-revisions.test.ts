@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import {
+  listRevisions,
+  PLAN_REVISION,
+  type PlanWriter,
+  readRevision,
+} from "@sidecar/database/models/plan-revisions";
+import {
+  createPlan,
+  deletePlan,
+  readPlan,
+  savePlanText,
+} from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { planRevision } from "@sidecar/database/schemas/plan-revision";
+import { voiceSessions } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
+import { VOICE_DELEGATION_MODE } from "@sidecar/database/voice-vocabulary";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -11,12 +30,6 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { planRevision } from "../server/db/plan-revision-schema";
-import { db } from "../server/db/query";
-import { voiceSessions } from "../server/db/voice-schema";
-import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
@@ -24,16 +37,8 @@ import {
   saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import {
-  listRevisions,
-  PLAN_REVISION,
-  type PlanWriter,
-  readRevision,
-} from "../server/hosted/plan-revisions";
-import { deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
-import { testSqlClient } from "./support/sql-client";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -102,7 +107,7 @@ const lastEditOf = (userId: string, planId: string) =>
     (stored): PlanLastEdit | undefined => Option.getOrThrow(stored).plan.lastEdit,
   );
 
-it.layer(testSqlClient)("a plan's history", (it) => {
+it.layer(getTestDB())("a plan's history", (it) => {
   it.effect("every save that changes the plan is a revision under the writer who made it", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

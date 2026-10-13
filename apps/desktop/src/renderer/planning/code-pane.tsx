@@ -17,9 +17,11 @@ import {
   type CodeFeedCallSource,
   codeFeedCalls,
   copiedLines,
+  fileName,
   isPointed,
   rangeLabel,
 } from "./code-pane-model";
+import { FileTypeIcon } from "./file-type-icon";
 import { callHeading } from "./transcript-model";
 
 /**
@@ -76,6 +78,20 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
 }
 
+/**
+ * What a blank line's text holds, here and in a diff. Note that it is a
+ * newline rather than nothing, because the gutter's number is left out of a
+ * selection, so a line holding no text would leave nothing to copy and the
+ * copy would close up the blank lines between the code; drawn in `pre-wrap`,
+ * a lone newline takes no more room than the line.
+ */
+export const BLANK_LINE_TEXT = "\n";
+
+/** Whether a line holds no text to copy. */
+function isBlank(tokens: PlanCode["lines"][number]): boolean {
+  return tokens.every((token) => token.text === "");
+}
+
 /** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's, which draws its notes before the lines they begin on. */
 export function CodeLineRows({
   firstLine,
@@ -102,6 +118,7 @@ export function CodeLineRows({
                 {line}
               </span>
               <code className="code-line-text">
+                {isBlank(tokens) ? BLANK_LINE_TEXT : null}
                 {tokens.map((token, at) => (
                   <span key={at} style={runColours(token)}>
                     {token.text}
@@ -156,7 +173,8 @@ export function codeCardName(ref: CodeRef): string {
 }
 
 /**
- * A card's header: its path, cut from the left so the file's own name stays
+ * A card's header: its file's type icon, as the file tree draws it
+ * (`file-type-icon.tsx`), then its path, cut from the left so the file's own name stays
  * in sight, with the whole path in its hint; the lines pointed at; their
  * copy, where the card holds them; and the whole file opened in a tab of
  * its own, from the path or its button, where the card's file can be. The Code tab's cards and an inbox
@@ -176,6 +194,7 @@ export function CodeCardHeader({
   const label = rangeLabel(codeRef);
   return (
     <header className="code-card-header">
+      <FileTypeIcon name={fileName(codeRef.path)} />
       <Tooltip label={codeRef.path}>
         {onOpen === undefined ? (
           <span className="code-card-path">
@@ -218,7 +237,7 @@ function CodeCardContent({
   onOpenFile,
 }: {
   showing: PlanCodeShowing;
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   const { code } = showing;
   return (
@@ -230,7 +249,7 @@ function CodeCardContent({
       <CodeCardHeader
         codeRef={code.ref}
         copied={copiedLines(code)}
-        onOpen={() => onOpenFile(code.ref)}
+        onOpen={() => onOpenFile(code.ref, code.commit)}
       />
       {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
       <CodeLines code={code} />
@@ -256,7 +275,7 @@ function CodeFeedRun({
 }: {
   call: CodeFeedCall;
   now: number;
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -295,7 +314,7 @@ export function CodePane({
   /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** The call whose card to scroll to, once, as the tab is drawn; none to keep to the newest. */
   reveal?: string | undefined;
   /** Says the card asked for was scrolled to, so the tab drawn again later keeps to the newest. */

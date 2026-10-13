@@ -31,7 +31,15 @@ const requests = vi.hoisted(() => {
 });
 
 /** Words the page draws or is typed into it, none of which may leave in a recording. */
-const WORDS = ["Quarterly", "roadmap", "feature-branch", "Delete", "typed-secret", "Folder"];
+const WORDS = [
+  "Quarterly",
+  "roadmap",
+  "feature-branch",
+  "Delete",
+  "typed-secret",
+  "Folder",
+  "private-token",
+];
 
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
 const GZIP_MAGIC = "\u001f\u008b";
@@ -42,8 +50,11 @@ function bootstrap(permitted: boolean): SessionReplayBootstrap {
 
 function drawPage(): void {
   document.body.innerHTML = `
+    <link rel="stylesheet" href="styles.css" />
     <main>
       <h1>Quarterly roadmap</h1>
+      <a href="https://example.test/invite?token=private-token">roadmap</a>
+      <svg><use href="#file-icon-ts" /></svg>
       <p title="feature-branch" aria-label="Folder">feature-branch</p>
       <button type="button">Delete</button>
       <input value="typed-secret" placeholder="Folder" />
@@ -122,9 +133,12 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   const snapshots = jsonRoundTrip(sent.filter((event) => event.event === "$snapshot"));
   const recording = JSON.stringify(snapshots === undefined ? undefined : opened(snapshots));
   // The page was recorded: its elements are there, by tag.
-  for (const tag of ["h1", "button", "input"]) {
+  for (const tag of ["h1", "a", "button", "input"]) {
     assert.ok(recording.includes(`"tagName":"${tag}"`), tag);
   }
-  // And none of its words, in a text node, an attribute, or an input's value.
+  // A stylesheet's address and an icon's symbol are layout, not words, so the replay can still lay out.
+  assert.ok(recording.includes("styles.css"), "the stylesheet's address");
+  assert.ok(recording.includes("#file-icon-ts"), "the icon's symbol");
+  // And none of its words, in a text node, an attribute, a link's address, or an input's value.
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
 });

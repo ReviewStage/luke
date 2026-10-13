@@ -12,6 +12,7 @@ import {
   mockModel,
 } from "eve/evals";
 import { CODER_MODEL_FIXTURE } from "../server/hosted/coder-host/bounds.js";
+import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 
 /**
@@ -24,7 +25,8 @@ import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
  * pair below and repeats the worker's answer; the worker, running on the
  * same model, reads the task back under eve's wrapper as the agent reads
  * the plan's title back. Handed a list of to-dos, it writes them, the first
- * in progress, and says so. It is
+ * in progress, and says so. Offered the fixture's skill and told its
+ * `/name`, it loads it and repeats the body's last line. It is
  * selected only by the fixture's own environment variable and a deployment
  * never names it.
  */
@@ -42,7 +44,23 @@ export const SCRIPTED_TODOS_REPLY = "The to-dos are written.";
 /** The pair the scripted agent names for every worker, which the fixture records as asked. */
 export const SCRIPTED_WORKER_CHOICE = { model: "openai/gpt-6.1-sol", effort: "low" } as const;
 
+/** What the scripted agent says once it has loaded a skill: the skill's last line follows. */
+export const SCRIPTED_SKILL_REPLY = "The skill says:";
+/** The skills a session under the fixture is offered in place of its repository's, so the eval reaches no GitHub. */
+export const SCRIPTED_SKILLS = [
+  {
+    name: "release-notes",
+    description: "Use when the developer asks for release notes.",
+    markdown: "# Release notes\n\nWrite one line per change, newest first.",
+  },
+] as const satisfies readonly CoderSkill[];
+
+/** A skill a developer names in their words, as `/name` at the start of a word. */
+const NAMED_SKILL = /(?:^|\s)\/([a-z0-9-]+)/u;
+
 const readDelegationOutput = Schema.decodeUnknownOption(codingAgentDelegationOutputSchema);
+/** What `load_skill` answers: the skill's body. */
+const readSkillBody = Schema.decodeUnknownOption(Schema.String);
 
 /** The line eve puts ahead of the agent's own words when it hands a worker its task. */
 const CALLER_MESSAGE_MARK = "Caller message:\n";
@@ -72,7 +90,28 @@ function scriptedTodos(words: string): CodingAgentTodos {
   };
 }
 
+/** The name of a skill the developer's words name and eve's announcement lists as one the session is offered; nothing otherwise. */
+function offeredSkillNamed(request: MockModelRequest): string | undefined {
+  const named = NAMED_SKILL.exec(request.lastUserMessage ?? "")?.[1];
+  if (named === undefined) return undefined;
+  // Note that eve announces a session's dynamic skills in a message of their own, not in its instructions.
+  const listed = request.messages.some((message) => message.text.includes(`- ${named}: `));
+  return listed ? named : undefined;
+}
+
+/** The reply to a loaded skill: the body's last line. */
+function skillReply(loaded: MockModelToolResult): MockModelResponse {
+  const body = Option.getOrElse(readSkillBody(loaded.output), () => "");
+  return { text: `${SCRIPTED_SKILL_REPLY} ${body.trim().split("\n").at(-1) ?? ""}` };
+}
+
 function scriptedResponse(request: MockModelRequest): MockModelResponse {
+  const loaded = request.toolResults.find((result) => result.name === CODER_TOOL.LOAD_SKILL);
+  if (loaded) return skillReply(loaded);
+  const skill = offeredSkillNamed(request);
+  if (skill !== undefined) {
+    return { toolCalls: [{ name: CODER_TOOL.LOAD_SKILL, input: { skill } }] };
+  }
   if (request.toolResults.some((result) => result.name === CODER_TOOL.WRITE_TODOS)) {
     return { text: SCRIPTED_TODOS_REPLY };
   }

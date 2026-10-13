@@ -3,6 +3,17 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import {
+  createPlan,
+  openPlanConversation,
+  readPlan,
+  savePlanText,
+  updatePlan,
+} from "@sidecar/database/models/plan-store";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
@@ -11,7 +22,6 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { HOSTED_API_ERROR, MESSAGE_ROLE, TURN_STATUS } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -23,14 +33,6 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { saveNotes } from "../server/hosted/plan-notes";
-import {
-  openPlanConversation,
-  readPlan,
-  savePlanText,
-  updatePlan,
-} from "../server/hosted/plan-store";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,
@@ -44,6 +46,7 @@ import {
   sessionInstructions,
   startupTokens,
 } from "../server/live";
+
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
@@ -54,7 +57,6 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "../server/voice/service";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { FIRST_EVE_TURN, goodbyeTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -196,6 +198,9 @@ function fakeEve(): FakeEve {
     },
     cancel() {
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
+    },
+    reset() {
+      return Effect.die(new Error("this suite retires no session"));
     },
   };
   return eve;

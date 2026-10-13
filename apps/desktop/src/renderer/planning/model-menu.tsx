@@ -13,6 +13,7 @@ import {
   effortLabel,
   effortsOf,
   FAST_WORD,
+  fastRestingNote,
   longWindowNote,
   modelLabel,
   offeredModels,
@@ -38,7 +39,8 @@ import {
  * offers two windows, naming the window chosen now and opening a submenu
  * of the two with what the whole one costs under them; each closes the menu
  * on a pick; and Fast, a switch to the model's fast version, muted where
- * the model has none, which leaves the menu open. The id a choice names is
+ * the model has none or the service withholds it, saying which, which
+ * leaves the menu open. The id a choice names is
  * the catalog's own, the fast version's where Fast is on, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button keeps it as the account's default, the chip
@@ -116,6 +118,10 @@ export function ModelMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
+  /** The menu is on its way out (`SearchableMenu`'s). */
+  leaving?: boolean | undefined;
+  /** Hands the menu's element to the hold its owner draws it through its exit with. */
+  ref?: ((element: HTMLElement | null) => void) | undefined;
 }): React.JSX.Element {
   const { models, chosen, onChoose, onClose } = props;
   const read =
@@ -198,10 +204,7 @@ export function ModelMenu(props: {
                 if (next !== undefined) onChoose(next);
               },
             },
-            disabled:
-              offered?.fast === undefined
-                ? `No fast version of ${modelLabel(read.base, models)}`
-                : undefined,
+            disabled: fastRestingNote(read.base, offered, models),
           },
         ];
 
@@ -236,6 +239,8 @@ export function ModelMenu(props: {
       onLeave={props.onLeave}
       foot={foot}
       footNote={props.footNote}
+      leaving={props.leaving}
+      ref={props.ref}
     />
   );
 }

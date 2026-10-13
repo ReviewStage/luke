@@ -1,3 +1,4 @@
+import type { LabelledAgentEdit, StoredPlan } from "@sidecar/database/models/plan-store";
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import {
@@ -34,9 +35,9 @@ import {
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
+import { INTEGRATION_NAMES_SAID } from "../integrations.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
-import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,
@@ -346,7 +347,7 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 /**
  * What a planning turn is handed beside its instructions every turn: the
  * plan's name, the saved document as JSON, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), the fields
+ * made on it (so Luke can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
@@ -547,7 +548,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const WORKER_INSTRUCTIONS = `
 You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected Linear, read it with connection_search and connection_execute; change something in Linear only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
+Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected ${INTEGRATION_NAMES_SAID}, read it with connection_search and connection_execute; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
@@ -561,7 +562,7 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   }));
 }
 
-/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation and the Linear connection's calls beside them (`../connection-tools.ts`). */
+/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation and every integration's calls beside them (`../connection-tools.ts`). */
 export function planningToolSet(): ToolSet {
   return Object.fromEntries([
     ...PLANNING_TOOLS.map((tool) => [

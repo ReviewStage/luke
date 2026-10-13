@@ -1,13 +1,24 @@
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+  AccountSeamEffect,
+} from "@sidecar/database/models/account-store";
+import type { StandingSession } from "@sidecar/database/models/recorded-session";
 import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import type { ModelChoice, ModelProvider } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
+  type PlanTemplateRevisionAnswer,
+  type PlanTemplateRevisionsAnswer,
   planTemplateWriteRequestSchema,
 } from "@sidecar/hosted/plan-document-template";
+import { planRevisionSeqSchema } from "@sidecar/hosted/plan-wire";
+import { failureKind } from "@sidecar/runtime/effect";
 import { accountPreferencesFromWire } from "@sidecar/settings";
-import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
@@ -17,11 +28,7 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type {
-  AccountPreferencesRow,
-  AccountPreferencesWrite,
-  AccountSeamEffect,
-} from "./hosted/account-store.js";
+import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -35,12 +42,10 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import {
-  acceptedModelChoice,
-  CODING_AGENT_DEFAULT_CHOICE,
-  type ModelCatalog,
-} from "./hosted/model-catalog.js";
+import { type IntegrationConnect, revokeIntegrationGrants } from "./hosted/integration-connect.js";
+import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
+import { retireSessions } from "./hosted/retire-sessions.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -63,12 +68,27 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * snapshot, because the desktop syncs the snapshot and applies it over its
  * own settings, and a twenty-thousand-character text has no place in that
  * loop. It is kept verbatim, and null stands for the built-in default.
+ * Every write that changes it is kept as a revision, which its history
+ * reads a page at a time and one at a time, and which a restore puts back
+ * as a revision of its own, all under the bearer's account alone.
  */
 
 const ACCOUNT_PATH = {
   DELETE: "/api/account/delete",
   PREFERENCES: "/api/account/preferences",
   PLAN_TEMPLATE: "/api/account/plan-template",
+  /** GET reads a page of the template's history, before the revision `before` names where it names one. */
+  PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
+  /** GET reads one revision beside the one before it; the rewrite moves the path's number into the `seq` query. */
+  PLAN_TEMPLATE_REVISION: "/api/account/plan-template/revision",
+  /** POST restores one revision as the template; the rewrite moves the path's number into the `seq` query. */
+  PLAN_TEMPLATE_RESTORE: "/api/account/plan-template/restore",
+} as const;
+
+/** The queries naming a revision of the template: the one an older page is read before, and the one a path names. */
+const REVISION_QUERY = {
+  BEFORE: "before",
+  SEQ: "seq",
 } as const;
 
 /** A template write is the template at its bound with every character escaped, and the key around it. */
@@ -80,11 +100,15 @@ const HTTP_METHOD = {
   PUT: "PUT",
 } as const;
 
-export interface AccountAppSeams {
+export interface AccountAppSeams extends EveReach {
   resolveUserId: UserIdResolver;
-  /** Deletes the user row; every dependent row cascades with it. */
+  /** The eve sessions the account's standing conversations run in, which the delete retires first. */
+  standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
+  /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
+  /** The providers the account runs on a key of its own, whose fast versions its coding-agent choice may not name. */
+  ownKeyProviders: (userId: string) => AccountSeamEffect<ReadonlySet<ModelProvider>>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
   writePreferences: (
     userId: string,
@@ -94,6 +118,21 @@ export interface AccountAppSeams {
   readPlanTemplate: (userId: string) => AccountSeamEffect<string | null>;
   /** Keeps the template verbatim, or null for the default, and answers what is then kept. */
   writePlanTemplate: (userId: string, template: string | null) => AccountSeamEffect<string | null>;
+  /** A page of the template's revisions, the newest first, before the one `before` names where it names one. */
+  listPlanTemplateRevisions: (
+    userId: string,
+    before?: number,
+  ) => AccountSeamEffect<PlanTemplateRevisionsAnswer>;
+  /** One revision beside the one before it; nothing where the account has no such revision. */
+  readPlanTemplateRevision: (
+    userId: string,
+    seq: number,
+  ) => AccountSeamEffect<Option.Option<PlanTemplateRevisionAnswer["revision"]>>;
+  /** Puts one revision back as the template and answers what is then kept; nothing where the account has no such revision. */
+  restorePlanTemplate: (
+    userId: string,
+    seq: number,
+  ) => AccountSeamEffect<Option.Option<string | null>>;
 }
 
 /** A coding-agent choice as a write names it; the catalog decides whether it is one. */
@@ -157,7 +196,15 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * to erase. Where the deployment can, the analytics person is asked to be
  * erased first, because nothing after the delete would still name it; a
  * refusal or an outage there must not hold up the delete, so it is logged as
- * a status and the delete proceeds.
+ * a status and the delete proceeds. Every eve session the account's
+ * standing conversations run in is retired before anything is deleted, as
+ * the developer, while eve's door still admits them to it
+ * (`retire-sessions.ts`); a session eve did not retire is logged and the
+ * delete proceeds, and the delete itself queues the sandbox of every session
+ * the account ran for the sweep. The account's grant at every integration is
+ * revoked at Vercel Connect once the rows are gone, as a Disconnect revokes
+ * one, so no grant outlives the account; a revoke that fails is logged by its
+ * word and the account is deleted all the same.
  */
 const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoint")(function* (
   seams: AccountAppSeams,
@@ -167,12 +214,18 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   | HostedEnvironment
   | HttpClient.HttpClient
   | SqlClient.SqlClient
+  | IntegrationConnect
   | HttpServerRequest.HttpServerRequest
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
   const userId = yield* resolvedUserId(seams);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
+  yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   yield* forgetAnalytics(userId);
   yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
+  yield* revokeIntegrationGrants(userId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
@@ -190,21 +243,24 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEn
 });
 
 /**
- * The write's coding-agent part, as the catalog accepts it: a choice the
- * catalog does not offer is a bad request, and a catalog the instance
+ * The write's coding-agent part, as the catalog accepts it for the
+ * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
  * cannot read is an outage the caller may retry.
  */
 const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: AccountAppSeams,
+  userId: string,
   value: UnparsedWireValue,
-): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog> {
+): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog | SqlClient.SqlClient> {
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return yield* acceptedModelChoice(read.success).pipe(
+  const own = yield* hostedStoreOrUnavailable(seams.ownKeyProviders(userId));
+  return yield* acceptedModelChoice(read.success, own).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
-        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-      ),
+      Effect.logWarning(
+        `the model catalog could not be read: ${failureKind(unavailable.cause)}`,
+      ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
 });
@@ -240,7 +296,7 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
       write.preferences = preferences;
     }
     if (body.codingAgent !== undefined) {
-      write.codingAgent = yield* acceptedCodingAgent(body.codingAgent);
+      write.codingAgent = yield* acceptedCodingAgent(seams, userId, body.codingAgent);
     }
 
     const row = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, write));
@@ -326,6 +382,94 @@ const accountPlanTemplateEndpoint = /* @__PURE__ */ Effect.fn("web/accountPlanTe
 );
 
 /**
+ * The revision number the query `name` holds, named once, or nothing where
+ * it is absent. A number that is not a whole number from one names no
+ * revision, and is refused as a request that does not read.
+ */
+const revisionSeqOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  name: string,
+): Effect.fn.Return<number | undefined, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(name);
+  const [seq] = named;
+  if (seq === undefined) return undefined;
+  const read = readEither(planRevisionSeqSchema)(unparsedWire(Number(seq)));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** The revision the path names, which a revision's routes cannot do without. */
+const namedRevisionOf = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
+  number,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest
+> {
+  const seq = yield* revisionSeqOf(REVISION_QUERY.SEQ);
+  if (seq === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return seq;
+});
+
+/** GET reads a page of the caller's template history, the newest first; an account with none answers an empty page. */
+const planTemplateRevisionsEndpoint = /* @__PURE__ */ Effect.fn(
+  "web/planTemplateRevisionsEndpoint",
+)(function* (
+  seams: AccountAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  yield* hostedMethod(HTTP_METHOD.GET);
+  const userId = yield* resolvedUserId(seams);
+  const before = yield* revisionSeqOf(REVISION_QUERY.BEFORE);
+  const page = yield* hostedStoreOrUnavailable(seams.listPlanTemplateRevisions(userId, before));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
+});
+
+/** GET reads one revision of the caller's template beside the one before it. */
+const planTemplateRevisionEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateRevisionEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    yield* hostedMethod(HTTP_METHOD.GET);
+    const seq = yield* namedRevisionOf();
+    const userId = yield* resolvedUserId(seams);
+    const revision = yield* hostedStoreOrUnavailable(seams.readPlanTemplateRevision(userId, seq));
+    if (Option.isNone(revision)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { revision: revision.value });
+  },
+);
+
+/**
+ * POST puts one revision back as the caller's template, a revision of its
+ * own naming it, and answers the template as a write does. It names nothing
+ * in a body: the revision is the path's.
+ */
+const planTemplateRestoreEndpoint = /* @__PURE__ */ Effect.fn("web/planTemplateRestoreEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    yield* hostedMethod(HTTP_METHOD.POST);
+    const seq = yield* namedRevisionOf();
+    const userId = yield* resolvedUserId(seams);
+    const restored = yield* hostedStoreOrUnavailable(seams.restorePlanTemplate(userId, seq));
+    if (Option.isNone(restored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, planTemplateAnswer(restored.value));
+  },
+);
+
+/**
  * An endpoint's refusal carried back onto the answer channel. A refusal is
  * failed with rather than returned, so an endpoint's steps read as the early
  * returns they are; a route answers on one channel, so the group makes the
@@ -338,13 +482,19 @@ function refusing<R>(
 }
 
 /**
- * The group: the three account endpoints on their own paths, and the hosted
+ * The group: the account endpoints on their own paths, and the hosted
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
 export function accountApp(
   seams: AccountAppSeams,
-): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient | ModelCatalog> {
+): WebRoutes<
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | ModelCatalog
+  | IntegrationConnect
+> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),
     HttpRouter.add(
@@ -356,6 +506,21 @@ export function accountApp(
       ANY_METHOD,
       ACCOUNT_PATH.PLAN_TEMPLATE,
       refusing(accountPlanTemplateEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_REVISIONS,
+      refusing(planTemplateRevisionsEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_REVISION,
+      refusing(planTemplateRevisionEndpoint(seams)),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PLAN_TEMPLATE_RESTORE,
+      refusing(planTemplateRestoreEndpoint(seams)),
     ),
     hostedNotFoundRoute,
   );

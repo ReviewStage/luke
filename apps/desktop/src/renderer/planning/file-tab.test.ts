@@ -18,6 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, onTestFinished, test, vi } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { installHighlights } from "#testing/find-highlights";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap } from "../app-commands";
@@ -151,6 +152,17 @@ it.effect(
       assert.doesNotMatch(tab.container.textContent ?? "", /Reading/u);
     }),
 );
+
+test("the keyboard's ring on a Show lines row is drawn whole, inside the row, since the row runs the lines' whole width", async () => {
+  const styled = await sheetStyle();
+  watchedRows();
+  const tab = mounted(numberedFile(1_200));
+  await tab.draw({ path: "src/invite.ts", range: { startLine: 600, endLine: 601 }, opened: 1 });
+  const edges = [...tab.container.querySelectorAll<HTMLElement>(".file-tab-edge")];
+
+  assert.equal(edges.length, 2);
+  assert.deepEqual(edges.map((edge) => ringClipping(styled, edge)).filter(Boolean), []);
+});
 
 test("a file opens on the window holding its lit lines, and the windows above and below are read as their rows scroll into view, joined into one run", async () => {
   const rows = watchedRows();
@@ -302,21 +314,28 @@ test("a file not on the branch read names the branch over the lines Luke showed 
   assert.deepEqual(drawnLines(unanswered.container), ["7", "8 lit", "9 lit", "10"]);
 });
 
-test("the lines a File tab draws in its file's place are the newest showing of the lines it was opened on, else the newest of the file", () => {
-  const showing = (path: string, startLine: number, callId: string): PlanCodeShowing => ({
+test("the lines a File tab draws in its file's place are the newest showing of the lines it was opened on, else the newest of the file, and for a tab read at a commit only those read at it", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const showing = (
+    path: string,
+    startLine: number,
+    callId: string,
+    at?: string,
+  ): PlanCodeShowing => ({
     callId,
     turnId: "t1",
     shownAt: 1,
     code: {
       ref: { path, startLine, endLine: startLine },
       repository: "acme/relay",
+      ...(at === undefined ? undefined : { commit: at }),
       firstLine: startLine,
       lineCount: 40,
       lines: [[{ text: callId }]],
     },
   });
   const shown = [
-    showing("src/invite.ts", 8, "first"),
+    showing("src/invite.ts", 8, "first", commit),
     showing("src/invite.ts", 8, "again"),
     showing("src/invite.ts", 20, "later"),
     showing("src/other.ts", 8, "other"),
@@ -330,6 +349,8 @@ test("the lines a File tab draws in its file's place are the newest showing of t
   assert.equal(snippetOf(shown, opened(8))?.lines[0]?.[0]?.text, "again");
   assert.equal(snippetOf(shown, opened(30))?.lines[0]?.[0]?.text, "later");
   assert.equal(snippetOf(shown, { path: "src/gone.ts", range: undefined, opened: 1 }), undefined);
+  assert.equal(snippetOf(shown, { ...opened(8), commit })?.lines[0]?.[0]?.text, "first");
+  assert.equal(snippetOf(shown, { ...opened(30), commit })?.lines[0]?.[0]?.text, "first");
 });
 
 test("while a find bar is open over the tab the rest of the file is read a window after another and drawn whole, so a match past the lines drawn is found, and never a line's number in the gutter", async () => {

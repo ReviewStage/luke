@@ -49,7 +49,7 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.jso
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted thirty days ago, settles as abandoned every turn still running
-past its bound (`apps/web/server/hosted/store/abandoned-turns.ts`'s
+past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on Luke's key every
 voice session whose device detached and did not come back within the grace. It
@@ -67,6 +67,10 @@ pnpm --filter @luke/web test:agent       # offline brain eval, scripted model
 `check.sh` must exit 0. A Mac or UI change also needs `./scripts/verify.sh`
 evidence; CI builds nothing for the Mac.
 
+The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
+testing guide, and the rules below agree with it. Its `bunx vitest` is
+`pnpm exec vitest` here.
+
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
@@ -75,33 +79,43 @@ evidence; CI builds nothing for the Mac.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.
-- Prefer the real implementation, then a fake, then a stub. A double is a
-  test `Layer` on the subject's `Context.Tag` at a process boundary: provider
-  HTTP, Apple, the model, the OS, the clock.
+- Prefer the real implementation, then a fake, then a stub. Mock at a
+  process boundary (provider HTTP, Apple, the model, the OS, the clock), never
+  between internal modules. For an Effect service the double is a test
+  `Layer` on its `Context.Tag`; elsewhere `vi.spyOn` over `vi.mock`, restored
+  with `vi.restoreAllMocks()`.
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup: `packages/host/src/testing/`,
   `apps/web/tests/support/`, `packages/wire/src/testing/`, and
   `temporaryDirectory` from `@sidecar/runtime/testing`.
-- Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
-  `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
-  (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
-  `it.live` fail lint (`testing/no-real-time`).
+- A test that needs a database provides `getTestDB()`
+  (`@sidecar/database/testing`), a migrated database of its own, and a query
+  over account rows tests that one user cannot read another's. A model or
+  repository under `packages/database/src/` ships with a sibling
+  `__tests__/<name>.test.ts` in the same PR.
+- Effect tests use `it.effect` and `TestClock.adjust`, rather than running
+  an effect themselves (`Effect.run*`, `Runtime.run*`, `ManagedRuntime.make`)
+  or waiting on real time (`setTimeout`, `setInterval`, `Effect.sleep`,
+  `it.live`). No lint rule holds a test file to this: the Effect edge rules
+  exempt one by extension, because a test body is its own edge
+  (`tools/oxlint/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
   helpers, with the diff explained in the PR.
-- Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
-  `.todo`, and `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix
-  or delete a flaky test.
+- Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
+  `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
+  test. A test that breaks on a refactor because it checks internal
+  wiring a behavior test already covers is deleted, not fixed, and the PR
+  says which behavior test covers it.
 - Do not write change-detector tests: an expected value computed by the code
   under test or pasted from its output; a test of a getter, constant, type,
   re-export, or Schema round-trip on a valid value; a test that only asserts
   a fake was called; a private function exported for a test.
 
-`tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
-`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
-last entry. `liveClockTests` is permanent, for a subject that is a real socket
-or process timeout; `it.live` is allowed only there, and each entry is named
-here with its reason:
-
+What the checks hold a test to is narrower than the rules above:
+`anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
+on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
+in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+`vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms
 
@@ -218,7 +232,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
-- **`apps/web/server/db/drizzle.ts`** — the Drizzle bridge, ported from
+- **`packages/database/src/core/drizzle.ts`** — the Drizzle bridge, ported from
   `@effect/sql-drizzle` because that plugin peers the v3 line and a second
   copy of `effect` in the tree would make a `Context.Service` minted in one
   copy a different service in the other. Drizzle's proxy driver renders a
@@ -254,7 +268,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   SqlClient>` today and buy nothing, and reading the client from the fiber
   instead is the same thing that keeps a bridged query inside the transaction
   around it.
-- **The test-support edges** — `apps/web/tests/support/sql-client.ts`,
+- **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
   `apps/web/eve/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
@@ -271,22 +285,24 @@ decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
 `packages/wire/src/effect/json-schema.ts`, and
-`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+`packages/database/src/models/message-reads.ts` all produce or read it.
 
 ### Idioms
 
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
-- Drizzle's query builder is the web server's statement layer, never a raw
-  `sql` template beside it: a query module builds over the tables its own
-  `apps/web/server/db/*-schema.ts` declares, through the one handle
-  `apps/web/server/db/query.ts` holds, and still answers `Effect<A, SqlError |
-  Schema.SchemaError, SqlClient>` with its rows still Schema-decoded. The
-  modules are hand-maintained beside hand-written migrations — `drizzle-kit`
-  generates nothing — and `apps/web/tests/drizzle-schema.test.ts` compares
-  them against `information_schema` in both directions, so a migration that
-  drops a column deletes it from its module in the same PR.
-  `apps/web/server/README.md`'s "The data layer" is the whole of it.
+- Drizzle follows the vendored `drizzle` and `db-migrations` skills
+  (lobehub's): the `db.select()` builder, never `db.query`; the schema module
+  under `packages/database/src/schemas/` first, then `pnpm db:generate` for
+  its migration. Two things differ from lobehub's examples. A row is decoded
+  by an Effect `Schema` through `SqlSchema`, never `drizzle-zod`, because
+  Effect takes no zod schema and a second validation library would split the
+  one way a boundary value is declared. A statement is an `Effect` on the
+  fiber's `SqlClient` through the bridge
+  (`packages/database/src/core/drizzle.ts`) rather than a promise, until
+  Drizzle's own `drizzle-orm/effect-postgres` supports Effect v4; it is
+  yielded, and `anti-slop/no-await-drizzle-statement` refuses one awaited.
+  `apps/web/server/README.md`'s "The data layer" is the rest.
 - Runtime only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
 - `Schedule`, not a hand-rolled interval or backoff loop.

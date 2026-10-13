@@ -1,3 +1,11 @@
+import { askRecord } from "@sidecar/database/models/asks";
+import { type HostedStore, hostedStore } from "@sidecar/database/models/hosted-store";
+import {
+  type VoiceTarget,
+  type VoiceWriteResult,
+  voiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -13,16 +21,6 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
-import { askRecord } from "../hosted/store/asks.js";
-import {
-  type ConversationTarget,
-  type HostedStore,
-  hostedStore,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  voiceWriter,
-} from "../hosted/store/index.js";
-import type { StoreWriter } from "../hosted/store/writer.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";

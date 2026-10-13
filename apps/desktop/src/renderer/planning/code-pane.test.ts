@@ -12,6 +12,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, onTestFinished, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { selectable, selectedText, sheetStyle } from "#testing/css-rules";
+import "../file-tree/index";
 import { CodePane } from "./code-pane";
 import { type CodeFeedCallSource, rangeLabel } from "./code-pane-model";
 
@@ -46,7 +48,10 @@ afterEach(() => {
 });
 
 /** The feed drawn into the document, redrawn by each `draw`, its atoms on `registry` where one is given. */
-function mounted(onOpenFile: (ref: CodeRef) => void = openNothing, registry?: AtomRegistry) {
+function mounted(
+  onOpenFile: (ref: CodeRef, commit?: string) => void = openNothing,
+  registry?: AtomRegistry,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -257,6 +262,26 @@ test("a card says Luke's note on its lines in words between its heading and the 
   );
 });
 
+test("a card's note and lines select and copy as text, the gutter's numbers left out, while its heading stays the card's controls", async () => {
+  const style = await sheetStyle();
+  const { container, draw } = mounted();
+  const note = "The invite is looked up by its token alone.";
+  draw([
+    showing("a", 2_000, {
+      ...windowOf("src/invite.ts", 2, 2),
+      lines: windowOf("src/invite.ts", 2, 2).lines.slice(0, 2),
+      note,
+    }),
+  ]);
+
+  const card = container.querySelector(".code-card");
+  assert.ok(card);
+  assert.equal(selectedText(style, card), `${note}line 1line 2`);
+  const header = card.querySelector(".code-card-header");
+  assert.ok(header);
+  assert.equal(selectable(style, header), false);
+});
+
 test("a run carries its colour in both appearances, so the stylesheet picks one as the appearance changes", () => {
   const code: PlanCode = {
     ...windowOf("src/invite.ts", 1, 1),
@@ -347,18 +372,43 @@ it.effect(
     }),
 );
 
-test("a card's Open file and its path each open the whole file, its lines lit", () => {
-  const opened: CodeRef[] = [];
-  const { container, draw } = mounted((ref) => opened.push(ref));
-  draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+test("a card's Open file and its path each open the whole file, its lines lit, at the commit Luke's checkout read it at where one was recorded", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const opened: { ref: CodeRef; commit: string | undefined }[] = [];
+  const { container, draw } = mounted((ref, at) => opened.push({ ref, commit: at }));
+  draw([showing("a", 2_000, { ...windowOf("src/invite.ts", 11, 12), commit })]);
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
   act(() =>
     container.querySelector<HTMLButtonElement>('button[aria-label="Open src/invite.ts"]')?.click(),
   );
+  draw([showing("b", 2_000, windowOf("src/invite.ts", 11, 12))]);
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
 
   const ref = { path: "src/invite.ts", startLine: 11, endLine: 12 };
-  assert.deepEqual(opened, [ref, ref]);
+  assert.deepEqual(opened, [
+    { ref, commit },
+    { ref, commit },
+    { ref, commit: undefined },
+  ]);
+});
+
+test("a card's header leads with its file's type icon, as the file tree draws the file", async () => {
+  const { container, draw } = mounted();
+  draw([
+    showing("a", 2_000, windowOf("src/invite.ts", 11, 12)),
+    showing("b", 3_000, windowOf("migrations/0042_roles.sql", 1, 2)),
+  ]);
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+
+  const icons = [...container.querySelectorAll(".code-card-header")].map((header) =>
+    header.firstElementChild?.matches(".file-type-icon")
+      ? header.firstElementChild.getAttribute("data-file-type")
+      : undefined,
+  );
+  assert.deepEqual(icons, ["typescript", "database"]);
 });
 
 test("the heading names one line, a range, or nothing for a whole file", () => {

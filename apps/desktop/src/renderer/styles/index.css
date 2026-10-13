@@ -9,9 +9,9 @@
 /* Before the surfaces that draw messages, so each can restate a measure of its
    own without out-specifying the block it is styling. */
 @import "./markdown.css";
-/* Before the surfaces that hold keycaps, so each can size its own without
-   out-specifying the cap itself. */
-@import "./keycaps.css";
+/* Before the surfaces that show a chord, so each can size its own without
+   out-specifying the chord itself. */
+@import "./shortcut.css";
 @import "./tooltip.css";
 @import "./skeleton.css";
 @import "./sign-in.css";

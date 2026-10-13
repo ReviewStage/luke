@@ -1,3 +1,7 @@
+import {
+  listRepositoryPins,
+  setRepositoryPin,
+} from "@sidecar/database/models/repository-pin-store";
 import { repositoryPinRequestSchema } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
@@ -14,7 +18,6 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { listRepositoryPins, setRepositoryPin } from "./hosted/repository-pin-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**

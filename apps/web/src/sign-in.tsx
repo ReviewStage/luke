@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { GitHubMark } from "./account-marks";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
+import { ConnectionGraphic } from "./connection-graphic";
 import { LukeMark } from "./SiteChrome";
 import {
   SOCIAL_PROVIDER_LABEL,
@@ -20,39 +21,6 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
-}
-
-function ArrowMark(): React.JSX.Element {
-  return (
-    <svg
-      className="size-6 shrink-0 text-muted-foreground"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M5 12h14M13 6l6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ConnectionGraphic(): React.JSX.Element {
-  return (
-    <div
-      className="mx-auto mb-5 flex items-center justify-center gap-4 text-foreground"
-      aria-hidden="true"
-    >
-      <GitHubMark className="size-10 shrink-0" />
-      <ArrowMark />
-      <LukeMark className="h-auto w-12 shrink-0" />
-    </div>
-  );
 }
 
 function SignIn(): React.JSX.Element {
@@ -92,7 +60,7 @@ function SignIn(): React.JSX.Element {
             page, so it carries the same face the product and the landing page
             wear. */}
         {provider ? (
-          <ConnectionGraphic />
+          <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
         ) : (
           <div className="inline-flex w-13" aria-hidden="true">
             <LukeMark className="h-auto w-full" />
@@ -119,7 +87,11 @@ function SignIn(): React.JSX.Element {
             </button>
           </div>
         ) : null}
-        {failure ? <p className="m-0 text-attention">{failure}</p> : null}
+        {failure ? (
+          <p className="m-0 text-attention" role="alert">
+            {failure}
+          </p>
+        ) : null}
         {/* Its own line rather than a run-on: with no provider to continue
             with there is no action block between it and the copy above. */}
         <small className="mt-4 block text-muted-foreground">

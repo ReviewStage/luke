@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { writePlanTemplate } from "@sidecar/database/models/account-store";
+import { createPlan, readPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { Effect, Option } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { writePlanTemplate } from "../server/hosted/account-store";
-import { readPlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -28,7 +28,7 @@ const openUser = Effect.gen(function* () {
 const opened = (userId: string, planId: string) =>
   Effect.map(readPlan(userId, planId), (stored) => Option.getOrThrow(stored).plan);
 
-it.layer(testSqlClient)("a new plan as one document", (it) => {
+it.layer(getTestDB())("a new plan as one document", (it) => {
   it.effect(
     "a new plan is one document, a copy of the default template while the account keeps none",
     () =>

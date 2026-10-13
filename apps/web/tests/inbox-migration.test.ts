@@ -2,22 +2,23 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import {
+  type JournalEntry,
+  runWebMigrations,
+  webMigrationJournal,
+} from "@sidecar/database/core/migrator";
+import { db } from "@sidecar/database/core/query";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { unmigratedPgliteSqlClient } from "@sidecar/database/testing";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { user } from "../server/db/auth-schema";
-import {
-  type JournalEntry,
-  runWebMigrations,
-  webMigrationJournal,
-} from "../server/db/effect-migrator";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { answerInboxItem, planInboxItems, postInboxItem } from "../server/hosted/inbox-store";
-import { unmigratedPgliteSqlClient } from "./support/sql-client";
 
 /**
  * Migration 0088 moves every inbox item from the fixed kinds, a kind, a
@@ -52,7 +53,15 @@ const migrationsThrough = (tag: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
-    const source = path.join(import.meta.dirname, "..", "drizzle");
+    const source = path.join(
+      import.meta.dirname,
+      "..",
+      "..",
+      "..",
+      "packages",
+      "database",
+      "migrations",
+    );
     const folder = yield* fileSystem.makeTempDirectoryScoped();
     yield* fileSystem.makeDirectory(path.join(folder, JOURNAL_FILE[0]));
     const entries = yield* webMigrationJournal(source);

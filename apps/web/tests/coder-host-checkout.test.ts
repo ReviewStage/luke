@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect, Option, Redacted } from "effect";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import {
   GITHUB_FIXTURE_BOT,
@@ -13,7 +15,6 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -66,7 +67,7 @@ const openAgent = (repository: string) =>
     return { agent, target: { userId, conversationId: agent.conversationId } };
   });
 
-it.layer(testSqlClient)("a coding agent's checkout", (it) => {
+it.layer(getTestDB())("a coding agent's checkout", (it) => {
   it.effect(
     "the repository is cloned whole at its default branch with a write token at the firewall for the clone alone, the token reaches no command and no output, and the checkout's commits are the developer's with Luke as co-author",
     () =>

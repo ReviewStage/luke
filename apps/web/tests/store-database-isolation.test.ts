@@ -1,9 +1,9 @@
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect, ManagedRuntime } from "effect";
 import { expect, test } from "vitest";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { openHostedStoreTestDatabase, TEST_USER_NAME } from "./support/hosted-store-database";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * Two openings of the test database stand in for two `test:store` files: a
@@ -42,8 +42,8 @@ test("an unscoped delete through one store harness leaves a sibling harness's ro
 });
 
 test("an unscoped delete through one build of the test SqlClient leaves a sibling build's rows standing", async () => {
-  const deleter = ManagedRuntime.make(testSqlClient);
-  const sibling = ManagedRuntime.make(testSqlClient);
+  const deleter = ManagedRuntime.make(getTestDB());
+  const sibling = ManagedRuntime.make(getTestDB());
   try {
     await sibling.runPromise(insertUser("user-kept"));
     await deleter.runPromise(insertUser("user-doomed"));

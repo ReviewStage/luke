@@ -52,8 +52,17 @@
   /* A page's content from its column's edges: the document, the call bar
      under it, the new-plan page, and a Settings page. */
   --page-inset: var(--space-40);
-  /* A menu's edge to its items, whose own row inset then places their glyphs. */
+  /* Every menu and popover draws from one set: the --surface-popover ground
+     inside a --hairline-strong edge, this corner and shadow, and its items
+     this inset from its edge, each row this tall and its glyph this big. The
+     corner is a row's own and the inset together, so a highlighted row
+     follows the menu's curve wherever it meets it. */
   --menu-inset: var(--space-4);
+  --menu-row-height: 32px;
+  --menu-row-radius: 6px;
+  --menu-glyph: 16px;
+  --menu-radius: calc(var(--menu-row-radius) + var(--menu-inset));
+  --menu-shadow: 0 12px 32px var(--shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
@@ -372,7 +381,8 @@ body,
   background: var(--hairline);
 }
 
-.sidebar-new-plan:disabled {
+.sidebar-new-plan:disabled,
+.sidebar-inbox:disabled {
   opacity: 0.45;
 }
 
@@ -424,6 +434,30 @@ body,
   width: 12px;
   height: 12px;
   flex: none;
+/* The Inbox row is the place shown while the window's Inbox stands, filled as
+   the new-plan page's row is. Its count of what waits unseen stands at its end
+   in a group count's ink, and gives way to its chord while the row is hovered
+   or reached from the keyboard, as the rows above show theirs. */
+.sidebar-inbox[aria-current="page"] {
+  background: var(--raised-strong);
+}
+
+.sidebar-inbox-unread {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-inbox-unread ~ .row-shortcut,
+.sidebar-inbox:hover > .sidebar-inbox-unread,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread {
+  display: none;
+}
+
+.sidebar-inbox:hover > .sidebar-inbox-unread ~ .row-shortcut,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread ~ .row-shortcut {
+  display: inline-flex;
 }
 
 .sidebar-new-plan svg,
@@ -439,6 +473,8 @@ body,
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  margin: calc(-1 * var(--focus-ring-reach));
+  padding: var(--focus-ring-reach);
   overflow-y: auto;
 }
 
@@ -461,6 +497,20 @@ body,
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.45;
+}
+
+/* The plans while the list is first read: each row a row's room around
+   one block in the name's type, as far apart as the rows, so the rows land
+   where the blocks stood. */
+.sidebar-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+}
+
+.sidebar-skeleton-row {
+  padding: var(--space-8) var(--row-inset);
+  font-size: 13px;
 }
 
 /* The list's failure: its sentence, then the retry under it, drawn back by
@@ -489,11 +539,11 @@ body,
   list-style: none;
 }
 
+/* Every row of the plans is one line, whatever section it stands in: what
+   else there is to say of it is on its hover card. */
 .sidebar-plan {
-  display: flex;
+  display: block;
   width: 100%;
-  flex-direction: column;
-  gap: var(--space-4);
   padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
@@ -516,7 +566,6 @@ body,
 }
 
 .sidebar-plan-name,
-.sidebar-plan-repository-name,
 .sidebar-account-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -535,7 +584,7 @@ body,
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
-   own line and type, ringed, and the repository stays beneath it. */
+   own line and type, ringed. */
 .sidebar-plan-field {
   width: calc(100% + 10px);
   margin: -2px -5px; /* off-scale */
@@ -547,7 +596,6 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  outline: none;
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -565,9 +613,9 @@ body,
   flex: 1;
 }
 
-/* An Inbox row's count of what waits stands in the time's place, drawn as
-   the time is, and, with no Pin or Archive to make room for, stays put
-   under the pointer. */
+/* A plan's count of what waits, in the Inbox's column, stands in the time's
+   place, drawn as the time is, and, with no Pin or Archive to make room for,
+   stays put under the pointer. */
 .sidebar-plan-time,
 .sidebar-inbox-count {
   flex: none;
@@ -655,11 +703,6 @@ body,
   opacity: 0.45;
 }
 
-.sidebar-plan-mark:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
-}
-
 .sidebar-plan-mark svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -669,6 +712,13 @@ body,
 .sidebar-plan-item:hover > .sidebar-plan-marks,
 .sidebar-plan-item:has(:focus-visible) > .sidebar-plan-marks {
   opacity: 1;
+}
+
+/* Note that the row holding the keyboard stands over its neighbours, because
+   its ring reaches past the list's gap and the next row's fill would
+   otherwise paint over the ring's foot. */
+.sidebar-plan-item:has(:focus-visible) {
+  z-index: 1;
 }
 
 .sidebar-plan-item:hover .sidebar-plan-time,
@@ -719,7 +769,7 @@ body,
   flex: 1;
   align-items: center;
   gap: var(--glyph-gap);
-  padding: var(--space-6) var(--row-inset);
+  padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
   color: var(--text-secondary);
@@ -734,8 +784,15 @@ body,
 }
 
 .sidebar-repository-toggle:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
+  outline: none; /* no ring: the header around it rings, as a plan row does */
+}
+
+/* The keyboard on the fold rings the whole header, its ⋯ and + included,
+   as a plan row's ring takes in its Pin and Archive. */
+:root[data-keyboard="true"]
+.sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .sidebar-repository-name {
@@ -857,11 +914,6 @@ body,
   color: var(--text-primary);
 }
 
-.sidebar-repository-action:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px; /* off-scale */
-}
-
 .sidebar-repository-action svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -878,26 +930,10 @@ body,
   object-fit: cover;
 }
 
-/* A row's repository, led by its owner's picture at the size of its words. */
-.sidebar-plan-repository {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
-}
-
-.sidebar-plan-repository :is(.repository-picture, .account-mark) {
-  width: 12px;
-  height: 12px;
-}
-
 /* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
-   glyph and name, which fades where it is cut short as a tab's does, and
-   its plan's name beneath in the repository's muted place. The name always
-   leaves its Unpin's room at the end, so showing it cuts nothing more. */
+   glyph and name, which fades where it is cut short as a tab's does. The
+   name always leaves its Unpin's room at the end, so showing it cuts
+   nothing more. */
 .sidebar-pinned-tab .sidebar-plan-line {
   align-items: center;
   gap: var(--space-6);
@@ -927,17 +963,9 @@ body,
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-.sidebar-pinned-tab-plan {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* A pin whose plan no longer holds what it opens stands dimmed, still
    answering its hover, its Unpin, and its menu. */
-.sidebar-plan[aria-disabled="true"] :is(.sidebar-plan-line, .sidebar-pinned-tab-plan) {
+.sidebar-plan[aria-disabled="true"] .sidebar-plan-line {
   opacity: 0.55;
 }
 
@@ -1145,7 +1173,8 @@ body,
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own. */
-.desktop-plan-main .desktop-toolbar {
+.desktop-plan-main .desktop-toolbar,
+.desktop-toolbar:has(.tab-skeleton) {
   padding-left: var(--column-inset);
 }
 
@@ -1159,7 +1188,7 @@ body,
 
 .desktop-toolbar-note {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -1270,11 +1299,6 @@ body,
   opacity: 0.45;
 }
 
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
 /* A small act beside a line of words, a failure's retry
    (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
    the muted voice of the words it follows, lit like any other on hover, and
@@ -1285,6 +1309,23 @@ body,
   padding: 0 var(--space-8);
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* A labelled toolbar button inside a hairline, the edge Start's split button
+   draws: the act a settings row offers, which stands on a card rather than in
+   a toolbar and so needs its edge to read as a button at rest. A destructive
+   one keeps the same face and says so in red, as a destructive menu item
+   does; the red fill is the confirm dialog's alone. */
+.bordered-button {
+  border: 1px solid var(--hairline);
+}
+
+.bordered-button[data-danger="true"] {
+  color: var(--danger-text);
+}
+
+.bordered-button[data-danger="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .quiet-button svg {
@@ -1305,6 +1346,47 @@ body,
   height: 12px;
   flex: none;
   align-self: center;
+}
+
+/* The way off a thumbnail, on its corner: an attached file's chip or a
+   feedback screenshot. Note that the disc is 18px but the button is 24px,
+   because the corner of a thumbnail carries no more disc than that and the
+   pointer still needs the 24px target docs/DESIGN.md asks of a control
+   floating over one: a transparent border is hit like the rest of the button,
+   and the ground is clipped inside it. */
+.corner-dismiss {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background: var(--surface-popover) padding-box;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.corner-dismiss:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.corner-dismiss:disabled {
+  opacity: 0.5;
+}
+
+/* base.css draws the ring; it stands inside the target, close round the disc. */
+.corner-dismiss:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.corner-dismiss svg {
+  width: 8px;
+  height: 8px;
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -1337,7 +1419,7 @@ body,
 }
 
 .copy-glyph > [data-glyph="failed"] {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -1354,12 +1436,15 @@ body,
   flex-direction: column;
   padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   /* A long menu, as a folder's entries may be, scrolls within the window. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
   -webkit-app-region: no-drag;
 }
 
@@ -1371,9 +1456,9 @@ body,
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 28px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -1383,7 +1468,7 @@ body,
 
 .plan-menu-item:hover,
 .plan-menu-item:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the row's fill marks it */
   background: var(--raised-strong);
 }
 
@@ -1405,15 +1490,15 @@ body,
    one line down the menu. Muted beside its label, and red with it on Delete. */
 .plan-menu-icon {
   display: flex;
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   color: var(--text-secondary);
 }
 
 .plan-menu-icon svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
 .plan-menu-item[data-danger="true"] .plan-menu-icon {
@@ -1438,8 +1523,8 @@ body,
 
 /* A setting's check at its end while it is on. */
 .plan-menu-check {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   margin-left: var(--space-24);
   color: var(--text-secondary);
@@ -1529,12 +1614,11 @@ body,
 
 /* The document ------------------------------------------------------------- */
 
-/* An archived plan's quiet line over its document: a hairline strip in the
-   secondary voice, with the press that brings the plan back. */
-/* An archived plan's banner: a card over the document, on the document's
-   own reading width, so the one action the plan takes is the first thing
-   read, the way Notion marks a page in the trash. */
-.archived-banner {
+/* A banner over a document: a card on the document's own reading width, so
+   what it says is the first thing read. An archived plan's says so with the
+   one action the plan takes, the way Notion marks a page in the trash, and
+   the plan template's says what the template is for, with its reset. */
+.document-banner {
   display: flex;
   box-sizing: border-box;
   width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
@@ -1547,7 +1631,7 @@ body,
   background: var(--desktop-well);
 }
 
-.archived-banner-glyph {
+.document-banner-glyph {
   display: grid;
   width: 32px;
   height: 32px;
@@ -1558,12 +1642,12 @@ body,
   color: var(--text-secondary);
 }
 
-.archived-banner-glyph svg {
+.document-banner-glyph svg {
   width: 16px;
   height: 16px;
 }
 
-.archived-banner-words {
+.document-banner-words {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -1571,17 +1655,17 @@ body,
   gap: var(--space-2);
 }
 
-.archived-banner-words p {
+.document-banner-words p {
   margin: 0;
 }
 
-.archived-banner-title {
+.document-banner-title {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
 }
 
-.archived-banner-detail {
+.document-banner-detail {
   color: var(--text-secondary);
   font-size: 12.5px;
 }
@@ -1824,7 +1908,7 @@ body,
 }
 
 .call-backend-action {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .call-controls {
@@ -1879,11 +1963,6 @@ body,
 
 .call-end:active {
   opacity: 0.7;
-}
-
-.call-end:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 /* The new-plan page -------------------------------------------------------- */
@@ -1964,6 +2043,30 @@ body,
   flex: 0 0 auto;
 }
 
+/* An integration whose brand publishes its one-colour mark in named inks
+   wears them by the ground: Notion's pure white on dark and pure black on
+   light, Sentry's white on dark and its dark blurple on light
+   (`integration-marks.tsx`). */
+:root {
+  --integration-ink-notion: #fff;
+  --integration-ink-sentry: #fff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --integration-ink-notion: #000;
+    --integration-ink-sentry: #181225;
+  }
+}
+
+.integration-mark-notion {
+  color: var(--integration-ink-notion);
+}
+
+.integration-mark-sentry {
+  color: var(--integration-ink-sentry);
+}
+
 /* The searchable menu, in the shape of a command menu: the search as the
    first row, flush and edge to edge over a hairline; under it the list,
    its rows inset by the list's own padding so a highlight never meets the
@@ -1992,8 +2095,8 @@ body,
 /* The glyph is sized here, as every glyph is by what it sits in: an SVG
    with no size of its own fills the row it is in. */
 .plan-compose-menu-search svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2002,7 +2105,7 @@ body,
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: none;
+  outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
   color: var(--text-primary);
   font: inherit;
@@ -2018,20 +2121,20 @@ body,
 .plan-compose-menu-list {
   display: block;
   max-height: 288px;
-  padding: var(--space-6);
+  padding: var(--menu-inset);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .plan-compose-menu-list:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the highlighted row marks it */
 }
 
 .plan-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
-  padding: var(--space-6);
+  padding: var(--menu-inset);
   border-top: 1px solid var(--hairline);
 }
 
@@ -2072,17 +2175,20 @@ body,
 }
 
 /* A switch row: the panel's own switch at the row's end, keyed off the
-   row, which is the switch for the keyboard; a row that cannot be pressed
-   is muted and takes no highlight. */
+   row, which is the switch for the keyboard, or off the switch's own button
+   where the row holds other controls too (the MCP popover's); a row that
+   cannot be pressed is muted and takes no highlight. */
 .plan-compose-menu-switch {
   margin-left: auto;
 }
 
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
-  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch,
+.agent-servers-switch[aria-checked="true"] .switch {
+  background: var(--switch-on);
 }
 
-.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb,
+.agent-servers-switch[aria-checked="true"] .switch-thumb {
   transform: translateX(14px);
 }
 
@@ -2108,12 +2214,14 @@ body,
   top: 0;
   left: calc(100% + 9px);
   width: 200px;
-  padding: var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  padding: var(--menu-inset);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 .plan-compose-submenu[data-side="left"] {
@@ -2164,8 +2272,8 @@ body,
 }
 
 .plan-compose-menu-row :is(svg, .repository-picture) {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2176,15 +2284,15 @@ body,
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   margin-left: auto;
   color: var(--text-tertiary);
 }
 
 .plan-compose-menu-end .credential-check {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   color: var(--text-primary);
 }
 
@@ -2209,11 +2317,13 @@ body,
   width: 340px;
   flex-direction: column;
   padding: var(--menu-inset);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-overlay);
-  box-shadow: 0 16px 40px var(--shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--menu-radius);
+  background: var(--surface-popover);
+  box-shadow: var(--menu-shadow);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
 }
 
 /* A popover hung from its own button (`anchored-popover.tsx`): the layer
@@ -2238,11 +2348,47 @@ body,
   width: auto;
 }
 
-@keyframes menu-enter {
+/* What pops up arrives on the pair every arriving element rides, its
+   opacity over `--duration-quick` and its travel on the spring, and leaves
+   first, fading over `--duration-exit` while its owner holds it drawn and
+   inert (`use-disclosure.ts`; the palette's Radix dialog holds its own on
+   `data-state`). A menu drops from where it hangs. */
+@keyframes popup-fade {
   from {
     opacity: 0;
-    transform: translateY(-4px);
   }
+}
+
+@keyframes menu-drop {
+  from {
+    transform: translateY(calc(-1 * var(--space-4)));
+  }
+}
+
+@keyframes popup-leave {
+  to {
+    opacity: 0;
+  }
+}
+
+:is(.plan-menu, .plan-compose-menu, .plan-summary-card)[data-leaving="true"],
+:is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
+  pointer-events: none;
+  animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
+  /* Note that the hold waits on every motion the element runs, and losing
+     focus would start the scrollbar's own fade (above), so the exit is the
+     one motion it has. */
+  transition: none;
+}
+
+/* A capture run zeroes the motion tokens on its stage, which a menu or the
+   palette drawn at the body's end does not stand under, so they are held
+   still here too. */
+body:has(.app-stage[data-capture="true"])
+:is(.plan-menu, .command-palette, .command-palette-backdrop) {
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
 }
 
 /* A row is one fixed height and flexes in no column it stands in. */
@@ -2252,9 +2398,9 @@ body,
   width: 100%;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 32px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -2264,7 +2410,7 @@ body,
 .plan-compose-menu-row:hover,
 .plan-compose-menu-row:focus-visible {
   background: var(--raised-strong);
-  outline: none;
+  outline: none; /* no ring: the row's fill marks it */
 }
 
 .plan-compose-menu-name {
@@ -2331,6 +2477,68 @@ body,
   text-align: center;
 }
 
+/* Inbox ---------------------------------------------------------------------- */
+
+/* The window's Inbox, in the plan's place beside the sidebar: the plans
+   holding items in a column on the sidebar's ground, under a bar the work
+   column's height, and the chosen plan's items beside it, at the Inbox
+   tab's own measure (`.desktop-inbox`). */
+.inbox-view {
+  --inbox-list-width: 280px;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: var(--inbox-list-width) minmax(0, 1fr);
+}
+
+.inbox-plans {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+.inbox-plans-bar {
+  justify-content: space-between;
+}
+
+.inbox-plans-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+/* A plan with an item the developer has not seen leads with the accent's dot,
+   and its name takes an unread plan's weight; the dot's room stands empty on
+   the rest, so the names line up. */
+.inbox-unread-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  align-self: center;
+  border-radius: 50%;
+}
+
+.inbox-plan[data-unread="true"] .inbox-unread-dot {
+  background: var(--message-sent);
+}
+
+.inbox-view-items {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Only the column's bar meets the folded sidebar's toggle, so the items' bar
+   keeps its own inset then. */
+.desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
+  padding-left: var(--content-inset);
+}
+
 /* Settings ------------------------------------------------------------------- */
 
 .desktop-settings,
@@ -2388,10 +2596,6 @@ body,
   transition: border-color var(--duration-hover) ease;
 }
 
-.settings-search-well:focus-within {
-  border-color: var(--selected-edge);
-}
-
 .settings-search-well .search-glyph {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -2408,7 +2612,7 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  outline: none;
+  outline: none; /* no ring: its well rings */
 }
 
 .settings-search-input::placeholder {
@@ -2452,10 +2656,12 @@ body,
   gap: var(--space-2);
   padding: var(--space-4);
   border: 1px solid var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
-  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  box-shadow: var(--menu-shadow);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    menu-drop var(--duration-fast) var(--spring-fast) both;
   -webkit-app-region: no-drag;
 }
 
@@ -2517,6 +2723,12 @@ body,
   list-style: none;
 }
 
+/* A page that needs a hand wears the front page's own mark at the row's end,
+   where the front page's row wears it before its chevron. */
+.settings-pages .sidebar-item .settings-attention {
+  margin-left: auto;
+}
+
 .settings-page,
 .version-page {
   display: flex;
@@ -2525,68 +2737,73 @@ body,
   flex-direction: column;
 }
 
+/* The plan template drawn as a plan, scrolling under the note pinned over
+   it: its words dissolve into the page at the scroller's top edge, through
+   the shared top fade, once the page has left its top. */
+.template-document .plan-document-scroll {
+  animation: scroll-top-fade linear both;
+  animation-timeline: scroll(self block);
+  animation-range: 0 var(--scroll-fade);
+}
+
+/* The measure a Settings page's head and rows read at, and a row's height. */
+.settings-page {
+  --settings-width: 640px;
+  --settings-row-height: 52px;
+}
+
+/* A Settings page has no top bar: the page names itself at the head of its
+   column, so the title-bar row above it is only the window's drag strip, and
+   the column scrolls beneath it. The page's top margin is wider than the
+   fade, so nothing at rest is faded; a row scrolled up dissolves into the
+   strip rather than being sliced off at its edge. */
 .settings-page-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: var(--page-inset);
+  padding: 0 var(--page-inset) var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
      column's own top margin above it. */
   scroll-padding-top: var(--page-inset);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--scroll-fade));
 }
 
-/* The page scrolls with the column rather than inside a scroller of its own.
-   Its rows are drawn at a size the window reads at by zooming them, which
-   would zoom the controls among them past every other button in the window,
-   so the controls take the zoom back off and stand at the window's own size. */
+/* The page's name and what acts on the whole page, its reset, on one line. */
+.settings-page-head {
+  display: flex;
+  max-width: var(--settings-width);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin: 0 auto var(--space-24);
+  padding-top: var(--space-32);
+}
+
+/* A quiet act ends the line flush with the card's edge, its words rather than
+   its hover's pill standing in the column. */
+.settings-page-head .quiet-button {
+  margin-right: calc(-1 * var(--space-8));
+}
+
+/* The page scrolls with the column rather than inside a scroller of its own,
+   at the width its rows read at, its groups a section apart and more. */
 .settings-page-scroll .settings {
-  --settings-zoom: 1.15;
-  max-width: 600px;
+  max-width: var(--settings-width);
+  gap: var(--space-32);
   margin: 0 auto;
   overflow: visible;
   animation: none;
-  zoom: var(--settings-zoom);
 }
 
-.settings-page-scroll
-  .settings
-  :is(.toolbar-button, .icon-button, .primary-button, .danger-button, .voice-select) {
-  zoom: calc(1 / var(--settings-zoom));
-}
-
-/* Note that the ring is restated at the zoom it is drawn under, because the
-   engine rounds an outline's width at the control's own zoom and would draw
-   the 2px ring a pixel thin. */
-.settings-page-scroll
-  .settings
-  :is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
-  outline-width: calc(2px * var(--settings-zoom));
-}
-
-/* The list on the left is the way between pages and the toolbar names the
-   page and carries its reset, so the panel's own index and page head are not
-   drawn. */
+/* The list on the left is the way between pages and the page names itself,
+   so the panel's own index and page head are not drawn. */
 .settings-page-scroll .settings-index,
 .settings-page-scroll .settings-header {
   display: none;
 }
 
 /* Version history ------------------------------------------------------------ */
-
-/* The plan the versions are of, under the view's own title, which gives up
-   its gap below to this line. */
-.version-log-title:has(+ .version-log-plan) {
-  margin-bottom: var(--space-2);
-}
-
-.version-log-plan {
-  margin: 0 var(--row-inset) var(--space-12);
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* The versions, newest first, one row each, the row whose version is drawn
    lit as a chosen sidebar row is (desktop-version-history.tsx). */
@@ -2611,7 +2828,10 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
-.version-row:hover {
+/* A row fills while the pointer is anywhere on its item, its ⋯ included,
+   and no more than its hover does, so the chosen row keeps its stronger
+   fill. */
+:where(.version-item:hover) > .version-row {
   background: var(--raised);
 }
 
@@ -2685,10 +2905,12 @@ body,
 
 .version-row-time {
   flex: none;
+  min-width: var(--sidebar-plan-mark);
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .version-row-summary {
@@ -2699,115 +2921,73 @@ body,
   white-space: nowrap;
 }
 
-/* A row and the chevron beside it that opens the sections its revision
-   changed, set over the row's end beside its time, so the row keeps its
-   whole width to press. */
+/* A row's ⋯ stands in its time's place, which is always as wide as it, while
+   the row is hovered, holds the keyboard, or its menu is open, drawn as a
+   sidebar plan's Pin and Archive are: the row's sibling, since a button
+   holds no button, laid over its first line. */
 .version-item {
+  --sidebar-plan-mark: 22px;
   position: relative;
 }
 
-.version-item:has(.version-row-sections) .version-row {
-  padding-right: calc(var(--row-inset) + 20px);
-}
-
-.version-row-sections {
+.version-row-actions {
   position: absolute;
-  top: 50%;
-  right: var(--space-4);
-  display: grid;
-  width: 20px;
-  height: 22px;
-  place-items: center;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-tertiary);
-  transform: translateY(-50%);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.version-row-sections:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.version-row-sections svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* A revision's Open: a quiet arrow at the row's end, beside the chevron
-   where there is one, standing only while the row is hovered, focused, or
-   its menu is open, in the place the time gives up for it. */
-.version-row-open {
-  position: absolute;
-  top: 50%;
-  right: var(--space-4);
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-tertiary);
+  top: var(--space-8);
+  right: var(--row-inset);
+  display: flex;
+  height: 1lh;
+  align-items: center;
+  font-size: 12.5px;
   opacity: 0;
-  transform: translateY(-50%);
-  transition:
-    opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
 }
 
-.version-item:has(.version-row-sections) .version-row-open {
-  right: calc(var(--space-4) + 22px);
-}
-
-.version-item:is(:hover, :focus-within, [data-menu-open="true"]) .version-row-open {
+.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]) > .version-row-actions {
   opacity: 1;
 }
 
-.version-item:is(:hover, :focus-within, [data-menu-open="true"]):has(.version-row-open)
+/* The row holding the keyboard stands over its neighbours, as a sidebar
+   plan's does, so the next row's fill leaves its ring's foot. */
+.version-item:has(:focus-visible) {
+  z-index: 1;
+}
+
+.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(.version-row-actions)
   .version-row-time {
-  opacity: 0;
-}
-
-.version-row-open:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.version-row-open svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Over a revision's sections the Open stands at the end of its one line,
-   in the flow rather than over a row, while the line is hovered. */
-.version-sections-head .version-row-open {
-  position: static;
-  margin-left: auto;
-  transform: none;
-}
-
-.version-sections-head:is(:hover, :focus-within) .version-row-open {
-  opacity: 1;
+  visibility: hidden;
 }
 
 /* The versions and the sections of the one opened stand side by side in a
    track as wide as the column, the sections slid in over the column's own
-   edge the way a nested page of System Settings is, on transform alone. */
+   edge the way a nested page of System Settings is, on transform alone. The
+   track reaches the keyboard ring's width past the column's content on
+   either side, each pane giving it back as padding, so it clips what slides
+   past it and not a row's ring; it clips across alone, since its panes
+   scroll their own height. */
 .version-log-track {
   display: grid;
   min-height: 0;
   flex: 1;
   grid-template-columns: 100% 100%;
-  overflow: clip;
+  grid-template-rows: minmax(0, 1fr);
+  margin-inline: calc(-1 * var(--focus-ring-reach));
+  overflow-x: clip;
 }
 
+/* The view's title heads the versions' pane rather than the column, so it
+   slides away with them and the sections' own head stands in its place. */
 .version-log-pane {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding-inline: var(--focus-ring-reach);
   transition: transform var(--duration-pane) var(--motion-pane);
+}
+
+/* The sections' pane is a scroller of the sidebar's kind, its reach already
+   the track's, so it fills its cell rather than standing past it. */
+.version-log-track > .sidebar-section {
+  margin-inline: 0;
 }
 
 .version-log-track[data-opened="true"] > .version-log-pane {
@@ -2819,21 +2999,30 @@ body,
   margin-bottom: var(--space-8);
 }
 
-/* Who wrote the revision and when, on the one line over its sections. */
+/* Who wrote the revision, on the one line over its sections: a row of its
+   own that goes where the revision was written, lit under the pointer as a
+   sidebar row is, where anywhere in the window wrote it. */
 .version-sections-head {
   display: flex;
   min-width: 0;
+  flex: none;
   align-items: center;
-  gap: var(--space-6);
-  margin: 0 var(--row-inset) var(--space-8);
-  color: var(--text-tertiary);
+  gap: var(--space-8);
+  margin: 0 0 var(--space-8);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
   font-size: 12px;
+  text-align: left;
   white-space: nowrap;
 }
 
-.version-sections-head time {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.version-sections-source {
+  transition: background-color var(--duration-hover) ease;
+}
+
+.version-sections-source:hover {
+  background: var(--raised);
 }
 
 .version-section-row {
@@ -3078,11 +3267,13 @@ body,
   overflow-y: auto;
   border: var(--card-edge) solid var(--hairline);
   border-radius: 12px;
-  background: var(--surface-overlay);
+  background: var(--surface-popover);
   box-shadow: 0 16px 40px var(--shadow);
-  outline: none;
+  outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
-  animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) both,
+    summary-card-grow var(--duration-fast) var(--spring-fast) both;
 }
 
 /* The pinned summary's chevron and the card's stand on the rail's own, and
@@ -3106,7 +3297,9 @@ body,
   --button-ground: var(--desktop-ground);
   position: sticky;
   z-index: 1;
-  top: 0;
+  /* Held off the scroller's edge by the keyboard ring's reach, so its ring
+     stands whole once the column is scrolled under it. */
+  top: var(--focus-ring-reach);
   flex: none;
   align-self: flex-end;
   margin-bottom: calc(-1 * (var(--control-height) + var(--section-gap)));
@@ -3141,9 +3334,8 @@ body,
 
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
-@keyframes summary-card-enter {
+@keyframes summary-card-grow {
   from {
-    opacity: 0;
     transform: scale(0.97);
   }
 }
@@ -3219,6 +3411,15 @@ body,
   margin-left: var(--space-6);
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* The Inbox row's count of what waits, at its end in the quiet count a
+   folded sidebar group shows after its name. */
+.inbox-row-count {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The files Luke showed, in rows the file tree's own (`planning.css`): its
@@ -3386,7 +3587,7 @@ body,
   bottom: 0;
   width: 6px;
   cursor: col-resize;
-  outline: none;
+  outline: none; /* no ring: the edge fills in the focus colour */
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
@@ -3541,10 +3742,6 @@ body,
   padding-inline: max(var(--space-16), var(--code-reading-room));
 }
 
-.side-panel-content .history-tab {
-  padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
 /* The board fills the tab edge to edge: the panel is its frame, so its own
    inset card gives way. */
 .side-panel .plan-board {
@@ -3612,9 +3809,10 @@ body,
   scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
-     under a tab being dragged, which the strip's scrolling would clip. */
-  margin-block: calc(-1 * var(--space-8));
-  padding-block: var(--space-8);
+     under a tab being dragged, which the strip's scrolling would clip, and
+     at either end for the keyboard's ring on the first tab and the last. */
+  margin: calc(-1 * var(--space-8)) calc(-1 * var(--focus-ring-reach));
+  padding: var(--space-8) var(--focus-ring-reach);
   mask-image: linear-gradient(
     to right,
     transparent,
@@ -3678,6 +3876,12 @@ body,
 .tab:hover {
   background: var(--raised);
   color: var(--text-primary);
+}
+
+/* The tab holding the keyboard stands over its neighbours, so the chosen
+   tab's fill beside it leaves its ring whole. */
+.tab:has(:focus-visible) {
+  z-index: 1;
 }
 
 .tab[data-selected="true"] {
@@ -3793,9 +3997,9 @@ body,
   gap: var(--space-4);
   padding: var(--space-6) var(--row-inset);
   border-color: var(--hairline-strong);
-  border-radius: 10px;
+  border-radius: var(--menu-radius);
   background: var(--surface-popover);
-  box-shadow: 0 12px 32px var(--shadow);
+  box-shadow: var(--menu-shadow);
   color: var(--text-primary);
   font-weight: 400;
   white-space: normal;
@@ -3855,8 +4059,21 @@ body,
 }
 
 .tab-card-preview code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* A summary row's words under its card's name, Luke's note on a file or the
+   title of what waits in the Inbox, wrapped to three lines rather than cut
+   to one, since they are read whole rather than glanced at. */
+.tab-card-note {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
@@ -3873,7 +4090,7 @@ body,
   background: none;
   color: inherit;
   font: inherit;
-  outline: none;
+  outline: none; /* no ring: its tab rings */
 }
 
 /* The × keeps none of a button's own padding, which would leave its glyph
@@ -3991,6 +4208,17 @@ body,
   flex: 0 1 auto;
 }
 
+/* While the plan is read, one block in its tab's place: a tab's height and
+   corner at a typical tab's width, starting where the tab's pill will
+   (`.desktop-plan-main .desktop-toolbar`), so the row stands as it will once
+   the plan's tab is drawn there. */
+.tab-skeleton {
+  width: 120px;
+  height: var(--control-height);
+  margin: 0;
+  border-radius: var(--control-radius);
+}
+
 /* Confirm dialog -------------------------------------------------------------- */
 
 /* An irreversible act asks the way every desktop app asks: the window dims
@@ -4021,11 +4249,13 @@ body,
   box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
   font-size: 13px;
-  animation: confirm-dialog-rise var(--duration-fast) var(--spring-fast);
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit),
+    confirm-dialog-rise var(--duration-fast) var(--spring-fast);
 }
 
 .confirm-dialog:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .confirm-dialog-title {
@@ -4043,7 +4273,7 @@ body,
 
 .confirm-dialog-error {
   margin: 0;
-  color: var(--error-text);
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -4068,7 +4298,6 @@ body,
 
 @keyframes confirm-dialog-rise {
   from {
-    opacity: 0;
     transform: scale(0.96);
   }
 }
@@ -4105,13 +4334,15 @@ body,
   color: var(--text-primary);
   overflow: clip;
   transform: translateX(-50%);
-  animation: command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
+  animation:
+    popup-fade var(--duration-quick) var(--motion-exit) backwards,
+    command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
   -webkit-app-region: no-drag;
 }
 
 .command-palette:focus,
 .command-palette [cmdk-root]:focus {
-  outline: none;
+  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .command-palette [cmdk-root] {
@@ -4132,8 +4363,8 @@ body,
 }
 
 .command-palette-search svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -4142,7 +4373,7 @@ body,
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: none;
+  outline: none; /* no ring: a menu's filter, which always holds the caret */
   background: none;
   color: var(--text-primary);
   font: inherit;
@@ -4199,7 +4430,7 @@ body,
 }
 
 .command-palette-list:focus-visible {
-  outline: none;
+  outline: none; /* no ring: the highlighted row marks it */
 }
 
 .command-palette [cmdk-group-heading] {
@@ -4218,9 +4449,9 @@ body,
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 32px;
+  height: var(--menu-row-height);
   padding: 0 var(--row-inset);
-  border-radius: 6px;
+  border-radius: var(--menu-row-radius);
   color: var(--text-primary);
   font-size: 13px;
   cursor: default;
@@ -4233,8 +4464,8 @@ body,
 /* A row's glyph: a plan's, an agent's mark, a setting's gear. */
 .command-palette-icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -4242,8 +4473,8 @@ body,
 }
 
 .command-palette-icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
 .command-palette-name {
@@ -4266,7 +4497,7 @@ body,
   white-space: nowrap;
 }
 
-/* An action's chord, drawn as keys at the row's right end. */
+/* An action's chord at the row's right end. */
 .command-palette-hint {
   display: inline-flex;
   flex: 0 0 auto;
@@ -4282,8 +4513,8 @@ body,
   padding-left: var(--space-16);
 }
 
-/* The keys' hints along the card's foot, in muted keys as a palette's foot
-   says them. */
+/* The keys' hints along the card's foot, each chord a step louder than the
+   words that say what it does, so the eye finds the keys first. */
 .command-palette-footer {
   display: flex;
   flex: 0 0 auto;
@@ -4300,6 +4531,10 @@ body,
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.command-palette-footer .shortcut {
+  --shortcut-ink: var(--text-secondary);
 }
 
 .command-palette-empty {
@@ -4321,7 +4556,6 @@ body,
 
 @keyframes command-palette-rise {
   from {
-    opacity: 0;
     transform: translateX(-50%) scale(0.96);
   }
 }
@@ -4407,11 +4641,6 @@ body,
   color: var(--text-tertiary);
 }
 
-.feedback-dialog-message:focus {
-  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
-  outline: none;
-}
-
 .feedback-dialog-images {
   display: flex;
   flex-wrap: wrap;
@@ -4436,35 +4665,6 @@ body,
   border: 1px solid var(--hairline);
   border-radius: 6px;
   object-fit: cover;
-}
-
-.feedback-dialog-image-remove {
-  position: absolute;
-  top: calc(-1 * var(--space-6));
-  right: calc(-1 * var(--space-6));
-  display: flex;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 50%;
-  background: var(--surface-popover);
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
-}
-
-.feedback-dialog-image-remove:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.feedback-dialog-image-remove:disabled {
-  opacity: 0.5;
-}
-
-.feedback-dialog-image-remove svg {
-  width: 8px;
-  height: 8px;
 }
 
 /* The signature as one quiet line: the choice at its start, and who the note
@@ -4507,17 +4707,18 @@ body,
 }
 
 /* Send's chord, muted against its own fill rather than the card's. */
-.feedback-dialog .primary-button .shortcut-glyphs {
-  color: var(--on-accent-muted);
+.feedback-dialog .primary-button .shortcut {
+  --shortcut-ink: var(--on-accent-muted);
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
    its bottom-right corner, newest at the bottom, in the corner itself
    whatever stands at the window's foot: a call bar, the side panel, or the
    summary. The folded sidebar's call card keeps the other corner, and the
-   window is never narrow enough for the two to meet. Each rises in on the spring and fades first on its way out;
-   the stack itself takes no pointer, so only a card with something to press
-   stands in the way of what is under it. */
+   window is never narrow enough for the two to meet. Each rises in on the
+   spring and fades first on its way out; the stack itself takes no pointer,
+   so only a card with something to press stands in the way of what is under
+   it, and that card is always one the developer can dismiss. */
 .toast-stack {
   position: fixed;
   z-index: var(--z-toast);
@@ -4525,16 +4726,6 @@ body,
   bottom: var(--space-16);
   width: min(340px, calc(100vw - 2 * var(--space-16)));
   pointer-events: none;
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-/* A card with something to press would take the presses meant for a plan's
-   call bar beneath it, so while one stands over a call bar the stack steps
-   up just clear of the bar's row, and settles back into the corner on the
-   spring once no such card is left. The step is the bar's row, its padding,
-   and its hairline, less the corner's own inset. */
-body:has(.desktop-call-bar) .toast-stack:has(.toast[data-action="true"]:not([data-leaving])) {
-  transform: translateY(calc(var(--space-16) - var(--call-row-height) - 3 * var(--space-12) - 1px));
 }
 
 .toast-stack > ol {
@@ -4555,9 +4746,13 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   --duration-hover: 0s;
 }
 
-/* Its glyph, its words, and its action share a first row as tall as the
-   action, so they read across on one line whether or not a second follows. */
+/* Its glyph, its words' first line, and its action share a first row as
+   tall as the action, each centred on it, so they read across on one line
+   however many follow; its words wrap at the card's own line. */
 .toast {
+  --toast-line: 18px;
+  --toast-row: 24px;
+  --toast-glyph: 16px;
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -4571,7 +4766,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
     0 12px 36px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
-  line-height: 18px;
+  line-height: var(--toast-line);
   pointer-events: none;
   animation:
     toast-fade var(--duration-quick) var(--motion-exit),
@@ -4587,15 +4782,15 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 }
 
 .toast > svg {
-  width: 16px;
-  height: 16px;
+  width: var(--toast-glyph);
+  height: var(--toast-glyph);
   flex: none;
-  margin-top: var(--space-4);
+  margin-top: calc((var(--toast-row) - var(--toast-glyph)) / 2);
   color: var(--state-complete);
 }
 
 .toast[data-tone="failed"] > svg {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 /* An ask is the developer's to answer, not news of something done, so its
@@ -4604,21 +4799,32 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   color: var(--text-secondary);
 }
 
-/* Its words, and the line under them that says where or what. */
+/* Its words, and the line under them that says where or what, a title's
+   step apart as a card's title and its secondary line are, each cut to two
+   lines; the column stands as far below its last line as above its first. */
 .toast-text {
   display: flex;
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  gap: var(--space-2);
+  padding-block: calc((var(--toast-row) - var(--toast-line)) / 2);
+}
+
+.toast-words,
+.toast-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .toast-words {
   font-weight: 600;
-  line-height: 24px;
 }
 
 .toast-detail {
-  padding-bottom: var(--space-2);
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 16px;
@@ -4641,7 +4847,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* The action is a small solid button in the full ink, the one thing on the
    card to press. */
 .toast-action {
-  height: 24px;
+  height: var(--toast-row);
   flex: none;
   padding: 0 var(--space-8);
   border: 0;
@@ -4657,9 +4863,8 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   opacity: 0.86;
 }
 
-/* A toast that stands until dismissed shows its × on its corner under the
-   pointer or focus, standing over the card's edge so it takes no room from
-   the words. */
+/* A toast with an action shows its × on its corner under the pointer or
+   focus, standing over the card's edge so it takes no room from the words. */
 .toast-dismiss {
   position: absolute;
   top: calc(-1 * var(--space-8));
@@ -4709,34 +4914,38 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* A sidebar plan's card: its name wrapped to two lines with how long ago it
    was updated muted at the head's right, its repository under the name, then
    a few rows each for its agents and its pull requests, each list under a
-   hairline. A row is the plan summary's (`.plan-summary-row`): its height,
-   type size, glyph, and gap, so an agent reads here as it does there, with a
-   muted corner at its end. The repository, an agent, and a pull request are
-   buttons that look like the rows around them until the pointer is on one,
-   which washes it as a menu's row is washed, bled into the card's inset so
-   its words stay in line with the rest. */
+   rule. It is set as a menu is (`.plan-menu`): the card stands its rows the
+   menu's inset from its edge, and each row is a menu row's height, inset,
+   and corner, so the wash on the repository, an agent, or a pull request
+   under the pointer sits off the card's edge as a menu item's does. A line
+   a press does nothing on keeps a row's place, so every word starts on the
+   rows' column. A pinned tab's card (`sidebar-pinned-tab.tsx`) is this
+   card. */
+.tooltip-card:has(> .plan-card) {
+  padding: var(--menu-inset);
+}
+
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-2) 0;
 }
 
 .plan-card-heading {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
 }
 
 .plan-card-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--glyph-gap);
+  padding: var(--space-6) var(--row-inset) var(--space-4);
 }
 
 .plan-card-name {
   display: -webkit-box;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   font-size: 13px;
   font-weight: 500;
@@ -4760,71 +4969,72 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   flex: none;
 }
 
-.plan-card-repository {
-  display: flex;
-  min-width: 0;
-  align-self: flex-start;
-  align-items: center;
-  gap: var(--space-6);
-  height: 22px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.plan-card-repository,
+.plan-card-detail,
 .plan-card-line {
-  margin: 0 calc(-1 * var(--space-6));
-  padding: 0 var(--space-6);
-  border-radius: 6px;
+  display: flex;
+  width: 100%;
+  height: var(--menu-row-height);
+  min-width: 0;
+  align-items: center;
+  gap: var(--glyph-gap);
+  padding: 0 var(--row-inset);
+  border-radius: var(--menu-row-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
-:is(button.plan-card-repository, button.plan-card-line):hover {
+:is(button.plan-card-detail, button.plan-card-line):is(:hover, :focus-visible) {
+  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
   background: var(--raised-strong);
 }
 
-.plan-card-repository :is(.repository-picture, .account-mark) {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.plan-card-lines {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: var(--space-6) 0 0;
-  border-top: 1px solid var(--hairline);
-  list-style: none;
+.plan-card-detail {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .plan-card-line {
-  display: flex;
-  width: calc(100% + 2 * var(--space-6));
-  height: 28px;
-  min-width: 0;
-  align-items: center;
-  gap: var(--glyph-gap);
   color: var(--text-primary);
   font-size: 13px;
 }
 
-/* A glyph takes the summary's footprint, the working mark and a harness's
-   mark wearing where it stands alike, so every row's label starts on one
-   edge. */
+/* A list's rule is a menu's (`.plan-menu-rule`), off the card's sides by a
+   row's inset. */
+.plan-card-lines {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-card-lines::before {
+  height: 1px;
+  margin: var(--menu-inset) var(--row-inset);
+  background: var(--hairline);
+  content: "";
+}
+
+/* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
+   wearing where it stands, and an owner's picture alike, so every row's
+   label starts on one edge. */
 .plan-card-glyph {
   display: inline-flex;
-  width: var(--control-glyph);
+  width: var(--menu-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: var(--control-glyph);
+  --state-glyph-size: var(--menu-glyph);
 }
 
 .plan-card-glyph > svg {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+}
+
+.plan-card-detail .plan-card-glyph > :is(.repository-picture, .account-mark) {
+  width: 14px;
+  height: 14px;
 }
 
 .plan-card-label {
@@ -4844,7 +5054,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
+  padding-left: calc(var(--row-inset) + var(--menu-glyph) + var(--glyph-gap));
 }
 
 /* A finished turn's card, hung from its "Worked for" line: the model it

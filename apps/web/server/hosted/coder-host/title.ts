@@ -1,13 +1,21 @@
+import { childTitlesOf, fillChildTitle } from "@sidecar/database/models/child-titles";
+import {
+  type CodingAgent,
+  fillCodingAgentTitle,
+} from "@sidecar/database/models/coding-agent-store";
+import {
+  listMessagesPast,
+  listRecentMessages,
+  turnsBefore,
+} from "@sidecar/database/models/message-reads";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
+import { failureKind } from "@sidecar/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
-import { childTitlesOf, fillChildTitle } from "../child-titles.js";
-import { type CodingAgent, fillCodingAgentTitle } from "../coding-agent-store.js";
-import { type ConversationTarget, listMessagesPast, listRecentMessages } from "../store/index.js";
-import { turnsBefore } from "../store/message-reads.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -143,7 +151,10 @@ function generateAgentTitle(
     Effect.timeoutOption(AGENT_TITLE.TIMEOUT),
     Effect.map(Option.flatten),
     Effect.catch((failure) =>
-      Effect.as(Effect.logWarning("a title could not be generated", failure.cause), Option.none()),
+      Effect.as(
+        Effect.logWarning(`a title could not be generated: ${failureKind(failure.cause)}`),
+        Option.none(),
+      ),
     ),
   );
 }

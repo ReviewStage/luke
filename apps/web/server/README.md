@@ -5,11 +5,11 @@
 Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
 migrations; the connection strings live nowhere in this repository. A table is
-declared twice and in two languages: once in the hand-written migration that
-builds it, and once in the `server/db/*-schema.ts` module the query builder
-reads it through. "The data layer" below is what holds the two together.
+declared once, in the `packages/database/src/schemas/*.ts` module the query
+builder reads it through, and `pnpm db:generate` writes the migration that
+builds it from that module. "The data layer" below is the rest.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
-over `server/db/auth-schema.ts` (see below), which is in the same barrel as
+over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
 the eleven Luke-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
@@ -20,36 +20,35 @@ kept them. `tests/instant-columns.test.ts` reads `information_schema` on both
 dialects and refuses any `timestamp without time zone` column, so a new table
 declares `timestamptz` or fails the store tests.
 
-For a new table or a changed one, write the migration by hand under
-`drizzle/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
-`drizzle-kit` used to generate before this migration off it; the directory
-name is what stands from that era and is not itself a dependency on the
-package), fold the change into the `server/db/*-schema.ts` module that
-declares the table in the same commit, and add whatever query modules under
-`server/` need it. Dropping a column means deleting it from that module: the
+For a new table or a changed one, edit the `packages/database/src/schemas/*.ts`
+module that declares it, run `pnpm db:generate`, and commit the SQL file,
+snapshot, and journal entry it writes under `packages/database/migrations/`
+in the same commit, with whatever query modules under `server/` need it. The
+vendored `drizzle` and `db-migrations` skills are the conventions: a text
+column typed by `$type<>()` rather than a `pgEnum`, a surrogate key rather
+than a new composite one, and an online index or a backfill handled the way
+`db-migrations` lays out. Dropping a column means deleting it from that module: the
 drift check reads the database both ways, so a declaration the database no
 longer carries fails it exactly as a column no module declares does. It takes
 two deployments, because a build migrates while the deployment before it still
-serves and Drizzle names every declared column in an insert: the first deletes
-the declaration and lists the column in the drift check's `PENDING_DROP`, and
-the second, once the first is live, drops it with `DROP COLUMN IF EXISTS` and
-deletes the entry.
+serves and Drizzle names every declared column in an insert. The first
+deletes the declaration, runs `pnpm db:generate`, empties the `DROP COLUMN`
+out of the SQL file it writes (its snapshot already records the column gone),
+and lists the column in the drift check's `PENDING_DROP`. The second, once the
+first is live, runs `pnpm db:generate --custom`, writes `DROP COLUMN IF
+EXISTS` into the empty file it gets, and deletes the entry.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `effect/unstable/sql`'s own migrator: `server/db/effect-migrator.ts`
-reads `drizzle/meta/_journal.json` and the `.sql` file each entry names, in
-order, and records what it applied in its own `effect_sql_migrations` table
-rather than `drizzle.__drizzle_migrations`, which a database an older
-Drizzle-based runner had already migrated is bootstrapped from once rather
-than migrated again: that runner stamped every row it wrote with the journal
-instant of the migration it had just applied and refused anything at or below
-the greatest instant it found, so that greatest instant is read, every journal
-entry at or below it is recorded as applied, and the copy runs only into an
-empty table, which is what makes a second deploy a no-op. The Neon integration
+What applies them is `effect/unstable/sql`'s own migrator: `packages/database/src/core/migrator.ts`
+reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each entry names, in
+order, and records what it applied in its own `effect_sql_migrations` table,
+which is what makes a second deploy a no-op. The older Drizzle-based runner's
+`drizzle.__drizzle_migrations`, which every database was bootstrapped from
+once, went with its schema in `20261013123642_dead_tables_drop`. The Neon integration
 creates a database branch for each Preview deployment, so its committed schema
 changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
@@ -84,7 +83,7 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
-Better Auth runs on its Drizzle adapter over `server/db/auth-schema.ts`
+Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
 (`server/auth-database.ts`), not its Kysely one: the migrations declare the
 OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
 as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
@@ -469,31 +468,34 @@ environment variables reach all three services alike, and each service's own
 
 Drizzle is the statement layer and nothing else. A query module builds its
 statement with the query builder over the tables its own
-`server/db/*-schema.ts` module declares, and `server/db/drizzle.ts` — the
+`packages/database/src/schemas/*.ts` module declares, and `packages/database/src/core/drizzle.ts` — the
 bridge ported from `@effect/sql-drizzle`, named in root AGENTS.md as a
 permanent adaptor — renders it and runs it on the `SqlClient` the asking fiber
 already carries. So a module still answers `Effect<A, SqlError |
 Schema.SchemaError, SqlClient>`, a bridged statement lands inside whatever
 `client.withTransaction` encloses it rather than beside it on a second
 connection, and one module still runs on both dialects. Only
-`server/db/effect-migrator.ts` is raw by design: its six statements are
+`packages/database/src/core/migrator.ts` is raw by design: its six statements are
 dialect metaprogramming over the journal rather than domain queries. A tagged
 template anywhere else is a leftover, not a pattern.
 
-`server/db/query.ts` holds the one shared handle, `db`, built at module scope
+`packages/database/src/core/query.ts` holds the one shared handle, `db`, built at module scope
 and imported wherever a statement is spelled. There is nothing per-module or
 per-request to build: the handle carries no connection, no client, and no
 context — it reads the `SqlClient` out of the fiber that yields the statement
 — so one serves every request and both dialects at once and two callers have
 nothing to contend over. It takes no `schema` config, because nothing reaches
-Drizzle's relational queries: the tables a statement names are named imports
-from their own module (`import { plan } from "../db/plan-schema.js"`), never
-the barrel and never a bare specifier,
+Drizzle's relational queries: a statement is the `db.select()` builder, never
+`db.query`, as the `drizzle` skill has it. The tables a statement names are
+named imports from their own module
+(`import { plan } from "@sidecar/database/schemas/plan"`), never the barrel,
 which is both what makes a renamed column a type error at the call site and
 the import `tests/store-writer-boundary.test.ts` resolves.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
-row is still decoded by a `Schema`. `SqlSchema`'s `execute` takes the builder
+row is still decoded by an Effect `Schema`, where lobehub's examples reach for
+`drizzle-zod`: Effect takes no zod schema, and every other boundary value here
+is declared as a `Schema` already. `SqlSchema`'s `execute` takes the builder
 itself — a patched builder already is the `Effect<rows, SqlError, SqlClient>`
 that `execute` wants — so no wrapper stands between them:
 
@@ -523,23 +525,20 @@ constant so the query reads as the query it is. A transaction and a row lock
 are the client's own `withTransaction` and a `.for("update")` select inside
 it, unchanged.
 
-`drizzle-kit` is not a dependency and no migration is generated from a schema
-module. Migrations stay hand-written SQL under `drizzle/`, applied by the
-Effect migrator above, and the modules are hand-maintained beside them:
-`drizzle/meta/` holds snapshots for `0000`–`0025` alone, from the era when the
-modules were `drizzle-kit`'s input and the migrations its output. What stands
-in for that lost loop is `tests/drizzle-schema.test.ts`, which compares the
-barrel against the `information_schema` of a database `runWebMigrations` has
-just built — PGlite in process, or the Postgres `LUKE_STORE_TEST_DATABASE_URL`
-names on CI — in both directions over the whole public schema: a column a
-module declares and the database has not fails, and so does a column the
-database has and no module declares, which is the direction that catches the
-migration nobody folded in. Name, type, nullability, and primary key are
-compared; defaults, indexes, foreign keys, and the `$type<>()` unions are not.
-Those unions name no Postgres type and are the compile-time claim the whole
-restoration was for — a text column read back as its own vocabulary rather
-than cast by hand under a `// SAFETY:` comment — so the module itself is the
-only thing that holds them.
+The schema modules are the source of truth. `pnpm db:generate` runs
+`drizzle-kit generate` (`packages/database/drizzle.config.ts`, `strict`) and
+writes the migration that brings the newest snapshot under
+`packages/database/migrations/meta/` up to the modules, which the Effect
+migrator above applies; hand-edit the generated SQL only for what drizzle-kit
+cannot know, such as a backfill. `0095_snapshot.json` is the baseline the loop
+restarted from: `0026`–`0094` were hand-written and carry no snapshot.
+`packages/database/src/schemas/__tests__/migrations.test.ts` fails when a
+module changes without its generated migration, and
+`tests/drizzle-schema.test.ts` still compares the barrel against the
+`information_schema` of a database `runWebMigrations` has just built, in both
+directions, which is what catches a generated migration edited into
+disagreement. The `$type<>()` unions name no Postgres type, so the module
+itself is the only thing that holds them.
 
 A migration that rewrites data the live release reads is expand and contract,
 for the same reason a dropped column takes two deployments: a production build
@@ -589,8 +588,8 @@ client out of the fiber it runs on rather than holding one of its own, the
 bridged statements of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
-Outside `server/hosted/store/`, `server/hosted/plan-store.ts` is on the same
-client, and `server/voice/session-record.ts` is on it whole, each of its five methods
+Outside `packages/database/src/models/`, `packages/database/src/models/plan-store.ts` is on the same
+client, and `packages/database/src/models/voice-session-record.ts` is on it whole, each of its five methods
 answering an effect over the live session row rather than running one.
 `VoiceService` yields those five
 directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
@@ -624,7 +623,7 @@ what leaves them external to the bundles rather than inlined into each of them,
 so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
 `pg`, which is external on the same terms and already was.
 
-A test reads the same client through `tests/support/sql-client.ts`, which
+A test reads the same client through `@sidecar/database/testing`, which
 chooses its dialect the way `tests/support/hosted-store-database.ts` does:
 PGlite in process, so `check.sh` needs no service, or the Postgres named by
 `LUKE_STORE_TEST_DATABASE_URL`, which the CI job points at its service
@@ -758,7 +757,7 @@ snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
 store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
 the same group from the same wiring; the reads and the writes themselves are
-`server/hosted/account-store.ts`'s effects over the ambient `SqlClient`,
+`packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the group as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real
@@ -827,13 +826,13 @@ on each instance, so the endpoint is no oracle for keys that are not the
 caller's. Neither the key nor what the provider said of it is logged.
 
 A key is kept in `account_provider_key` (migration 0080), sealed by
-`server/hosted/provider-key-seal.ts`: AES-256-GCM under a data key drawn
+`packages/database/src/models/provider-key-seal.ts`: AES-256-GCM under a data key drawn
 for that save, the data key wrapped under the deployment's key-encryption
 key, with the account and provider bound as additional data on both seals
 and the version on the wrap, so a sealed key copied onto another row does
 not open. The row holds the version, the wrapped data key, the sealed key,
 the hint, and the status; it is replaced whole by a save, deleted by a
-removal, and cascades with the account. `server/hosted/provider-key-store.ts`
+removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
@@ -890,92 +889,130 @@ and a meter the database refused is logged while the text is still answered.
 There is no path on an account's own key. `tests/dictation-app.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
-## The Linear connection
+## Integrations
 
 Every agent Luke runs — the planning assistant, the coding agent, and each
-one's declared worker — can use the signed-in account's Linear through
-Linear's own hosted MCP server, `https://mcp.linear.app/mcp`, with every tool
-it lists and no approval step. The connection belongs to the account, so it
-reaches every plan and project the account has.
+one's declared worker — can use the signed-in account's integrations, each
+through the provider's own hosted MCP server with every tool it lists and no
+approval step: Linear (`https://mcp.linear.app/mcp`), Notion
+(`https://mcp.notion.com/mcp`), Sentry (`https://mcp.sentry.dev/mcp`), and
+Slack (`https://mcp.slack.com/mcp`), which is read-only: its entry allows
+Slack's search and read tools alone (`ALLOWED_TOOLS`, eve's tool filter). A connection belongs to the account, so it reaches every plan and
+project the account has. `server/hosted/integrations.ts` is the one table of
+providers: the variable each connector's UID is read from, its MCP server
+and what the model is told of it, and the name its nested calls are stored
+under. Everything below is the same for every provider.
 
-**Who holds what.** Vercel Connect holds the Linear grant, encrypted, and
-refreshes it; Luke never stores a token. Luke holds one row per account in
-`linear_connection` (migration 0089, `db/linear-schema.ts`), which is its
-own word on whether its agents may use the grant: `connected` lets them,
-anything else or no row does not. Connect has no way to ask whether a
-sign-in finished and its SDK caches tokens in process, so this row is also
-what makes a Disconnect take effect regardless of any cache.
+**Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
+it; Luke never stores a token. Luke holds one row per account and provider
+in `integration_connection` (`schemas/integration.ts`), which is its own word
+on whether its agents may use the grant: `connected` lets them, anything else
+or no row does not. Connect has no way to ask whether a sign-in finished and
+its SDK caches tokens in process, so this row is also what makes a Disconnect
+take effect regardless of any cache. The migration that made the table copied
+every row of Linear's own table in as Linear's, and the one after it dropped
+that table.
 
-**The routes** (`server/linear-app.ts`, `fixtures/linear-route/`):
+**The routes** (`server/integrations-app.ts`, `fixtures/integrations-route/`):
 
-- `GET /api/account/linear` answers `connected`, `pending`, `expired`,
-  `disconnected`, or `unavailable` (no connector on this deployment). A
-  sign-in still under way, begun within the last fifteen minutes, is
+- `GET /api/account/integrations` answers `{ integrations: { <provider>:
+  status } }`, each status `connected`, `pending`, `expired`,
+  `disconnected`, or `unavailable` (no connector for it on this deployment).
+  A sign-in still under way, begun within the last fifteen minutes, is
   settled here by asking Connect for a token afresh.
-- `POST /api/account/linear/connect` asks Connect's `startAuthorization` for
-  the account, with Luke's own user id as the subject and
-  `/api/account/linear/connected?state=…` as the callback, records the
-  sign-in's one-time state, and answers the address. The desktop's host
-  opens it through the native node; no window draws it and nothing logs it.
-- `POST /api/account/linear/disconnect` deletes the row first, then asks
-  Connect to revoke the grant. A failed revoke is logged and the account is
-  disconnected all the same. Connect revokes at Linear where Linear allows
-  it; otherwise Linear's token stands until it expires, though Luke no
-  longer uses it.
-- `GET /api/account/linear/connected` is where Connect returns the browser.
-  The state names the account, Connect is asked for a token afresh, and the
-  browser lands on `/linear-connected.html` with one word: `connected`,
+- `POST /api/account/integrations/{provider}/connect` asks Connect's
+  `startAuthorization` for the account, with Luke's own user id as the
+  subject and `/api/account/integrations/connected?state=…` as the callback,
+  records the sign-in's one-time state, and answers the address. The
+  desktop's host opens it through the native node; no window draws it and
+  nothing logs it.
+- `POST /api/account/integrations/{provider}/disconnect` deletes the row
+  first, then asks Connect to revoke the grant. A failed revoke is logged and
+  the account is disconnected all the same. Connect revokes at the provider
+  where the provider allows it; otherwise its token stands until it expires,
+  though Luke no longer uses it. Deleting the account revokes every
+  provider's grant the same way.
+- `GET /api/account/integrations/{provider}/tools` answers the tools the
+  provider's server offers the account's agents, `{ tools: [{ name,
+  description }] }`, for the composer's MCP popover. It reads them as an MCP
+  client does (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list`
+  page by page, JSON or event-stream answers), with the account's token from
+  Connect. The list is narrowed to the provider's `ALLOWED_TOOLS` where it
+  has them, and each description is cut to its first line. It is held in the
+  instance's memory for five minutes per account and provider. A provider
+  the account has not connected is refused as unavailable before any token
+  is read.
+- `GET /api/account/integrations/connected` is where Connect returns the
+  browser from any provider. The state names the account and the provider,
+  Connect is asked for a token afresh, and the browser lands on
+  `/integration-connected.html` with the provider and one word: `connected`,
   `not-completed` (declined or cancelled), `expired`, or `unavailable`.
 
-**The agents** (`server/hosted/linear-connection.ts`). eve hands a declared
-subagent none of its parent's connections, so each of the four agent roots
-registers `connections/linear.ts`, and each file is the one definition over
+The rewrite moves a provider's path segment into the `provider` query
+(`function-rewrites.ts`), as a plan's id is moved into `id`.
+
+**The agents** (`server/hosted/integration-connection.ts`,
+`server/hosted/agent-runtime/connections.ts`). eve hands a declared subagent
+none of its parent's connections, so each of the four agents registers one
+`connections/integrations.ts`: a dynamic connection resolved as each turn
+starts, which hands the turn every server its role's policy has on
+(`agent-runtime/servers.ts`), each the one definition over its provider and
 that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. The definition's auth is eve's plain `getToken` form,
-credentialed as the app, and the account is the admitted conversation's
-owner, never the session's principal. That matters because a spoken planning
-turn runs as the deployment acting for the account, and eve's user-scoped
-auth (`connect()` from `@vercel/connect/eve`) would refuse it before reading
-any token. That form has no interactive half either, so eve never pauses a
-run for a sign-in. eve opens the client once per model step: the row is read
-at each opening, and again after Connect answers, so a Disconnect takes
-effect from the next step. A connection that cannot be used throws one of
-`LINEAR_UNAVAILABLE`'s fixed sentences, which fails only the call that tried
-it; every other tool, and the run, carries on. Workers stay read-only in the
-checkout and change Linear only when their task explicitly asks them to.
+`admitDelegated`. The planning agents are handed every integration; a coding
+agent and its worker are handed every one the developer has not switched off
+for that agent. The
+definition's auth is eve's plain `getToken` form, credentialed as the app,
+and the account is the admitted conversation's owner, never the session's
+principal. That matters because a spoken planning turn runs as the
+deployment acting for the account, and eve's user-scoped auth (`connect()`
+from `@vercel/connect/eve`) would refuse it before reading any token. That
+form has no interactive half either, so eve never pauses a run for a
+sign-in. eve opens the client once per model step: the row is read at each
+opening, and again after Connect answers, so a Disconnect takes effect from
+the next step. A connection that cannot be used throws one of
+`integrationUnavailable`'s fixed sentences, which fails only the call that
+tried it; every other tool, and the run, carries on. Workers stay read-only
+in the checkout and change an integration only when their task explicitly
+asks them to.
 
 **Transcripts** (`server/hosted/connection-tools.ts`). eve offers a
 connection through `connection_search` and `connection_execute`, and tells a
 remote call as a call of its own nested under the `connection_execute` that
-ran it, named `linear__<tool>`, with id `<wrapper>:1`. The relay stores the
-nested call under the fixed name `linear_remote`, whose input is
-`{ remoteTool, parentCallId, input }`, and settles it with what Linear
-answered, before the wrapper's own result. All three names are in both
-agents' tool sets whatever any account's connection stands at, so a
-transcript reads back the same after a Disconnect. Rows now hold Linear
-content (issue titles, descriptions, comments); no token reaches a row. A
-turn cancelled while Linear was answering leaves the call's outcome unknown
-("it may have run"), never a failure to retry.
+ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
+the nested call under the provider's fixed name (`linear_remote` for
+Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
+with what the provider answered, before the wrapper's own result. Every name
+is in both agents' tool sets whatever any account's connections stand at, so
+a transcript reads back the same after a Disconnect. Rows hold provider
+content (Linear's issues and comments, Notion's pages); no token reaches a
+row. A turn cancelled while a provider was answering leaves the call's
+outcome unknown ("it may have run"), never a failure to retry.
 
-**Provisioning a deployment.** From the `apps/web` Vercel project's
-directory:
+**Provisioning a deployment.** For each provider, from the `apps/web` Vercel
+project's directory:
 
 ```
 vercel link
-vercel connect create mcp.linear.app --name <name>   # prints the connector UID
+vercel connect create mcp.linear.app --name linear   # Linear; prints the connector UID
+vercel connect create mcp.notion.com --name notion   # Notion
+vercel connect create mcp.sentry.dev --name sentry   # Sentry
+vercel connect create slack --name slack             # Slack: Vercel's managed Slack app
 vercel connect attach <connector-uid> --yes          # production, preview, and development
 ```
 
-Then set `LINEAR_CONNECTOR_UID` to that UID in the web project and in both
-eve projects (`eve`, `coder`), because the agents read tokens too. Asking
-Connect about an arbitrary user id needs the deployment's own Vercel OIDC
-token, which the SDK reads from the request (`x-vercel-oidc-token`) or
-`VERCEL_OIDC_TOKEN`. Keep OIDC enabled for all three projects, and make sure
-each one is linked to the connector for the environments it runs in. For
-local development, `vercel env pull` writes a short-lived
-`VERCEL_OIDC_TOKEN`. A deployment without `LINEAR_CONNECTOR_UID` runs every
-agent without Linear, and Settings shows the row as unavailable. Every token
-request is billed by Connect and rate-limited per team.
+Then set the provider's variable (`LINEAR_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`, `SLACK_CONNECTOR_UID`) to that UID in the `luke-web` project for production,
+preview, and development. The web, `eve`, and `coder` are services of that
+one project (`vercel.json`'s `services`), so its variables and the
+connector's link reach all three, which matters because the agents read
+tokens too. Asking Connect about an arbitrary user id needs the deployment's
+own Vercel OIDC token, which the SDK reads from the request
+(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
+project. For local development, `vercel env pull` writes a
+short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
+runs every agent without that provider, and Settings shows its row as
+unavailable. Every token request is billed by Connect and rate-limited per
+team.
 
 ## The models group
 
@@ -1047,7 +1084,7 @@ plan listed with `coding_agent.published` (migration 0078), their newest
 turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`server/hosted/plan-store.ts` names the account beside the plan and gates on
+`packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
 its membership of the plan's workspace, so a teammate's plan reads and
 writes as the account's own, and a plan of a workspace the account is not in
 answers exactly as none does.
@@ -1057,7 +1094,7 @@ repositories the account pinned in the sidebar, whose groups of plans stand
 above the rest: `GET` reads them newest pinned first, and `PUT` pins or
 unpins one and answers them all as they then stand. A pin is a row of
 `repository_pin` keyed by the account and the repository's full name
-(`server/hosted/repository-pin-store.ts`), stamped the first time it is made,
+(`packages/database/src/models/repository-pin-store.ts`), stamped the first time it is made,
 deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
@@ -1131,7 +1168,7 @@ path override from `route-path` (`server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
 
 `GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
-History tab (`server/hosted/plan-revisions.ts`): fifty revisions a page,
+version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
 newest first, each its writer as the "Edited by" line names it, when it
 began and last moved, how many changes it made, and for a restore the
 revision it brought back; `?before=<seq>` reads the page before that
@@ -1140,7 +1177,7 @@ before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
 revision's content and the content before it, null for the first, each
 formatted under the plan's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
-puts that revision's fields and assumptions back through the plan's one
+puts that revision's text back through the plan's one
 locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
@@ -1170,15 +1207,21 @@ login; one of another installation is `repository-not-reachable` too, since
 the workspace does not reach it. A personal workspace's plan may name any
 repository the account reaches.
 
-Nothing in the group writes a document. The one writer is a planning call's
-notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
-the fixed template (`packages/hosted/src/plan-template.ts`): a point added
-under a field, a phrase corrected, or a line
-struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
-the fields the plan holds, passing over a note that names a phrase the plan
-does not hold, formats the body, and saves it under a binding of account and
-plan the service built rather than anything the model sends, answering the
-document as saved or why nothing was: a body past its bound once formatted,
+A plan's text has one write, `server/hosted/plan-notes.ts`, and four
+writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
+whole text against the base it was made on (`saveDeveloperEdit`), saved
+where the text still holds that base, laid over what Luke wrote meanwhile
+where it can be, and answered as a conflict with the text as it stands, with
+nothing saved, where it cannot (`packages/hosted/src/plan-edit.ts`); a
+restore above is the second. A planning call's notetaker
+(`server/voice/plan-scribe.ts`) and a coding agent's `edit_plan`
+(`server/hosted/coder-host/plan-edit.ts`) answer with notes
+(`packages/hosted/src/plan-template.ts`): a point added under a heading, a
+phrase corrected, or a line struck. `saveNotes` takes them in order over the
+text as it stands, passing over a note that names a phrase the plan does not
+hold, and saves it under a binding of account and plan the service built
+rather than anything the model sends, answering the document as saved or
+why nothing was: a text past its bound,
 a plan deleted meanwhile, which a save never recreates because it is an
 `update` over the row that stands, and a store that could not be reached,
 each leaving the prior document in place.
@@ -1441,7 +1484,7 @@ directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
-one atomic upsert before each upstream call (`server/hosted/quota.ts`).
+one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
 seconds of audio in the row's `dictation_seconds`, beside the voice seconds
 `voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on
@@ -1558,7 +1601,7 @@ the host's admission of the conversation again on every tool call a turn
 makes.
 
 What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
-voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
+voice writer (`packages/database/src/models/voice-writer.ts`). Every server event is
 handed to `observe` in arrival order and the writer takes what it keeps —
 each transcript delta a segment, and, through the one row door the service
 calls behind each fragment (`upsertSpokenRow`, debounced 300 ms a row and
@@ -1819,7 +1862,7 @@ row's `usage` with `{ seconds, confirmed: false }`, a snapshot and never a
 sum. `session.closed` is finalization. Whichever connection sees it forwards
 it, writes the row's `closed_at`, `close_reason`, and
 `usage { seconds, confirmed: true }`, records `usage.seconds` through
-`recordVoiceSeconds` in `server/hosted/quota.ts`
+`recordVoiceSeconds` in `packages/database/src/models/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
 ends. The session's one `session.close` is the exchange's, as the
@@ -1911,28 +1954,31 @@ brain's conversations per account: a plan's conversation, its messages, the
 turns that ran over it, and the asks handed to it. Every row is keyed by
 `user_id` and cascades with the user row, so
 `server/routes/account/delete.ts` erases them with the account.
-`server/hosted/store/` is the store the brain host composes against; every
+`packages/database/src/models/` is the store the brain host composes against; every
 module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
 whose rows a `Schema` decodes and whose path rule is that schema too, which
 `HostedStore`, the store writer, the voice writer, and the ask record all
 answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
-The database still carries tables and columns nothing reads or writes any
-more — `events`, `provider_cursors`, `provider_key`, `roster_snapshot`,
+`20261013123642_dead_tables_drop` dropped the tables and columns nothing
+read or wrote any more — `events`, `provider_cursors`, `provider_key` (not
+the BYOK keys, which are `account_provider_key`), `roster_snapshot`,
 `transcript_mark`, `observation_pass`, `workspace_file`,
-`workspace_embedding`, `devices`, `account_workspace_preference`, and
-`introduction_usage`, and the conversation row's observed-session and child
-columns — and their schema modules still declare them, so the drift check
-holds; they go with the migration that drops them.
+`workspace_embedding`, `devices`, `account_workspace_preference`,
+`introduction_usage`, `account_preference.default_workspace_provider`, and
+the conversation row's observed-session, event-sequence, completion-sweep,
+and memory-flush columns. A child's `parent_conversation_id`, `label`,
+`title`, and `expects_completion` are live: a subagent's and a coding
+agent's worker's child conversation writes them.
 
 The conversation tables are the shape the LUKE-95 storage plan settled on,
 less the `prompts` table it drew and less the `tool_sets` table
 `0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`plan`, which `server/hosted/plan-store.ts`
-opens, and `coding_agent`, which `server/hosted/coding-agent-store.ts` opens,
+conversation row names its kind (`plan`, which `packages/database/src/models/plan-store.ts`
+opens, and `coding_agent`, which `packages/database/src/models/coding-agent-store.ts` opens,
 are the two any code still opens), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
@@ -1949,11 +1995,11 @@ the schemas as the key, and the turn row carries that hash and nothing else
 of either, naming no row and holding no foreign key. Nothing in these tables
 is sealed: the content is readable by an operator.
 
-The store writer, `server/hosted/store/writer.ts`, is the one path by which a
+The store writer, `packages/database/src/models/writer.ts`, is the one path by which a
 `messages` or `turns` row is written, and
 `tests/store-writer-boundary.test.ts` holds the server's own sources to that:
 the writer is the one server module with an insert, an update, or a delete over
-`messages`, `turns`, or `events`, whether as a Drizzle table imported from the schema or in the
+`messages` or `turns`, whether as a Drizzle table imported from the schema or in the
 text of a statement, and the modules that name one at all are the writer and
 the two readers, each listed there by name. It
 consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
@@ -2019,12 +2065,12 @@ within two minutes of the write, in which case the row joins the turn. No
 audio is ever stored.
 
 Two writers share those tables and never a column. The voice service's own
-`server/voice/session-record.ts` owns the session row's whole life: it is
+`packages/database/src/models/voice-session-record.ts` owns the session row's whole life: it is
 inserted when the session is created, found again by `(user_id,
 live_session_id)` when a fresh function instance re-attaches to the same
 live session, overwritten with each unconfirmed usage snapshot while open,
 and closed once with the confirmed seconds, the instant, and the reason. The
-voice writer in `server/hosted/store/voice-writer.ts` only reads that row
+voice writer in `packages/database/src/models/voice-writer.ts` only reads that row
 for its id and hangs everything else off it: a segment per transcript delta
 at the next position of the session's own sequence, and the developer's spoken ask as a
 user message on the voice channel, cut from the stored user segments between
@@ -2048,14 +2094,14 @@ dialect an opening of the test database is a database of that opening's own:
 a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
 names, made with `create database ... template ...` on the cluster's
 `postgres` maintenance database and dropped when the file closes it
-(`tests/support/store-test-postgres.ts`). Nothing writes to the named
+(`@sidecar/database/testing`). Nothing writes to the named
 database itself after `db:migrate`, so a statement a test forgets to scope by
 account or conversation reaches its own file's rows and no other file's,
 which is the property `tests/store-database-isolation.test.ts` holds the
 harness to. Which files `test:store` runs is read from the files, not kept
 in a list: `scripts/store-tests.ts` selects every `tests/**/*.test.ts` whose
-source imports one of the three doors under `tests/support`
-(`hosted-store-database`, `sql-client`, `store-test-postgres`), because
+source imports one of the two doors, `tests/support/hosted-store-database`
+or `@sidecar/database/testing` (whose `getTestDB()` is the bare one), because
 `LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
 door cannot meet a Postgres whatever it does. A new store test is therefore
 in the set the moment it imports its harness, and `package.json` is not
@@ -2135,7 +2181,7 @@ URLs eve mints resolve to the public path. The web functions reach it through
 and `tests/eve-layout.test.ts` builds both roots.
 
 A coding agent is one eve session over a `coding_agent` conversation
-(`server/hosted/coding-agent-store.ts`), and the host behind the authored
+(`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
 files is `server/hosted/coder-host/`: the same door and conversation
 admission as the planning brain's (`brain-host/door.ts`,
 `brain-host/conversation.ts`), with the developer's own bearer the caller
@@ -2409,6 +2455,18 @@ built once with the routes, under a key that says whether the agent had
 ended, so the first read after a turn ends is fresh rather than the running
 turn's kept answer; a failed read is kept for no time. A tab reading beside
 every held page thus asks GitHub a few times a minute at most.
+`GET /api/agents/{id}/changes` answers the agent's changes for its Changes
+tab: the files of the pull request that kept answer names, with its page,
+read from GitHub's `pulls/{n}/files` afresh on each ask on the developer's
+own token (`github/pull-requests.ts`), a hundred to a page up to
+`CHANGES_BOUNDS.MAX_FILES`, each with its path, the path it moved from,
+what became of it, its lines added and removed, and its patch; a file
+GitHub sends no patch for, or whose patch runs past
+`CHANGES_BOUNDS.MAX_PATCH_CHARS`, says `binary` or `too-large` instead of
+reading as unchanged, a file only moved carries an empty patch, and a
+list cut at the bound says so. An agent with no pull request yet answers
+a null one. The agent's sandbox is no source: nothing outside its session
+reaches it and its diff is not kept in the store.
 `tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
@@ -2433,7 +2491,7 @@ conversations stamped deleted more than thirty days ago, which is what a
 deleted plan's conversation comes to, counted as `purged`; the sweep over
 turns still running past their kind's bound, an hour for a planning turn
 and a day and an hour for a coding agent's
-(`server/hosted/store/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
+(`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
 `TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
 the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and

@@ -27,6 +27,7 @@ export const CALL_KIND = {
   SEARCH: "search",
   WEB_SEARCH: "web-search",
   WEB_PAGE: "web-page",
+  LOAD_SKILL: "load-skill",
   SHOW_CODE: "show-code",
   DRAW_ON_BOARD: "draw-on-board",
   LOOK_AT_BOARD: "look-at-board",
@@ -50,6 +51,20 @@ export const CALL_KIND = {
 
 export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
 
+/**
+ * A call as the wire that carried it already read it: its kind, the one
+ * input a reader looks for first, and the words a command was said to be
+ * for. The planning model's turns arrive read this way (`work-model.ts`),
+ * so their calls say it beside the SDK's own part, and the row draws what
+ * the wire said rather than reading the tool's input again; a coding
+ * agent's calls say nothing, and their rows are read from the part.
+ */
+export interface SaidCall {
+  readonly kind: CallKind;
+  readonly subject?: string;
+  readonly description?: string;
+}
+
 /** How a call of each kind says what it did, and whether its subject is code (a command, a path) rather than words. */
 export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },
@@ -59,6 +74,7 @@ export const CALL_WORDS = {
   [CALL_KIND.SEARCH]: { verb: "Searched", code: true },
   [CALL_KIND.WEB_SEARCH]: { verb: "Searched the web for", code: false },
   [CALL_KIND.WEB_PAGE]: { verb: "Fetched", code: true },
+  [CALL_KIND.LOAD_SKILL]: { verb: "Loaded skill", code: true },
   [CALL_KIND.SHOW_CODE]: { verb: "Showed", code: true },
   [CALL_KIND.DRAW_ON_BOARD]: { verb: "Drew on the board", code: false },
   [CALL_KIND.LOOK_AT_BOARD]: { verb: "Looked at the board", code: false },
@@ -80,26 +96,41 @@ export const CALL_WORDS = {
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
-/** What a call's line says: the verb, if any, then the subject, and whether the subject is code. */
+/** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
 export interface CallLine {
-  readonly verb: string | undefined;
+  readonly verb: string;
   readonly subject: string | undefined;
   readonly code: boolean;
 }
 
 /**
  * How a call's line reads: its kind's verb before its subject; or, for a
- * command the model said the purpose of, those plain words alone, as Claude
- * Code and Cursor name a command, with the command itself in the row's body.
+ * command the model said the purpose of, those plain words in the verb's
+ * place, as Claude Code and Cursor name a command, and the command's first
+ * line after them as its preview, the whole of it in the row's body.
  */
 export function callLine(
   kind: CallKind,
   subject: string | undefined,
   description: string | undefined,
 ): CallLine {
-  if (description !== undefined) return { verb: undefined, subject: description, code: false };
   const words = CALL_WORDS[kind];
-  return { verb: words.verb, subject, code: words.code };
+  if (description === undefined) return { verb: words.verb, subject, code: words.code };
+  return {
+    verb: description,
+    subject: subject === undefined ? undefined : firstLine(subject),
+    code: true,
+  };
+}
+
+/** A command's first line of words, as a line too short for the rest previews it. */
+function firstLine(text: string): string {
+  return (
+    text
+      .split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim() ?? ""
+  );
 }
 
 /**

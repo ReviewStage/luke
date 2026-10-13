@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -45,7 +46,6 @@ import {
   sessionOpener,
 } from "./opening.js";
 import { OPENING_OUTCOME, type OpeningSettled, RELAY_DEFAULTS, relaySession } from "./relay.js";
-import type { VoiceSessionRecord } from "./session-record.js";
 import { SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
 
 /**

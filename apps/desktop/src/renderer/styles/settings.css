@@ -33,6 +33,72 @@
   scroll-padding-top: calc(var(--settings-header-height) + var(--settings-gap));
 }
 
+/* A page's own name, at the head of its column: the page list says where
+   Settings is, and this says which page the column holds. */
+.settings-page-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* A group of a page (`settings-group.tsx`): its name above the card, small
+   and muted, as macOS and Linear head a group, and the card holding the rows
+   with a hairline between each and the next, edge to edge. The card's corner
+   is a button's, so the page draws one corner throughout. */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.settings-group-title {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.settings-card > .settings-row {
+  min-height: var(--settings-row-height);
+  padding: var(--space-12) var(--space-16);
+}
+
+.settings-card > * + * {
+  border-top: 1px solid var(--hairline);
+}
+
+/* What a card says where its rows would be: who to sign in as, a read that
+   failed and its Retry, or the rows on their way. */
+.settings-card-line {
+  display: flex;
+  min-height: var(--settings-row-height);
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+}
+
+/* A row's refusal stands under the row it belongs to, inside the same rule. */
+.settings-card > .error-message {
+  padding: 0 var(--space-16) var(--space-12);
+}
+
+.settings-card > :is(.settings-row, .api-key-form) + .error-message {
+  margin-top: calc(-1 * var(--space-4));
+  border-top: 0;
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;
@@ -43,23 +109,22 @@
   background: var(--section-fill);
 }
 
-/* A section names itself in sentence case, as the sidebar's own heading does;
-   the settings page's zoom brings this to the sidebar heading's 12px. */
+/* A section names itself in sentence case, as the sidebar's own heading does. */
 .settings-section h2 {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 /* Sized to the heading it labels rather than to a grid: the glyph is a letter
    in the line, not an element beside it. */
 .settings-icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
   opacity: 0.85;
 }
@@ -72,7 +137,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 /* A page's head: the way back beside the page's own name, above the sections
@@ -222,13 +287,20 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-2);
+}
+
+/* A row's words take what the row leaves once its mark and controls stand,
+   so its controls end at the row's edge however many stand beside them. */
+.settings-row > .settings-copy {
+  flex: 1;
 }
 
 .settings-copy strong {
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 /* The word a row wears while its value differs from the default, riding the
@@ -238,7 +310,7 @@
 .settings-changed {
   margin-left: 6px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -250,15 +322,15 @@
    and the hidden text's; the glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--state-attention) 22%, transparent);
   color: var(--state-attention);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -275,7 +347,7 @@
 .settings-note {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -332,12 +404,21 @@
 /* Scoped under the picker, because the chip and menu classes they add to are
    written in desktop.css, after this sheet, and would otherwise win back the
    composer's pill and 340px width at equal specificity. */
+/* The chip wears a row button's face, a hairline and no fill, so a picker and
+   the buttons beside it read as one set of controls. */
 .settings-picker .settings-picker-chip {
-  width: 190px;
-  height: 28px;
-  padding: 0 8px 0 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  width: 200px;
+  height: var(--control-height);
+  padding: 0 var(--space-8) 0 var(--space-12);
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-picker .settings-picker-chip:is(:hover, [aria-expanded="true"]):not(:disabled) {
+  background: var(--selected);
 }
 
 .settings-picker .settings-picker-chip .plan-compose-chip-name {
@@ -353,12 +434,6 @@
 
 .settings-picker .settings-picker-chip .settings-chevron {
   color: var(--text-tertiary);
-}
-
-/* The ring the input draws, because this is the same kind of landing place. */
-.settings-picker .settings-picker-chip:focus-visible {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  outline: none;
 }
 
 .settings-picker .settings-picker-chip:disabled {
@@ -404,20 +479,23 @@
   flex-wrap: wrap;
   gap: 2px;
   margin: 0;
-  padding: 2px;
+  padding: var(--space-2);
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: var(--raised);
 }
 
 .settings-segment {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 7px;
+  /* Note that a segment draws the ring inside itself, because its trough
+     leaves it no room for one outside. */
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+  height: calc(var(--control-height) - 2 * var(--space-2));
+  padding: 0 var(--space-12);
+  border-radius: calc(var(--control-radius) - var(--space-2));
   background: none;
   color: var(--text-secondary);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 560;
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
@@ -455,18 +533,11 @@
   gap: 7px;
 }
 
-/* The signed-in identity: the provider's picture of the person beside their
-   address, or our own glyph where no picture travelled. */
-.account-identity {
-  display: flex;
-  align-items: center;
-  flex-direction: row;
-  gap: 10px;
-}
-
+/* The signed-in identity's picture, leading its row as a provider's mark
+   leads one, or our own glyph where no picture travelled. */
 .account-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   border-radius: 50%;
   object-fit: cover;
@@ -484,122 +555,6 @@
   height: 14px;
 }
 
-.account-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* Signing out is destructive the way deleting a key is — getting back in costs
-   a trip through the browser — so it says so on hover rather than sitting in
-   red beside the identity it would end. Deleting the account is more so — the
-   service erases it and no sign-in brings it back — and wears the same warning
-   the same way. */
-.account-signout:hover:not(:disabled),
-.account-delete:hover:not(:disabled),
-.account-linear-disconnect:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger-text);
-}
-
-/* Deleting a key is the one action in this panel that cannot be undone from inside
-   it: nothing here can hand a key back, so a trash pressed by mistake costs a
-   trip to the provider's own site. The trash asks instead of acting, and the
-   answer is given in the few pixels the question was asked in.
- *
- * The line's controls and the confirm that replaces them are the same cell of
- * one grid. That is what makes the swap free: the cell is as wide as the wider
- * of the two whichever one is showing, so the name flexing beside it never
- * re-shapes, and neither layer is mounted or unmounted by the press. Only
- * `transform`, `opacity`, and `visibility` ever change hands. */
-.credential-actions {
-  display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
-}
-
-.credential-actions > * {
-  grid-area: 1 / 1;
-}
-
-/* The layer that is leaving fades over `--duration-exit`, the way panel content
-   always leaves before the thing it belongs to moves. `visibility` waits out
-   that fade so it can be seen going, and switches immediately on the way in so
-   the arriving layer can take the focus the leaving one is about to lose. */
-.credential-actions > [data-drawn="false"] {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    visibility 0s linear var(--duration-exit);
-}
-
-.credential-actions > [data-drawn="true"] {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit),
-    visibility 0s linear;
-}
-
-/* The layer fades; what springs is what is inside it. Every control here rides
-   `--spring-fast` — the same bounce the tab thumb has, which is the profile
-   every small element in the app moves on, so a control trading places belongs
-   to the same object as everything around it. Each one collapses into, and
-   grows back out of, its own right edge: the group folds toward the corner the
-   trash sits in rather than shrinking about its middle.
- *
- * Matched through the layer rather than by class, because `.toolbar-button`
- * and `.danger-button` are written in desktop.css, later in the stylesheet,
- * and would otherwise win this declaration back at equal specificity. Their
- * transition declares only the hover's own, so this replaces it rather than
- * adding to it and has to carry those along. */
-.credential-actions > [data-drawn] > * {
-  transform-origin: 100% 50%;
-  transition:
-    transform var(--duration-fast) var(--spring-fast) var(--answer-delay, 0s),
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease,
-    filter var(--duration-hover) ease;
-}
-
-/* Standing down happens all at once: a group leaving in sequence reads as
-   hesitation, and the answer is already on its way in. */
-.credential-actions > [data-drawn="false"] > * {
-  transform: scale(0.82) translateX(10px);
-}
-
-/* Arriving does not. The answer that changes nothing lands first and the one
-   that cannot be taken back lands a beat later, on the same stagger the panel's
-   own rows fan open with — so the confirm unfolds rather than appearing, and
-   the eye reaches the safe answer first. */
-.credential-actions > [data-drawn="true"] > * {
-  --answer-delay: calc(var(--answer-index, 0) * var(--row-stagger));
-
-  transform: none;
-}
-
-/* The group is what names the question for the two controls inside it, the same
-   way the editor's group names the provider for its own Cancel and Save. None
-   of the user-agent frame is wanted, including the `min-inline-size` that would
-   stop it shrinking with the panel. */
-.credential-confirm {
-  min-inline-size: 0;
-  padding: 0;
-  border: 0;
-  margin: 0;
-}
-
-.settings-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 620;
-}
-
 .link-icon {
   width: 9px;
   height: 9px;
@@ -615,7 +570,7 @@
   background: var(--input-fill);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 13px;
   letter-spacing: 0.4px;
   transition:
     border-color var(--duration-hover) ease,
@@ -628,9 +583,7 @@
 }
 
 .settings-input:focus {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
   background: var(--input-fill-focus);
-  outline: none;
 }
 
 .settings-input:disabled {
@@ -645,176 +598,140 @@
   gap: 7px;
 }
 
-/* Held to the width of its longest word, so saying "Deleting…" does not widen
-   the group and slide the answer beside it along. */
-.credential-confirm .danger-button {
-  min-width: 96px;
-}
-
 .error-message {
   margin: 0;
-  color: var(--error-text);
-  font-size: 10px;
+  color: var(--danger-text);
+  font-size: 12px;
 }
 
-/* Settings › API keys: a provider's name and what is true of its key beside
-   the field a key is pasted into, the field taking whatever the row leaves it
-   and wrapping under the name where the row is narrow. The hint is the key's
-   own characters, so it reads in the code face; a status that asks for a hand
-   reads in the error colour. */
-.api-key-row .provider-mark {
-  width: 16px;
-  height: 16px;
-}
-
-.api-key-form {
-  min-width: 0;
-  flex: 1 1 260px;
+/* Settings › Coding agents › API keys: a key being added or edited grows its
+   row a field, Cancel, and Save, under the row's words and inside its rule.
+   The hint is the key's own characters, so it reads in the code face. */
+.settings-card > .api-key-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-top: calc(-1 * var(--space-4));
+  padding: 0 var(--space-16) var(--space-12) calc(var(--space-16) + 20px + var(--space-12));
+  border-top: 0;
 }
 
 .api-key-form .settings-input {
   min-width: 0;
-  flex: 1 1 auto;
-  padding: 6px 10px;
+  height: var(--control-height);
+  flex: 1;
+  padding: 0 var(--space-8);
+  border-radius: var(--control-radius);
 }
 
 .api-key-hint {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
-.api-key-trouble {
-  color: var(--error-text);
+/* The Keyboard shortcuts page: a reference list more than a form, so the
+   window's own rows sit at a list's density rather than a form's, each the
+   command's name in regular weight and its chord at the row's end. The chord
+   is the row's value, so it is set at the row's own size in the value's ink,
+   the way System Settings lists its keyboard shortcuts. */
+.settings-card {
+  --shortcut-text: 13px;
+  --shortcut-ink: var(--text-secondary);
 }
 
-.api-key-error {
-  flex: 1 0 100%;
+.settings-card > .shortcut-row {
+  min-height: 40px;
+  padding-top: var(--space-8);
+  padding-bottom: var(--space-8);
 }
 
-/* Settings › Plan template: the help beside the reset, then the template,
-   or, should the editor fail to load, the template in the code face as
-   Markdown whose marks are typed as written. The box grows with its words,
-   so the page scrolls rather than a well inside it, and the failed save's
-   words stand beside its Retry. */
-.plan-template-head,
-.plan-template-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
-}
-
-.plan-template-line {
-  justify-content: flex-start;
-}
-
-.plan-template-input {
-  width: 100%;
-  min-height: 360px;
-  padding: var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--input-fill);
-  color: var(--text-primary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11.5px;
-  line-height: 1.55;
-  field-sizing: content;
-  resize: none;
-}
-
-.plan-template-input:focus {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  background: var(--input-fill-focus);
-  outline: none;
-}
-
-/* The template in the plan's own editor, in the box the plain one stands in,
-   its headings standing a section's gap apart as a plan's do. */
-.plan-template-editor {
-  min-height: 360px;
-  padding: var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--input-fill);
-  color: var(--text-primary);
-}
-
-.plan-template-editor:focus-within {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  background: var(--input-fill-focus);
-}
-
-.plan-template-editor
-  .plan-document-text
-  > .markdown-heading:is([data-level="1"], [data-level="2"]):not(:first-child) {
-  margin-top: var(--plan-section-gap);
-}
-
-/* The Keyboard shortcuts page: a reference list more than a form, so its rows
-   sit at a list's density rather than a form's, each the command's name in
-   regular weight and its chord's caps in the one column every row's chord
-   ends in, the way a menu prints its key equivalents. The caps stand at a
-   small control's height once the page's zoom is applied, and the buttons
-   beside the two keys Luke can change are small controls to match. */
-.shortcut-section {
-  gap: var(--space-2);
-  --control-height: 24px;
-  --keycap-size: 20px;
-  --keycap-text: 11px;
-}
-
-/* The label keeps its own room above the first row, which the list's
-   tighter gap would otherwise take from it. */
-.shortcut-section h2 {
-  margin-bottom: var(--space-4);
-}
-
-.shortcut-row {
-  min-height: 28px;
-}
-
-/* A row that carries a description keeps a form row's breathing room. */
-.shortcut-row:has(small) {
-  padding: var(--space-4) 0;
-}
-
-/* The two changeable keys hold their chord in a slot of one width, so their
-   buttons stand level whether the chord is ⌥S or ⌃⌥Space, and the caps still
-   end in the column the rest of the page's do. */
-.shortcut-slot {
-  display: flex;
-  min-width: 84px;
-  justify-content: flex-end;
-}
-
-.shortcut-name {
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-/* What is said where the keys would be, when there are none to draw: the chord
-   being typed, or none having registered. As tall as a cap, so the row keeps
-   its height, and lettered rather than keyed because neither is something to
-   press. */
-.shortcut-state {
+/* A changeable key's chord is a field, as a text field is drawn, so a key
+   that can be changed reads apart from the fixed list under it: pressed, it
+   records the next chord in place. */
+.shortcut-field {
+  --shortcut-ink: var(--text-primary);
   display: inline-flex;
-  height: var(--keycap-size);
+  min-width: 104px;
+  height: var(--control-height);
+  flex: none;
   align-items: center;
-  padding: 0 var(--space-8);
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  color: var(--text-tertiary);
-  font-size: var(--keycap-text);
-  white-space: nowrap;
+  justify-content: center;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--input-fill);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.shortcut-field:hover:not(:disabled) {
+  border-color: var(--selected-edge);
 }
 
 /* Recording is the field ringed in the focus colour, the way a text field
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
-.shortcut-state[data-recording="true"] {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 25%, transparent);
+.shortcut-field[aria-pressed="true"] {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.shortcut-name {
   color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* What the field says where there is no chord to draw: none having
+   registered, or another app owning it. Muted, because neither is a key. */
+.shortcut-state {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.shortcut-field[aria-pressed="true"] > .shortcut-state {
+  color: var(--text-primary);
+}
+
+/* What leads a row that stands for something of its own, a provider's or a
+   service's mark, in one box whatever the artwork's proportions. */
+.settings-row-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+}
+
+.settings-row-mark > :is(svg, img) {
+  width: 20px;
+  height: 20px;
+}
+
+/* Where a row's subject stands, under its name: connected with the dot a
+   finished session wears, and what needs a hand in the attention tint. */
+.settings-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.settings-state[data-state="connected"]::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--state-complete);
+  content: "";
+}
+
+.settings-copy .settings-state[data-state="attention"] {
+  color: var(--state-attention);
+}
+
+/* What a row says where a button would be, when there is nothing to offer. */
+.settings-unavailable {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }

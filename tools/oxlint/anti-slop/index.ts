@@ -1,5 +1,8 @@
 import { eslintCompatPlugin } from "@oxlint/plugins";
 
+import { enforceDeleteWithWhereRule } from "./rules/enforce-delete-with-where.ts";
+import { enforceUpdateWithWhereRule } from "./rules/enforce-update-with-where.ts";
+import { noAwaitDrizzleStatementRule } from "./rules/no-await-drizzle-statement.ts";
 import { noChainedTypeAssertionsRule } from "./rules/no-chained-type-assertions.ts";
 import { noConditionalEmptyObjectSpreadRule } from "./rules/no-conditional-empty-object-spread.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
@@ -17,6 +20,9 @@ import { requireSafetyCommentForTypeAssertionRule } from "./rules/require-safety
 const antiSlopPlugin = eslintCompatPlugin({
   meta: { name: "anti-slop" },
   rules: {
+    "enforce-delete-with-where": enforceDeleteWithWhereRule,
+    "enforce-update-with-where": enforceUpdateWithWhereRule,
+    "no-await-drizzle-statement": noAwaitDrizzleStatementRule,
     "no-chained-type-assertions": noChainedTypeAssertionsRule,
     "no-conditional-empty-object-spread": noConditionalEmptyObjectSpreadRule,
     "no-known-value-widening": noKnownValueWideningRule,

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import type { MessageListRead } from "@sidecar/database/models/message-reads";
 import {
-  CONVERSATION_EVENT_KIND,
+  listRecentMessages,
+  type StoredMessageRecord,
+} from "@sidecar/database/models/message-reads";
+import { CLEARED_CONVERSATION_RETENTION_MS } from "@sidecar/database/models/soft-delete";
+import { messages as messagesTable, turns } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -13,25 +21,17 @@ import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
-import { db } from "../server/db/query";
-import { messages as messagesTable, turns } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
-import type { MessageListRead } from "../server/hosted/store/message-reads";
-import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
   type ConversationRow,
   deleteUser,
   insertConversation as insertConversationRow,
-  insertEvent as insertEventRow,
   insertMessage as insertMessageRow,
   insertTurn as insertTurnRow,
   type MessageRow as MessageInsertRow,
   POSTGRES_ERROR,
   readConversationById,
-  readEventsByConversation,
   readMessagesByConversation,
   readStandingConversations,
   readTurnsByConversation,
@@ -96,8 +96,6 @@ const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.T
 
 interface ConversationOverrides {
   readonly kind?: NonNullable<ConversationRow["kind"]>;
-  readonly providerId?: string | null;
-  readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
 }
 
@@ -147,21 +145,6 @@ async function insertMessage(
   });
 }
 
-async function insertEvent(
-  userId: string,
-  conversationId: string,
-  messageId: string,
-  seq: number,
-): Promise<string> {
-  return insertEventRow(database.run, {
-    userId,
-    conversationId,
-    messageId,
-    seq,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-  });
-}
-
 async function countConversations(id: string): Promise<number> {
   return (await readConversationById(database.run, id)).length;
 }
@@ -171,7 +154,7 @@ function readRecords(read: MessageListRead): readonly StoredMessageRecord[] {
   return read.ok ? read.value : [];
 }
 
-/** A main conversation with three messages, an event on each, and the turn that wrote them. */
+/** A main conversation with three messages and the turn that wrote them. */
 async function populateMain(
   userId: string,
 ): Promise<{ main: string; turn: string; ids: string[] }> {
@@ -179,9 +162,7 @@ async function populateMain(
   const turn = await insertTurn(userId, main);
   const ids: string[] = [];
   for (const seq of [1, 2, 3]) {
-    const id = await insertMessage(userId, main, seq, { turnId: turn });
-    await insertEvent(userId, main, id, seq);
-    ids.push(id);
+    ids.push(await insertMessage(userId, main, seq, { turnId: turn }));
   }
   return { main, turn, ids };
 }
@@ -342,11 +323,7 @@ test("a conversation stamped deleted disappears from every read on the next call
         .where(eq(messagesTable.conversationId, rows.main)),
     ),
   );
-  const observed = await insertConversation(userId, {
-    kind: CONVERSATION_KIND.OBSERVED,
-    providerId: "conductor",
-    providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
-  });
+  const observed = await insertConversation(userId, { kind: CONVERSATION_KIND.OBSERVED });
   const observedTurn = await insertTurn(userId, observed);
   const observedRow = await insertMessage(userId, observed, 1, {
     turnId: observedTurn,
@@ -416,7 +393,6 @@ test("the purge takes a stamped conversation and everything under it once the wi
   assert.equal(await countConversations(child), 0);
   assert.equal((await readMessagesByConversation(database.run, main)).length, 0);
   assert.equal((await readTurnsByConversation(database.run, main)).length, 0);
-  assert.equal((await readEventsByConversation(database.run, main)).length, 0);
   assert.equal(await countConversations(kept), 1);
   assert.equal(await countConversations(recent), 1);
   assert.equal(await countConversations(standing), 1);

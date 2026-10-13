@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -12,9 +17,6 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { Duration, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   agentInboxItems,
   answerInboxItem,
@@ -26,8 +28,6 @@ import {
   readInboxItem,
   withdrawInboxAnswer,
 } from "../server/hosted/inbox-store";
-import { deletePlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -87,7 +87,7 @@ const SETTINGS: InboxPost = {
   needsReply: false,
 };
 
-it.layer(testSqlClient)("the inbox store", (it) => {
+it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
     "a post is one open item; posting under the same key again writes it again, moves its revision on, and opens it once answered",
     () =>

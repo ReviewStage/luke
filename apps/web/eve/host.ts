@@ -1,16 +1,14 @@
 import { Effect } from "effect";
-import type { SessionAuth } from "eve/context";
+import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
+import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
+import { turnServers } from "../server/hosted/agent-runtime/servers.js";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
 import {
   type BrainHostSeams,
   productionBrainHostSeams,
 } from "../server/hosted/brain-host/production.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
-import {
-  type LinearAdmission,
-  linearAccessToken,
-  linearConnection,
-} from "../server/hosted/linear-connection.js";
+import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 
 /**
@@ -55,13 +53,20 @@ export function relayChildEvent(
 }
 
 /**
- * The Linear connection under one of this project's ownership checks, the
- * root's or the worker's, for each agent's own `connections/linear.ts`: the
- * token read runs here, at the edge, under the check that agent's model
- * runs under too.
+ * Every integration one of this project's agents is handed, for that
+ * agent's own `connections/integrations.ts`: the standing and the token
+ * reads run here, at the edge, under the check that agent's model runs
+ * under too, and the role's policy decides the servers
+ * (`server/hosted/agent-runtime/servers.ts`).
  */
-export function linearConnectionFor(
-  admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
+export function integrationConnectionsFor(
+  role: typeof AGENT_ROLE.PLANNER | typeof AGENT_ROLE.PLANNER_WORKER,
 ) {
-  return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
+  const profile = ROLE_PROFILE[role];
+  const admit = profile.delegated ? host.admitDelegated : host.admit;
+  return integrationConnections({
+    servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
+    token: (provider) => (auth, sessionId) =>
+      runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  });
 }

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { isToolUIPart, type ToolSet } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -12,8 +14,7 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CONNECTION_TOOL } from "../server/hosted/connection-tools";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
+import { INTEGRATION } from "../server/hosted/integrations";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
@@ -253,7 +254,7 @@ for (const { agent, tools } of TOOL_SETS) {
               state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
             },
             {
-              type: `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`,
+              type: `tool-${INTEGRATION.linear.REMOTE_TOOL}`,
               toolCallId: NESTED_CALL,
               state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
             },
@@ -282,7 +283,7 @@ for (const { agent, tools } of TOOL_SETS) {
         assert.deepEqual(recording.refusals, []);
         const calls = await answeredCalls(recording, target);
         const nested = calls.find((call) => call.toolCallId === NESTED_CALL);
-        assert.equal(nested?.type, `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`);
+        assert.equal(nested?.type, `tool-${INTEGRATION.linear.REMOTE_TOOL}`);
         assert.equal(nested?.state, TOOL_PART_STATE.OUTPUT_ERROR);
         assert.equal(
           calls.find((call) => call.toolCallId === EXECUTE_CALL)?.state,
@@ -291,6 +292,27 @@ for (const { agent, tools } of TOOL_SETS) {
       }),
   );
 }
+
+it.effect(
+  "a nested call of a Notion tool stands in the record under Notion's own stored name",
+  () =>
+    Effect.promise(async () => {
+      const recording = await recorder(HOSTED_TOOL_SET);
+      const target = await play(
+        recording,
+        linearTurn("turn_0", { toolName: "notion__notion-search" }),
+      );
+
+      assert.deepEqual(recording.refusals, []);
+      const nested = (await answeredCalls(recording, target))[2];
+      assert.equal(nested?.type, `tool-${INTEGRATION.notion.REMOTE_TOOL}`);
+      assert.deepEqual(nested?.input, {
+        remoteTool: "notion-search",
+        parentCallId: EXECUTE_CALL,
+        input: ISSUE_INPUT,
+      });
+    }),
+);
 
 it.effect(
   "a nested call of no Linear tool is left out with its result, and the turn around it is recorded whole",
@@ -338,7 +360,7 @@ it.effect(
       const nested = journal?.parts
         .filter(isToolUIPart)
         .find((part) => part.toolCallId === NESTED_CALL);
-      assert.equal(nested?.type, `tool-${CONNECTION_TOOL.LINEAR_REMOTE}`);
+      assert.equal(nested?.type, `tool-${INTEGRATION.linear.REMOTE_TOOL}`);
       assert.equal(nested?.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.match(
         JSON.stringify(nested && "output" in nested ? nested.output : null),

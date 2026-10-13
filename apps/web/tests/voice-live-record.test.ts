@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import {
+  VOICE_WRITE_REFUSAL,
+  type VoiceTarget,
+  type VoiceWriteResult,
+  voiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+} from "@sidecar/database/models/writer";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -29,16 +42,6 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
-import {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  storeWriter,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  voiceWriter,
-} from "../server/hosted/store";
-import { VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
 import {
   LIVE_CLIENT_EVENT,
   type LiveAppendEvent,
@@ -47,7 +50,6 @@ import {
 } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import { settled } from "./support/settle";

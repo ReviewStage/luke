@@ -33,6 +33,7 @@ import {
   WORKER_TOOL_NAMES,
 } from "../server/hosted/coder-host/tool-set";
 import { CONNECTION_TOOL } from "../server/hosted/connection-tools";
+import { INTEGRATION } from "../server/hosted/integrations";
 
 /**
  * What the coding agent is declared as, held to the decisions the plan
@@ -75,12 +76,16 @@ test("the agent runs none of eve's default tools, caps no input tokens, and has 
   ]);
 });
 
-test("the tools authored for the agent and the Linear connection's calls are exactly the writer's tool set, with every sandbox tool among them", () => {
+test("the tools authored for the agent and every integration's calls are exactly the writer's tool set, with every sandbox tool among them", () => {
   const authored = authoredTools(TOOLS_DIRECTORY);
   const authoredSet = new Set(authored);
   for (const name of SANDBOX_TOOLS) assert.ok(authoredSet.has(name), name);
   assert.deepEqual(
-    [...authored, ...Object.values(CONNECTION_TOOL)].sort(),
+    [
+      ...authored,
+      ...Object.values(CONNECTION_TOOL),
+      ...Object.values(INTEGRATION).map((integration) => integration.REMOTE_TOOL),
+    ].sort(),
     Object.keys(CODER_TOOL_SET).sort(),
   );
   assert.deepEqual(authored, Object.values(CODER_TOOL).sort());
@@ -244,6 +249,21 @@ test("the session is told when to delegate, how to choose a worker's model, and 
       "run at once",
       "cheaper or faster model",
       "read-only",
+    ]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
+  }
+});
+
+test("the session is told a `/name` in the developer's words names a skill to load before anything else, and where to read one added since it began", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief, false);
+    for (const kept of [
+      "`/name`",
+      `\`${CODER_TOOL.LOAD_SKILL}\``,
+      "before anything else",
+      "`.agents/skills/<name>/`",
+      "`.claude/skills/<name>/`",
     ]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }

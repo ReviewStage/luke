@@ -148,6 +148,34 @@ test("a delegated worker's tab is held to the plan's agents: it stands while the
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
+test("an agent's Changes tab opens once and is chosen, stands while the agent's own tab does, closes to the tab viewed before it, and is kept across no launch", () => {
+  const panel = mount([AGENT]);
+  const changes = { changes: AGENT };
+  act(() => panel.control().onChoose(changes));
+  assert.equal(panel.control().open, true);
+  assert.deepEqual(panel.control().tab, changes);
+  act(() => panel.control().onChoose({ changes: AGENT }));
+  assert.deepEqual(panel.control().changes, [changes]);
+  assert.equal(sameTab(changes, { subagent: AGENT }), false);
+
+  // Its agent's tab closed, the panel shows the first tab; while the agents are unread it stands.
+  panel.stand([OTHER]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
+  panel.stand(undefined);
+  assert.deepEqual(panel.control().tab, changes);
+
+  panel.stand([AGENT]);
+  act(() => panel.control().onClose(changes));
+  assert.deepEqual(panel.control().changes, []);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
+
+  // A launch after it was chosen opens none, on the first tab.
+  act(() => panel.control().onChoose(changes));
+  const second = mount(undefined);
+  assert.deepEqual(second.control().changes, []);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
 test("a closed tab is replaced by one the plan draws, never a tab viewed that another plan's work holds, and closing the last leaves none", () => {
   const panel = mount([], [CALL]);
   act(() => panel.control().onChoose({ subagent: CALL }));
@@ -661,6 +689,21 @@ test("a pinned agent takes the name its tab has now on its own plan, and keeps t
 
   act(() => panel.control().onRenamePins(PLAN, new Map([[AGENT, "Invite flow"]])));
   assert.equal(panel.control().pins[0]?.label, "Invite flow");
+});
+
+test("a pinned agent keeps the model it ran on across a launch, for its row to wear its harness's mark on another plan", () => {
+  const first = mount([AGENT]);
+  act(() => first.control().onPin({ agent: AGENT }, "GPT-5.5", "openai/gpt-5.5"));
+  act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+
+  const second = mount([AGENT]);
+  assert.deepEqual(
+    second.control().pins.map(({ tab, model }) => ({ tab, model })),
+    [
+      { tab: SIDE_PANEL_TAB.WORK, model: undefined },
+      { tab: { agent: AGENT }, model: "openai/gpt-5.5" },
+    ],
+  );
 });
 
 test("a file shown from its pin before the plan's code is read is chosen once it is, though other tabs arrive first", () => {

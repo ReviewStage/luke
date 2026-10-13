@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { eq } from "drizzle-orm";
-import { Cause, DateTime, Effect, Option } from "effect";
-import { SqlClient } from "effect/unstable/sql";
-import { member, organization, user } from "../server/db/auth-schema";
-import { personalWorkspace } from "../server/db/personal-workspace-schema";
-import { db } from "../server/db/query";
-import type { WorkspaceSeams } from "../server/hosted/workspace-seams";
+import { db } from "@sidecar/database/core/query";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
 import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
-} from "../server/hosted/workspace-store";
-import { testSqlClient } from "./support/sql-client";
+} from "@sidecar/database/models/workspace-store";
+import { member, organization, user } from "@sidecar/database/schemas/auth";
+import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
+import { getTestDB } from "@sidecar/database/testing";
+import { eq } from "drizzle-orm";
+import { Cause, DateTime, Effect, Option } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
 import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/workspaces";
 
@@ -61,7 +61,7 @@ const openSharedWorkspace = (
     return id;
   });
 
-it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) => {
   it.effect(
     "an account's first ensure makes its personal workspace and the second makes none",
     () =>

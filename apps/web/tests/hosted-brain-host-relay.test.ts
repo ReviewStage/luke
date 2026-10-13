@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import { hostTurnId, reasoningItemId } from "@sidecar/database/models/ids";
+import { awaitingLinesOf } from "@sidecar/database/models/message-reads";
+import {
+  type ConversationTarget,
+  STORE_WRITE_REFUSAL,
+  storeWriter,
+} from "@sidecar/database/models/writer";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -17,11 +26,9 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
-import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
 import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning";
 import {
   FAILURE_DETAIL_BOUNDS,
@@ -32,10 +39,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
-import { awaitingLinesOf } from "../server/hosted/store/message-reads";
-import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { stampedEveEvent } from "./support/eve-events";
 import { parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

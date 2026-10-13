@@ -1,4 +1,11 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
+import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
@@ -15,19 +22,12 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import { user } from "../../server/db/auth-schema";
-import { db } from "../../server/db/query";
-import { sqlClientOverUrl } from "../../server/db/sql-client";
-import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../../server/hosted/brain-host/ids";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
-import { openPlanConversation, readPlan, savePlanText } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
-import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import { startPlan } from "../../tests/support/workspaces";
 import {

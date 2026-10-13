@@ -1,12 +1,12 @@
+import { workspaceSeams } from "@sidecar/database/models/workspace-seams";
+import * as authSchema from "@sidecar/database/schemas/auth";
+import { openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
 import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect } from "effect";
 import { authDatabaseAdapter } from "../../server/auth-database";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../../server/auth-policy";
-import * as authSchema from "../../server/db/auth-schema";
-import { workspaceSeams } from "../../server/hosted/workspace-seams";
-import { openMigratedPglite, sqlClientOverPglite } from "./sql-client";
 
 /**
  * workspace-plugin.ts -- Better Auth with the organization plugin over a migrated PGlite of its own.

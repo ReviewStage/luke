@@ -23,8 +23,12 @@ import { cn } from "./utils";
  * red mark if it failed, trailing the words so that only their cut moves
  * when the mark goes; a call that ended well keeps no seat for one. A
  * subject the body says whole, as a command's input is the command, is
- * the closed row's preview, and the open row says its verb alone. There
- * is no chevron: the icon leads, and a hover fill says the line opens. The body under
+ * the closed row's preview, and the open row says its verb alone. The
+ * verb is in the full ink and the icon and the subject in the muted one,
+ * so a reader scans what each call did and the subject reads as its
+ * preview, fading where the line cuts it rather than ending on an
+ * ellipsis. There is no chevron: the icon leads, and a hover fill says
+ * the line opens. The body under
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
  * the rest behind Show more. What the words say is the caller's decision
@@ -151,9 +155,9 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   state: ToolState;
   /** The tool's icon, drawn at 16px. */
   icon: ReactNode;
-  /** The verb before the subject; none for a command, which is its own line. */
+  /** What the call did, in the full ink: its verb, or what a described command is for; none for a line that is its subject alone. */
   label: string | undefined;
-  /** What the call was done to; none for a call that has no one input a reader looks for first. */
+  /** What the call was done to, in the muted ink after the label; none for a call that has no one input a reader looks for first. */
   subject: string | undefined;
   /** Whether the subject is code (a command, a path), set in mono, rather than words. */
   subjectIsCode?: boolean;
@@ -163,12 +167,22 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
 
 /**
  * How a call's line is set, whether it folds its body open or opens
- * somewhere else: in the muted ink, subject and all, since a turn runs
- * many calls and the model's own words should be the one thing in full
- * ink; the body under it keeps its own.
+ * somewhere else: in the muted ink, which its icon, its subject, and its
+ * working mark keep, while its label is set in the full ink over it; the
+ * body under it keeps its own.
  */
 export const TOOL_LINE_CLASS =
   "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary";
+
+/**
+ * The fade a subject ends on where the line cuts it, over the last
+ * `--label-fade` as a cut label's (desktop.css). Note that it is drawn
+ * without measuring the words, unlike a label's (`use-clipped.ts`),
+ * because the subject's box takes the line's whole rest whatever it
+ * holds, so words that stop short end before the fade begins, and words
+ * still streaming in reach it without a resize to measure them by.
+ */
+const SUBJECT_FADE = "[mask-image:linear-gradient(to_left,transparent,#000_var(--label-fade))]";
 
 /** What a call's line says: its icon, what it did, and where it stands. */
 export function ToolLine({
@@ -186,14 +200,23 @@ export function ToolLine({
       >
         {icon}
       </span>
-      <span className="min-w-0 flex-1 truncate">
+      {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
+      <span className="flex min-w-0 flex-1 items-baseline gap-1">
         {label === undefined ? null : (
-          <span className="text-muted-foreground">
+          <span className="min-w-0 truncate text-foreground">
             {subject === undefined ? label : `${label} `}
           </span>
         )}
         {subject === undefined ? null : (
-          <span className={subjectIsCode ? "font-mono text-[11.5px]" : undefined}>{subject}</span>
+          <span
+            className={cn(
+              "min-w-0 flex-1 basis-0 overflow-hidden whitespace-nowrap",
+              SUBJECT_FADE,
+              subjectIsCode && "font-mono text-[11.5px]",
+            )}
+          >
+            {subject}
+          </span>
         )}
       </span>
       <ToolStateMark state={state} />
@@ -294,7 +317,7 @@ export function ToolOutput({ block, errorText, className, ...props }: ToolOutput
     return (
       <div className={className} data-tool-output="" {...props}>
         <p
-          className="m-0 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+          className="m-0 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-danger whitespace-pre-wrap [overflow-wrap:anywhere] select-text"
           role="alert"
         >
           {errorText}

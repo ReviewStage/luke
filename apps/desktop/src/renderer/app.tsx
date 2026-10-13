@@ -8,7 +8,12 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { type AppInboxPlan, RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+  sessionReplayBootstrap,
+} from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -55,6 +60,9 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxPlan[] = [];
+
+/** No plan holds an inbox item, as the document reads before main has answered. */
+const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -205,7 +213,13 @@ export function App(): React.JSX.Element {
     shown: tab === PANEL_TAB.PLANS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
+    inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
+    // Arriving at Settings lands on its front page, so the page is turned after.
+    onOpenIntegrations: () => {
+      changeTab(PANEL_TAB.SETTINGS);
+      setSettingsView(SETTINGS_VIEW.INTEGRATIONS);
+    },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
   // Read through a ref, because the tab hands a new closure each render and
@@ -234,12 +248,13 @@ export function App(): React.JSX.Element {
   );
   // The call card, while this window has the keyboard and its call bar is not
   // on screen: another plan, the new-plan page, Settings, or the plan itself
-  // under its version history or a side panel filling the window.
+  // under its version history, the Inbox, or a side panel filling the window.
   const focused = useWindowFocused();
   const planShown = callBarPlanId({
     plansTab: tab === PANEL_TAB.PLANS,
     documentPage: plans.page === PLANS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
+    inboxOpen: plans.inboxView.open,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activePlanId: state?.planning.activePlanId,
   });
@@ -359,13 +374,14 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, or a plan's version history, back to wherever it was
+      // time: Settings, a plan's version history, or the Inbox, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the new-plan page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
@@ -480,7 +496,6 @@ export function App(): React.JSX.Element {
             },
             updates,
             settings,
-            onFeedback: setFeedbackKind,
             shortcuts,
             // The workspace Settings shows members of is the one the sidebar lists.
             workspace: {

@@ -3,10 +3,12 @@ import { MarkdownMessage } from "../markdown-message";
 import {
   ConfirmDialog,
   DIALOG_TONE,
+  type DialogConfirm,
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
 import { Skeleton, SkeletonRegion } from "../skeleton";
+import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
 import { momentText } from "./plan-time";
@@ -50,14 +52,18 @@ const PAGE_SKELETON = [
   { heading: "30%", lines: ["100%", "91%", "72%"] },
 ] as const;
 
+/** What the toast says once a version is restored, and why its Undo did nothing. */
+const VERSION_RESTORED_NOTE = "Version restored";
+const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
+
 /** Why Restore this version is unavailable over the newest version. */
 const CURRENT_HINT = "This version is already current";
 
-/** The question Restore this version asks, naming the version. */
-function restoreQuestion(at: number): DialogQuestion {
+/** The question Restore this version asks, naming the version and what it is of. */
+function restoreQuestion(at: number, noun: string): DialogQuestion {
   return {
     title: "Restore this version?",
-    body: `The plan will go back to the version from ${versionMoment(at)}. The plan as it stands now stays in the history, so you can restore it again.`,
+    body: `The ${noun} will go back to the version from ${versionMoment(at)}. The ${noun} as it stands now stays in the history, so you can restore it again.`,
     verb: "Restore",
     running: "Restoring",
     tone: DIALOG_TONE.PRIMARY,
@@ -148,39 +154,86 @@ function VersionContent({
 }
 
 /**
- * The version chosen in the version history, the page beside its list: the
- * bar with when it was saved and its restore, over the version itself.
- * `shown` is whether the window shows it, which the restore's question
- * stands on, and `onRestored` what follows a restore that landed. An
- * archived plan's versions are read but not restored, so its bar offers no
- * restore.
+ * The restore of the version chosen, asked in the window's dialog: held by
+ * the history around the page rather than the page itself, so a version
+ * row's menu can choose its version and ask in one press. `shown` is
+ * whether the window shows the history, which the question stands on, and
+ * `onRestored` what follows a restore that landed. Note that the answer
+ * restores whichever version is chosen when it is given, which is the one
+ * the question names, since choosing another takes focus off the dialog.
  */
-export function VersionView({
-  history,
-  viewing,
-  shown,
-  onRestored,
-  restorable = true,
-  title,
-  section,
-}: {
-  history: PlanHistoryControl;
-  viewing: ViewedVersion;
-  shown: boolean;
-  onRestored: () => void;
-  /** Whether the version may be restored: not while the plan is archived. */
-  restorable?: boolean;
-  /** The plan's name, which every version is drawn under. */
-  title?: string | undefined;
-  /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
-  section?: number | undefined;
-}): React.JSX.Element {
+export function useVersionRestore(
+  history: PlanHistoryControl,
+  shown: boolean,
+  restorable: boolean,
+  onRestored: () => void,
+): DialogConfirm {
   // An archive landing while the question stands takes the question down with the button.
-  const restore = useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
+  return useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
     const result = await history.onRestore();
     if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
     return result;
   });
+}
+
+/**
+ * Says in the window's toast that a restore landed, with its Undo where the
+ * history names the version that stood before it: a restore of that
+ * version, itself a restore, which says so where it is refused.
+ */
+export function sayRestored(
+  toast: (notice: ToastNotice) => void,
+  undo: (() => Promise<boolean>) | undefined,
+): void {
+  if (undo === undefined) {
+    toast({ words: VERSION_RESTORED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    return;
+  }
+  toast({
+    words: VERSION_RESTORED_NOTE,
+    tone: TOAST_TONE.DONE,
+    action: {
+      label: UNDO_LABEL,
+      onPress: () => {
+        undo().then((undone) => {
+          if (undone) return;
+          toast({
+            words: RESTORE_UNDO_REFUSED_NOTE,
+            tone: TOAST_TONE.FAILED,
+            hold: TOAST_HOLD.FAILED,
+          });
+        });
+      },
+    },
+  });
+}
+
+/**
+ * The version chosen in the version history, the page beside its list: the
+ * bar with when it was saved and its restore, over the version itself. An
+ * archived plan's versions are read but not restored, so its bar offers no
+ * restore.
+ */
+export function VersionView({
+  viewing,
+  restore,
+  restorable = true,
+  title,
+  noun = "plan",
+  section,
+}: {
+  viewing: ViewedVersion;
+  /** The restore's question, held by the history around the page (`useVersionRestore`). */
+  restore: DialogConfirm;
+  /** Whether the version may be restored: not while the plan is archived. */
+  restorable?: boolean;
+  /** The plan's name, which every version is drawn under. */
+  title?: string | undefined;
+  /** What the versions are of, as the restore's question names it. */
+  noun?: string;
+  /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
+  section?: number | undefined;
+}): React.JSX.Element {
   const { line } = viewing;
   return (
     <>
@@ -210,7 +263,7 @@ export function VersionView({
           <VersionContent viewing={viewing} title={title} section={section} />
         </div>
       </div>
-      <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at)} />
+      <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>
   );
 }

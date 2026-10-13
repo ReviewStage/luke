@@ -1,14 +1,14 @@
-import { serialQueue } from "@sidecar/runtime/effect";
+import type {
+  VoiceTarget,
+  VoiceWriteResult,
+  VoiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
+import { causeKind, serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import {
-  STORE_WRITE_EFFECT,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  type VoiceWriter,
-} from "../hosted/store/index.js";
 import type { LiveServerEvent } from "../live.js";
 
 /**
@@ -71,9 +71,12 @@ export function hostedLiveRecord({
 > {
   return Effect.gen(function* () {
     // Every end of a write, its death included, is the exit its deferred is
-    // settled with, so the queue itself is handed nothing to catch.
+    // settled with, so the queue itself is handed nothing to catch. Note that
+    // a defect here is logged by its kind alone, because its message or a
+    // statement beneath it can quote the words being written.
     const waiting = yield* serialQueue<SqlClient.SqlClient>({
-      onDefect: (cause) => Effect.logError("a live record write could not be settled", cause),
+      onDefect: (cause) =>
+        Effect.logError(`a live record write could not be settled: ${causeKind(cause)}`),
     });
     let last: Landed | undefined;
 

@@ -1,17 +1,22 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { BackIcon, LaptopIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
+import { AttentionMark } from "../settings/marks";
 import { SETTINGS_PAGE } from "../settings/pages";
+import { TemplateVersionHistory } from "../settings/plan-template-history";
+import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
 import {
   SettingsPanel,
   type SettingsPanelProps,
   settingsRowsInput,
+  voicePageAttention,
 } from "../settings/settings-panel";
 import { useSettingsWrites } from "../settings/writes";
 import {
@@ -23,7 +28,8 @@ import {
   settingsSearchEntries,
 } from "../settings-search";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
-import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
+import { Shortcut } from "../shortcut";
+import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -38,9 +44,14 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * Settings as a desktop app lays them out: the sidebar turns into the list of
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
- * are the panel's own, drawn by `SettingsPanel`; its front-page index and its
- * back buttons are this list's job here, and a page's reset rides the
- * toolbar's right edge beside the page's title.
+ * are the panel's own, drawn by `SettingsPanel`; its front-page index, with
+ * the Voice row's attention mark, and its back buttons are this list's job
+ * here. The page has no top bar: its title heads its column, under the
+ * window's drag strip, and a page's reset ends the title's line. The plan
+ * template is the one page drawn apart from the panel: it is a plan's page,
+ * document and all (`../settings/plan-template-page.tsx`), and its version
+ * history takes the whole window as a plan's does, Back and Escape leaving it
+ * for the page.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -72,9 +83,14 @@ export function DesktopSettings({
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
-  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  const [templateHistory, setTemplateHistory] = useState(false);
+  // The template's history is the template page's, so a page turned another way, by a shortcut or a voice request, leaves it.
+  if (templateHistory && settings.view !== SETTINGS_VIEW.PLAN_TEMPLATE) setTemplateHistory(false);
+  // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
+  const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
@@ -111,6 +127,21 @@ export function DesktopSettings({
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
 
+  // The template's version history takes the whole window as a plan's does, and leaves for the template.
+  // Note that the call card floats while it does, as over a plan's history, since the page list it rides is gone.
+  if (templateHistory) {
+    return (
+      <>
+        <TemplateVersionHistory
+          sidebar={sidebar}
+          history={history}
+          account={settings.account}
+          onExit={() => setTemplateHistory(false)}
+        />
+        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
+      </>
+    );
+  }
   return (
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages">
@@ -124,7 +155,10 @@ export function DesktopSettings({
         >
           <BackIcon />
           Back
-          <ShortcutGlyphs command={APP_COMMAND.EXIT_SETTINGS} className="row-shortcut" />
+          <Shortcut
+            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord}
+            className="row-shortcut"
+          />
         </button>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
@@ -151,6 +185,9 @@ export function DesktopSettings({
                     >
                       {page.icon}
                       {page.title}
+                      {view === SETTINGS_VIEW.VOICE && voiceNote ? (
+                        <AttentionMark note={voiceNote} />
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -164,17 +201,23 @@ export function DesktopSettings({
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>
-      <section className="settings-page" aria-label={shown.title}>
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{shown.title}</h1>
+      {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
+        <PlanTemplatePage
+          signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN}
+          onShowHistory={() => setTemplateHistory(true)}
+        />
+      ) : (
+        <section className="settings-page" aria-label={shown.title}>
+          <div className="desktop-drag-strip" />
+          <div className="settings-page-scroll">
+            <header className="settings-page-head">
+              <h1 className="settings-page-title">{shown.title}</h1>
+              {reset}
+            </header>
+            <SettingsPanel {...settings} />
           </div>
-          {reset ? <div className="desktop-toolbar-actions">{reset}</div> : null}
-        </header>
-        <div className="settings-page-scroll">
-          <SettingsPanel {...settings} />
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

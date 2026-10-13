@@ -9,6 +9,8 @@
  * a coding agent's journals. A leaf over the row alone, so it reads nothing.
  */
 
+import { TurnUsageColumnSchema } from "@sidecar/database/models/columns";
+import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import {
   CODING_AGENT_BOUNDS,
   TURN_ENDING,
@@ -20,8 +22,6 @@ import { CATALOG_ID_SEPARATOR } from "@sidecar/hosted/model-label";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Option, Schema } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
-import { TurnUsageColumnSchema } from "./store/database.js";
-import type { StoredTurnRecord } from "./store/message-reads.js";
 
 /** The row's fields a record is read from. */
 export type RecordedTurn = Pick<
@@ -32,10 +32,10 @@ export type RecordedTurn = Pick<
 const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
 
 /**
- * A recorded model as the catalog names it. Note that the brain reaches
- * OpenAI directly (`brain-host/model.ts`), so its turn rows record OpenAI's
- * own id, which the catalog names under its provider; an id that already
- * names one is kept.
+ * A recorded model as the catalog names it. Note that the brain's turn
+ * rows written before it named its model by the catalog's id
+ * (`brain-host/model.ts`) record OpenAI's own id, which the catalog names
+ * under its provider; an id that already names one is kept.
  */
 function catalogIdOf(model: string): string {
   return model.includes(CATALOG_ID_SEPARATOR)

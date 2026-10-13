@@ -13,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
@@ -208,6 +209,7 @@ test("the main part starts on the default, naming nothing, and says the default 
   assert.deepEqual(presses, [undefined]);
 
   const menu = await openMenu(page);
+  assertOpensWhatItNames(buttonNamed(page, "Choose a model to start with"));
   assert.deepEqual(reads, ["models", "default", "models", "default"]);
   const search = menu.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
   assert.ok(search, "the search is the menu's first row");
@@ -256,6 +258,28 @@ test("the main part starts on the default, naming nothing, and says the default 
   assert.deepEqual(rowsOf(menu), []);
   assert.equal(menu.querySelector(".plan-compose-menu-note")?.textContent, "No models match");
   assert.deepEqual(presses, [undefined], "nothing in the menu started anything");
+});
+
+test("a press of Start with the menu open closes the menu and starts on the default", async () => {
+  const { presses, control } = standing();
+  const page = mount(control);
+  await openMenu(page);
+  const main = buttonNamed(page, "Start a coding agent");
+  // A real click focuses the main part first, which lies inside the button, then presses it.
+  act(() => main.focus());
+  assert.ok(page.querySelector(".plan-compose-menu"), "focus moving to Start alone keeps it open");
+  act(() => main.click());
+  assert.ok(page.querySelector(".plan-compose-menu") === null, "the menu closed");
+  assert.deepEqual(presses, [undefined], "and Start started on the default");
+});
+
+test("a press of Start under way still closes an open menu, starting nothing", async () => {
+  const { presses, control } = standing();
+  const page = mount({ ...control, start: { ...control.start, busy: true } });
+  await openMenu(page);
+  act(() => buttonNamed(page, "Start a coding agent").click());
+  assert.ok(page.querySelector(".plan-compose-menu") === null, "the menu closed");
+  assert.deepEqual(presses, []);
 });
 
 test("a pick of a model keeps it as the default at the effort it was running, or the model's first where it lacks that one, and closes the menu", async () => {

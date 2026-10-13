@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+} from "@sidecar/database/models/account-store";
+import type { StandingSession } from "@sidecar/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import {
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
+import {
+  type CatalogModel,
+  CODING_AGENT_DEFAULT_CHOICE,
+  MODEL_PROVIDER,
+  type ModelChoice,
+} from "@sidecar/hosted/models-wire";
 import { LIVE_VOICE } from "@sidecar/live";
 import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
@@ -10,18 +25,21 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
-import type {
-  AccountPreferencesRow,
-  AccountPreferencesWrite,
-} from "../server/hosted/account-store.js";
+import { EVE_RESET_OUTCOME, type EveSessions } from "../server/hosted/brain-host/eve-sessions.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
-  CODING_AGENT_DEFAULT_CHOICE,
+  type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnectFailure,
+  UNCONFIGURED_CONNECTOR,
+} from "../server/hosted/integration-connect.js";
+import {
   ModelCatalog,
   ModelCatalogUnavailable,
   modelCatalogOf,
 } from "../server/hosted/model-catalog.js";
+import { integrationConnectOf } from "./support/integration-connect.js";
 import { noDatabase } from "./support/no-database.js";
 import {
   type RecordedResponse,
@@ -76,13 +94,29 @@ const CATALOG: readonly CatalogModel[] = [
   },
 ];
 
+/** The account's planning session and one coding agent's, as its standing conversations record them. */
+const SESSIONS: StandingSession[] = [
+  { sessionId: "wrun_planning", kind: CONVERSATION_KIND.PLAN },
+  { sessionId: "wrun_agent", kind: CONVERSATION_KIND.CODING_AGENT },
+];
+
 const SOL_AT_HIGH = { model: "openai/gpt-6.1-sol", effort: "high" } as const satisfies ModelChoice;
 
 interface Backing {
+  /** The eve sessions the account's standing conversations run in. */
+  sessions: StandingSession[];
+  /** The sessions eve was asked to retire, in order. */
+  retired: string[];
   deleted: string[];
   forgotten: string[];
+  /** Each grant Vercel Connect was asked to revoke and did, as its provider and its account. */
+  revoked: (readonly [IntegrationProvider, string])[];
   stored: Map<string, AccountPreferencesRow>;
   forgetAnalyticsFails: boolean;
+  /** Vercel Connect refuses every revoke, the way an outage there reads. */
+  revokeFails: boolean;
+  /** The deployment names no connector for any integration. */
+  connectUnconfigured: boolean;
   /** The store refuses every statement, the way an unreachable database does. */
   storeUnavailable: boolean;
   /** The catalog cannot be read, the way an outage at AI Gateway reads. */
@@ -91,10 +125,15 @@ interface Backing {
 
 function backing(overrides: Partial<Backing> = {}): Backing {
   return {
+    sessions: [],
+    retired: [],
     deleted: [],
     forgotten: [],
+    revoked: [],
     stored: new Map(),
     forgetAnalyticsFails: false,
+    revokeFails: false,
+    connectUnconfigured: false,
     storeUnavailable: false,
     catalogUnavailable: false,
     ...overrides,
@@ -168,6 +207,39 @@ function writePreferences(state: Backing) {
   };
 }
 
+const UNCONFIGURED = new IntegrationConnectFailure({
+  reason: INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED,
+});
+
+/** Vercel Connect as the delete asks it about one provider: only a revoke, which lands or fails as the backing says. */
+function connectorDouble(state: Backing, provider: IntegrationProvider): ConnectorService {
+  return {
+    configured: true,
+    authorize: () => Effect.fail(UNCONFIGURED),
+    token: () => Effect.fail(UNCONFIGURED),
+    revoke: (userId) =>
+      state.revokeFails
+        ? Effect.fail(
+            new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.UNAVAILABLE }),
+          )
+        : Effect.sync(() => {
+            state.revoked.push([provider, userId]);
+          }),
+  };
+}
+
+/** Every provider's connector, configured over the backing or named by no variable at all. */
+function connectLayer(state: Backing) {
+  return integrationConnectOf((provider) =>
+    state.connectUnconfigured ? UNCONFIGURED_CONNECTOR : connectorDouble(state, provider),
+  );
+}
+
+/** Every provider's grant for the account, as a delete revokes them all. */
+function everyGrantOf(userId: string): (readonly [IntegrationProvider, string])[] {
+  return INTEGRATION_PROVIDER_LIST.map((provider) => [provider, userId] as const);
+}
+
 /** The catalog as the group reads it: the fixed list, or the outage. */
 function catalogLayer(state: Backing) {
   return state.catalogUnavailable
@@ -177,16 +249,38 @@ function catalogLayer(state: Backing) {
     : modelCatalogOf(CATALOG);
 }
 
+/** eve as the delete reaches it: only a reset, which retires the session named. */
+function eveDouble(state: Backing): EveSessions {
+  const unasked = () => Effect.die(new Error("the account group asks eve only to retire"));
+  return {
+    open: unasked,
+    send: unasked,
+    cancel: unasked,
+    reset: (sessionId) =>
+      Effect.sync(() => {
+        state.retired.push(sessionId);
+        return { outcome: EVE_RESET_OUTCOME.RESET };
+      }),
+  };
+}
+
 function groupSeams(state: Backing): AccountAppSeams {
   return {
     resolveUserId,
+    eveOrigin: () => undefined,
+    eve: () => eveDouble(state),
+    standingSessions: () => overStore(state, async () => state.sessions),
     deleteUser: (userId) => overStore(state, () => deleteUser(state)(userId)),
     readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
+    ownKeyProviders: () => Effect.succeed(new Set()),
     writePreferences: (userId, write) =>
       overStore(state, () => writePreferences(state)(userId, write)),
     // The plan template's path is answered over a real dialect in `account-plan-template.test.ts`.
     readPlanTemplate: () => Effect.die(new Error("this suite reads no plan template")),
     writePlanTemplate: () => Effect.die(new Error("this suite writes no plan template")),
+    listPlanTemplateRevisions: () => Effect.die(new Error("this suite reads no plan template")),
+    readPlanTemplateRevision: () => Effect.die(new Error("this suite reads no plan template")),
+    restorePlanTemplate: () => Effect.die(new Error("this suite writes no plan template")),
   };
 }
 
@@ -197,6 +291,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
       HttpRouter.provideRequest(Layer.succeed(HostedEnvironment, ENVIRONMENT)),
       HttpRouter.provideRequest(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
       HttpRouter.provideRequest(catalogLayer(state)),
+      HttpRouter.provideRequest(connectLayer(state)),
       HttpRouter.provideRequest(noDatabase),
     ),
     { disableLogger: true },
@@ -263,9 +358,16 @@ interface Exchange {
 const EXCHANGES: readonly Exchange[] = [
   {
     name: "delete-success",
-    state: () => backing(),
+    state: () => backing({ sessions: SESSIONS }),
     request: deleteRequest,
-    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID] }),
+    finalState: () =>
+      backing({
+        sessions: SESSIONS,
+        retired: SESSIONS.map(({ sessionId }) => sessionId),
+        deleted: [USER_ID],
+        forgotten: [USER_ID],
+        revoked: everyGrantOf(USER_ID),
+      }),
   },
   {
     name: "delete-wrong-method",
@@ -283,7 +385,23 @@ const EXCHANGES: readonly Exchange[] = [
     name: "delete-analytics-failure",
     state: () => backing({ forgetAnalyticsFails: true }),
     request: deleteRequest,
-    finalState: () => backing({ deleted: [USER_ID], forgetAnalyticsFails: true }),
+    finalState: () =>
+      backing({ deleted: [USER_ID], revoked: everyGrantOf(USER_ID), forgetAnalyticsFails: true }),
+  },
+  // Connect cannot revoke the grants: the account is deleted all the same.
+  {
+    name: "delete-revoke-failure",
+    state: () => backing({ revokeFails: true }),
+    request: deleteRequest,
+    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID], revokeFails: true }),
+  },
+  // A deployment naming no connector asks Connect nothing.
+  {
+    name: "delete-connect-unconfigured",
+    state: () => backing({ connectUnconfigured: true }),
+    request: deleteRequest,
+    finalState: () =>
+      backing({ deleted: [USER_ID], forgotten: [USER_ID], connectUnconfigured: true }),
   },
   {
     name: "preferences-read",
@@ -398,14 +516,15 @@ const EXCHANGES: readonly Exchange[] = [
     request: () => new Request(`${ORIGIN}/api/account/preferences`, { method: "DELETE" }),
     finalState: () => backing(),
   },
-  // The store is unreachable: the erasure is refused as unavailable, so the
-  // caller knows to ask again, and the analytics forget that ran first is
-  // the only thing that landed.
+  // The store is unreachable: the erasure is refused as unavailable before
+  // anything lands, since the account's sessions cannot even be read, so the
+  // caller asks again with every session, the analytics person, and every
+  // grant still standing for the retry.
   {
     name: "delete-store-unavailable",
     state: () => backing({ storeUnavailable: true }),
     request: deleteRequest,
-    finalState: () => backing({ storeUnavailable: true, forgotten: [USER_ID] }),
+    finalState: () => backing({ storeUnavailable: true }),
   },
   {
     name: "preferences-read-store-unavailable",

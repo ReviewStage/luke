@@ -12,6 +12,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
+  TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
@@ -28,6 +29,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
+import { CodingAgentsIcon } from "@sidecar/panel";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Duration, Effect } from "effect";
@@ -45,6 +47,7 @@ import {
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ringClipping, sheetStyle } from "#testing/css-rules";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { installHighlights } from "#testing/find-highlights";
 import {
@@ -53,11 +56,13 @@ import {
   UNPINNED_SUMMARY,
   usedPlan,
 } from "#testing/plans-control";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
+import { type InboxReadsControl, useInboxReads } from "../planning/inbox-reads";
 import {
   DOCUMENT_REGION,
   PLAN_MARK,
@@ -86,6 +91,7 @@ import {
 } from "../planning/use-side-panel";
 import { workerCallIds } from "../planning/work-model";
 import { ToastHost } from "../toast";
+import "../file-tree/index";
 import { DesktopPlans } from "./desktop-plans";
 import { SidePanelToggle } from "./side-panel";
 
@@ -453,6 +459,17 @@ test("the panel's tabs hang no pill, their words being enough, while Copy plan's
   assert.equal(copies, before + 1);
 });
 
+test("the keyboard's ring is drawn whole on every tab of the plan's strip and the panel's, the first and the last included", async () => {
+  const styled = await sheetStyle();
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const tabs = [...page.querySelectorAll<HTMLElement>(".tab-strip button")];
+
+  assert.ok(page.querySelectorAll(".tab-strip").length === 2, "the plan's strip and the panel's");
+  assert.ok(tabs.length >= 4);
+  assert.deepEqual(tabs.map((tab) => ringClipping(styled, tab)).filter(Boolean), []);
+});
+
 test("a panel too narrow for its tabs whole still draws every tab's label, hanging no pill on one whose label shows whole", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -727,7 +744,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
   // As an agent's tab: the task a card at the top, and a working line at the end while the subagent runs.
-  const card = content?.querySelector("[data-task-card]");
+  const card = content?.querySelector("[data-plan-card]");
   assert.ok(card?.textContent?.includes(job));
   assert.equal(card?.textContent?.includes(task), false, "folded to its line");
   const opener = card?.querySelector("summary");
@@ -830,7 +847,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   assert.equal(tabState(tabNamed(page, job)), "Working", "a ring around it while it runs");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
-  const card = content?.querySelector("[data-task-card], [data-plan-card]");
+  const card = content?.querySelector("[data-plan-card], [data-plan-card]");
   assert.equal(card?.getAttribute("aria-label"), "Task");
   assert.ok(card?.textContent?.includes(job));
   assert.ok(content?.querySelector("[data-working]"));
@@ -863,6 +880,58 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
   press(page, '[aria-label="Close Opus 5.5"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+});
+
+test("a delegated worker wears the mark of the model its delegation chose, though its agent runs in another harness", async () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const job = "Count the routes.";
+  const turn: CodingAgentMessage = {
+    id: "m-turn",
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-delegate",
+        toolCallId: "call_d1",
+        state: "output-available",
+        input: { task: job, model: "openai/gpt-6-astra", effort: "high" },
+        output: { result: "Three routes." },
+      },
+    ],
+  };
+  const worker: CodingAgentMessage = {
+    id: "w-1",
+    role: "assistant",
+    parts: [{ type: "text", text: "Three routes." }],
+  };
+  const readTranscript: TranscriptReader = ({ after, callId }) => {
+    if (after !== CODING_AGENT_CURSOR_START) return new Promise(() => undefined);
+    return Promise.resolve({
+      messages: callId === undefined ? [turn] : [worker],
+      cursor: "1:1",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    });
+  };
+  const page = mountOpenPlan({
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
+  });
+  act(() => tabNamed(page, "Opus 5.5").click());
+  await settle();
+  press(page, '[data-subagent-row][data-call-id="call_d1"]');
+  await settle();
+
+  const tab = tabNamed(page, job);
+  assert.ok(tab.querySelector('img.provider-mark[src="marks/codex-16.png"]'), "Codex's cloud");
+  assert.equal(tab.querySelector("svg.provider-mark"), null, "not its agent's Clawd");
 });
 
 test("a subagent's tab cuts a long job short and says the whole of it in its card, with the session's latest step, while a fixed tab hangs none", () => {
@@ -912,6 +981,73 @@ test("a planning worker whose call ended under it wears its glyph at rest and sa
   assert.ok(tab.querySelector("svg.lucide-bot"), "the worker's glyph");
   hover(tab);
   assert.deepEqual(cardParts(), [job, "Stopped", "Queue A lets an admin revoke."]);
+});
+
+test("a planning worker whose own task failed wears an alert at its tab's end and says it failed, as an agent whose turn failed does", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session);
+  const failed: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.FAILED,
+        ending: TURN_ENDING.FAILED,
+        parts: [
+          {
+            ...worker,
+            state: PLAN_WORK_STATE.FAILED,
+            session: { ...worker.session, ending: TURN_ENDING.FAILED },
+          },
+        ],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: failed });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const tab = tabNamed(page, job);
+
+  assert.equal(tabEndState(tab), "Failed");
+  assert.ok(tab.lastElementChild?.querySelector("svg.lucide-circle-alert"), "the alert glyph");
+  hover(tab);
+  assert.deepEqual(cardParts(), [job, "Failed", "Queue A lets an admin revoke."]);
+});
+
+test("a planning worker whose call the planning model answered and went on from still wears its own task's failure", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session);
+  const answered: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.DONE,
+        parts: [
+          {
+            ...worker,
+            state: PLAN_WORK_STATE.DONE,
+            session: { ...worker.session, ending: TURN_ENDING.FAILED },
+          },
+        ],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: answered });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+
+  assert.equal(tabEndState(tabNamed(page, job)), "Failed");
 });
 
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
@@ -981,7 +1117,7 @@ function watchedRows() {
   };
 }
 
-test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none waits for a press", async () => {
+test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none says so in an alert and waits for a press", async () => {
   const rows = watchedRows();
   const asked: string[] = [];
   const page = mountOpenPlan({
@@ -1010,12 +1146,18 @@ test("the Work tab reads the turns before its oldest as the row before them scro
     );
 
   assert.equal(row()?.textContent, "Show earlier work");
+  assert.equal(row()?.querySelector("[role=alert]"), null);
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
   await act(async () => {
     await Promise.resolve();
   });
   assert.equal(row()?.textContent, "Could not read earlier work. Retry");
+  assert.equal(
+    row()?.querySelector("[role=alert]")?.textContent,
+    "Could not read earlier work.",
+    "the failure is announced as it lands, the retry's word left out of it",
+  );
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
 
@@ -1588,6 +1730,40 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a plan being read stands one tab-shaped skeleton in its toolbar and names no tab, and its read draws the plan's tab in that place",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const draw = (region: PlansControl["region"]) =>
+        act(() => root.render(onRegistry(registry, createElement(Opening, { region }))));
+      const toolbar = () => {
+        const bar = container.querySelector<HTMLElement>(".desktop-toolbar");
+        assert.ok(bar, "the toolbar is drawn");
+        return bar;
+      };
+      const tabs = () =>
+        [...toolbar().querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => tab.textContent);
+      draw({ kind: DOCUMENT_REGION.READING });
+      assert.equal(toolbar().querySelectorAll(".skeleton").length, 1);
+      assert.deepEqual(tabs(), []);
+      assert.equal(toolbar().textContent, "");
+
+      draw({ kind: DOCUMENT_REGION.READY, plan: PLAN });
+      assert.equal(toolbar().querySelector(".skeleton"), null);
+      assert.deepEqual(tabs(), [PLAN.name]);
+
+      // A plan that could not be read stands no skeleton, since nothing is on its way.
+      draw({ kind: DOCUMENT_REGION.FAILED });
+      assert.equal(toolbar().querySelector(".skeleton"), null);
+      assert.deepEqual(tabs(), []);
+    }),
+);
+
 /** The panel's tabs, in the strip's order. */
 function panelTabs(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')].map(
@@ -1969,16 +2145,17 @@ interface Unarchives {
 }
 
 /**
- * The open plan's page with its column on its running agent's tab, the plan
- * archived or brought back as `archived` says, and every Unarchive press,
- * the banner's and the composer's alike, written down.
+ * The open plan's page with its column on its running agent's tab, or on
+ * the tab `render` is handed, the plan archived or brought back as
+ * `archived` says, and every Unarchive press, the banner's and the
+ * composer's alike, written down.
  */
 function mountArchivable(archived: boolean, unarchives: Unarchives) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (now: boolean) => {
+  const render = (now: boolean, tab: MainTab = { agent: TITLED_AGENT.id }) => {
     const { archivedAt: _archivedAt, ...standing } = ARCHIVED_PLAN;
     const plan = now ? ARCHIVED_PLAN : standing;
     act(() =>
@@ -2001,7 +2178,7 @@ function mountArchivable(archived: boolean, unarchives: Unarchives) {
             mainTabs: {
               ...plansControl().mainTabs,
               tabs: [MAIN_TAB.PLAN, { agent: TITLED_AGENT.id }],
-              tab: { agent: TITLED_AGENT.id },
+              tab,
               openAgents: [TITLED_AGENT.id],
             },
             agents: codingAgentsControl({
@@ -2072,7 +2249,7 @@ test("a plan renamed at its title renames the plan, and a refusal is said beside
 
 test("an archived plan reads but takes nothing: no editor, rename, repository, call, Start, new agent, or message, and its banner and its composer's note offer Unarchive", () => {
   const unarchives: Unarchives = { marked: [], composer: 0 };
-  const { container } = mountArchivable(true, unarchives);
+  const { container, render } = mountArchivable(true, unarchives);
 
   const banner = container.querySelector<HTMLElement>('[aria-label="This plan is archived"]');
   assert.ok(banner, "the banner stands over the document");
@@ -2086,7 +2263,6 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
     "no section opens the editor",
   );
   assert.equal(container.querySelector(".call-start"), null, "no call is started");
-  assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
   assert.equal(container.querySelector('[aria-label="Message to the agent"]'), null);
   const note = container.querySelector<HTMLElement>(".archived-composer");
   assert.ok(note, "the composer's place says why");
@@ -2107,17 +2283,6 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
   act(() => planTab.click());
   assert.equal(container.querySelector(".desktop-toolbar input"), null);
 
-  // The ⋯ menu offers what reads the plan, its history among it, Unarchive, and Permanently delete.
-  press(container, '[aria-label="Plan actions"]');
-  assert.deepEqual(menuLabels(), [
-    "Copy plan",
-    "Version history",
-    "Unarchive",
-    "Open on GitHub",
-    "Permanently delete",
-  ]);
-  key(focused(), "Escape");
-
   // The column's + offers the agents to read and no new agent.
   act(() => columnAddButton(container).click());
   assert.equal(
@@ -2131,6 +2296,19 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
   assert.ok(composerUnarchive);
   act(() => composerUnarchive.click());
   assert.deepEqual(unarchives, { marked: [[PLAN.id, PLAN_MARK.UNARCHIVE]], composer: 1 });
+
+  // On the plan's own tab, Start is not drawn, and the ⋯ menu offers what
+  // reads the plan, its history among it, Unarchive, and Permanently delete.
+  render(true, MAIN_TAB.PLAN);
+  assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
+  press(container, '[aria-label="Plan actions"]');
+  assert.deepEqual(menuLabels(), [
+    "Copy plan",
+    "Version history",
+    "Unarchive",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
 });
 
 test("an Unarchive gives an archived plan back everything at once: its editors, its call, Start, and its agent's composer, and the banner goes", () => {
@@ -2141,9 +2319,10 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
   assert.equal(container.querySelector('[aria-label="This plan is archived"]'), null);
   assert.ok(container.querySelector(".plan-document-block"), "the sections open the editor");
   assert.ok(container.querySelector(".call-start"), "the call starts");
-  assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
   assert.ok(container.querySelector('[aria-label="Message to the agent"]'));
   assert.equal(container.querySelector(".archived-composer"), null);
+  render(false, MAIN_TAB.PLAN);
+  assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
 });
 
 test("the editor still open when the plan is archived elsewhere is let go", () => {
@@ -2274,6 +2453,7 @@ test("Command-T opens the + of the column holding the focus, the plan's column's
   const search = document.activeElement;
   assert.ok(search instanceof HTMLInputElement, "the menu's search has focus");
   assert.ok(search.closest(".desktop-toolbar .tab-add-menu"), "in the column's + menu");
+  assertOpensWhatItNames(columnAddButton(page));
   key(search, "Escape");
   assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.deepEqual(columnTabs(page), [PLAN.name]);
@@ -3135,21 +3315,36 @@ function addRow(label: string): HTMLElement {
   return row;
 }
 
-test("the column's + offers New coding agent and the plan's Inbox and coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
+test("the column's + offers the plan's Inbox first by itself, then New coding agent, then the plan's coding agents under a section of their own, each by its glyph and name alone, found by a search, and picking one chooses its tab rather than doubling it", () => {
   const page = mountAgents();
   act(() => columnAddButton(page).click());
 
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Opus 5.5", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Opus 5.5", "GPT 5.6 Sol"]]]);
   assert.deepEqual(addRows(), [
-    ["New coding agent", "", true],
     ["Inbox", "", true],
+    ["New coding agent", "", true],
     ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],
   ]);
+  assert.ok(addRow("Inbox").querySelector("svg.lucide-inbox"), "the Inbox's tray");
+  const generic = renderToStaticMarkup(createElement(CodingAgentsIcon));
+  assert.equal(
+    [...document.querySelectorAll(".tab-add-menu svg")].some(
+      (svg) => svg.outerHTML === generic || svg.classList.contains("lucide-terminal"),
+    ),
+    false,
+    "no row wears a terminal or the generic Coding agents glyph",
+  );
   assert.equal(document.activeElement?.getAttribute("placeholder"), "Search tabs");
-  // An agent's row says nothing of where it stands, by word or by dot.
-  for (const label of ["Opus 5.5", "GPT 5.6 Sol"]) {
+  // An agent's row wears its harness's mark and says nothing of where it
+  // stands, by word, by dot, or by the working mark its tab wears.
+  for (const [label, mark] of [
+    ["Opus 5.5", "svg.provider-mark"],
+    ["GPT 5.6 Sol", 'img.provider-mark[src="marks/codex-16.png"]'],
+  ] as const) {
     const row = addRow(label);
+    assert.ok(row.querySelector(mark), `${label} wears its harness's mark`);
+    assert.equal(row.querySelector(".working-mark"), null);
     assert.equal(row.querySelector(".agent-status-dot"), null);
     assert.equal(row.querySelector(".plan-compose-menu-detail"), null);
     assert.equal(row.textContent, label);
@@ -3195,6 +3390,40 @@ test("the side panel's + lists the plan's subagents under a section of their own
   act(() => addButton(page).click());
   assert.equal(addRow(job).textContent, job, "an open tab's row says nothing of it");
 });
+test("a subagent wears its model's mark in its tab and its row of the side panel's +, as its row in the Work tab does, rather than the worker's robot", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL && worker.session !== undefined);
+  const page = mountOpenPlan({
+    work: {
+      ...live,
+      callLive: false,
+      turns: [
+        {
+          ...turn,
+          state: PLAN_WORK_STATE.DONE,
+          parts: [
+            {
+              ...worker,
+              state: PLAN_WORK_STATE.DONE,
+              session: { ...worker.session, model: "openai/gpt-6.1-sol" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const codex = 'img.provider-mark[src="marks/codex-16.png"]';
+  assert.ok(tabNamed(page, job).querySelector(codex), "the tab wears Codex's cloud");
+  act(() => addButton(page).click());
+  assert.ok(addRow(job).querySelector(codex), "and so does its + row");
+  assert.equal(document.querySelector(".tab-add-menu svg.lucide-bot"), null);
+});
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the column's + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();
   act(() => tabNamed(page, "GPT 5.6 Sol").click());
@@ -3231,7 +3460,7 @@ test("the + reads the plan's agents again as it opens, so an agent no tab follow
   // The agent is named with its tab closed, where nothing follows it.
   listed = [{ ...RUNNING_AGENT, title: "Queue spike" }, DONE_AGENT];
   act(() => columnAddButton(page).click());
-  assert.deepEqual(addSections(), [["Coding agents", ["Inbox", "Queue spike", "GPT 5.6 Sol"]]]);
+  assert.deepEqual(addSections(), [["Coding agents", ["Queue spike", "GPT 5.6 Sol"]]]);
 });
 
 /** The key the draft below is minted under, which its first message starts the agent with. */
@@ -3276,6 +3505,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     repository,
     archived: false,
     onUnarchive: () => undefined,
+    onOpenIntegrations: () => undefined,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });
@@ -3446,6 +3676,24 @@ test("while Start could not run, New coding agent says Start's reason and opens 
   );
 });
 
+test("a file's row in the side panel's + and its tab wear its type's icon, as the file tree draws the file", async () => {
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+    holds: { [SIDE_PANEL_TAB.CODE]: true },
+    shownCode: [{ callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE }],
+  });
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+  const typeOf = (element: Element | null | undefined) =>
+    element?.querySelector(".file-type-icon")?.getAttribute("data-file-type");
+
+  act(() => addButton(page).click());
+  assert.equal(typeOf(addRow("invite.ts")), "typescript");
+  act(() => addRow("invite.ts").click());
+  assert.equal(typeOf(tabNamed(page, "invite.ts")), "typescript");
+});
+
 test("a card's Open file opens its whole file in a tab named by the file, its lines lit, and opening it again from the + chooses that tab", async () => {
   const asked: unknown[] = [];
   Object.defineProperty(window, "sidecar", {
@@ -3453,8 +3701,9 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
     value: {
       onMenuCommand: () => () => undefined,
       // Main answers a File tab's read with the file as GitHub holds it now.
-      act: (request: { payload?: unknown }) => {
-        asked.push(request.payload);
+      act: (request: { kind: string; payload?: unknown }) => {
+        // The tree beside the file lists folders too, which this test does not count.
+        if (request.kind === ACT_KIND.PLANNING_FILE) asked.push(request.payload);
         return Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: {
@@ -4405,4 +4654,102 @@ test("the Inbox tab stands nowhere until an item the developer has not seen arri
   act(() => addRow("Inbox").click());
   assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "Inbox 2"]);
   assert.equal(columnChosen(page), "Inbox 2");
+});
+
+test("the Inbox tab's menu offers Pin tab; pinned, it wears no × and offers no Close, so neither Command-W nor Close others shuts it, it stands again on the next launch, and Unpin tab makes it closable again", async () => {
+  const inbox = () =>
+    codingAgentsControl({
+      agents: [RUNNING_AGENT],
+      agentIds: [RUNNING_AGENT.id],
+      readInbox: ({ after }) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items: [waitingItem(FIRST_ITEM)], cursor: "1" })
+          : new Promise(() => undefined),
+    });
+  const page = mountOpenPlan({ agents: inbox() });
+  await settle();
+  assert.deepEqual(tabMenu(tabNamed(page, "Inbox 1")), [
+    ["Close", true],
+    ["Close others", true],
+    ["Pin tab", true],
+  ]);
+  closeMenu();
+
+  chooseFromTab(tabNamed(page, "Inbox 1"), "Pin tab");
+  assert.equal(page.querySelector('[aria-label="Close Inbox"]'), null, "no ×");
+  assert.deepEqual(tabMenu(tabNamed(page, "Inbox 1")), [
+    ["Close others", true],
+    ["Unpin tab", true],
+  ]);
+  closeMenu();
+  act(() => tabNamed(page, "Inbox 1").focus());
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "the chord leaves it");
+  chooseFromTab(tabNamed(page, "Opus 5.5"), "Close others");
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "Inbox 1"]);
+  unmountAll();
+
+  const again = mountOpenPlan({ agents: inbox() });
+  await settle();
+  assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5", "Inbox 1"], "still pinned");
+  chooseFromTab(tabNamed(again, "Inbox 1"), "Unpin tab");
+  press(again, '[aria-label="Close Inbox"]');
+  assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5"]);
+});
+
+test("the items waiting on the Inbox tab count as read once the tab is on screen with them, and not while another tab is chosen", async () => {
+  const waiting = [{ planId: PLAN.id, items: [FIRST_ITEM, SECOND_ITEM] }];
+  let reads: InboxReadsControl | undefined;
+  const agents = codingAgentsControl({
+    agents: [RUNNING_AGENT],
+    agentIds: [RUNNING_AGENT.id],
+    readInbox: ({ after }) =>
+      after === INBOX_CURSOR_START
+        ? Promise.resolve({
+            items: [waitingItem(FIRST_ITEM), waitingItem(SECOND_ITEM)],
+            cursor: "1.2",
+          })
+        : new Promise(() => undefined),
+  });
+  function InboxPage() {
+    const mainTabs = useMainTabs(false, PLAN.id, agents.agentIds, undefined, true);
+    const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id), mainTabs.openAgents);
+    reads = useInboxReads(waiting, [], false);
+    return createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        mainTabs,
+        sidePanel,
+        agents,
+        inbox: waiting,
+        inboxReads: reads,
+        // Main is told the Inbox is on screen while the plan's column shows it (`use-plans-tab.ts`).
+        inboxShown: mainTabs.tab === MAIN_TAB.INBOX ? PLAN.id : null,
+      }),
+    });
+  }
+  // The Inbox those items open is chosen on its own; the plan's tab is chosen over it first.
+  window.localStorage.setItem(
+    "luke.mainTabs",
+    JSON.stringify({
+      closedAgents: [],
+      plans: { [PLAN.id]: { inboxSeen: [FIRST_ITEM, SECOND_ITEM], recent: ["plan"] } },
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(InboxPage)));
+  await settle();
+  assert.equal(reads?.total, 2, "the plan's own tab shows none of them");
+
+  act(() => columnAddButton(container).click());
+  act(() => addRow("Inbox").click());
+  await settle();
+  assert.equal(columnChosen(container), "Inbox 2");
+  assert.equal(reads?.total, 0);
 });

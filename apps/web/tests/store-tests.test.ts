@@ -26,7 +26,7 @@ const TESTS_DIRECTORY = dirname(THIS_FILE);
 /** What a door exports, as a file would use it; the second reading. */
 const DOOR_SYMBOLS = [
   "openHostedStoreTestDatabase",
-  "testSqlClient",
+  "getTestDB()",
   "unmigratedPgliteSqlClient",
   "openMigratedPglite",
   "sqlClientOverPglite",
@@ -62,26 +62,24 @@ test("a door's import is read in each spelling a file uses, and nothing else is"
   expect(importsStoreDoor(`import { x } from "${STORE_TEST_DOORS.HOSTED_STORE_DATABASE}";`)).toBe(
     true,
   );
-  expect(importsStoreDoor(`import { x } from "${STORE_TEST_DOORS.SQL_CLIENT}.js";`)).toBe(true);
-  expect(importsStoreDoor(`import { x } from '${STORE_TEST_DOORS.STORE_TEST_POSTGRES}';`)).toBe(
+  expect(importsStoreDoor(`import { x } from "${STORE_TEST_DOORS.TEST_DB}.js";`)).toBe(true);
+  expect(importsStoreDoor(`import { x } from '${STORE_TEST_DOORS.TEST_DB}';`)).toBe(true);
+  expect(importsStoreDoor(`import {\n  a,\n  b,\n} from "${STORE_TEST_DOORS.TEST_DB}";`)).toBe(
     true,
   );
-  expect(importsStoreDoor(`import {\n  a,\n  b,\n} from "${STORE_TEST_DOORS.SQL_CLIENT}";`)).toBe(
-    true,
-  );
-  expect(importsStoreDoor(`import { x } from "./support/sql-client-fixtures";`)).toBe(false);
-  expect(importsStoreDoor(`import { x } from "../server/db/sql-client";`)).toBe(false);
+  expect(importsStoreDoor(`import { x } from "@sidecar/database/testing-fixtures";`)).toBe(false);
+  expect(importsStoreDoor(`import { x } from "@sidecar/database/core/sql-client";`)).toBe(false);
   expect(importsStoreDoor(`import { PGlite } from "@electric-sql/pglite";`)).toBe(false);
 });
 
 test("the selection is every test file importing a door, wherever it sits, in path order, and no other", () => {
   const directory = fixtureTests({
     "zeta.test.ts": `import { openHostedStoreTestDatabase } from "${STORE_TEST_DOORS.HOSTED_STORE_DATABASE}";`,
-    "alpha.test.ts": `import { testSqlClient } from "${STORE_TEST_DOORS.SQL_CLIENT}.js";`,
-    "nested/deep.test.ts": `import { cloneStoreTestPostgres } from "${STORE_TEST_DOORS.STORE_TEST_POSTGRES}";`,
+    "alpha.test.ts": `import { getTestDB } from "${STORE_TEST_DOORS.TEST_DB}.js";`,
+    "nested/deep.test.ts": `import { cloneStoreTestPostgres } from "${STORE_TEST_DOORS.TEST_DB}";`,
     "plain.test.ts": `import { test } from "vitest";`,
-    "support/sql-client.ts": `export const testSqlClient = 1;`,
-    "notes.ts": `import { testSqlClient } from "${STORE_TEST_DOORS.SQL_CLIENT}";`,
+    "support/sql-client.ts": `export const getTestDB = () => 1;`,
+    "notes.ts": `import { getTestDB } from "${STORE_TEST_DOORS.TEST_DB}";`,
   });
   expect(storeTestFiles(directory)).toEqual([
     "alpha.test.ts",

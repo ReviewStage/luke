@@ -1,6 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { FeedbackKind } from "@sidecar/feedback";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
@@ -13,9 +12,8 @@ import {
   settingsNavRowId,
 } from "../settings-views";
 import { AccountSection } from "./account-section";
-import { ApiKeysSection } from "./api-keys-page";
 import { AppearanceSection } from "./appearance-page";
-import { CodingAgentsSection } from "./coding-agents-page";
+import { CodingAgentsPage } from "./coding-agents-page";
 import type {
   MicrophoneControl,
   NotificationsControl,
@@ -23,10 +21,10 @@ import type {
   UpdateControl,
 } from "./controls";
 import { FeedbackSection } from "./feedback-section";
+import { IntegrationsSection } from "./integrations-page";
 import { MembersSection, type WorkspaceSettingsControl } from "./members-section";
 import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
-import { PlanTemplateSection } from "./plan-template-page";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
@@ -56,8 +54,6 @@ export interface SettingsPanelProps {
   notifications: NotificationsControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  /** Opens the dialog that writes a note of this kind to the people who make Luke. */
-  onFeedback: (kind: FeedbackKind) => void;
   shortcuts: ShortcutControl;
   /** The workspace the sidebar lists, its members, and the install, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
@@ -89,6 +85,21 @@ export function settingsRowsInput({
   };
 }
 
+/**
+ * Why the Voice page's row in a list of pages wears its mark, or nothing while
+ * voice is fully set up. Judged from the panel's props rather than on the Voice
+ * page because the mark has to stand while that page is not drawn: it is the
+ * list saying a page one press away still needs a hand. The keyless half moved
+ * to the Account and usage heading with the ways in, so the row marks only a
+ * microphone still ungranted for a voice that can run. The panel's front page
+ * and the desktop's list of pages both read it, so the two never disagree.
+ */
+export function voicePageAttention(microphone: MicrophoneControl): string | undefined {
+  return microphone.voiceAvailable
+    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
+    : undefined;
+}
+
 export function SettingsPanel({
   account,
   onSignOut,
@@ -99,20 +110,11 @@ export function SettingsPanel({
   notifications,
   updates,
   settings,
-  onFeedback,
   shortcuts,
   workspace,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
-  // Why the front page's Voice row wears its mark, or nothing while voice is
-  // fully set up. Judged here rather than on the Voice page because the mark
-  // has to stand while that page is not drawn: it is the front page saying a
-  // page one press away still needs a hand. The keyless half moved to the
-  // Account and usage heading with the ways in, so the row marks only a
-  // microphone still ungranted for a voice that can run.
-  const voiceNote = microphone.voiceAvailable
-    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
-    : undefined;
+  const voiceNote = voicePageAttention(microphone);
   const panelView = settingsRowsInput({ settings, microphone, account });
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
@@ -176,16 +178,17 @@ export function SettingsPanel({
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
-        <PlanTemplateSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
-      ) : null}
-
       {view === SETTINGS_VIEW.CODING_AGENTS ? (
-        <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+        <>
+          <CodingAgentsPage signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+          {panelView ? (
+            <NotificationsSection view={panelView} writes={writes} control={notifications} />
+          ) : null}
+        </>
       ) : null}
 
-      {view === SETTINGS_VIEW.API_KEYS ? (
-        <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      {view === SETTINGS_VIEW.INTEGRATIONS ? (
+        <IntegrationsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS ? (
@@ -202,13 +205,7 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          {panelView ? (
-            <NotificationsSection view={panelView} writes={writes} control={notifications} />
-          ) : null}
-
           <UpdatesSection control={updates} />
-
-          <FeedbackSection onOpen={onFeedback} />
 
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
             <AccountSection

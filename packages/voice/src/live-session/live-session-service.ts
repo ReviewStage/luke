@@ -21,7 +21,7 @@ import {
   type TranscriptUtterance,
   thinkingAppend,
 } from "@sidecar/live";
-import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
 import {
   Clock,
   Deferred,
@@ -597,7 +597,8 @@ export class LiveSessionService {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
       const tasks = yield* serialQueue({
-        onDefect: (cause) => Effect.logError("a live session task could not be started", cause),
+        onDefect: (cause) =>
+          Effect.logError(`a live session task could not be started: ${causeKind(cause)}`),
       });
       const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
       const scope = yield* Effect.scope;

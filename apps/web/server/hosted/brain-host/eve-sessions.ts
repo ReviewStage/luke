@@ -1,7 +1,8 @@
 /**
- * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
+ * eve-sessions.ts -- the host's four calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
+import { failureKind } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
@@ -16,8 +17,8 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
  * developer's behalf: open the conversation's session with a first message,
- * follow up on the session it runs in, and cancel one turn by eve's own id
- * for it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
+ * follow up on the session it runs in, cancel one turn by eve's own id
+ * for it, and retire the session for good once Luke lets go of it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
  * follow-up answers to itself, and that id is what ties an ask to the turn
  * eve later starts, so the requests are made here as eve's own routes
  * document them. The caller is the deployment acting for an account it
@@ -137,6 +138,10 @@ const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_tur
 const cancelAnswer = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(EVE_CANCEL_STATUS)),
 });
+const EVE_RESET_STATUS = { RESET: "reset", NO_ACTIVE_SESSION: "no_active_session" } as const;
+const resetAnswer = EffectSchema.Struct({
+  status: EffectSchema.Literals(Object.values(EVE_RESET_STATUS)),
+});
 
 /** Every answer eve hands back is read with the keys this build does not name dropped. */
 const DROPPING_EXCESS = { excess: EXCESS_KEYS.DROP } as const;
@@ -147,17 +152,15 @@ export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
 }> {}
 
 /**
- * The failure in the words a report carries: the client's own, and beneath a
- * transport failure the platform's, which is where a refused connection or a
- * failed handshake says what it was.
+ * The failure in the words a report carries: the client's kind of failure,
+ * and the status where eve answered at all. Note that the client's message
+ * is not written, because it names the request's address and can describe
+ * the body eve sent, and the platform's error beneath it is not either.
  */
 export function describeUnreachable(failure: EveUnreachable): string {
-  const reason = failure.cause.reason;
-  const beneath =
-    reason._tag === "TransportError" && reason.cause !== undefined
-      ? `: ${String(reason.cause)}`
-      : "";
-  return `${failure.cause.message}${beneath}`;
+  const kind = failureKind(failure.cause);
+  const status = failure.cause.response?.status;
+  return status === undefined ? kind : `${kind} ${status}`;
 }
 
 /** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */
@@ -200,6 +203,18 @@ type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
 
+/** How eve answered a reset: the session retired now, one it no longer ran, or an answer this build cannot read as either. */
+export const EVE_RESET_OUTCOME = {
+  RESET: EVE_RESET_STATUS.RESET,
+  NO_ACTIVE_SESSION: EVE_RESET_STATUS.NO_ACTIVE_SESSION,
+  FAILED: "failed",
+} as const;
+
+type EveReset =
+  | { readonly outcome: typeof EVE_RESET_OUTCOME.RESET }
+  | { readonly outcome: typeof EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }
+  | { readonly outcome: typeof EVE_RESET_OUTCOME.FAILED; readonly status: number };
+
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
@@ -222,6 +237,13 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
    * means: a subagent the stopped turn handed work to does not go on.
    */
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
+  /**
+   * Asks eve to retire the session for good: a turn under way is cancelled
+   * with every task it handed out, the workflow run ends, and the session
+   * takes nothing again. eve answers once the session has let go of its
+   * inbox; a session it no longer runs answers `no_active_session`.
+   */
+  reset(sessionId: string): Effect.Effect<EveReset, EveUnreachable>;
 }
 
 /**
@@ -362,6 +384,16 @@ function readCancelled({ status, body }: EveAnswer): EveCancelled {
     : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
 }
 
+function readReset({ status, body }: EveAnswer): EveReset {
+  const answer = readEither(resetAnswer, DROPPING_EXCESS)(body);
+  if (status < OK_STATUS.FIRST || status > OK_STATUS.LAST || Result.isFailure(answer)) {
+    return { outcome: EVE_RESET_OUTCOME.FAILED, status };
+  }
+  return answer.success.status === EVE_RESET_STATUS.RESET
+    ? { outcome: EVE_RESET_OUTCOME.RESET }
+    : { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION };
+}
+
 function sessionsOver<Turn extends BrainHostTurn>(
   client: HttpClient.HttpClient,
   options: EveSessionsOptions,
@@ -401,6 +433,8 @@ function sessionsOver<Turn extends BrainHostTurn>(
         post(`${sessionPath(mount, sessionId)}/cancel`, {}, { turnId: eveTurnId }),
         readCancelled,
       ),
+    reset: (sessionId) =>
+      Effect.map(post(`${sessionPath(mount, sessionId)}/reset`, {}, {}), readReset),
   };
 }
 

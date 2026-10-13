@@ -1,3 +1,5 @@
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -5,8 +7,6 @@ import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "./auth.js";
-import { user } from "./db/auth-schema.js";
-import { db } from "./db/query.js";
 import { hostedUserId } from "./hosted/bearer.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";

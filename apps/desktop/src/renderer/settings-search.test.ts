@@ -74,13 +74,22 @@ test("a row a page is not drawing is not offered", () => {
   assert.ok(!signedOut.includes("Delete account"));
 
   // Voice runs on the account alone, so no row offers a key for it: the one
-  // key-shaped query's results are the coding agents' own keys, on their page.
+  // key-shaped query's results are the coding agents' own keys, on the Coding
+  // agents page that holds them as a group.
   const hosted = settingsSearchEntries(searchInput());
   const keyed = found(searchSettings(hosted, "openai api key"));
   assert.deepEqual(labels(keyed), ["OpenAI API key"]);
   assert.deepEqual(
     keyed.map((entry) => entry.page),
-    [SETTINGS_VIEW.API_KEYS],
+    [SETTINGS_VIEW.CODING_AGENTS],
+  );
+  assert.deepEqual(
+    found(searchSettings(hosted, "api keys")).map((entry) => [entry.label, entry.page]),
+    [
+      ["Anthropic API key", SETTINGS_VIEW.CODING_AGENTS],
+      ["OpenAI API key", SETTINGS_VIEW.CODING_AGENTS],
+    ],
+    "the old page's name still finds both keys",
   );
   const signedOutKeys = found(
     searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "api key"),
@@ -97,6 +106,17 @@ test("a row a page is not drawing is not offered", () => {
     searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "template"),
   );
   assert.deepEqual(labels(signedOutTemplate), [], "no template without an account to hold it");
+
+  // An integration is the account's too, so it is found on the Integrations page while one is signed in.
+  const tracker = found(searchSettings(hosted, "issues tracker"));
+  assert.deepEqual(
+    tracker.map((entry) => [entry.label, entry.page]),
+    [["Linear", SETTINGS_VIEW.INTEGRATIONS]],
+  );
+  const signedOutTracker = found(
+    searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "linear"),
+  );
+  assert.deepEqual(labels(signedOutTracker), [], "no integration without an account to connect it");
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {
@@ -128,9 +148,13 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
     "Quiet Music and Spotify",
   ]);
 
-  // A description is part of the haystack, so a row is found by what it does.
+  // The line drawn under a row is part of the haystack, so a row is found by
+  // what it says there.
   const bluetooth = labels(found(searchSettings(entries, "bluetooth")));
   assert.ok(bluetooth.includes("Prefer the Mac's microphone"));
+
+  // A choice is found by what it offers, though its row says none of it.
+  assert.ok(labels(found(searchSettings(entries, "dark"))).includes("Theme"));
 
   const captions = searchSettings(entries, "captions");
   assert.equal(found(captions)[0]?.page, SETTINGS_VIEW.VOICE);

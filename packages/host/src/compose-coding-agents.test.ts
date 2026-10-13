@@ -4,6 +4,7 @@ import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sideca
 import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
@@ -19,11 +20,14 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
+  type PlanTemplateRevisionLine,
 } from "@sidecar/hosted/plan-document-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -32,6 +36,14 @@ import {
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+
+/** One revision of the template as the service lists it. */
+const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
+  seq: 2,
+  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 1_000, duringCall: false },
+  startedAt: 1_000,
+  changes: 1,
+};
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -69,6 +81,25 @@ const PUBLISHED = {
     additions: 210,
     deletions: 14,
     changedFiles: 6,
+  },
+};
+
+/** The agent's changes, as the service answers them. */
+const CHANGES = {
+  pullRequest: {
+    url: "https://github.com/acme/relay/pull/123",
+    files: [
+      {
+        path: "src/invite.ts",
+        previousPath: null,
+        status: CHANGED_FILE_STATUS.MODIFIED,
+        additions: 1,
+        deletions: 1,
+        patch: "@@ -1 +1 @@\n-old\n+new",
+        omitted: null,
+      },
+    ],
+    truncated: false,
   },
 };
 
@@ -176,6 +207,11 @@ function fakeService() {
         asked.push(`rename:${agentId}:${request.title}`);
         return { agent: { ...AGENT, title: request.title } };
       }),
+    switchServers: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
+        return { agent: { ...AGENT, disabledServers: request.disabledServers } };
+      }),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
@@ -190,6 +226,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);
         return PUBLISHED;
+      }),
+    changes: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`changes:${agentId}`);
+        return CHANGES;
       }),
     readProviderKeys: () =>
       Effect.sync(() => {
@@ -218,6 +259,27 @@ function fakeService() {
           template: write.template ?? DEFAULT_PLAN_TEMPLATE,
           custom: write.template !== null,
         };
+      }),
+    readPlanTemplateRevisions: (page) =>
+      Effect.sync(() => {
+        asked.push(`revisions:${page.before ?? "newest"}`);
+        return { revisions: [TEMPLATE_REVISION] };
+      }),
+    readPlanTemplateRevision: (revision) =>
+      Effect.sync(() => {
+        asked.push(`revision:${revision.seq}`);
+        return {
+          revision: {
+            seq: revision.seq,
+            document: { body: "## Why\n", assumptions: [] },
+            previous: null,
+          },
+        };
+      }),
+    restorePlanTemplate: (revision) =>
+      Effect.sync(() => {
+        asked.push(`restore:${revision.seq}`);
+        return { template: "## Why\n", custom: true };
       }),
     transcribeDictation: (clip) =>
       Effect.sync(() => {
@@ -252,7 +314,7 @@ function fakeService() {
     accountInbox: (after) =>
       Effect.sync(() => {
         asked.push(`account-inbox:${after}`);
-        return { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt };
+        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
   };
   return { client, asked };
@@ -352,6 +414,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { agent: { ...AGENT, title: "Sign-out button" } },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+        agentId: AGENT_ID,
+        disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+      }),
+      { agent: { ...AGENT, disabledServers: [INTEGRATION_PROVIDER.LINEAR] } },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
@@ -362,6 +431,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID }),
+      CHANGES,
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
@@ -398,7 +471,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
-      { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt },
+      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
     );
 
     assert.deepEqual(asked, [
@@ -413,9 +486,11 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,
+      `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `pull-request:${AGENT_ID}`,
+      `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
@@ -544,6 +619,33 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asked, ["template", "template:## Why\n", "template:the default"]);
+      assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect(
+  "the plan template's history is read a page and a revision at a time and a revision restored, each one ask of the service; a revision with no number is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const newest = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
+      const older = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, { before: 3 });
+      const revision = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: 2 });
+      const restored = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 2 });
+      const refused = yield* Effect.flip(call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 0 }));
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
+
+      assert.deepEqual(newest, { revisions: [TEMPLATE_REVISION] });
+      assert.deepEqual(older, { revisions: [TEMPLATE_REVISION] });
+      assert.deepEqual(revision, {
+        revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
+      });
+      assert.deepEqual(restored, { template: "## Why\n", custom: true });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, ["revisions:newest", "revisions:3", "revision:2", "restore:2"]);
       assert.deepEqual(signedOut.asked, []);
     }),
 );

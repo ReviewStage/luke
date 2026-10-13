@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_PART,
@@ -13,8 +20,10 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { installExits, uninstallExits } from "#testing/exits";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import "../file-tree/index";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { useMainTabs } from "../planning/use-main-tabs";
@@ -125,6 +134,7 @@ function Page({
   resting,
   failed,
   shelved,
+  inbox,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
@@ -134,6 +144,8 @@ function Page({
   failed: boolean;
   /** The plan's archived agents. */
   shelved: readonly CodingAgentSummary[];
+  /** The plan's inbox items, as its first read answers them. */
+  inbox: readonly InboxItem[];
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
@@ -148,6 +160,11 @@ function Page({
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     ...(archived ? { onUnarchive: () => undefined } : undefined),
+    // Each read past the first is held, as the service holds it, until the inbox changes.
+    readInbox: ({ after }) =>
+      after === INBOX_CURSOR_START
+        ? Promise.resolve({ items: inbox, cursor: `1.${inbox.length}` })
+        : new Promise(() => undefined),
   });
   const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined, false);
   const sidePanel = useSidePanel(
@@ -185,12 +202,40 @@ function mount(
   resting = false,
   failed = false,
   shelved: readonly CodingAgentSummary[] = [],
+  inbox: readonly InboxItem[] = [],
 ): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed, shelved })));
+  act(() =>
+    root.render(createElement(Page, { archived, shownCode, resting, failed, shelved, inbox })),
+  );
   return container;
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** An item the plan's agent posted that waits on the developer's reply. */
+function waitingItem(id: string): InboxItem {
+  return {
+    id,
+    agentId: AGENT.id,
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "What should the email say?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1,
+    updatedAt: 1,
+  };
 }
 
 /** Closes the window, as a quit does, so the next mount is a fresh launch. */
@@ -199,11 +244,15 @@ function quit(): void {
   document.body.innerHTML = "";
 }
 
+/** The exit a leaving card runs, as desktop.css plays it. */
+const LEAVING_CARD = '.plan-summary-card[data-leaving="true"]';
+
 afterEach(() => {
   quit();
   archives.length = 0;
   vi.restoreAllMocks();
   window.localStorage.clear();
+  uninstallExits();
 });
 
 /** Lays the plan's column out this wide, the summary beside the document included and the side panel not; jsdom lays out nothing. */
@@ -305,7 +354,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
 
   assert.deepEqual(listed(summary), [
     ["Tabs", ["Board", "Transcript"]],
-    ["Coding agents", ["Inbox", AGENT.title]],
+    ["Coding agents", [AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
   ]);
@@ -314,6 +363,90 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     const glyph: Element | null = rowNamed(summary, label).querySelector('[role="img"]');
     assert.equal(glyph?.getAttribute("aria-label"), "Working");
   }
+});
+
+test("the Inbox leads Tabs while the plan holds an inbox item or its tab is open, counting what waits at its end, and stays off the rail", async () => {
+  const tabsOf = (page: HTMLElement) =>
+    listed(summaryOf(page)).find(([heading]) => heading === "Tabs")?.[1];
+  const items = [
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000001"),
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000002"),
+  ];
+  const waiting = mount(false, SHOWN, false, false, [], items);
+  await settle();
+  assert.deepEqual(tabsOf(waiting), ["Inbox", "Board", "Transcript"]);
+  const counted = rowNamed(summaryOf(waiting), "Inbox");
+  assert.equal(counted.textContent, "Inbox2 waiting");
+  assert.equal(counted.lastElementChild?.textContent, "2 waiting");
+  // Collapsed to its rail, the summary draws the panel's kinds alone.
+  layOutColumn(800);
+  assert.equal(modeOf(waiting), "rail");
+  assert.deepEqual(tabsOf(waiting), ["Board", "Transcript"]);
+  vi.restoreAllMocks();
+  quit();
+
+  // Everything answered, the Inbox still stands, counting nothing.
+  const answered = items.map((item) => ({ ...item, status: INBOX_STATUS.ANSWERED }));
+  const settled = mount(false, SHOWN, false, false, [], answered);
+  await settle();
+  assert.deepEqual(tabsOf(settled), ["Inbox", "Board", "Transcript"]);
+  assert.equal(rowNamed(summaryOf(settled), "Inbox").textContent, "Inbox");
+  quit();
+
+  // On a fresh install, where no Inbox tab stays open from a launch before,
+  // an empty inbox stands no row until its tab is opened.
+  window.localStorage.clear();
+  installScrollIntoView();
+  const empty = mount(false, SHOWN, false, false, [], []);
+  await settle();
+  assert.deepEqual(tabsOf(empty), ["Board", "Transcript"]);
+  press(empty, '.desktop-toolbar [aria-label="Open a tab"]');
+  const open = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Inbox",
+  );
+  assert.ok(open, "the column's + offers the Inbox");
+  act(() => open.click());
+  assert.deepEqual(tabsOf(empty), ["Inbox", "Board", "Transcript"]);
+  assert.equal(rowNamed(summaryOf(empty), "Inbox").textContent, "Inbox");
+});
+
+test("the summary's rows hang the cards the rest of the window hangs for the same thing: an agent's its tab's card, a worker's its tab's, a file's its path and Luke's note, the Inbox's what waits; the panel's kinds hang none", async () => {
+  const noted: PlansControl["shownCode"] = [
+    { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+    {
+      callId: "show-2",
+      turnId: "turn-1",
+      shownAt: 2,
+      code: { ...CODE, note: "Where an invite is accepted." },
+    },
+  ];
+  const items = [
+    waitingItem("a1b2c3d4-0000-4000-8000-000000000001"),
+    { ...waitingItem("a1b2c3d4-0000-4000-8000-000000000002"), title: "Which roles may invite?" },
+  ];
+  const page = mount(false, noted, false, false, [], items);
+  await settle();
+  const summary = summaryOf(page);
+  const cardOf = (label: string) => {
+    hover(rowNamed(summary, label));
+    return document.querySelector<HTMLElement>('.tooltip-card[role="tooltip"]');
+  };
+
+  assert.equal(hover(rowNamed(summary, "Board")), undefined, "a kind's name says all there is");
+
+  const agent = cardOf(AGENT.title ?? "");
+  assert.ok(agent?.querySelector("[data-tab-card]"), "the agent's tab's card");
+  assert.ok(agent?.textContent?.startsWith(`${AGENT.title}Opus 5.5 High`));
+  assert.ok(agent?.textContent?.includes("Working"));
+
+  const worker = cardOf(JOB);
+  assert.ok(worker?.querySelector("[data-tab-card]"), "the worker's tab's card");
+  assert.ok(worker?.textContent?.startsWith(JOB));
+  assert.ok(worker?.textContent?.includes("Working"));
+
+  assert.equal(cardOf("invite.ts")?.textContent, "src/invite.tsWhere an invite is accepted.");
+
+  assert.equal(cardOf("Inbox")?.textContent, "Inbox2 waitingWhich roles may invite?");
 });
 
 test("a failed agent's row keeps its harness's mark and says Failed in a mark at its end, to a reader and in its hint, where a working agent's row ends on its label", () => {
@@ -455,7 +588,7 @@ test("the archived agents fold under Archived at the foot of Coding agents, coun
   assert.equal(summary.querySelector('ul[aria-label="Archived agents"]'), null);
   assert.deepEqual(
     listed(summary)[1],
-    ["Coding agents", ["Inbox", AGENT.title]],
+    ["Coding agents", [AGENT.title]],
     "an archived agent is no row of its own",
   );
 
@@ -587,6 +720,39 @@ test("the rail's chevron hangs the whole summary as a card, which Escape takes d
   assert.ok(document.activeElement === chevron, "the chevron takes the focus back");
 });
 
+test("the card Escape takes down hands focus back at once, and fades out inert before it goes", () => {
+  const exits = installExits(LEAVING_CARD);
+  const page = mount();
+  layOutColumn(900);
+  const chevron = press(page, '[aria-label="Expand summary"]');
+
+  pressEscape();
+  assert.ok(document.activeElement === chevron, "the chevron has focus back before the exit");
+  assert.equal(chevron.getAttribute("aria-expanded"), "false");
+  const leaving = card();
+  assert.ok(leaving, "the card is drawn through its exit");
+  assert.equal(leaving.dataset.leaving, "true");
+  assert.equal(leaving.hasAttribute("inert"), true, "nothing reaches the card on its way out");
+  assert.equal(pressEscape().defaultPrevented, false, "a card leaving takes no more keys");
+
+  act(() => exits[0]?.finish());
+  assert.equal(card(), null);
+});
+
+test("the card hung again while it leaves stands again and takes the focus", () => {
+  installExits(LEAVING_CARD);
+  const page = mount();
+  layOutColumn(900);
+  const chevron = press(page, '[aria-label="Expand summary"]');
+  pressEscape();
+
+  act(() => chevron.click());
+  const hung = card();
+  assert.ok(hung, "the card hangs");
+  assert.equal(hung.dataset.leaving, undefined);
+  assert.ok(document.activeElement === rowNamed(hung, "Board"), "its first row takes the focus");
+});
+
 test("the card's own chevron collapses it back to the rail", () => {
   const page = mount();
   layOutColumn(900);
@@ -603,6 +769,22 @@ test("the card's own chevron collapses it back to the rail", () => {
   assert.equal(modeOf(page), "rail");
   assert.equal(chevron.getAttribute("aria-expanded"), "false");
   assert.ok(document.activeElement === chevron, "the rail's chevron takes the focus");
+});
+
+test("a press on the hover card a row of the summary's card hangs leaves the summary's card standing", () => {
+  const page = mount();
+  layOutColumn(900);
+  act(() => summaryButton(page).click());
+  const summary = card();
+  assert.ok(summary, "the card hangs");
+
+  hover(rowNamed(summary, AGENT.title ?? ""));
+  const rowCard = document.querySelector('.tooltip-card[role="tooltip"]');
+  assert.ok(rowCard, "the agent's row hangs its card");
+  act(() => {
+    rowCard.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+  });
+  assert.ok(card(), "the summary's card stands");
 });
 
 test("a press in the column takes the card down and still lands where it was pressed", () => {

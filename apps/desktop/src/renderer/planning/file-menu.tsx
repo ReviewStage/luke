@@ -117,8 +117,8 @@ export function FileMenu({
           <EllipsisIcon />
         </button>
       </Tooltip>
-      {menu.open === undefined ? null : (
-        <ActionMenu label="File actions" menu={menu.open} groups={groups} onClose={menu.close} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label="File actions" menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
     </>
   );

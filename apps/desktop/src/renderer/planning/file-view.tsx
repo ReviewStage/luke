@@ -1,7 +1,16 @@
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type RefObject,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { GitHubMark } from "../account-marks";
+import { paneTiming } from "../desktop/pane-motion";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
@@ -13,6 +22,7 @@ import {
   type FileRead,
   fileUrl,
   notesOf,
+  shortCommit,
   WHOLE_TEXT,
   type WholeText,
   wholeTextOf,
@@ -29,8 +39,10 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * as breadcrumbs, then at its end the file opened on GitHub, the ⋯ of what
  * is done with it (`file-menu.tsx`), and the tree's toggle, the side
  * panel's own glyph, since the tree is docked on the right as the panel
- * is. The tab under it reads the file and tells the bar how the read
- * stands, which is what the GitHub button and the menu offer by.
+ * is, and slides in and out as the panel does (`useTreeSlide`). The tab
+ * under it reads the file and tells the bar how the read stands, which is
+ * what the GitHub button and the menu offer by. The breadcrumbs are words
+ * in the window's own type, as a tab's name is; only the file is code.
  *
  * The tree and the breadcrumbs both browse the repository the file was
  * read from, listed through one store of what the panel has listed
@@ -42,8 +54,9 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
  * alone, its path plain in the bar. A file opened at a commit, as an inbox
- * item's code opens it, is read at that commit, its GitHub page and its
- * copy too, and drawn afresh when the same file is opened at another.
+ * item's code or a snippet Luke read from his checkout opens it, is read at
+ * that commit, its GitHub page and its copy too, the commit named quietly
+ * beside the path, and drawn afresh when the same file is opened at another.
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
@@ -69,6 +82,62 @@ function TreeToggle({
       </button>
     </Tooltip>
   );
+}
+
+/** The tree as the view draws it: whether it is drawn, whether on its way out, and its box. */
+interface TreeSlide {
+  drawn: boolean;
+  leaving: boolean;
+  pane: RefObject<HTMLElement | null>;
+}
+
+/**
+ * The tree shown and hidden as a pane is (docs/DESIGN.md): it lands in the
+ * layout or leaves it at once, so the file takes or gives its room on the
+ * frame the toggle is pressed and moves no more, and the tree slides in
+ * from the view's right edge, or out past it over the file it uncovers,
+ * on the pane's own motion tokens. Each slide starts from wherever one
+ * under way had brought it. A closed tree is held drawn through its slide
+ * out and let go once it has played; with no motion to play, under reduced
+ * motion or a capture run, it is let go before the frame is drawn. The tree
+ * a File tab opens with stands at once, since nothing was toggled.
+ */
+function useTreeSlide(open: boolean): TreeSlide {
+  const pane = useRef<HTMLElement>(null);
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  if (shown !== open) {
+    setShown(open);
+    setLeaving(!open);
+  }
+  const last = useRef(open);
+  useLayoutEffect(() => {
+    const element = pane.current;
+    if (last.current === open || element === null) return;
+    last.current = open;
+    const timing = paneTiming(element);
+    // Note that the slide under way is read before it is stopped, because
+    // the next one starts from where it had brought the tree, and that it is
+    // stopped even with no motion to play, because an exit's fill would
+    // otherwise hold a tree shown again past the edge.
+    const from = getComputedStyle(element).transform;
+    for (const running of element.getAnimations()) running.cancel();
+    if (timing === undefined) {
+      if (!open) setLeaving(false);
+      return;
+    }
+    if (open) {
+      const start = from === "none" ? "translateX(100%)" : from;
+      element.animate([{ transform: start }, { transform: "none" }], timing);
+      return;
+    }
+    const exit = element.animate([{ transform: from }, { transform: "translateX(100%)" }], {
+      ...timing,
+      fill: "forwards",
+    });
+    exit.onfinish = () => setLeaving(false);
+  }, [open]);
+  return { drawn: open || leaving, leaving, pane };
 }
 
 /** A File tab's history as its bar walks it: whether each way holds a file, and the step. */
@@ -192,9 +261,8 @@ export function FileView({
   );
 
   const commit = file.commit;
-  // Luke's notes are on the lines of his own checkout, which no commit pins.
   const notes: FileNotes = {
-    notes: commit === undefined ? notesOf(shownCode, file.path, repository) : [],
+    notes: notesOf(shownCode, file.path, repository, commit),
     folded: file.foldedNotes ?? [],
     onFold: onFoldNote,
     onShow: onShowNote,
@@ -218,6 +286,7 @@ export function FileView({
     }));
 
   const browsing = repository !== null;
+  const tree = useTreeSlide(browsing && treeOpen);
   return (
     <div className="file-view">
       <header className="file-view-bar">
@@ -234,6 +303,11 @@ export function FileView({
             <span className="file-view-path">
               <bdi>{file.path}</bdi>
             </span>
+          </Tooltip>
+        )}
+        {commit === undefined ? null : (
+          <Tooltip label={`Read at commit ${commit}`}>
+            <span className="file-view-commit">{shortCommit(commit)}</span>
           </Tooltip>
         )}
         <div className="file-view-actions">
@@ -256,25 +330,26 @@ export function FileView({
       </header>
       <div className="file-view-body">
         {/* Keyed by the file, then by the commit it is read at, so lines read
-            at one commit are never laid beside another's. Luke's snippet was
-            read from his own checkout, which no commit pins. */}
+            at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
           <FileTab
             key={commit ?? HEAD_READ}
             file={file}
-            snippet={commit === undefined ? snippet : undefined}
+            snippet={snippet}
             notes={notes}
             readFile={readAt}
             onRead={onRead}
           />
         </Fragment>
-        {browsing && treeOpen ? (
+        {browsing && tree.drawn ? (
           <FileTreePane
             file={file.path}
             shown={shown}
             listFolder={listFolder}
             readWhole={listWhole}
             onOpen={onBrowse}
+            pane={tree.pane}
+            leaving={tree.leaving}
           />
         ) : null}
       </div>

@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  recordCodingAgentPublished,
+} from "@sidecar/database/models/coding-agent-store";
+import { writePage } from "@sidecar/database/models/plan-pages";
+import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { purgeDeletedPlanCalls } from "@sidecar/database/models/soft-delete";
+import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { planBoard } from "@sidecar/database/schemas/plan";
+import { turns } from "@sidecar/database/schemas/storage";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
+import {
+  VOICE_CLOSE_REASON,
+  VOICE_DELEGATION_MODE,
+  VOICE_SEGMENT_ROLE,
+  type VoiceSegmentRole,
+} from "@sidecar/database/voice-vocabulary";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import {
@@ -9,6 +31,7 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { planPagesAnswerSchema, planPageVersionAnswerSchema } from "@sidecar/hosted/page-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
@@ -24,6 +47,7 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planSkillsAnswerSchema,
   planTreeAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
@@ -36,36 +60,18 @@ import {
 import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { user } from "../server/db/auth-schema";
-import { planBoard } from "../server/db/plan-schema";
-import { db } from "../server/db/query";
-import { turns } from "../server/db/storage-schema";
-import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  VOICE_SEGMENT_ROLE,
-  type VoiceSegmentRole,
-} from "../server/db/voice-vocabulary";
 import {
   DRAW_ON_BOARD_REFUSAL,
   DRAW_ON_BOARD_STATUS,
   runDrawOnBoard,
 } from "../server/hosted/board-tool";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  recordCodingAgentPublished,
-} from "../server/hosted/coding-agent-store";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
-import { PLAN_REVISION } from "../server/hosted/plan-revisions";
-import { personalWorkspaceOf } from "../server/hosted/workspace-store";
 import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
@@ -83,7 +89,7 @@ import {
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
-import { testSqlClient } from "./support/sql-client";
+import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 import {
   fakeWorkspaceSeams,
   joinWorkspace,
@@ -113,10 +119,12 @@ const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
 const FILE = "/api/plans/file";
 const TREE = "/api/plans/tree";
+const SKILLS = "/api/plans/skills";
 const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
 const EDIT = "/api/plans/edit";
+const PAGE = "/api/plans/page";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -179,6 +187,8 @@ const answer = (
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
         workspaces: yield* fakeWorkspaceSeams,
+        // A plan here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
+        eveOrigin: () => undefined,
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -379,6 +389,24 @@ function repositoryOf(sent: SentToGitHub): Response | undefined {
   return tree === undefined ? Response.json({ message: "Not Found" }, { status: 404 }) : tree();
 }
 
+/** The fixture repository's skills: one a developer may choose, one the model alone loads, and one in the Claude Code root. */
+const relaySkills = skillsRepository({
+  fullName: "Acme/Relay",
+  branch: "main",
+  roots: {
+    ".agents/skills": { release: SKILL_ENTRY.FOLDER, drizzle: SKILL_ENTRY.FOLDER },
+    ".claude/skills": { review: SKILL_ENTRY.FOLDER },
+  },
+  files: {
+    ".agents/skills/release/SKILL.md":
+      "---\nname: release\ndescription: Use to cut a release of the relay.\n---\nTag it, then publish.",
+    ".agents/skills/drizzle/SKILL.md":
+      "---\ndescription: Use for Drizzle schemas.\nuser-invocable: false\n---\nWrite the schema first.",
+    ".claude/skills/review/SKILL.md":
+      "---\ndescription: Use to review a pull request.\n---\nRead the diff whole.",
+  },
+});
+
 const RELAY_REACHED = [{ id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] }];
 
 /** A note the developer drew, as the canvas would send it. */
@@ -488,7 +516,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-it.layer(testSqlClient)("the plan routes", (it) => {
+it.layer(getTestDB())("the plan routes", (it) => {
   it.effect(
     "a listed plan names its open pull request among the few it carries, ahead of newer merged and closed ones",
     () =>
@@ -1480,6 +1508,88 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
+    "a deleted plan takes its ended calls and their words with it, and the sweep each call left open once it ends",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const keptId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const othersId = startedId(
+          yield* ask(request(PLANS, other, { method: "POST", body: RELAY })),
+        );
+        const hour = Duration.toMillis(Duration.hours(1));
+        const ended = (at: number): Recorded => ({
+          closedAt: new Date(at),
+          closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
+          usage: { seconds: 60, confirmed: false },
+          model: LIVE_DEFAULTS.MODEL,
+        });
+        const said: readonly Said[] = [[VOICE_SEGMENT_ROLE.USER, "Ship the invite flow.", 0]];
+        yield* callAbout(
+          { userId: owner, planId, startedAt: 10 * hour, recorded: ended(10 * hour + 60_000) },
+          said,
+        );
+        const openCall = yield* callAbout({ userId: owner, planId, startedAt: 12 * hour }, said);
+        const staleCall = yield* callAbout({ userId: owner, planId, startedAt: 9 * hour }, said);
+        const keptCall = yield* callAbout(
+          { userId: owner, planId: keptId, startedAt: 10 * hour, recorded: ended(11 * hour) },
+          said,
+        );
+        const othersCall = yield* callAbout(
+          { userId: other, planId: othersId, startedAt: 10 * hour, recorded: ended(11 * hour) },
+          said,
+        );
+        const standing = () =>
+          Effect.map(
+            db
+              .select({ id: voiceSessions.id })
+              .from(voiceSessions)
+              .where(inArray(voiceSessions.userId, [owner, other]))
+              .orderBy(voiceSessions.id),
+            (rows) => rows.map(({ id }) => id),
+          );
+        const spokenOn = () =>
+          Effect.map(
+            db
+              .selectDistinct({ id: voiceTranscriptSegments.voiceSessionId })
+              .from(voiceTranscriptSegments)
+              .innerJoin(
+                voiceSessions,
+                eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId),
+              )
+              .where(inArray(voiceSessions.userId, [owner, other]))
+              .orderBy(voiceTranscriptSegments.voiceSessionId),
+            (rows) => rows.map(({ id }) => id),
+          );
+        const ids = (...each: string[]) => [...each].sort();
+
+        yield* ask(request(ONE_PLAN, owner, { id: planId, method: "DELETE" }));
+
+        const afterDelete = ids(openCall, staleCall, keptCall, othersCall);
+        assert.deepEqual(yield* standing(), afterDelete);
+        assert.deepEqual(yield* spokenOn(), afterDelete);
+
+        // An hour past the open call's start no Live session of the stale call can still run.
+        const liveEdge = new Date(12 * hour - hour);
+        yield* purgeDeletedPlanCalls(liveEdge);
+        assert.deepEqual(yield* standing(), ids(openCall, keptCall, othersCall));
+
+        yield* db
+          .update(voiceSessions)
+          .set({ closedAt: new Date(12 * hour + 60_000) })
+          .where(eq(voiceSessions.id, openCall));
+        yield* purgeDeletedPlanCalls(liveEdge);
+        const afterSweep = ids(keptCall, othersCall);
+        assert.deepEqual(yield* standing(), afterSweep);
+        assert.deepEqual(yield* spokenOn(), afterSweep);
+      }),
+  );
+
+  it.effect(
     "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan",
     () =>
       Effect.gen(function* () {
@@ -2158,6 +2268,80 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
+    "a plan's repository's skills read as GitHub holds them on the default branch, naming that branch, on the App's token, as a desktop sends the read: the ones the model alone loads left out and no body carried; another account's plan reads as none, and a plan with no repository as having none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, relaySkills);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const bare = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })));
+        const skillsOf = (userId: string, plan: string) =>
+          ask(request(`/api/plans/${plan}/skills`, userId), "plans/skills");
+
+        const answered = yield* skillsOf(owner, planId);
+        assert.deepEqual(readAnswer(planSkillsAnswerSchema, HOSTED_HTTP_STATUS.OK, answered), {
+          skills: {
+            repository: "Acme/Relay",
+            branch: "main",
+            skills: [
+              { name: "release", description: "Use to cut a release of the relay." },
+              { name: "review", description: "Use to review a pull request." },
+            ],
+          },
+        });
+        assert.equal(JSON.stringify(answered.body).includes("Tag it"), false, "no body is carried");
+        const asked = github.sent.find((sent) => TREES_PATH.test(new URL(sent.url).pathname));
+        assert.equal(
+          asked?.headers.get("authorization"),
+          `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+        );
+        assert.deepEqual(
+          readAnswer(planSkillsAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* skillsOf(owner, bare)),
+          { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY },
+        );
+        assert.deepEqual(
+          yield* skillsOf(other, planId),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a repository's skills read while GitHub fails answer as unavailable, and a read by any method but GET is refused",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, (sent) =>
+          TREES_PATH.test(new URL(sent.url).pathname)
+            ? Response.json({ message: "Server Error" }, { status: 502 })
+            : undefined,
+        );
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+
+        assert.deepEqual(
+          readAnswer(
+            planSkillsAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(SKILLS, owner, { id: planId })),
+          ),
+          { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE },
+        );
+        assert.deepEqual(
+          yield* ask(request(SKILLS, owner, { id: planId, method: "POST", body: {} })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
     "a raw read carries the file's whole text as it holds it, its long lines uncut and its byte-order mark and line endings kept, refuses bytes that are not UTF-8, is held to the same rule, and a raw query other than 1 is invalid",
     () =>
       Effect.gen(function* () {
@@ -2438,6 +2622,82 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(yield* ask(request(REVISION, owner, { id: planId })), invalid);
         assert.deepEqual(
           yield* ask(request(RESTORE, owner, { id: planId, query: { seq: "1" } })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's pages as a desktop reads them, once the platform lands each read: the list, and one version's HTML inside JSON",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const first = Option.getOrThrow(
+          yield* writePage(owner, planId, { title: "Invite funnel", html: "<p>v1</p>" }),
+        );
+        const second = Option.getOrThrow(
+          yield* writePage(owner, planId, { pageId: first.id, title: "Funnel", html: "<p>v2</p>" }),
+        );
+
+        assert.deepEqual(
+          readAnswer(
+            planPagesAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(`/api/plans/${planId}/pages`, owner), "plans/pages"),
+          ),
+          { pages: [second] },
+        );
+        assert.deepEqual(
+          readAnswer(
+            planPageVersionAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(
+              request(`/api/plans/${planId}/pages/${first.id}/versions/1`, owner),
+              "plans/page",
+            ),
+          ),
+          { page: { ...first, html: "<p>v1</p>" } },
+        );
+      }),
+  );
+
+  it.effect(
+    "another account reads no page of the plan, and a version that names none answers as none or is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const page = Option.getOrThrow(
+          yield* writePage(owner, planId, { title: "Invite funnel", html: "<p>v1</p>" }),
+        );
+        const version = (asker: string, pageId: string, number: string, method?: string) =>
+          ask(
+            request(PAGE, asker, {
+              id: planId,
+              query: { page: pageId, version: number },
+              ...(method === undefined ? undefined : { method }),
+            }),
+          );
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(yield* ask(request(`/api/plans/${planId}/pages`, other), "plans/pages"), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { pages: [] },
+        });
+        assert.deepEqual(yield* version(other, page.id, "1"), notFound);
+        assert.deepEqual(yield* version(owner, page.id, "2"), notFound);
+        assert.deepEqual(yield* version(owner, "not-a-page", "1"), notFound);
+        assert.deepEqual(
+          yield* version(owner, page.id, "0"),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* version(owner, page.id, "1", "POST"),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),

@@ -1,5 +1,5 @@
 import { CloseIcon } from "@sidecar/panel";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -11,7 +11,7 @@ import {
   MENU_DROP,
   type MenuAction,
   type MenuPlacement,
-  type OpenMenu,
+  useActionMenu,
 } from "./action-menu";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
 
@@ -461,7 +461,7 @@ export function Tab({
           {tab}
         </Tooltip>
       ) : (
-        <span className="tab-button" data-editing="true">
+        <span className="tab-button field-well" data-editing="true">
           {glyph}
           {editor}
         </span>
@@ -494,27 +494,24 @@ export function MenuTab({
 }: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
   groups: MenuAction[][];
 }): React.JSX.Element {
-  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
-  const opener = useRef<HTMLElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setMenu(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
+  const menu = useActionMenu(true);
   return (
     <>
       <Tab
         {...tab}
         onSelect={() => {
-          setMenu(undefined);
+          menu.close(false);
           tab.onSelect();
         }}
-        onMenu={(placement, element) => {
-          opener.current = element;
-          setMenu({ placement, opener: element });
-        }}
+        onMenu={menu.show}
       />
-      {menu === undefined ? null : (
-        <ActionMenu label={`${tab.label} actions`} menu={menu} groups={groups} onClose={close} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={`${tab.label} actions`}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
       )}
     </>
   );

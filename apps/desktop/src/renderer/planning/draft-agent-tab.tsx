@@ -66,10 +66,12 @@ export function DraftAgentTab({
     if (!hasWordsOrFiles(task, draft.attachments) || sending) return;
     setSending(true);
     setNote(undefined);
-    latest.current.startTask(draft.id, task, draft.choice, draft.attachments).then((failed) => {
-      setSending(false);
-      setNote(failed);
-    });
+    latest.current
+      .startTask(draft.id, task, draft.choice, draft.attachments, draft.disabledServers)
+      .then((failed) => {
+        setSending(false);
+        setNote(failed);
+      });
   };
   const composer: AgentComposerControl = {
     draft: draft.task,
@@ -113,10 +115,16 @@ export function DraftAgentTab({
           readModels={control.readModels}
           published={undefined}
           usage={undefined}
+          servers={{
+            disabled: draft.disabledServers,
+            onSwitch: (next) => control.onDraftChange({ disabledServers: next }),
+            onOpenSettings: control.onOpenIntegrations,
+          }}
           doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
           followsUp={false}
           keywords={control.keywords}
+          skills={control.readSkills}
         />
       </footer>
     </section>

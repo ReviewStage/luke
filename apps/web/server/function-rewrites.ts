@@ -32,11 +32,27 @@ interface SegmentRewrite {
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
+  {
+    src: "/api/account/integrations/([^/]+)/connect",
+    route: "account/integrations/connect",
+    query: "provider=$1",
+  },
+  {
+    src: "/api/account/integrations/([^/]+)/tools",
+    route: "account/integrations/tools",
+    query: "provider=$1",
+  },
+  {
+    src: "/api/account/integrations/([^/]+)/disconnect",
+    route: "account/integrations/disconnect",
+    query: "provider=$1",
+  },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
   { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },
   { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1" },
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
@@ -47,7 +63,23 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   },
   { src: "/api/plans/([^/]+)/revisions/([^/]+)", route: "plans/revision", query: "id=$1&seq=$2" },
   { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
+    route: "plans/page",
+    query: "id=$1&page=$2&version=$3",
+  },
+  { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1" },
   { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
+  {
+    src: "/api/account/plan-template/revisions/([^/]+)/restore",
+    route: "account/plan-template/restore",
+    query: "seq=$1",
+  },
+  {
+    src: "/api/account/plan-template/revisions/([^/]+)",
+    route: "account/plan-template/revision",
+    query: "seq=$1",
+  },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
@@ -56,6 +88,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
   { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",

@@ -50,6 +50,12 @@
         "longTokens"
       ],
       "additionalProperties": false
+    },
+    "fastWithheld": {
+      "type": "string",
+      "enum": [
+        "own-key"
+      ]
     }
   },
   "required": [

@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import {
+  ASK_DISPATCH_REFUSAL,
+  type AskRecord,
+  type AskRow,
+  newestSession,
+} from "@sidecar/database/models/asks";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
+import {
+  conversationReachableBy,
+  recordedRuntimeSession,
+} from "@sidecar/database/models/recorded-session";
+import {
+  STORE_WRITE_EFFECT,
+  STORE_WRITE_REFUSAL,
+  storeWriter,
+} from "@sidecar/database/models/writer";
+import { conversations, turns } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
@@ -16,9 +36,6 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, test } from "vitest";
-import { db } from "../server/db/query";
-import { conversations, turns } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_DISPATCH_DEADLINE,
   ASK_REFUSAL,
@@ -37,21 +54,7 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
-import {
-  conversationReachableBy,
-  recordedRuntimeSession,
-} from "../server/hosted/brain-host/recorded-session";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { openPlanConversation } from "../server/hosted/plan-store";
-import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
-import {
-  ASK_DISPATCH_REFUSAL,
-  type AskRecord,
-  type AskRow,
-  newestSession,
-} from "../server/hosted/store/asks";
-import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
@@ -230,6 +233,7 @@ function fakeEve(): FakeEve {
         eve.activeTurn = undefined;
         return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
       }),
+    reset: () => Effect.die(new Error("this suite retires no session")),
   };
   return eve;
 }

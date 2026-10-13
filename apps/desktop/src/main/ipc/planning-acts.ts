@@ -17,6 +17,8 @@ import type {
   PlanningRevisionsParams,
   PlanningSetRepositoryAnswer,
   PlanningSetRepositoryParams,
+  PlanningSkillsAnswer,
+  PlanningSkillsParams,
   PlanningStartAnswer,
   PlanningStartRequest,
   PlanningTreeAnswer,
@@ -71,6 +73,7 @@ export interface PlanningActsDependencies {
     planningWorkEarlier(): Effect.Effect<void>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
     planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
+    planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
@@ -85,7 +88,7 @@ export interface PlanningActsDependencies {
       params: PlanningWorkspaceLeaveParams,
     ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
   };
-  /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
+  /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
@@ -113,11 +116,13 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_SET_REPOSITORY
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
+  | typeof ACT_KIND.WEB_OPEN
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
   | typeof ACT_KIND.PLANNING_FILE
   | typeof ACT_KIND.PLANNING_TREE
+  | typeof ACT_KIND.PLANNING_SKILLS
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
@@ -227,6 +232,12 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
       return dependencies.openExternal(url);
     },
+    // The address is an http or https one by the act's own schema, so it
+    // opens in the browser and never in a file's or another app's handler.
+    [ACT_KIND.WEB_OPEN]: ({ url }, sender) => {
+      refuseUnlessPanel(ACT_KIND.WEB_OPEN, sender);
+      return dependencies.openExternal(url);
+    },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.
     [ACT_KIND.PLANNING_TALK]: (_payload, sender) => {
@@ -248,6 +259,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_TREE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_TREE, sender);
       return host.planningTree(params);
+    },
+    [ACT_KIND.PLANNING_SKILLS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_SKILLS, sender);
+      return host.planningSkills(params);
     },
     [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);

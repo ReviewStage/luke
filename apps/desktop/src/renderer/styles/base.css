@@ -3,6 +3,11 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   font-synthesis: none;
   background: transparent;
+  /* The one monospace stack, for code, a path, a branch, or a command,
+     wherever it is drawn: a hand-written rule spends it, and so does
+     Tailwind's `font-mono` (styles/tailwind.css), whose own default this
+     outranks from outside its layers. */
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
   --state-working: #5cd5ff;
   /* A sent message is an action the developer already took, not a session
@@ -25,11 +30,10 @@
      that ground. Quitting, the trash, and the confirm the trash opens are the
      only three places in the app that draw it, and they have to be the same
      red — a delete that announced itself in a colour nothing else uses would
-     read as a different kind of act. */
+     read as a different kind of act. The text weight is also every error's
+     and failure's words, so a fault reads in the same red as a delete. */
   --danger: #ff7e7e;
   --danger-text: #ff9b9b;
-  --error-text: #ff8c8c;
-  --surface-overlay: #111214;
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -49,13 +53,19 @@
   /* A button held down: a step past its hover, so the press is seen. */
   --pressed: rgba(255, 255, 255, 0.26);
   /* The keyboard's ring around whatever control it is on, in the system's
-     own default accent. */
+     own default accent, and how thick it is and how far it stands off the
+     control's edge. A control that clips what it holds sets the offset to
+     less the width, so the ring is drawn inside it. The reach is how far the
+     ring stands past the control's edge: a scroller pads by it, so the ring
+     of a row laid edge to edge in it is not clipped. */
   --focus-ring: var(--message-sent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+  --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
   --hairline: rgba(255, 255, 255, 0.08);
   /* The edge of what floats over the window, a menu or a dialog, and the one
      an edge brightens to while it is taking a chord. */
   --hairline-strong: rgba(255, 255, 255, 0.12);
-  --edge-strong: rgba(255, 255, 255, 0.35);
   /* A document's running text, a step under the primary ink so a page of it
      does not glare. */
   --text-body: rgba(255, 255, 255, 0.86);
@@ -114,21 +124,6 @@
   --file-icon-pink: #ff678d;
   --file-icon-mauve: #79697b;
 
-  /* A key drawn on screen is a physical thing quoted, so it gets a little of
-     what the hairline withholds: an edge that closes the shape on its own, a
-     face just off the surface, and a dark underside a pixel deep. Quiet on
-     purpose — a page lists thirty chords, and caps that each shouted would
-     outweigh the names they belong to — but the edge still says where one key
-     ends and the next begins. */
-  --keycap-face: rgba(255, 255, 255, 0.06);
-  --keycap-edge: rgba(255, 255, 255, 0.12);
-  --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.35);
-  /* Squares a lone glyph and lets a word key ride out past it on the padding.
-     Both are set per surface: the Keyboard shortcuts page draws the chord at a
-     small control's height. */
-  --keycap-size: 18px;
-  --keycap-text: 10.5px;
-
   /* Springs, durations, delays, and the row fan arrive from motion-tokens.css,
      imported by index.css, so the marketing mock cannot ship a different
      vocabulary. One sampled damped spring drives every travel, at one
@@ -178,8 +173,6 @@
     --state-merged: #8250df;
     --danger: #e0383e;
     --danger-text: #b8232a;
-    --error-text: #b8232a;
-    --surface-overlay: #fff;
 
     --text-primary: rgba(0, 0, 0, 0.88);
     --text-secondary: rgba(0, 0, 0, 0.6);
@@ -191,7 +184,6 @@
     --pressed: rgba(0, 0, 0, 0.11);
     --hairline: rgba(0, 0, 0, 0.08);
     --hairline-strong: rgba(0, 0, 0, 0.1);
-    --edge-strong: rgba(0, 0, 0, 0.4);
     --text-body: rgba(0, 0, 0, 0.8);
     --ink: #000;
     --scrollbar: rgba(0, 0, 0, 0.2);
@@ -230,12 +222,6 @@
     --file-icon-pink: #d32a61;
     --file-icon-mauve: #594c5b;
 
-    /* A light key is a white cap with a grey edge and a shadow under it, as
-       a keyboard drawn on white is. */
-    --keycap-face: #fff;
-    --keycap-edge: rgba(0, 0, 0, 0.11);
-    --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.06);
-
     --surface-fill: #fff;
   }
 }
@@ -254,6 +240,23 @@
 
   to {
     mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
+/* The same fade at a scroll container's top edge, where something stands
+   pinned over it, as the plan template's banner does: content scrolled up
+   past the edge dissolves into the surface over `--scroll-fade` rather than
+   being sliced against the banner. A container runs it on its own scroll
+   timeline over its first `--scroll-fade` of scrolling, so a page at rest at
+   its top is left whole and the fade has fully risen by the time a line
+   could reach the edge. */
+@keyframes scroll-top-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--scroll-fade));
   }
 }
 
@@ -300,6 +303,43 @@
     background: none;
     color: inherit;
     font: inherit;
+  }
+
+  /* One ring for every control. `:focus-visible` alone guesses wrong in a
+     window Luke focuses for itself and rings a button after a plain press,
+     so until the keyboard has actually moved focus (`keyboard-modality.ts`)
+     nothing but a field rings. In the base layer, so a sheet's own rule for
+     a control still wins: a menu row marks its focus with a fill, and says
+     so where it is drawn. */
+  :is(
+    button,
+    a[href],
+    summary,
+    input[type="checkbox"],
+    [role="button"],
+    [role="tab"],
+    [role="switch"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"]
+  ):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  :root:not([data-keyboard="true"])
+    :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"])) {
+    outline: none; /* no ring: a press moved focus, not the keyboard */
+  }
+
+  /* A field holding the caret wears the same ring however the caret got
+     there, centred on its own edge the way a macOS text field takes the
+     keyboard. A field that sits borderless in a well of its own, a search's
+     or a composer's, rings the well instead (`.field-well`). */
+  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
+  .field-well:has(:is(textarea, [contenteditable], input):focus-visible) {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: calc(var(--focus-ring-width) / -2);
   }
 }
 
@@ -571,7 +611,7 @@ body,
 /* A voice failure borrows the strip in the `.error-message` red, because it
    is a fault being reported rather than words being spoken. */
 .voice-caption[data-tone="error"] .voice-caption-text {
-  color: var(--error-text);
+  color: var(--danger-text);
 }
 
 /* A state notice borrows it more quietly, in the attention orange: temporary
@@ -838,12 +878,52 @@ svg.working-mark[viewBox] {
   white-space: nowrap;
 }
 
-/* Feedback --------------------------------------------------------------- */
+/* Disclosures ------------------------------------------------------------ */
 
-/* The settings section's two offers share one row, side by side. */
-.feedback-offers {
-  display: flex;
-  gap: 7px;
+/* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in the
+   layout at once and rides in on the pair an arriving element rides: a fade,
+   and a clip unrolling it from its top edge, on the panes' plain ease-out,
+   since a clip that overshot would cut nothing. Closing, it fades out first
+   and the layout lands once the fade is done. Nothing moves a height, so the
+   words never re-wrap mid-motion, and a body still growing as it streams is
+   unrolled by a fraction of its own box rather than a size it was measured
+   at. Only the press marks the root, so a find opening a fold onto a match,
+   or a row drawn again, appears at once. */
+[data-disclosure="opening"] > .disclosure-body {
+  animation:
+    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    disclosure-unroll var(--duration-pane) var(--motion-pane) backwards;
+}
+
+[data-disclosure="closing"] > .disclosure-body {
+  animation: disclosure-leave var(--duration-exit) var(--motion-exit) forwards;
+  /* Note that the hold waits on every motion the body runs, and a body that
+     held focus would start the scrollbar's own fade (desktop.css) as it
+     lost it, so the exit is the one motion it has. */
+  transition: none;
+}
+
+@keyframes disclosure-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Note that the clip names both ends, because a clip cannot be interpolated
+   from none: it would flip halfway through instead. */
+@keyframes disclosure-unroll {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes disclosure-leave {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,

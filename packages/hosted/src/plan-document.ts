@@ -4,22 +4,21 @@ import { PLAN_ACTOR, PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 /**
  * plan-document.ts -- a plan kept as one free Markdown document: its sections, and who last changed each.
  *
- * A plan is moving from the fixed template's fields (`plan-template.ts`) to
- * one Markdown text the developer and Luke both write, started from the
- * account's own template (`docs/PLANNING.md`). The text has no title line,
+ * A plan is one Markdown text the developer and Luke both write, started
+ * from the account's own template (`docs/PLANNING.md`). The text has no title line,
  * since the plan's name is its own, and its assumptions are a section like
  * any other. A section is a `#` or `##` heading and everything up to the
  * next one, a deeper heading standing inside its section, and a heading
  * inside a code fence being no heading at all; what stands before the first
  * heading is a section of its own with no heading. A section is known by its
- * heading's words, so the window can say who wrote each section the way it
- * said who wrote each field, and a renamed heading is a section no save has
+ * heading's words, so the window can say who wrote each section, and a
+ * renamed heading is a section no save has
  * changed yet.
  */
 
 /**
  * Who last changed one section of a plan that is one document, and when: the
- * section's heading, the writer as a field's writer names one, the coding
+ * section's heading, the writer (`PLAN_ACTOR`), the coding
  * agent's id where an agent made the save, whether the notetaker made it on
  * one of the plan's calls, and the instant.
  */

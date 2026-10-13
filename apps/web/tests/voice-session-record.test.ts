@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { LIVE_DEFAULTS } from "@sidecar/live";
-import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
+import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { user } from "@sidecar/database/schemas/auth";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { getTestDB } from "@sidecar/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
-} from "../server/db/voice-vocabulary";
-import { deletePlan } from "../server/hosted/plan-store";
-import { InstantColumnSchema } from "../server/hosted/store/database";
-import { voiceSessionRecord } from "../server/voice/session-record";
-import { testSqlClient } from "./support/sql-client";
+} from "@sidecar/database/voice-vocabulary";
+import { LIVE_DEFAULTS } from "@sidecar/live";
+import { eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -87,7 +87,7 @@ const callWith = (
     return voiceSessionId;
   });
 
-it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
     "a registered session names its account and its model, keeps its first owner, and answers the owner's re-attach alone",
     () =>

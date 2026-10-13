@@ -1,9 +1,10 @@
+import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { Effect, Redacted } from "effect";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
 import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
-import { recordVoiceSeconds, spendHostedMeter } from "../hosted/quota.js";
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { deploymentExchange } from "./deployment-exchange.js";
@@ -14,7 +15,6 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "./service.js";
-import { voiceSessionRecord } from "./session-record.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function

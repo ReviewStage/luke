@@ -3,6 +3,7 @@ import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { ChevronDownIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { useDisclosure } from "../use-disclosure";
 import { agentUsageLine } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";
@@ -47,6 +48,7 @@ export function AgentModelChip({
   usage: CodingAgentUsage | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -72,7 +74,7 @@ export function AgentModelChip({
         ref={trigger}
         type="button"
         className="toolbar-button agent-model-button"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
@@ -80,9 +82,11 @@ export function AgentModelChip({
         <ModelLabel choice={model.choice} models={models ?? []} />
         <ChevronDownIcon />
       </button>
-      {open ? (
+      {drawn.mounted ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ModelMenu
+            leaving={drawn.leaving}
+            ref={drawn.ref}
             id={menuId}
             className="agent-model-menu"
             models={models}

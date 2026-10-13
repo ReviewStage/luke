@@ -1,4 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  GITHUB_INSTALLATION_STATUS,
+  type GitHubInstallationStatus,
+} from "@sidecar/database/github-installation-vocabulary";
+import { listCodingAgentsOnBranches } from "@sidecar/database/models/coding-agent-store";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -9,13 +14,8 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import {
-  GITHUB_INSTALLATION_STATUS,
-  type GitHubInstallationStatus,
-} from "./db/github-installation-vocabulary.js";
 import type { GitHubApp } from "./github/github-app.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
-import { listCodingAgentsOnBranches } from "./hosted/coding-agent-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { setInstallationStatus } from "./hosted/github-installations.js";
 import {

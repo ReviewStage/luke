@@ -1,18 +1,20 @@
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
-import { DateTime, Effect, type Redacted, Result } from "effect";
-import type { WebStoreRun } from "../../runtime.js";
-import type { PlanStoreEffect } from "../plan-store.js";
+import type { PlanStoreEffect } from "@sidecar/database/models/plan-store";
 import {
   type KeyRing,
   openProviderKey,
   PROVIDER_KEY_UNREADABLE,
   parseKeyRing,
-} from "../provider-key-seal.js";
+} from "@sidecar/database/models/provider-key-seal";
 import {
   listProviderKeyRows,
   type ProviderKeyRow,
   setProviderKeyStatus,
-} from "../provider-key-store.js";
+} from "@sidecar/database/models/provider-key-store";
+import type { ModelProvider } from "@sidecar/hosted/models-wire";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
+import { DateTime, Effect, type Redacted, Result } from "effect";
+import type { WebStoreRun } from "../../runtime.js";
+import type { MeterSeams } from "../agent-runtime/meter.js";
 import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 
 /**
@@ -32,6 +34,8 @@ import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 /** What the read is handed: Luke's own keys, the deployment's ring as its environment holds it, and the edge's runner for a report. */
 export interface AccountKeysSeams {
   readonly luke: LukeKeys;
+  /** The account's meter, which Luke's own keys carry (`../agent-runtime/meter.ts`). */
+  readonly meter: (userId: string) => MeterSeams;
   readonly ring: Redacted.Redacted | undefined;
   readonly run: WebStoreRun;
 }
@@ -47,7 +51,7 @@ function keyOf(
   if (row === undefined) {
     const luke =
       provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? seams.luke.anthropic : seams.luke.openAi;
-    return luke === undefined ? undefined : { key: luke };
+    return luke === undefined ? undefined : { key: luke, meter: seams.meter(userId) };
   }
   if (ring === undefined) return PROVIDER_KEY_UNREADABLE;
   const opened = openProviderKey(ring, { userId, provider }, row);
@@ -92,4 +96,12 @@ export function accountProviderKeys(
       ),
     };
   });
+}
+
+/** The providers the account runs on a key of its own: each it holds a row for, readable or not, as a step would. */
+export function ownKeyProviders(userId: string): PlanStoreEffect<ReadonlySet<ModelProvider>> {
+  return Effect.map(
+    listProviderKeyRows(userId),
+    (rows) => new Set(rows.map((row) => row.provider)),
+  );
 }

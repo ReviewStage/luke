@@ -1,27 +1,40 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AgentTabCard } from "../planning/agent-tab-card";
 import { shownFiles } from "../planning/code-pane-model";
+import { agentTabLabel } from "../planning/coding-agent-model";
+import type { InboxBoardView } from "../planning/inbox-model";
+import { sameTab } from "../planning/tab-strip-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, useActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
-import { AGENTS_SECTION, agentEntries, inboxEntries } from "./main-tabs";
-import { ADD_SECTION, panelEntries, planWorkers } from "./side-panel";
-import type { AddEntry } from "./strip-tabs";
+import {
+  AGENTS_SECTION,
+  agentCardReading,
+  agentEntries,
+  INBOX_LABEL,
+  INBOX_ROW,
+  inboxEntry,
+} from "./main-tabs";
+import { ADD_SECTION, panelEntries, planWorkers, workerCardReading } from "./side-panel";
+import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 
 /**
  * plan-summary.tsx -- the open plan's summary at its column's right: everything the plan's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
  * The summary lists what the side panel's "+" and the plan's column's "+"
- * open, in their rows' words and glyphs (`panelEntries`, `inboxEntries`,
- * `agentEntries`), under quiet headings: the panel's kinds the plan has
- * used, its Inbox and coding agents, its subagents, and the files Luke
- * showed on it. An agent or a subagent wears where it stands on its glyph,
+ * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
+ * `agentEntries`), under quiet headings: the plan's Inbox, counting what
+ * waits on the developer, and the panel's kinds the plan has used, its
+ * coding agents, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
  * beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
@@ -104,8 +117,8 @@ const NOTHING_YET_LINE = "Board, code, agents, and files appear here as you plan
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
 
-/** What a row of the card opens over the window, drawn outside the card, so a press in it is no press outside: an agent's menu, and its Archive's question. */
-const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"]';
+/** What a row of the card opens over the window, drawn outside the card, so a press in it is no press outside: an agent's menu, its Archive's question, and a row's hover card. */
+const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"], [role="tooltip"]';
 
 /**
  * Whether the summary stands pinned where it fits, rather than collapsed to
@@ -258,27 +271,132 @@ export function SummaryButton({
   );
 }
 
+/** A row of the summary: its "+" row, and the card it hangs where the rest of the window hangs one for the same thing. */
+interface SummaryEntry extends AddEntry {
+  card?: ReactNode;
+}
+
 /** A heading and the rows under it. */
 interface SummarySection {
   heading: string;
-  entries: readonly AddEntry[];
+  entries: readonly SummaryEntry[];
 }
 
-/** What the summary lists, under its headings in their order, each heading only where it has a row. */
-function summarySections(plans: PlansControl): SummarySection[] {
+/** What the Inbox's card says while nothing waits on the developer. */
+const NOTHING_WAITS = "Nothing waiting";
+
+/**
+ * The Inbox row's card, in a tab card's look: its name, how many items wait
+ * on the developer at its right, and under them the title of the newest
+ * that waits, or of the latest settled where none does.
+ */
+function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
+  const waiting = inbox.open.length;
+  const latest = waiting > 0 ? inbox.open.at(-1) : inbox.settled[0];
+  return (
+    <div className="tab-card" data-tab-card="">
+      <div className="tab-card-head">
+        <span className="tab-card-name">{INBOX_LABEL}</span>
+        <span className="tab-card-time">
+          {waiting === 0 ? NOTHING_WAITS : `${waiting} waiting`}
+        </span>
+      </div>
+      {latest === undefined ? null : <p className="tab-card-note">{latest.title}</p>}
+    </div>
+  );
+}
+
+/**
+ * A file row's card, in a tab card's look, as a File tab's hint says its
+ * path: the file's whole path, and under it Luke's note on the newest lines
+ * of it he showed with one, where any has.
+ */
+function FileCard({ path, note }: { path: string; note: string | undefined }): React.JSX.Element {
+  return (
+    <div className="tab-card" data-tab-card="">
+      <span className="tab-card-name">{path}</span>
+      {note === undefined ? null : <p className="tab-card-note">{note}</p>}
+    </div>
+  );
+}
+
+/** Luke's note on the newest lines of the file he showed with one, if any. */
+function newestNote(shown: readonly PlanCodeShowing[], path: string): string | undefined {
+  return shown.findLast(({ code }) => code.ref.path === path && code.note !== undefined)?.code.note;
+}
+
+/**
+ * The card each row hangs, the one its tab hangs where it has one: an
+ * agent's its tab's card, read from what its tab last held; a subagent's
+ * its tab's card, from the session the plan's work holds; a file's its path
+ * and Luke's note; the Inbox's what waits. The panel's kinds hang none, as
+ * their tabs hang none, since their names say all there is.
+ */
+function withCards(
+  entries: readonly AddEntry[],
+  input: {
+    plans: PlansControl;
+    inbox: InboxBoardView;
+    held: HeldTranscripts;
+    workers: ReturnType<typeof planWorkers>;
+    files: readonly string[];
+  },
+): SummaryEntry[] {
+  const { plans, inbox, held, workers, files } = input;
+  const { agents, mainTabs } = plans;
+  const models = agents.models ?? [];
+  const shown = plans.shownCode ?? [];
+  return entries.map((entry) => {
+    const { row, agent } = entry;
+    if (agent !== undefined) {
+      const label = agentTabLabel(agent, agents.models);
+      const chosen = sameTab({ agent: agent.id }, mainTabs.tab);
+      const read = agentCardReading(agent, label, held, chosen);
+      return { ...entry, card: <AgentTabCard name={label} models={models} read={read} /> };
+    }
+    if (row.id === INBOX_ROW) return { ...entry, card: <InboxCard inbox={inbox} /> };
+    if (row.section === ADD_SECTION.SUBAGENTS) {
+      const worker = workers.find((each) => each.call.id === row.id);
+      const untitled = worker?.session?.title === undefined;
+      const read = () => workerCardReading(worker);
+      const card = (
+        <AgentTabCard name={row.label} untitled={untitled} models={models} read={read} />
+      );
+      return { ...entry, card };
+    }
+    // Note that a file's row is named by its place in the files listed (`panelEntries`).
+    const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
+    if (path === undefined) return entry;
+    return { ...entry, card: <FileCard path={path} note={newestNote(shown, path)} /> };
+  });
+}
+
+/**
+ * What the summary lists, under its headings in their order, each heading
+ * only where it has a row. The plan's Inbox leads Tabs, counting what waits
+ * on the developer, while it holds an item, waiting or settled, or its tab
+ * is open, as a panel's kind stands once the plan has used it.
+ */
+function summarySections(
+  plans: PlansControl,
+  inbox: InboxBoardView,
+  held: HeldTranscripts,
+): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
-  const entries = [
-    ...panelEntries({
-      panel: sidePanel,
-      kinds: sidePanel.used,
-      workers,
-      files: shownFiles(plans.shownCode ?? []),
-      standing: true,
-    }),
-    ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX)),
+  const files = shownFiles(plans.shownCode ?? []);
+  const inboxHolds = inbox.open.length + inbox.settled.length > 0;
+  const inboxRow =
+    inboxHolds || mainTabs.tabs.includes(MAIN_TAB.INBOX)
+      ? [inboxEntry(() => mainTabs.onChoose(MAIN_TAB.INBOX), inbox.open.length)]
+      : [];
+  const rows = [
+    ...inboxRow,
+    ...panelEntries({ panel: sidePanel, kinds: sidePanel.used, workers, files, standing: true }),
     ...agentEntries(mainTabs, agents, true),
   ];
+  const paths = files.map((ref) => ref.path);
+  const entries = withCards(rows, { plans, inbox, held, workers, files: paths });
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
   return SECTION_ORDER.flatMap((heading) => {
@@ -288,34 +406,49 @@ function summarySections(plans: PlansControl): SummarySection[] {
   });
 }
 
-/** A row of the column or the card: its glyph, its label, and what tells it apart, a file's folder, as its "+" row says it, faded at its end where it is cut short, then a failed agent's mark. */
+/**
+ * A row of the column or the card: its glyph, its label, and what tells it
+ * apart, a file's folder, as its "+" row says it, faded at its end where it
+ * is cut short, then a failed agent's mark or the Inbox's count. A row with
+ * a card hangs it on hover beside the row, before its start where the
+ * window ends past it, as the sidebar's rows hang theirs.
+ */
 function SummaryRow({
   entry,
   onPick,
   onContextMenu,
 }: {
-  entry: AddEntry;
+  entry: SummaryEntry;
   onPick: () => void;
   onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const [words, clipped] = useClipped();
+  const row = (
+    <button
+      type="button"
+      className="plan-summary-row"
+      onClick={onPick}
+      onContextMenu={onContextMenu}
+    >
+      <span className="plan-summary-glyph">{entry.row.icon}</span>
+      <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
+        {entry.row.label}
+        {entry.row.detail === undefined ? null : (
+          <span className="plan-summary-detail">{entry.row.detail}</span>
+        )}
+      </span>
+      {entry.endMark}
+    </button>
+  );
   return (
     <li>
-      <button
-        type="button"
-        className="plan-summary-row"
-        onClick={onPick}
-        onContextMenu={onContextMenu}
-      >
-        <span className="plan-summary-glyph">{entry.row.icon}</span>
-        <span ref={words} className="plan-summary-label" data-overflow={String(clipped)}>
-          {entry.row.label}
-          {entry.row.detail === undefined ? null : (
-            <span className="plan-summary-detail">{entry.row.detail}</span>
-          )}
-        </span>
-        {entry.endMark}
-      </button>
+      {entry.card === undefined ? (
+        row
+      ) : (
+        <Tooltip label={entry.row.label} card={entry.card} cardBeside>
+          {row}
+        </Tooltip>
+      )}
     </li>
   );
 }
@@ -328,7 +461,7 @@ function AgentSummaryRow({
   shown,
   onPick,
 }: {
-  entry: AddEntry;
+  entry: SummaryEntry;
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
@@ -346,10 +479,10 @@ function AgentSummaryRow({
           menu.show(atPointer(event), event.currentTarget);
         }}
       />
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Agent actions"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={[[archive.action]]}
           onClose={menu.close}
         />
@@ -431,7 +564,8 @@ function SummaryList({
  * as it hangs, so the keys reach its rows, and gives it to the control that
  * hung it when Escape or its chevron takes it down. A press anywhere
  * outside it takes it down too, and still lands where it was pressed, but
- * one on a control that hangs it is that control's to answer.
+ * one on a control that hangs it is that control's to answer. Taken down,
+ * it is held drawn through its exit, `leaving`, inert and hearing nothing.
  */
 function SummaryCard({
   id,
@@ -439,26 +573,41 @@ function SummaryCard({
   sections,
   agents,
   onDismiss,
+  leaving,
+  ref: hold,
 }: {
   id: string;
   from: CardFrom;
   sections: readonly SummarySection[];
   agents: CodingAgentsControl;
   onDismiss: () => void;
+  leaving: boolean;
+  /** Hands the card's element to the hold that draws it through its exit. */
+  ref: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
   const card = useRef<HTMLDivElement>(null);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      card.current = node;
+      hold(node);
+    },
+    [hold],
+  );
+  // Hung again while it was leaving, it takes the focus again.
   useLayoutEffect(() => {
+    if (leaving) return;
     const element = card.current;
     (element?.querySelector<HTMLElement>(".plan-summary-row") ?? element)?.focus({
       preventScroll: true,
     });
-  }, []);
+  }, [leaving]);
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
     opener?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   useEffect(() => {
+    if (leaving) return;
     const press = (event: PointerEvent) => {
       const { target } = event;
       if (!(target instanceof Element) || card.current?.contains(target)) return;
@@ -483,15 +632,17 @@ function SummaryCard({
       window.removeEventListener("pointerdown", press, true);
       window.removeEventListener("keydown", key, true);
     };
-  }, [collapse, onDismiss]);
+  }, [collapse, onDismiss, leaving]);
   return (
     <div
-      ref={card}
+      ref={drawn}
       id={id}
       className="plan-summary-card"
       role="dialog"
       aria-label="Summary"
       tabIndex={-1}
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
     >
       <Tooltip label="Collapse summary">
         <button
@@ -554,13 +705,26 @@ export function PlanSummary({
   plans,
   layout,
   cardId,
+  inbox,
+  held,
 }: {
   plans: PlansControl;
   layout: SummaryLayout;
   cardId: string;
+  /** The plan's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
+  inbox: InboxBoardView;
+  /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
+  held: HeldTranscripts;
 }): React.JSX.Element {
-  const sections = summarySections(plans);
-  const kinds = sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? [];
+  const sections = summarySections(plans, inbox, held);
+  // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
+  const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
+    (entry) => entry.row.id !== INBOX_ROW,
+  );
+  // The card is drawn through its exit, from the control that last hung it.
+  const [hungFrom, setHungFrom] = useState(layout.card);
+  if (layout.card !== undefined && layout.card !== hungFrom) setHungFrom(layout.card);
+  const card = useDisclosure(layout.card !== undefined);
   return (
     <>
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
@@ -575,13 +739,15 @@ export function PlanSummary({
           </ul>
         )}
       </aside>
-      {layout.card === undefined ? null : (
+      {!card.mounted || hungFrom === undefined ? null : (
         <SummaryCard
           id={cardId}
-          from={layout.card}
+          from={hungFrom}
           sections={sections}
           agents={plans.agents}
           onDismiss={layout.onDismiss}
+          leaving={card.leaving}
+          ref={card.ref}
         />
       )}
     </>

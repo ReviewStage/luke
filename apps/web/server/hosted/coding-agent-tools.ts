@@ -1,4 +1,13 @@
 import {
+  awaitingLinesOfReached,
+  type CodingAgent,
+  latestTurnsOfReached,
+  listCodingAgents,
+  readCodingAgent,
+} from "@sidecar/database/models/coding-agent-store";
+import { listJournals } from "@sidecar/database/models/message-reads";
+import type { StoreWriter } from "@sidecar/database/models/writer";
+import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
@@ -32,18 +41,9 @@ import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import {
-  awaitingLinesOfReached,
-  type CodingAgent,
-  latestTurnsOfReached,
-  listCodingAgents,
-  readCodingAgent,
-} from "./coding-agent-store.js";
 import type { HostedRefusal } from "./http-effect.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
-import type { StoreWriter } from "./store/index.js";
-import { listJournals } from "./store/message-reads.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Who may open the admin dashboard is the account's `role`, a plain-text column
  * on the `user` table that Better Auth manages — declared as an additional user
- * field in `auth.ts`, generated into `auth-schema.ts`, and returned on the
+ * field in `auth.ts`, generated into `@sidecar/database/schemas/auth`, and returned on the
  * session — not a constant in this file. The gate is a first-party browser
  * session the maintainer signed in for on this site (resolved through Better
  * Auth, never the desktop's bearer token) whose account carries the admin role.

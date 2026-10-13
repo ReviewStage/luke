@@ -278,6 +278,9 @@ function unitClass(view: UnitView, changed: boolean): string {
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
 
+/** Where a title's draft goes when nothing else names the plan: nowhere. */
+const NO_DRAFT = (_name: string | undefined): void => undefined;
+
 /** A unit drawn with its section's byline, where a save has changed the section. */
 function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null): React.JSX.Element {
   if (byline === null) return drawn;
@@ -308,8 +311,10 @@ function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }):
  * last stopped; `onShowHistory` opens the plan's version history from the
  * "Edited by" line, on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
- * place, and with `onRename` the title too; without them the document is
- * drawn read-only. `looks` are the sections changed since the developer last
+ * place, and with `onRename` the title too, its words drawn as the plan's
+ * name through `onDraftName` as they are typed; without them the document is
+ * drawn read-only; `titleEnd` stands at the end of a title that is not
+ * edited. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
  * none are.
  */
@@ -319,15 +324,21 @@ export function PlanBody({
   onShowHistory,
   onEdit,
   onRename,
+  onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
+  titleEnd,
 }: {
   plan: Plan;
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
-  /** Renames the plan, from its title. */
-  onRename?: (name: string) => void;
+  /** Renames the plan, from its title, answering whether the name was taken. */
+  onRename?: (name: string) => Promise<boolean>;
+  /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
+  onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;
+  /** What stands at the right end of a title that is not edited, as a page's actions stand at the end of its title line. */
+  titleEnd?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live);
   const editable = onEdit !== undefined;
@@ -434,14 +445,22 @@ export function PlanBody({
       <ChangedLine looks={looks} />
       <div className="plan-body">
         {editable && onRename !== undefined ? (
+          // Keyed by the plan, so words typed for one are saved to it as another opens.
           <EditableTitle
+            key={plan.id}
             name={plan.name}
             entry={entry === EDITOR_PLACE.TITLE}
             editing={editing}
             onRename={onRename}
+            onDraft={onDraftName}
           />
-        ) : (
+        ) : titleEnd === undefined ? (
           <PlanTitle name={plan.name} />
+        ) : (
+          <div className="plan-title-line">
+            <PlanTitle name={plan.name} />
+            {titleEnd}
+          </div>
         )}
         {editing.editor === undefined ? (
           sections

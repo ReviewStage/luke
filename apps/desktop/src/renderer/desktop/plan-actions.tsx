@@ -18,7 +18,6 @@ import { useAppCommand } from "../app-commands";
 import { sinceText } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { RepositoryPicture } from "../repository-picture";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
@@ -95,7 +94,9 @@ function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuA
  * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
  * item runs, and only the open plan's Archive names ⇧⌘A, because the chord
  * archives the open plan rather than the row under the pointer. They are the
- * row's siblings rather than inside it, so a press on one opens nothing.
+ * row's siblings rather than inside it, so a press on one opens nothing, but
+ * part of the row to its card, which stands while the pointer is on them and
+ * goes as one is pressed (`Tooltip`'s `cardRegion`).
  */
 function SidebarPlanMarks({
   plans,
@@ -205,23 +206,29 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
 
 /**
  * One plan's menu and its delete question, held for whichever door offers
- * them. Neither outlives the tab going off screen, and the question does not
- * outlive the plan: each is taken down in the render that finds it gone, so
- * neither is left standing over another surface, over a plan deleted
- * elsewhere, or waiting for the next time the panel opens.
+ * them. Neither outlives the tab going off screen, the menu does not
+ * outlive its door, and the question does not outlive the plan: each is
+ * taken down in the render that finds it gone, so neither is left standing
+ * over another surface, over a plan deleted elsewhere, or waiting for the
+ * next time the panel opens.
  */
-function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: () => void) {
+function usePlanMenu(
+  plans: PlansControl,
+  planId: string,
+  name: string,
+  doors: { rename: () => void; drawn: boolean },
+) {
   const plan = planOf(plans, planId);
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
-  const { open, show, close } = useActionMenu(plans.shown);
+  const { open, drawn, show, close } = useActionMenu(plans.shown && doors.drawn);
   const menu =
-    open === undefined ? null : (
+    drawn === undefined ? null : (
       <ActionMenu
         label="Plan actions"
-        menu={open}
-        groups={planActionGroups(plans, planId, { rename, askDelete: deletion.ask })}
+        menu={drawn}
+        groups={planActionGroups(plans, planId, { rename: doors.rename, askDelete: deletion.ask })}
         onClose={close}
       />
     );
@@ -235,22 +242,27 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
 }
 
 /**
- * The open plan's ⋯ button in the toolbar, and the menu it drops. It is also
- * what offers the open plan's Archive and Permanently delete shortcuts, so
- * each runs exactly as its menu item would: Permanently delete still asks
- * first, and an archived plan has no Archive to offer.
+ * The open plan's ⋯ button in the toolbar, and the menu it drops, drawn
+ * while the plan's own tab is chosen, because the menu is the plan's and not
+ * an agent's. It is also what offers the open plan's Archive and Permanently
+ * delete shortcuts, on every tab of the plan, so each runs exactly as its
+ * menu item would: Permanently delete still asks first, and an archived plan
+ * has no Archive to offer.
  */
-export function PlanActionsButton({
+export function PlanActions({
   plans,
   plan,
+  button,
   onRename,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
+  /** Whether the ⋯ button is drawn: the shortcuts and the delete question stand either way. */
+  button: boolean;
   /** Opens the toolbar's title as the plan's name field. */
   onRename: () => void;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, plan.id, plan.name, onRename);
+  const actions = usePlanMenu(plans, plan.id, plan.name, { rename: onRename, drawn: button });
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
@@ -260,45 +272,30 @@ export function PlanActionsButton({
   );
   return (
     <>
-      <Tooltip label="Plan actions">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Plan actions"
-          aria-haspopup="menu"
-          aria-expanded={actions.open}
-          disabled={deletion.busy}
-          onClick={(event) => {
-            if (actions.open) {
-              actions.close(true);
-              return;
-            }
-            actions.show(dropBelow(event.currentTarget), event.currentTarget);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      {button ? (
+        <Tooltip label="Plan actions">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Plan actions"
+            aria-haspopup="menu"
+            aria-expanded={actions.open}
+            disabled={deletion.busy}
+            onClick={(event) => {
+              if (actions.open) {
+                actions.close(true);
+                return;
+              }
+              actions.show(dropBelow(event.currentTarget), event.currentTarget);
+            }}
+          >
+            <EllipsisIcon />
+          </button>
+        </Tooltip>
+      ) : null}
       {actions.menu}
       {actions.dialog}
     </>
-  );
-}
-
-/** A sidebar row's repository beneath its plan's name, led by its owner's picture at the size of its words. */
-export function SidebarPlanRepository({
-  repository,
-  pictures,
-}: {
-  repository: string;
-  /** Whether owners' pictures are fetched: a capture run draws none. */
-  pictures: boolean;
-}): React.JSX.Element {
-  return (
-    <span className="sidebar-plan-repository">
-      <RepositoryPicture repository={repository} pictures={pictures} fallback={<GitHubMark />} />
-      <span className="sidebar-plan-repository-name">{repository}</span>
-    </span>
   );
 }
 
@@ -317,7 +314,6 @@ export function SidebarPlan({
   plan,
   current,
   unread,
-  repositoryShown,
   now,
   onOpen,
 }: {
@@ -327,15 +323,14 @@ export function SidebarPlan({
   current: boolean;
   /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
-  /** Whether the row names its repository beneath its name: a row under its repository's header leaves it to the header. */
-  repositoryShown: boolean;
   /** The time the row's last update is counted back from. */
   now: number;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
-  const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
+  const actions = usePlanMenu(plans, plan.id, plan.name, { rename: rename.begin, drawn: true });
   const row = useRef<HTMLButtonElement | null>(null);
+  const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
     if (rename.editing || !refocus.current) return;
@@ -349,12 +344,8 @@ export function SidebarPlan({
     if (row.current === null) return;
     actions.show(atPointer(event), row.current);
   };
-  const repository =
-    repositoryShown && plan.repository !== null ? (
-      <SidebarPlanRepository repository={plan.repository} pictures={plans.repositories.pictures} />
-    ) : null;
   return (
-    <li className="sidebar-plan-item">
+    <li ref={item} className="sidebar-plan-item">
       {rename.editing ? (
         <div className="sidebar-plan" aria-current={current ? "page" : undefined}>
           <PlanNameField
@@ -365,7 +356,6 @@ export function SidebarPlan({
               rename.end(edit);
             }}
           />
-          {repository}
         </div>
       ) : (
         <Tooltip
@@ -381,6 +371,7 @@ export function SidebarPlan({
             />
           }
           cardBeside
+          cardRegion={item}
         >
           <button
             ref={row}
@@ -404,7 +395,6 @@ export function SidebarPlan({
                 {sinceText(plan.updatedAt, now)}
               </span>
             </span>
-            {repository}
           </button>
         </Tooltip>
       )}

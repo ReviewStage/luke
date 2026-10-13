@@ -1,64 +1,76 @@
-import { useAtom } from "@effect/atom-react";
 import type { PlanTemplateAnswerView } from "@sidecar/hosted/coding-agent-view";
 import {
   PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
 } from "@sidecar/hosted/plan-document-template";
+import { PLAN_EDIT_REFUSAL } from "@sidecar/hosted/plan-edit";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
+import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { ResetIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
-import { rendererRuntime } from "../renderer-runtime";
+import { PlanBody } from "../planning/plan-body";
+import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
-import { SpinnerRegion } from "../spinner";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_TONE, useToast } from "../toast";
+import { Tooltip } from "../tooltip";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
-import { PlanTemplateEditor } from "./plan-template-editor";
 
 /**
- * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of.
+ * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
+ *
+ * The template is a plan's text before it is a plan, so the page is a plan's
+ * page beside Settings' page list, with no top bar: the document is the
+ * plan's own (`../planning/plan-body.tsx`), at the plan's width and in its
+ * type, read as sections until a click or Return opens the same editor on
+ * the same words with the same keyboard, and its words dissolve as they
+ * scroll up under the note over them. Its title is the page's name, which is
+ * no name of the account's to change, so it is drawn and never edited, and
+ * the page's actions stand at the end of its line: the version history
+ * (`plan-template-history.tsx`), which the "Edited by" line over the
+ * document opens too, and Reset to default while the account holds a
+ * template of its own. The reset asks first, since it replaces every word of
+ * the account's, kept since only in the template's history, and waits for a
+ * save already out so the default lands last. A quiet note over the
+ * document, placed as an archived plan's banner is, says what the template
+ * is for.
  *
  * The template is the account's, kept on the service, so the page reads it
  * afresh as it opens and every Mac the account signs in on edits the same
- * one. The words save a beat after the developer stops typing and again as
- * focus leaves the box or the page goes, one write at a time: a pause that
- * ends while a write is out is saved once that write answers. A save that
- * failed says so under the box with a Retry, or, once the page has gone, in
- * a toast whose Retry sends the same words, and a template past the bound
- * says so and is not sent. Reset to default asks first, since the words it
- * replaces are kept nowhere, waits for a write already out so the default
- * lands last, and stands only while the account holds a template of its own. With no account signed in there is no template to
- * show, and the page says so.
- *
- * The box is `PlanTemplateEditor`, kept behind its own small boundary so
- * the plan's document editor can take its place.
+ * one. The document saves the words as the developer pauses and as they
+ * leave the editor (`../planning/use-plan-editing.ts`), here as a write of
+ * the whole template, which is the developer's alone and so never meets
+ * words of Luke's to merge. A save that failed says so under the editor
+ * with a Retry, or, once the page has gone, in a toast whose Retry sends the
+ * same words; a template past its bound is refused before it is sent. With
+ * no account signed in there is no template to show, and the page says so.
+ * The document stands under `ph-no-capture`, so the session recording keeps
+ * neither the words nor the rhythm of the typing.
  */
 
-/** What the page says beside the box, and with no account. */
+/** The page's name, which the template is drawn under as a plan's title, and its versions too. */
+export const TEMPLATE_TITLE = "Plan template";
+
+/** What the page says. */
 const PAGE_LINE = {
-  HELP: "New plans start as a copy of this template. Editing it doesn't change existing plans.",
+  NOTE: "New plans start as a copy of this template.",
+  NOTE_DETAIL: "Editing it doesn't change existing plans.",
   SIGNED_OUT: "Sign in to edit the template your new plans start from.",
   READ_FAILED: "The template could not be read.",
-  WRITE_FAILED: "The template could not be saved.",
   LEFT_UNSAVED: "Your plan template could not be saved.",
   RESET_FAILED: "The template could not be reset. Try again.",
-  TOO_LONG: `That template is too long to save. Keep it to ${PLAN_TEMPLATE_BOUNDS.MAX_CHARS.toLocaleString("en-US")} characters.`,
-  SAVING: "Saving…",
-  SAVED: "Saved",
 } as const;
 
-/** How long the developer pauses before what they typed is saved. */
-const SAVE_PAUSE = Duration.seconds(1);
+/** The id the template is drawn under as a plan's document, which names no plan of the account's. */
+export const TEMPLATE_DOCUMENT_ID = "plan-template";
 
-/** The pause before a save, as an atom whose work is the wait; setting it again starts the wait over. */
-const savePauseAtom = rendererRuntime.fn((stamp: number) =>
-  Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
-);
+/** What the title line's button that opens the template's version history says, as a plan's menu item says it. */
+const HISTORY_LABEL = "Version history";
 
 /** Where the page stands with the service's template. */
 const TEMPLATE_READ = {
@@ -69,56 +81,12 @@ const TEMPLATE_READ = {
 
 type TemplateRead = (typeof TEMPLATE_READ)[keyof typeof TEMPLATE_READ];
 
-/** Where the newest save stands, as the line under the box says it. */
-const SAVE_STATE = {
-  /** Nothing to say: nothing typed since the template was read, or words still waiting on their pause. */
-  QUIET: "quiet",
-  SAVING: "saving",
-  SAVED: "saved",
-  FAILED: "failed",
-} as const;
-
-type SaveState = (typeof SAVE_STATE)[keyof typeof SAVE_STATE];
-
 const RESET_QUESTION: DialogQuestion = {
   title: "Reset plan template?",
-  body: "Your template is replaced by the default, and your edits to it are lost. Existing plans don't change. This can't be undone.",
+  body: "Your template is replaced by the default. Existing plans don't change, and your template stays in its version history, so you can restore it.",
   verb: "Reset",
   running: "Resetting",
 };
-
-/**
- * What a save reads and writes as it lands, which no render stands between:
- * the box's words, the words the service last answered it keeps, the write
- * that is out, whether a pause ended while it was, whether a reset is under
- * way, and which reading of the template the box is on, so a write sent
- * before a reset lands nowhere.
- */
-interface HeldTemplate {
-  text: string;
-  kept: string;
-  flight: Promise<void> | undefined;
-  due: boolean;
-  resetting: boolean;
-  generation: number;
-}
-
-/** The held record for a template as the service answered it, with nothing out. */
-function heldFor(template: string, generation: number): HeldTemplate {
-  return {
-    text: template,
-    kept: template,
-    flight: undefined,
-    due: false,
-    resetting: false,
-    generation,
-  };
-}
-
-/** Whether the words are past what the service keeps. */
-function tooLong(text: string): boolean {
-  return text.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS;
-}
 
 /** One write of the template, read as the template kept or nothing at all. */
 function written(
@@ -131,146 +99,89 @@ function written(
 }
 
 /**
- * Sends words the page left unsaved as it went. Note that a failure is said
- * in a toast, because the page and its Retry are gone with the words; the
- * toast's Retry sends the same words again.
+ * The template as the plan's document draws it: the page's name as its
+ * title, the template as its text, and its newest revision as its last
+ * edit, which the "Edited by" line over it says, and which the developer's
+ * own edit here moves on, so the document takes their words in at once as
+ * it takes a plan's, rather than typing them in again.
  */
-function saveOnLeaving(
-  act: ActHandle["act"],
-  toast: ReturnType<typeof useToast>,
-  words: string,
-): void {
-  written(act, words).then((answer) => {
-    if (answer !== undefined) return;
-    toast({
-      words: PAGE_LINE.LEFT_UNSAVED,
-      tone: TOAST_TONE.FAILED,
-      persists: true,
-      action: { label: "Retry", onPress: () => saveOnLeaving(act, toast, words) },
-    });
-  });
+function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Plan {
+  return {
+    id: TEMPLATE_DOCUMENT_ID,
+    name: TEMPLATE_TITLE,
+    createdAt: 0,
+    updatedAt: 0,
+    repository: null,
+    document: { body: text, assumptions: [] },
+    ...(lastEdit === undefined ? undefined : { lastEdit }),
+  };
 }
 
-/** The template as the box edits it, and its doors. */
-interface TemplateDraft {
+/** The developer's edit of the template here, now, as the document's last. */
+function editedNow(): PlanLastEdit {
+  return { actor: PLAN_ACTOR.DEVELOPER, at: Date.now(), duringCall: false };
+}
+
+/** The template as the page holds it, and its doors. */
+interface TemplateControl {
+  read: TemplateRead;
+  retry: () => void;
   text: string;
   custom: boolean;
-  save: SaveState;
-  take: (answer: PlanTemplateAnswer) => void;
-  type: (text: string) => void;
-  send: () => void;
+  /** Its newest revision, or the developer's edit here since; none for a template never edited. */
+  lastEdit: PlanLastEdit | undefined;
+  edit: PlanEditDoor;
   reset: () => Promise<ActionResult>;
 }
 
 /**
- * The words the box holds and their saves. Note that the held record is a
- * ref, because a pause and a blur landing in one flush must start one
- * write, not two, and a write's answer reads the words as they stand when it
- * lands.
+ * What the page's writes read and change as they land, which no render
+ * stands between: the template as the service last kept it, which every
+ * edit the document sends was written from; the write out; whether a reset
+ * is under way; words whose save failed while the page stood, until another
+ * save is sent; and whether the page still stands.
  */
-function useTemplateDraft(act: ActHandle["act"]): TemplateDraft {
-  const [text, setText] = useState("");
-  const [custom, setCustom] = useState(false);
-  const [save, setSave] = useState<SaveState>(SAVE_STATE.QUIET);
-  const [pause, restartPause] = useAtom(savePauseAtom);
-  const stamp = useRef(0);
-  // The keystroke whose pause last saved, so a pause saves once however many renders follow it.
-  const spent = useRef(0);
-  const toast = useToast();
-  const held = useRef<HeldTemplate>(heldFor(text, 0));
-
-  const take = useCallback((answer: PlanTemplateAnswer) => {
-    held.current = heldFor(answer.template, held.current.generation + 1);
-    setText(answer.template);
-    setCustom(answer.custom);
-    setSave(SAVE_STATE.QUIET);
-  }, []);
-
-  const send = useCallback(() => {
-    const now = held.current;
-    const sending = now.flight !== undefined;
-    now.due = sending && !now.resetting;
-    if (sending || now.resetting || now.text === now.kept || tooLong(now.text)) return;
-    const { text: sent, generation } = now;
-    setSave(SAVE_STATE.SAVING);
-    now.flight = written(act, sent).then((answer) => {
-      const landed = held.current;
-      if (landed.generation !== generation) return;
-      landed.flight = undefined;
-      if (answer === undefined) {
-        setSave(SAVE_STATE.FAILED);
-      } else {
-        landed.kept = answer.template;
-        setCustom(answer.custom);
-        setSave(landed.text === landed.kept ? SAVE_STATE.SAVED : SAVE_STATE.QUIET);
-      }
-      // A pause or a blur that came while the write was out saves what stands now.
-      if (landed.due) send();
-    });
-  }, [act]);
-
-  // A pause that ran out on the newest keystroke saves what stands, once.
-  useEffect(() => {
-    if (!AsyncResult.isSuccess(pause) || pause.waiting || pause.value !== stamp.current) return;
-    if (spent.current === stamp.current) return;
-    spent.current = stamp.current;
-    send();
-  });
-
-  // The page going sends words still waiting on their pause, since nothing will be left to.
-  useEffect(
-    () => () => {
-      const now = held.current;
-      if (now.text === now.kept || tooLong(now.text)) return;
-      saveOnLeaving(act, toast, now.text);
-    },
-    [act, toast],
-  );
-
-  return {
-    text,
-    custom,
-    save,
-    take,
-    send,
-    type: (next) => {
-      held.current.text = next;
-      setText(next);
-      setSave((was) => (was === SAVE_STATE.SAVED ? SAVE_STATE.QUIET : was));
-      stamp.current += 1;
-      restartPause(stamp.current);
-    },
-    reset: async (): Promise<ActionResult> => {
-      // The write already out lands before the null is sent, so the default is what the service keeps.
-      const now = held.current;
-      now.resetting = true;
-      now.due = false;
-      await now.flight;
-      const answer = await written(act, null);
-      now.resetting = false;
-      if (answer === undefined) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
-      }
-      take(answer);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
-  };
+interface HeldWrites {
+  kept: string;
+  flight: Promise<unknown> | undefined;
+  resetting: boolean;
+  failed: string | undefined;
+  standing: boolean;
 }
 
-/** Where the read stands, and its Retry. */
-interface TemplateReading {
-  read: TemplateRead;
-  retry: () => void;
-}
-
-/** The read of the service's template as the page opens, and again on Retry; a read that lands is taken into the box. */
-function useTemplateRead(
-  signedIn: boolean,
-  act: ActHandle["act"],
-  take: (answer: PlanTemplateAnswer) => void,
-): TemplateReading {
+/**
+ * The service's template, read as the page opens and again on Retry, and
+ * written through the document's edit door. Note that an edit written from
+ * a template the service no longer keeps is dropped, because it was queued
+ * behind a reset the developer confirmed, and landing after the reset it
+ * would undo it. Words whose save failed are sent once more as the
+ * page goes, because the editor holds a failed save back from its own
+ * leaving; and a save that fails once the page has gone is said in a toast
+ * whose Retry sends the same words, because the page and its Retry are gone
+ * with them.
+ */
+function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl {
   const [read, setRead] = useState<TemplateRead>(TEMPLATE_READ.READING);
   const [attempt, setAttempt] = useState(0);
+  const [text, setText] = useState("");
+  const [custom, setCustom] = useState(false);
+  const [lastEdit, setLastEdit] = useState<PlanLastEdit | undefined>(undefined);
+  const held = useRef<HeldWrites>({
+    kept: "",
+    flight: undefined,
+    resetting: false,
+    failed: undefined,
+    standing: true,
+  });
+  const toast = useToast();
+
+  const take = useCallback((answer: PlanTemplateAnswer, edited: PlanLastEdit | undefined) => {
+    held.current.kept = answer.template;
+    setText(answer.template);
+    setCustom(answer.custom);
+    setLastEdit(edited);
+  }, []);
+
   useEffect(() => {
     if (!signedIn) return;
     let live = true;
@@ -279,93 +190,237 @@ function useTemplateRead(
       .catch((): PlanTemplateAnswerView | undefined => undefined)
       .then((answer) => {
         if (!live) return;
-        if (answer !== undefined && !("failure" in answer)) take(answer);
-        setRead(
-          answer === undefined || "failure" in answer ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ,
-        );
+        const failed = answer === undefined || "failure" in answer;
+        if (!failed) take(answer, undefined);
+        setRead(failed ? TEMPLATE_READ.FAILED : TEMPLATE_READ.READ);
+      });
+    // The newest revision names the "Edited by" line, read beside the template and never waited on, unless an edit here has named it since.
+    act(ACT_KIND.PLAN_TEMPLATE_REVISIONS, {})
+      .then((page) => ("failure" in page ? undefined : page.revisions[0]?.lastEdit))
+      .catch((): PlanLastEdit | undefined => undefined)
+      .then((edited) => {
+        if (live && edited !== undefined) setLastEdit((held) => held ?? edited);
       });
     return () => {
       live = false;
     };
   }, [act, signedIn, attempt, take]);
-  return { read, retry: () => setAttempt((count) => count + 1) };
+
+  const save = (words: string): Promise<PlanningEditAnswer> => {
+    const writes = held.current;
+    writes.failed = undefined;
+    if (words.length > PLAN_TEMPLATE_BOUNDS.MAX_CHARS) {
+      return Promise.resolve({ failure: PLAN_EDIT_REFUSAL.TOO_LONG });
+    }
+    const sent = written(act, words).then((answer): PlanningEditAnswer => {
+      if (answer !== undefined) {
+        if (writes.standing) take(answer, editedNow());
+        return { saved: true };
+      }
+      if (writes.standing) {
+        writes.failed = words;
+      } else {
+        toast({
+          words: PAGE_LINE.LEFT_UNSAVED,
+          tone: TOAST_TONE.FAILED,
+          persists: true,
+          action: { label: "Retry", onPress: () => save(words) },
+        });
+      }
+      return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+    });
+    writes.flight = sent;
+    return sent;
+  };
+
+  // The page going sends words whose save failed a turn later, once the document's own leaving has sent anything newer.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the page going is what sends them, through the door it held.
+  useEffect(() => {
+    const writes = held.current;
+    writes.standing = true;
+    return () => {
+      writes.standing = false;
+      Promise.resolve().then(() => {
+        if (writes.failed !== undefined) save(writes.failed);
+      });
+    };
+  }, []);
+
+  return {
+    read,
+    retry: () => setAttempt((count) => count + 1),
+    text,
+    custom,
+    lastEdit,
+    edit: (request) => {
+      const writes = held.current;
+      if (writes.resetting || request.document.base !== writes.kept) {
+        return Promise.resolve({ saved: true });
+      }
+      return save(request.document.value);
+    },
+    reset: async (): Promise<ActionResult> => {
+      // The write already out lands before the null is sent, so the default is what the service keeps.
+      const writes = held.current;
+      writes.resetting = true;
+      writes.failed = undefined;
+      await writes.flight;
+      const answer = await written(act, null);
+      writes.resetting = false;
+      if (answer === undefined) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.RESET_FAILED };
+      }
+      take(answer, editedNow());
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    },
+  };
 }
 
-/** What stands under the box: the bound, a failed save and its retry, or how the newest save stands. */
-function SaveLine({ draft }: { draft: TemplateDraft }): React.JSX.Element | null {
-  if (tooLong(draft.text)) {
-    return (
-      <p className="error-message" role="alert">
-        {PAGE_LINE.TOO_LONG}
-      </p>
-    );
-  }
-  if (draft.save === SAVE_STATE.FAILED) {
-    return (
-      <div className="plan-template-line" role="alert">
-        <span className="error-message">{PAGE_LINE.WRITE_FAILED}</span>
-        <RetryButton onRetry={draft.send} />
-      </div>
-    );
-  }
-  if (draft.save === SAVE_STATE.QUIET) return null;
+/**
+ * The note over the template, placed as an archived plan's banner is: what
+ * the template is for. It is what a settings search for the template lands
+ * on.
+ */
+function TemplateNote(): React.JSX.Element {
   return (
-    <p className="settings-note">
-      {draft.save === SAVE_STATE.SAVING ? PAGE_LINE.SAVING : PAGE_LINE.SAVED}
-    </p>
+    <section
+      className="document-banner template-note"
+      aria-label={PAGE_LINE.NOTE}
+      {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}
+    >
+      <span className="document-banner-glyph" aria-hidden="true">
+        <InfoIcon />
+      </span>
+      <div className="document-banner-words">
+        <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
+        <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+      </div>
+    </section>
   );
 }
 
-/** The template read: the help beside the reset, the box under the recording's mask, and the line under it. */
-function TemplateRows({ draft }: { draft: TemplateDraft }): React.JSX.Element {
-  const reset = useConfirmDialog({ subject: draft.custom, surfaceOpen: true }, draft.reset);
+/**
+ * The page's actions at the right end of its title line, as every Settings
+ * page carries its own: the version history, and Reset to default while the
+ * account holds a template of its own.
+ */
+function TitleActions({
+  custom,
+  onShowHistory,
+  onReset,
+}: {
+  custom: boolean;
+  onShowHistory: () => void;
+  onReset: () => void;
+}): React.JSX.Element {
+  return (
+    <span className="plan-title-actions">
+      <Tooltip label={HISTORY_LABEL}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={HISTORY_LABEL}
+          onClick={onShowHistory}
+        >
+          <HistoryIcon />
+        </button>
+      </Tooltip>
+      {custom ? (
+        <button type="button" className="toolbar-button bordered-button" onClick={onReset}>
+          <ResetIcon />
+          Reset to default
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+/** The template read: the note, the template as a plan's document, and the reset's question. */
+function TemplateDocument({
+  template,
+  onShowHistory,
+}: {
+  template: TemplateControl;
+  onShowHistory: () => void;
+}): React.JSX.Element {
+  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
-      <div className="plan-template-head">
-        <p className="settings-note">{PAGE_LINE.HELP}</p>
-        {draft.custom ? (
-          <button type="button" className="toolbar-button" onClick={reset.ask}>
-            <ResetIcon />
-            Reset to default
-          </button>
-        ) : null}
-      </div>
-      <div className="ph-no-capture" {...searchAnchorProps(SETTINGS_SEARCH_ROW.PLAN_TEMPLATE)}>
-        <PlanTemplateEditor
-          text={draft.text}
-          label="Plan template"
-          onText={draft.type}
-          onLeave={draft.send}
+      <TemplateNote />
+      <div className="desktop-document template-document ph-no-capture">
+        <PlanBody
+          plan={templateDocument(template.text, template.lastEdit)}
+          live={false}
+          onEdit={template.edit}
+          onShowHistory={onShowHistory}
+          titleEnd={
+            <TitleActions
+              custom={template.custom}
+              onShowHistory={onShowHistory}
+              onReset={reset.ask}
+            />
+          }
         />
       </div>
-      <SaveLine draft={draft} />
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
     </>
   );
 }
 
-export function PlanTemplateSection({ signedIn }: { signedIn: boolean }): React.JSX.Element {
-  const { act } = useAct();
-  const draft = useTemplateDraft(act);
-  const { read, retry } = useTemplateRead(signedIn, act, draft.take);
+/** What stands in the document's place: no account, the read under way, or the read failed with its Retry. */
+function TemplateState({
+  signedIn,
+  template,
+}: {
+  signedIn: boolean;
+  template: TemplateControl;
+}): React.JSX.Element {
+  if (!signedIn) {
+    return (
+      <div className="desktop-empty">
+        <p>{PAGE_LINE.SIGNED_OUT}</p>
+      </div>
+    );
+  }
+  if (template.read === TEMPLATE_READ.FAILED) {
+    return (
+      <div className="desktop-empty">
+        <p role="alert">{PAGE_LINE.READ_FAILED}</p>
+        <RetryButton onRetry={template.retry} />
+      </div>
+    );
+  }
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
-      {!signedIn ? (
-        <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
-      ) : read === TEMPLATE_READ.READ ? (
-        <TemplateRows draft={draft} />
-      ) : read === TEMPLATE_READ.FAILED ? (
-        <>
-          <p className="error-message" role="alert">
-            {PAGE_LINE.READ_FAILED}
-          </p>
-          <RetryButton onRetry={retry} />
-        </>
+    <div className="desktop-empty">
+      <Spinner label="Loading your template" size={SPINNER_SIZE.REGION} />
+    </div>
+  );
+}
+
+/**
+ * Settings › Plan template beside Settings' page list: the template as a
+ * plan's document, its title line carrying the page's actions.
+ * `onShowHistory` opens the history, from the button or the "Edited by"
+ * line, a section's opening it on the template as it stands.
+ */
+export function PlanTemplatePage({
+  signedIn,
+  onShowHistory,
+}: {
+  signedIn: boolean;
+  onShowHistory: () => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const template = useTemplate(signedIn, act);
+  const drawn = signedIn && template.read === TEMPLATE_READ.READ;
+  return (
+    <section className="settings-page" aria-label={TEMPLATE_TITLE}>
+      {/* Settings has no top bar: the page's title and its actions stand in the page. */}
+      <div className="desktop-drag-strip" />
+      {drawn ? (
+        <TemplateDocument template={template} onShowHistory={() => onShowHistory()} />
       ) : (
-        <SpinnerRegion label="Loading your template" />
+        <TemplateState signedIn={signedIn} template={template} />
       )}
     </section>
   );

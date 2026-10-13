@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -25,14 +28,11 @@ import {
   brainHost,
   type HostedToolBinding,
 } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -596,7 +596,10 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
   const seat = ownSeat(userA, conversationId);
   const spent: string[] = [];
   const { host } = hostOverTestDatabase({
-    openAi: () => ({ apiKey: Redacted.make("sk-test-ownership"), modelId: "gpt-test" }),
+    openAi: () => ({
+      apiKey: Redacted.make("sk-test-ownership"),
+      choice: { model: "openai/gpt-6.1-sol", effort: "medium" },
+    }),
     spend: async (userId) => {
       spent.push(userId);
     },
@@ -625,11 +628,16 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
   assert.ok(Result.isSuccess(admitted));
   assert.equal(admitted.success.caller, teammate);
   assert.deepEqual(admitted.success.target, target);
-  const model = host.model(admitted.success);
-  assert.ok(model !== undefined);
+  const selection = host.model(admitted.success);
+  assert.ok(Result.isSuccess(selection));
   // The inference is refused before it leaves the process: the meter in front of it counts first.
   await assert.rejects(
-    generateText({ model, prompt: "hello", abortSignal: AbortSignal.abort(), maxRetries: 0 }),
+    generateText({
+      model: selection.success.model,
+      prompt: "hello",
+      abortSignal: AbortSignal.abort(),
+      maxRetries: 0,
+    }),
   );
   assert.deepEqual(spent, [teammate]);
 

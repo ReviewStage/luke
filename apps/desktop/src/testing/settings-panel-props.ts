@@ -38,7 +38,6 @@ export function settingsPanelProps(
       onOpenLatest: ignore,
     },
     settings: settingsView({ voiceAvailable: true }),
-    onFeedback: ignore,
     shortcuts: {
       voiceHotkeyHeld: false,
       voiceChosen: false,

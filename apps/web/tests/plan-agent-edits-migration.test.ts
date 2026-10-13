@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { readPlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { NOTE_KIND, type PlanReadNote } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { readPlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
 import { openWorkspace } from "./support/workspaces";
 
 /**
@@ -28,7 +28,12 @@ import { openWorkspace } from "./support/workspaces";
  */
 
 const MIGRATION_SQL = readFileSync(
-  fileURLToPath(new URL("../drizzle/0084_plan_agent_edits_teammate.sql", import.meta.url)),
+  fileURLToPath(
+    new URL(
+      "../../../packages/database/migrations/0084_plan_agent_edits_teammate.sql",
+      import.meta.url,
+    ),
+  ),
   "utf8",
 );
 
@@ -127,7 +132,7 @@ const journalOf = (userId: string, planId: string) =>
     Option.getOrThrow(stored).agentEdits.map(({ agentId, at, notes }) => ({ agentId, at, notes })),
   );
 
-it.layer(testSqlClient)("migration 0084 onto the teammate template's journal", (it) => {
+it.layer(getTestDB())("migration 0084 onto the teammate template's journal", (it) => {
   it.effect(
     "a plan whose agents saved under the old fields reads, each note in its new section",
     () =>

@@ -9,6 +9,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { disclosureMotion, useDisclosure } from "../use-disclosure";
 import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-menu";
 
 /**
@@ -148,10 +149,10 @@ function ArchivedAgentRow({
           </button>
         </Tooltip>
       </span>
-      {menu.open === undefined ? null : (
+      {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Archived agent actions"
-          menu={menu.open}
+          menu={menu.drawn}
           groups={[[{ label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: unarchive }]]}
           onClose={menu.close}
         />
@@ -170,10 +171,15 @@ export function ArchivedAgents({
   shown: boolean;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
+  const fold = useDisclosure(unfolded);
   const archived = agents.archived ?? [];
   if (archived.length === 0) return null;
   return (
-    <div className="plan-summary-archived">
+    // Note that the group starts folded, so every open is a press's, and unrolls.
+    <div
+      className="plan-summary-archived"
+      data-disclosure={disclosureMotion(unfolded, fold.leaving)}
+    >
       <button
         type="button"
         className="plan-summary-row plan-summary-archived-toggle"
@@ -194,8 +200,13 @@ export function ArchivedAgents({
           </span>
         )}
       </button>
-      {unfolded ? (
-        <ul className="plan-summary-rows" aria-label="Archived agents">
+      {fold.mounted ? (
+        <ul
+          ref={fold.ref}
+          className="plan-summary-rows disclosure-body"
+          inert={fold.leaving}
+          aria-label="Archived agents"
+        >
           {archived.map((agent) => (
             <ArchivedAgentRow key={agent.id} agent={agent} agents={agents} shown={shown} />
           ))}

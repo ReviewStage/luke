@@ -1,17 +1,21 @@
+import { db } from "@sidecar/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@sidecar/database/github-installation-vocabulary";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import {
+  roleOf,
+  type Workspace,
+  type WorkspaceStoreEffect,
+} from "@sidecar/database/models/workspace-store";
+import { member, organization, user } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
+import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
 import type { WorkspaceMember, WorkspaceRole } from "@sidecar/hosted/workspace-wire";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { and, asc, eq } from "drizzle-orm";
 import { type Cause, Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
-import { member, organization, user } from "../db/auth-schema.js";
-import { githubInstallation } from "../db/github-installation-schema.js";
-import { GITHUB_INSTALLATION_STATUS } from "../db/github-installation-vocabulary.js";
-import { personalWorkspace } from "../db/personal-workspace-schema.js";
-import { db } from "../db/query.js";
 import type { StoreFailure } from "./store-failure.js";
-import type { WorkspaceSeams } from "./workspace-seams.js";
-import { roleOf, type Workspace, type WorkspaceStoreEffect } from "./workspace-store.js";
 
 /**
  * workspace-members.ts -- who is in a workspace, and the joins, removals, and leavings that change it.

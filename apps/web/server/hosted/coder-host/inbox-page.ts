@@ -3,6 +3,7 @@ import type { AccountInboxAnswer } from "@sidecar/hosted/account-inbox-wire";
 import type { InboxAnswer } from "@sidecar/hosted/inbox-wire";
 import { Clock, type Duration, Effect, Schedule } from "effect";
 import {
+  accountInboxPlans,
   accountWaitingItems,
   accountWaitingStamps,
   type InboxStamp,
@@ -27,7 +28,11 @@ import { CODER } from "./bounds.js";
  *
  * The account's read is the same hold over the account's open items, the
  * desktop's one read that stands whichever plan is open: it is what says an
- * item landed while the developer was elsewhere. Note that it looks every
+ * item landed while the developer was elsewhere. It names every plan holding
+ * an item too, settled ones included, read once per answer rather than on
+ * each look: a plan's list moves with its open items, since every item
+ * opens before it settles, and what moves it alone, such as an archive, is
+ * answered at the hold's end at the latest. Note that it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
  */
@@ -95,8 +100,9 @@ export function accountInboxPast(
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
     const rows = yield* accountWaitingItems(userId);
+    const plans = yield* accountInboxPlans(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
-    return { items, cursor: cursorOf(rows), readAt };
+    return { items, plans, cursor: cursorOf(rows), readAt };
   });
   return heldUntilMoved(accountWaitingStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
     Effect.andThen(read),

@@ -1,15 +1,17 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
+import { spendHostedMeter } from "@sidecar/database/models/quota";
+import { type StoreWriter, storeWriter } from "@sidecar/database/models/writer";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
+import { accountMeter } from "../agent-runtime/meter.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleModel } from "../coder-host/model.js";
 import { HostedEnvironment } from "../environment.js";
-import { spendHostedMeter } from "../quota.js";
-import { type StoreWriter, storeWriter } from "../store/index.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
@@ -27,10 +29,11 @@ import { deploymentEveOrigin } from "./eve-origin.js";
  * nothing else.
  */
 
-interface OpenAiAccess {
+export interface OpenAiAccess {
   /** Sealed until the SDK client is built. */
   readonly apiKey: Redacted.Redacted;
-  readonly modelId: string;
+  /** The model, by its catalog id, and the effort every inference runs on, as a coding agent's row names its own. */
+  readonly choice: ModelChoice;
 }
 
 export interface BrainHostSeams {
@@ -45,8 +48,8 @@ export interface BrainHostSeams {
   readonly eveOrigin: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
   readonly openAi: () => OpenAiAccess | undefined;
-  /** The model a worker's title is generated on; nothing, where the deployment holds no Anthropic key, leaves every worker untitled. */
-  readonly titleModel: () => LanguageModel | undefined;
+  /** The model one account's worker's title is generated on, behind that account's meter; nothing, where the deployment holds no Anthropic key, leaves every worker untitled. */
+  readonly titleModel: (userId: string) => LanguageModel | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
   readonly scriptedModel: () => boolean;
   /** Counts one hosted use against the account's day. */
@@ -70,6 +73,8 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
     // composition probes every declared output schema, so a warm instance pays
     // that walk once rather than once per request.
     const writer = yield* Effect.cached(storeWriter({ tools: HOSTED_TOOL_SET }));
+    const spend = (userId: string) =>
+      run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() })));
     return {
       writer: () => writer,
       ownership: {
@@ -90,13 +95,16 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           ? undefined
           : {
               apiKey: environment.openAiKey,
-              modelId: BRAIN_OPENAI_DEFAULTS.MODEL,
+              choice: { model: BRAIN_OPENAI_DEFAULTS.MODEL, effort: BRAIN_OPENAI_DEFAULTS.EFFORT },
             },
-      titleModel: () =>
-        titleModel({ anthropic: environment.anthropicKey, openAi: environment.openAiKey }),
+      titleModel: (userId) =>
+        titleModel(
+          { anthropic: environment.anthropicKey, openAi: environment.openAiKey },
+          accountMeter(spend, userId),
+        ),
       scriptedModel: () =>
         process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
-      spend: (userId) => run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() }))),
+      spend,
       now: () => Date.now(),
     };
   },

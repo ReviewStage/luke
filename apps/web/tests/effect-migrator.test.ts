@@ -1,21 +1,19 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
-import { FileSystem } from "effect/FileSystem";
-import { Path } from "effect/Path";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
-  bootstrapFromDrizzleHistory,
-  DRIZZLE_MIGRATIONS_TABLE,
   type JournalEntry,
   MIGRATIONS_TABLE,
   runWebMigrations,
   webMigrationJournal,
   webMigrations,
-} from "../server/db/effect-migrator.js";
-import { testSqlClient, unmigratedPgliteSqlClient } from "./support/sql-client.js";
+} from "@sidecar/database/core/migrator";
+import { getTestDB, unmigratedPgliteSqlClient } from "@sidecar/database/testing";
+import { Effect, Layer } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { Path } from "effect/Path";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 interface RecordedMigration {
   readonly id: number;
@@ -78,27 +76,7 @@ function unapplied(
   return [...declared].filter((id) => !applied.has(id));
 }
 
-function seedDrizzleHistory(createdAt: number) {
-  return Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const schema = sql(DRIZZLE_MIGRATIONS_TABLE.SCHEMA);
-    const table = sql(DRIZZLE_MIGRATIONS_TABLE.NAME);
-    yield* sql`create schema ${schema}`;
-    yield* sql`
-      create table ${schema}.${table} (
-        id serial primary key,
-        hash text not null,
-        created_at bigint
-      )
-    `;
-    yield* sql`
-      insert into ${schema}.${table} (hash, created_at)
-      values (${"seeded"}, ${createdAt})
-    `;
-  });
-}
-
-it.layer(withPlatform(testSqlClient))(
+it.layer(withPlatform(getTestDB()))(
   "the web migration runner over a database already at the latest migration",
   (it) => {
     it.effect("applies nothing, and records every migration the folder holds", () =>
@@ -147,29 +125,6 @@ it.effect("a fresh database takes every migration the folder holds, in the journ
     Effect.gen(function* () {
       assert.deepEqual(named(yield* runWebMigrations()), yield* resolved);
       assert.deepEqual(yield* recorded, yield* resolved);
-    }),
-  ),
-);
-
-it.effect("the bootstrap records only the migrations Drizzle's history says were applied", () =>
-  onFreshDatabase(
-    Effect.gen(function* () {
-      const boundary = 3;
-      const entry = (yield* webMigrationJournal())[boundary];
-      assert.ok(entry);
-      const applied = (yield* resolved).slice(0, boundary + 1);
-      yield* seedDrizzleHistory(entry.when);
-      assert.deepEqual(named(yield* bootstrapFromDrizzleHistory()), applied);
-      assert.deepEqual(yield* recorded, applied);
-    }),
-  ),
-);
-
-it.effect("the bootstrap records nothing when there is no Drizzle history to read", () =>
-  onFreshDatabase(
-    Effect.gen(function* () {
-      assert.deepEqual(named(yield* bootstrapFromDrizzleHistory()), []);
-      assert.deepEqual(yield* recorded, []);
     }),
   ),
 );

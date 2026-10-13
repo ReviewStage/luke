@@ -17,9 +17,11 @@
 
 /* The components' tokens, each an alias of one base.css names, so a utility
    and a hand-written rule read one vocabulary and no second gray or hairline
-   is invented here. Only the tokens something draws with. */
+   is invented here. Only the tokens something draws with. `font-mono` needs
+   no alias: it reads `--font-mono` by that name, and base.css's, outside
+   every layer, outranks the theme's own default. */
 @theme inline {
-  --color-background: var(--surface-overlay);
+  --color-background: var(--surface-popover);
   --color-foreground: var(--text-primary);
   --color-muted: var(--raised);
   --color-muted-foreground: var(--text-secondary);
@@ -31,7 +33,6 @@
   --color-selected-edge: var(--selected-edge);
   --color-card: var(--desktop-sidebar);
   --color-well: var(--desktop-well);
-  --color-error: var(--error-text);
   --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);
   --color-danger: var(--danger-text);

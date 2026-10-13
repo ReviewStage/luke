@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type {
+  DetachedVoiceSession,
+  VoiceSessionRecord,
+} from "@sidecar/database/models/voice-session-record";
+import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
 import {
   closeGracefully,
   type LiveSideband,
@@ -7,12 +12,10 @@ import {
 } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import { VOICE_CLOSE_REASON } from "../db/voice-vocabulary.js";
 import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";
 import type { LiveUpstream } from "./openai.js";
-import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.js";
 
 /**
  * The bound on a detached voice session. A sessions-route connection whose

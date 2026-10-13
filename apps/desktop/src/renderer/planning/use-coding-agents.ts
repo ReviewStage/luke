@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
@@ -9,6 +10,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { IntegrationProvider } from "@sidecar/hosted/integration-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +24,7 @@ import {
   choiceRequest,
   MODEL_CHANGE_FAILED,
   RENAME_FAILED,
+  SERVERS_FAILED,
   START_ARCHIVED,
   START_FAILED_AWAY,
   START_NEEDS_REPOSITORY,
@@ -30,9 +33,12 @@ import {
   withAgent,
   withAgentRun,
 } from "./coding-agent-model";
+import { keptSkills } from "./repository-skills";
+import type { SkillSource } from "./skill-picker";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
+import type { ServersWriter } from "./use-agent-servers";
 import type { TranscriptReader } from "./use-agent-transcript";
 import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-plan-inbox";
 
@@ -109,8 +115,8 @@ export interface CodingAgentsControl {
   draft: AgentDraft | undefined;
   /** Opens a draft agent on the open plan, or answers the one it has, by its key. */
   onNewDraft: () => string;
-  /** Writes the open plan's draft: the words in its box, or the choice on its chip. */
-  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice">>) => void;
+  /** Writes the open plan's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
+  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice" | "disabledServers">>) => void;
   /** Changes the open plan's draft's files from those it holds as the change lands. */
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
@@ -119,7 +125,8 @@ export interface CodingAgentsControl {
   onDiscardDraft: (draftId: string) => void;
   /**
    * Starts the draft's agent with the words as its task, never the plan,
-   * and the files attached to them, on the choice where one was made and else the account's default; the
+   * and the files attached to them, on the choice where one was made and else the account's default,
+   * with the MCP servers the draft switched off; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
    * nothing once it did.
    */
@@ -128,6 +135,7 @@ export interface CodingAgentsControl {
     task: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
+    disabledServers?: readonly IntegrationProvider[],
   ) => Promise<string | undefined>;
   /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -149,6 +157,10 @@ export interface CodingAgentsControl {
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
   onChoose: ChoiceWriter;
+  /** Switches one agent's MCP servers for its next turn on, and takes the agent as the service answers it; a refusal is said in a toast. */
+  onSwitchServers: ServersWriter;
+  /** Opens Settings on its Integrations page, where an MCP server is connected. */
+  onOpenIntegrations: () => void;
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
@@ -168,8 +180,12 @@ export interface CodingAgentsControl {
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it. */
   readPullRequest: PullRequestReader;
+  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
+  readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
+  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
+  readSkills: SkillSource | undefined;
   /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
@@ -178,12 +194,13 @@ export interface CodingAgentsControl {
   readInboxImage: InboxImageReader;
 }
 
-/** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
+/** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, the choice made on its chip, none while it runs on the account's default, and the MCP servers switched off for it. */
 export interface AgentDraft {
   readonly id: string;
   readonly task: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
+  readonly disabledServers: readonly IntegrationProvider[];
 }
 
 /** A Start on its way or asked again: the plan, the key the press minted, and the choice it was for. */
@@ -224,6 +241,8 @@ export function useCodingAgents(input: {
   archived: boolean;
   /** Brings the open plan back from the archive. */
   onUnarchive: () => void;
+  /** Opens Settings on its Integrations page. */
+  onOpenIntegrations: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
   /** The words a dictation into an agent's box is likely to say; none where nothing is open. */
@@ -399,12 +418,14 @@ export function useCodingAgents(input: {
     if (draft !== undefined) return draft.id;
     const id = mintKey();
     if (planId !== undefined) {
-      withDraft(planId, { id, task: "", attachments: [], choice: undefined });
+      withDraft(planId, { id, task: "", attachments: [], choice: undefined, disabledServers: [] });
     }
     return id;
   };
 
-  const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice">>) => {
+  const onDraftChange = (
+    change: Partial<Pick<AgentDraft, "task" | "choice" | "disabledServers">>,
+  ) => {
     if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
   };
 
@@ -433,6 +454,7 @@ export function useCodingAgents(input: {
     task: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
+    disabledServers: readonly IntegrationProvider[] = [],
   ): Promise<string | undefined> => {
     if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
     if (archived) return START_ARCHIVED;
@@ -440,6 +462,7 @@ export function useCodingAgents(input: {
       idempotencyKey: draftId,
       task,
       ...(attachments.length === 0 ? undefined : { attachments }),
+      ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
     if ("failure" in answer) return startFailureNote(answer.failure);
@@ -503,6 +526,37 @@ export function useCodingAgents(input: {
       return answer;
     },
     [act],
+  );
+
+  // Note that each agent's switches are sent one after another, each once the
+  // one before it has answered, because a switch writes the whole list and two
+  // writes in flight may land in either order, which would leave the service
+  // holding the older list for the next turn. Only the newest switch's answer is
+  // taken into the list, and only its refusal is said, in a toast, as the
+  // switches fall back.
+  const switches = useRef(new Map<string, { count: number; sent: Promise<unknown> }>());
+  const onSwitchServers = useCallback<ServersWriter>(
+    async (agentId, disabledServers) => {
+      const before = switches.current.get(agentId);
+      const change = (before?.count ?? 0) + 1;
+      const sent = (before?.sent ?? Promise.resolve()).then(() =>
+        act(ACT_KIND.CODING_AGENTS_SERVERS, { agentId, disabledServers }).catch(
+          (): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+        ),
+      );
+      switches.current.set(agentId, { count: change, sent });
+      const answer: CodingAgentAgentAnswer = await sent;
+      if (switches.current.get(agentId)?.count !== change) return answer;
+      if ("failure" in answer) {
+        failed(SERVERS_FAILED);
+        return answer;
+      }
+      setList((was) =>
+        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+      );
+      return answer;
+    },
+    [act, failed],
   );
 
   // A rename's field closes as the edit ends, so a second rename may be out before the first
@@ -611,6 +665,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
+    [act],
+  );
+
   const readInbox = useCallback<InboxReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -619,6 +678,16 @@ export function useCodingAgents(input: {
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
     [act],
+  );
+
+  // Note that the skills are kept for the plan and its repository as they
+  // stand, so another plan, or the plan moved to another repository, reads afresh.
+  const readSkills = useMemo(
+    () =>
+      planId === undefined || repository === null
+        ? undefined
+        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId })),
+    [act, planId, repository],
   );
 
   const readInboxImage = useCallback<InboxImageReader>(
@@ -654,6 +723,8 @@ export function useCodingAgents(input: {
     onStop,
     onMessage,
     onChoose,
+    onSwitchServers,
+    onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     onRename,
     onArchive,
     readAgent,
@@ -661,7 +732,9 @@ export function useCodingAgents(input: {
     onTitle,
     readTranscript,
     readPullRequest,
+    readChanges,
     keywords: input.keywords ?? NO_KEYWORDS,
+    readSkills,
     readInbox,
     answerInbox,
     readInboxImage,

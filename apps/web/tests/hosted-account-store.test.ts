@@ -1,24 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import { count, eq, or } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
-import { Duration, Effect } from "effect";
-import { TestClock } from "effect/testing";
-import { member, organization, user } from "../server/db/auth-schema";
-import { personalWorkspace } from "../server/db/personal-workspace-schema";
-import { accountPreference } from "../server/db/preferences-schema";
-import { db } from "../server/db/query";
-import { hostedUsage } from "../server/db/usage-schema";
+import { db } from "@sidecar/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
   writeAccountPreferences,
-} from "../server/hosted/account-store";
-import { CODING_AGENT_DEFAULT_CHOICE } from "../server/hosted/model-catalog";
-
-import { testSqlClient } from "./support/sql-client";
+} from "@sidecar/database/models/account-store";
+import { member, organization, user } from "@sidecar/database/schemas/auth";
+import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
+import { accountPreference } from "@sidecar/database/schemas/preferences";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
+import { count, eq, or } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 
 /**
  * The account group's own reads and writes against a real Postgres dialect.
@@ -91,7 +90,7 @@ const countRows = (userId: string) =>
     };
   });
 
-it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the account group's seams over effect/unstable/sql", (it) => {
   it.effect("an account that stored nothing reads as nothing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

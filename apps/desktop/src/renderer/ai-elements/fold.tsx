@@ -4,10 +4,14 @@ import {
   createContext,
   type MouseEvent,
   type ReactNode,
+  useCallback,
   useContext,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 import { useFindOpen } from "../find-in-tab";
+import { disclosureMotion, useDisclosure } from "../use-disclosure";
 import { cn } from "./utils";
 
 /**
@@ -23,16 +27,31 @@ import { cn } from "./utils";
  * takes the click itself and stops the element's own toggle, so the two
  * cannot disagree, and says whether it is open in `aria-expanded`.
  *
+ * A press moves the fold, and nothing else does. The layout lands at once
+ * either way; a press that opens marks the element `data-disclosure` as
+ * opening, which unrolls the body as it fades in (base.css), and a press
+ * that closes holds the body drawn through its fade (`use-disclosure.ts`).
+ * For the moment it moves, the body's height is published on the element
+ * as `--disclosure-rise`, which is how a fold whose line travels as it
+ * opens, the to-do list docked over the composer, tells the stylesheet how
+ * far. A fold drawn open from the start, or drawn again, replays nothing.
+ *
  * While a find bar is open over the tab (`find-in-tab.tsx`), a closed body
  * is drawn after all, still hidden inside its closed `details` as the
  * platform hides one, so the find covers what the fold holds; a find that
  * shows a match there opens the element, and the fold follows the element's
- * own toggle, so its state is the element's again at once.
+ * own toggle, so its state is the element's again at once, with no motion.
  */
 
 interface FoldState {
+  /** Whether it is open, as its line says. */
   readonly open: boolean;
+  /** Whether its body is drawn: open, or closed and still fading. */
+  readonly drawn: boolean;
+  /** Whether its body is fading out, out of reach of the keys and the pointer. */
+  readonly leaving: boolean;
   readonly toggle: () => void;
+  readonly body: (element: HTMLElement | null) => void;
 }
 
 const FoldContext = createContext<FoldState | undefined>(undefined);
@@ -44,16 +63,16 @@ function useFold(): FoldState {
 }
 
 /**
- * Whether the fold around the caller draws its body: open, or a find looking
- * through it. Note that a summary previewing its body asks this rather than
- * whether the fold is open, because the body a find draws hidden says the
- * same words, and a find counting both would open the fold onto a match in
- * the preview that opening it takes away.
+ * Whether the fold around the caller draws its body: open, on its way out,
+ * or a find looking through it. Note that a summary previewing its body asks
+ * this rather than whether the fold is open, because the body a find draws
+ * hidden says the same words, and a find counting both would open the fold
+ * onto a match in the preview that opening it takes away.
  */
 export function useFoldBodyDrawn(): boolean {
-  const { open } = useFold();
+  const { drawn } = useFold();
   const finding = useFindOpen();
-  return open || finding;
+  return drawn || finding;
 }
 
 /** Note that the element's own `open` is not a prop: the state is this component's, and a fold meant to start open says `defaultOpen`. */
@@ -69,14 +88,53 @@ export function Fold({
   ...props
 }: FoldProps): ReactNode {
   const [open, setOpen] = useState(defaultOpen);
-  const state: FoldState = { open, toggle: () => setOpen((was) => !was) };
+  // Whether the open state is a press's, which alone plays the opening.
+  const [pressed, setPressed] = useState(false);
+  const shown = useDisclosure(open);
+  const root = useRef<HTMLDetailsElement>(null);
+  const held = useRef<HTMLElement | null>(null);
+  const shownRef = shown.ref;
+  const body = useCallback(
+    (element: HTMLElement | null) => {
+      held.current = element;
+      shownRef(element);
+    },
+    [shownRef],
+  );
+  // Note that no motion plays while a find looks through the tab, because a
+  // body held open through its fade would be closed over the match a find
+  // showed there, which opens only a `details` that is closed.
+  const finding = useFindOpen();
+  const motion = finding ? undefined : disclosureMotion(open && pressed, shown.leaving);
+  // Note that this runs before the frame the press is drawn on, so the rise
+  // is there for the first frame of any motion that reads it.
+  useLayoutEffect(() => {
+    if (motion === undefined || held.current === null) return;
+    root.current?.style.setProperty("--disclosure-rise", `${held.current.offsetHeight}px`);
+  }, [motion]);
+  const state: FoldState = {
+    open,
+    drawn: shown.mounted,
+    leaving: shown.leaving,
+    toggle: () => {
+      setPressed(true);
+      setOpen(!open);
+    },
+    body,
+  };
   return (
     <FoldContext.Provider value={state}>
       <details
-        open={open}
+        ref={root}
+        open={shown.mounted}
         className={cn("group/fold min-w-0", className)}
+        data-disclosure={motion}
         onToggle={(event) => {
-          setOpen(event.currentTarget.open);
+          // Note that the element's own toggle, a find's among them, lands at once.
+          if (event.currentTarget.open !== shown.mounted) {
+            setPressed(false);
+            setOpen(event.currentTarget.open);
+          }
           onToggle?.(event);
         }}
         {...props}
@@ -141,10 +199,17 @@ export function FoldChevron({ className }: { className?: string }): ReactNode {
   );
 }
 
-export type FoldBodyProps = ComponentProps<"div">;
+/** Note that the body's element is the fold's own, to wait on its fade, so it takes no ref. */
+export type FoldBodyProps = Omit<ComponentProps<"div">, "ref">;
 
-/** What the fold holds, drawn only while it is open or a find is looking through it. */
-export function FoldBody({ children, ...props }: FoldBodyProps): ReactNode {
-  if (!useFoldBodyDrawn()) return null;
-  return <div {...props}>{children}</div>;
+/** What the fold holds, drawn only while it is open, on its way out, or a find is looking through it. */
+export function FoldBody({ className, children, ...props }: FoldBodyProps): ReactNode {
+  const { body, leaving } = useFold();
+  const drawn = useFoldBodyDrawn();
+  if (!drawn) return null;
+  return (
+    <div ref={body} className={cn("disclosure-body", className)} inert={leaving} {...props}>
+      {children}
+    </div>
+  );
 }

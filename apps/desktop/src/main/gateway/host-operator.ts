@@ -21,6 +21,7 @@ import {
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
@@ -38,10 +39,12 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
+  type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
+  codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
@@ -54,20 +57,31 @@ import {
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
   planTemplateAnswerViewSchema,
+  planTemplateRevisionAnswerViewSchema,
+  planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  LINEAR_CALL_FAILURE,
-  type LinearConnectView,
-  type LinearStatusView,
-  linearConnectViewSchema,
-  linearStatusViewSchema,
-} from "@sidecar/hosted/linear-view";
+  INTEGRATION_CALL_FAILURE,
+  type IntegrationConnectView,
+  type IntegrationProviderParams,
+  type IntegrationStatusesView,
+  type IntegrationStatusView,
+  type IntegrationToolsView,
+  integrationConnectViewSchema,
+  integrationStatusesViewSchema,
+  integrationStatusViewSchema,
+  integrationToolsViewSchema,
+} from "@sidecar/hosted/integration-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -88,6 +102,8 @@ import {
   type PlanningRevisionsParams,
   type PlanningSetRepositoryAnswer,
   type PlanningSetRepositoryParams,
+  type PlanningSkillsAnswer,
+  type PlanningSkillsParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningTreeAnswer,
@@ -106,6 +122,7 @@ import {
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
   planningSetRepositoryAnswerSchema,
+  planningSkillsAnswerSchema,
   planningStartAnswerSchema,
   planningTreeAnswerSchema,
   planningViewSchema,
@@ -226,25 +243,29 @@ export interface HostOperator {
   planningSetRepository(
     params: PlanningSetRepositoryParams,
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
-  /** The developer's edit of one field of a plan; saved, a conflict with what the field holds now, or why nothing was saved. */
+  /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
   planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
   planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
+  /** The skills a developer may choose of a plan's repository; or why they are not read. */
+  planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
   planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
-  /** Where the account's Linear connection stands; or why there is no answer. */
-  linearStatus(): Effect.Effect<LinearStatusView>;
-  /** A Linear sign-in begun and opened in the browser by the host; whether it was, never the address. */
-  linearConnect(): Effect.Effect<LinearConnectView>;
-  /** The account's Linear connection ended; where it then stands, or why there is no answer. */
-  linearDisconnect(): Effect.Effect<LinearStatusView>;
+  /** Where every one of the account's integrations stands; or why there is no answer. */
+  integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
+  /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
+  integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
+  /** The tools one provider's server offers the account's agents; or why there is no answer. */
+  integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
+  /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
+  integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The workspace of a GitHub App installation joined; the workspace, or why it was not. */
   workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
   /** One workspace's members; or why there are none. */
@@ -277,6 +298,7 @@ export interface HostOperator {
   codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
+  codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
@@ -285,6 +307,10 @@ export interface HostOperator {
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+  /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
+  codingAgentChanges(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentChangesAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -295,6 +321,16 @@ export interface HostOperator {
   planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
   /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
   planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
+  /** A page of the template's history, newest first; or why there is none. */
+  planTemplateRevisions(
+    params: PlanTemplateRevisionsParams,
+  ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
+  /** One revision of the template beside the one before it; or why there is none. */
+  planTemplateRevision(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateRevisionAnswerView>;
+  /** One revision of the template put back as the template; the template as kept, or why it is unchanged. */
+  planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
     params: DictationTranscribeParams,
@@ -367,8 +403,8 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** What a Linear call the host could not answer is drawn as. */
-const LINEAR_UNANSWERED = { failure: LINEAR_CALL_FAILURE.UNANSWERED } as const;
+/** What an integration call the host could not answer is drawn as. */
+const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
@@ -419,23 +455,34 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? CODING_AGENT_UNANSWERED;
 
-  /** A Linear answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const linearAnswer =
+  /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const integrationAnswer =
     <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof LINEAR_UNANSWERED =>
+    (answer: GatewayCallResult): Answer | typeof INTEGRATION_UNANSWERED =>
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? LINEAR_UNANSWERED;
+        : undefined) ?? INTEGRATION_UNANSWERED;
 
   return {
-    linearStatus: () =>
-      Effect.map(client.call(GATEWAY_METHOD.LINEAR_STATUS), linearAnswer(linearStatusViewSchema)),
-    linearConnect: () =>
-      Effect.map(client.call(GATEWAY_METHOD.LINEAR_CONNECT), linearAnswer(linearConnectViewSchema)),
-    linearDisconnect: () =>
+    integrationsStatus: () =>
       Effect.map(
-        client.call(GATEWAY_METHOD.LINEAR_DISCONNECT),
-        linearAnswer(linearStatusViewSchema),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
+        integrationAnswer(integrationStatusesViewSchema),
+      ),
+    integrationsConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, { provider: params.provider }),
+        integrationAnswer(integrationConnectViewSchema),
+      ),
+    integrationsTools: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, { provider: params.provider }),
+        integrationAnswer(integrationToolsViewSchema),
+      ),
+    integrationsDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, { provider: params.provider }),
+        integrationAnswer(integrationStatusViewSchema),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
@@ -601,6 +648,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
+    planningSkills: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: params.planId }),
+        (answer): PlanningSkillsAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
     planningRevisions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_REVISIONS, {
@@ -745,6 +802,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
           ...("task" in params ? { task: params.task } : undefined),
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
+          ...("disabledServers" in params
+            ? { disabledServers: params.disabledServers }
+            : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -785,6 +845,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
+    codingAgentServers: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_SERVERS, {
+          agentId: params.agentId,
+          disabledServers: params.disabledServers,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
     codingAgentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
@@ -802,6 +870,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+      ),
+    codingAgentChanges: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentChangesAnswerViewSchema),
       ),
     providerKeysRead: () =>
       Effect.map(
@@ -829,6 +902,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planTemplateWrite: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: params.template }),
+        codingAgentAnswer(planTemplateAnswerViewSchema),
+      ),
+    planTemplateRevisions: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS,
+          params.before === undefined ? {} : { before: params.before },
+        ),
+        codingAgentAnswer(planTemplateRevisionsAnswerViewSchema),
+      ),
+    planTemplateRevision: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: params.seq }),
+        codingAgentAnswer(planTemplateRevisionAnswerViewSchema),
+      ),
+    planTemplateRestore: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: params.seq }),
         codingAgentAnswer(planTemplateAnswerViewSchema),
       ),
     dictationTranscribe: (params) =>

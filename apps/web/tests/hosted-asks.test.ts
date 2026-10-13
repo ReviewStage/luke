@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "@sidecar/database/models/asks";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { storeWriter } from "@sidecar/database/models/writer";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, acceptAsk, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -17,15 +20,12 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   memoryRelayState,
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { storeWriter } from "../server/hosted/store";
-import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -316,6 +316,7 @@ function eveAccepting(
         return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId };
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
+    reset: () => Effect.die(new Error("this suite retires no session")),
   };
   return eve;
 }

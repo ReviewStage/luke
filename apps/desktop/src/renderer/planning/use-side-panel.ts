@@ -3,9 +3,12 @@ import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fileName } from "./code-pane-model";
 import {
+  type AgentStripTab,
+  type ChangesStripTab,
   type FileStripTab,
   inPlanOrder,
   isAgentTab,
+  isChangesTab,
   isFileTab,
   isSubagentTab,
   movedOrder,
@@ -16,6 +19,7 @@ import {
   sameTab,
   viewedLast,
 } from "./tab-strip-model";
+import { MAIN_TAB } from "./use-main-tabs";
 
 /**
  * use-side-panel.ts -- the open plan's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -46,10 +50,12 @@ import {
  * agent's tab, is held to the open plan's work, or to the plan's open
  * agent tabs where one of them delegated, so closing the
  * agent's tab takes its workers' with it; it closes, and it is kept
- * nowhere, so a launch opens none. A file's tab, opened from a snippet in
- * the Code tab or from the "+", is the one kind that stands many times, one
- * per file: it is held to the files Luke showed on the open plan the same
- * way, closes, and is kept nowhere. Opening a file
+ * nowhere, so a launch opens none. An agent's Changes tab, opened from the
+ * Changes chip at its tab's foot, is held to its agent's tab on the same
+ * terms, one per agent, and is pinned nowhere. A file's tab, opened from a
+ * snippet in the Code tab or from the "+", is the one kind that stands many
+ * times, one per file: it is held to the files Luke showed on the open plan
+ * the same way, closes, and is kept nowhere. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -85,7 +91,7 @@ import {
  * leaving the rest as they stood.
  *
  * A fixed tab or a file's may be pinned to the sidebar, and so may a coding
- * agent's from the plan's column, where it stands under Pinned beside the
+ * agent's or the Inbox from the plan's column, where it stands under Pinned beside the
  * pinned plans, newest pinned first, and opens its plan on that tab from
  * any plan. The pins are kept here, with the rest of the window's tab
  * preferences. The strip draws a pinned tab as it draws any other: it
@@ -141,8 +147,8 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, or one file's. */
-export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab;
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, or one agent's Changes. */
+export type SidePanelTab = FixedSidePanelTab | SubagentStripTab | FileStripTab | ChangesStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -245,19 +251,25 @@ const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Sc
  */
 const PINS_KEPT = 100;
 
-/** The tab a pin opens: a fixed one, an agent's, or a file's. */
+/** The tab a pin opens: a fixed one, an agent's, the plan's Inbox, or a file's. */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
   Schema.Struct({ agent: Schema.String }),
+  Schema.Literal(MAIN_TAB.INBOX),
   Schema.Struct({ file: Schema.String }),
 ]);
 
-/** A tab pinned to the sidebar: its plan, the tab, the name the sidebar draws for it, and when it was pinned. */
+/**
+ * A tab pinned to the sidebar: its plan, the tab, the name the sidebar draws
+ * for it, when it was pinned, and, an agent's, the model it ran on then,
+ * whose harness's mark its row wears while its plan is not the open one.
+ */
 const pinnedTabSchema = Schema.Struct({
   plan: Schema.String,
   tab: pinnableTabSchema,
   label: Schema.String,
   at: Schema.Number,
+  model: Schema.optionalKey(Schema.String),
 });
 
 /** A tab of a kind the sidebar holds a pin of, of today's kinds. */
@@ -336,6 +348,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentStripTab[];
   readonly files: readonly OpenFile[];
+  /** The open Changes tabs, by agent, in the order opened. */
+  readonly changes: readonly ChangesStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -388,6 +402,8 @@ export interface SidePanelControl {
   subagents: readonly SubagentStripTab[];
   /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
   files: readonly OpenFile[];
+  /** The open Changes tabs in the order opened, after the file tabs; only those whose agent's tab stands open are drawn. */
+  changes: readonly ChangesStripTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -407,16 +423,16 @@ export interface SidePanelControl {
   onClose: (tab: SidePanelTab) => void;
   /** Moves the tab to the place `to` in the strip, among tabs of every kind, leaving the chosen one chosen. */
   onMove: (tab: SidePanelTab, to: number) => void;
-  /** Pins the open plan's tab, of either strip, to the sidebar under the name given, newest of the pins. */
-  onPin: (tab: PinnableTab, label: string) => void;
+  /** Pins the open plan's tab, of either strip, to the sidebar under the name given, newest of the pins; an agent's with the model it runs on. */
+  onPin: (tab: PinnableTab, label: string, model?: string) => void;
   onUnpin: (planId: string, tab: PinnableTab) => void;
   /** Names each agent pinned on the plan as its tab is named now, by agent id; an agent named nowhere keeps the name it has. */
   onRenamePins: (planId: string, labels: ReadonlyMap<string, string>) => void;
   /**
    * Shows the panel on the file's tab, opening one at the strip's end where
    * none stands, its lit lines the reference's; with `commit`, as an inbox
-   * item's code opens it, the file as it stood at that commit, drawn on the
-   * open plan though Luke never showed it there.
+   * item's code or a snippet Luke read from his checkout opens it, the file
+   * as it stood at that commit, drawn on the open plan.
    */
   onOpenFile: (ref: CodeRef, commit?: string) => void;
   /**
@@ -529,9 +545,17 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, or a file's. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, the Inbox, or a file's. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isAgentTab(tab) || isFileTab(tab);
+  return FIXED_TABS.has(tab) || isAgentTab(tab) || tab === MAIN_TAB.INBOX || isFileTab(tab);
+}
+
+/** A pin of a tab in the plan's own column rather than the side panel: an agent's, or the Inbox. */
+export type ColumnPinnableTab = Extract<PinnableTab, AgentStripTab | typeof MAIN_TAB.INBOX>;
+
+/** Whether a pin opens in the plan's own column, an agent's tab or the Inbox, rather than in the side panel. */
+export function inColumn(tab: PinnableTab): tab is ColumnPinnableTab {
+  return isAgentTab(tab) || tab === MAIN_TAB.INBOX;
 }
 
 /** Whether the pin is of the plan's tab. */
@@ -614,13 +638,18 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
       ? [...held.files, { path: tab.file, range: undefined, opened: 0 }]
       : held.files;
+  const changes =
+    isChangesTab(tab) && !held.changes.some((each) => sameTab(each, tab))
+      ? [...held.changes, tab]
+      : held.changes;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
+    changes === held.changes &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, tab: chosen };
+    : { ...opened, subagents, files, changes, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -754,6 +783,15 @@ export function drawsSubagent(
   return drawn.agents === undefined || drawn.agents.includes(tab.delegation.agent);
 }
 
+/**
+ * Whether the plan draws the agent's Changes tab: while the agent has its
+ * tab open in the plan's column, or until the agents are read, as a
+ * delegated worker's tab stands.
+ */
+export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "agents">): boolean {
+  return drawn.agents === undefined || drawn.agents.includes(tab.changes);
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -774,6 +812,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnFixed(held, drawn.plan),
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
+    ...held.changes.filter((each) => drawsChanges(each, drawn)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -827,7 +866,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
       ? held.subagents.some((each) => sameTab(each, tab))
         ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
         : undefined
-      : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+      : isChangesTab(tab)
+        ? { ...held, changes: held.changes.filter((each) => !sameTab(each, tab)) }
+        : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -946,9 +987,10 @@ function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
   );
 }
 
-/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, or any agent's. */
+/** The name a pin read from the strip's own carries until its plan is next open: a fixed tab's kind, a file's name, the Inbox's, or any agent's. */
 function stripPinLabel(tab: PinnableTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
+  if (tab === MAIN_TAB.INBOX) return "Inbox";
   return isAgentTab(tab) ? "Coding agent" : SIDE_PANEL_TAB_KIND[tab].label;
 }
 
@@ -992,6 +1034,7 @@ function settled(state: SidePanelState): HeldState {
     width: clampWidth(state.width),
     subagents: [],
     files: [],
+    changes: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1080,6 +1123,7 @@ function shownTab(
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
   if (isFileTab(kept)) return files.includes(kept.file) ? kept : tabs[0];
+  if (isChangesTab(kept)) return drawsChanges(kept, { agents }) ? kept : tabs[0];
   return drawsSubagent(kept, { agents, subagents }) ? kept : tabs[0];
 }
 
@@ -1306,10 +1350,12 @@ export function useSidePanel(
     [update, drawn],
   );
   const onPin = useCallback(
-    (tab: PinnableTab, label: string) => {
+    (tab: PinnableTab, label: string, model?: string) => {
       if (planId === undefined) return;
       const at = Date.now();
-      update((held) => withPin(held, { plan: planId, tab, label }, at));
+      const pin =
+        model === undefined ? { plan: planId, tab, label } : { plan: planId, tab, label, model };
+      update((held) => withPin(held, pin, at));
     },
     [update, planId],
   );
@@ -1334,6 +1380,7 @@ export function useSidePanel(
     used,
     pins: state.pins,
     subagents: state.subagents,
+    changes: state.changes,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

@@ -4,6 +4,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -24,12 +25,17 @@ import {
   codingAgentMessagesParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionsAnswerView,
   type ProviderKeysAnswerView,
+  planTemplateRevisionParamsSchema,
+  planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -73,14 +79,19 @@ export type CodingAgentClient = Pick<
   | "message"
   | "choose"
   | "rename"
+  | "switchServers"
   | "archive"
   | "stop"
   | "pullRequest"
+  | "changes"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
   | "readPlanTemplate"
   | "writePlanTemplate"
+  | "readPlanTemplateRevisions"
+  | "readPlanTemplateRevision"
+  | "restorePlanTemplate"
   | "transcribeDictation"
   | "inbox"
   | "answerInbox"
@@ -171,6 +182,36 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.writePlanTemplate(write));
         return carried<PlanTemplateAnswerView>(answer);
       }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS]: (params) =>
+      Effect.gen(function* () {
+        const page = yield* read(
+          planTemplateRevisionsParamsSchema,
+          params,
+          "a page of the template's history names the revision it is read before, or none",
+        );
+        const answer = yield* asked(client.readPlanTemplateRevisions(page));
+        return carried<PlanTemplateRevisionsAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION]: (params) =>
+      Effect.gen(function* () {
+        const revision = yield* read(
+          planTemplateRevisionParamsSchema,
+          params,
+          "a revision of the template names its number",
+        );
+        const answer = yield* asked(client.readPlanTemplateRevision(revision));
+        return carried<PlanTemplateRevisionAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE]: (params) =>
+      Effect.gen(function* () {
+        const revision = yield* read(
+          planTemplateRevisionParamsSchema,
+          params,
+          "a restore of the template names the revision it brings back",
+        );
+        const answer = yield* asked(client.restorePlanTemplate(revision));
+        return carried<PlanTemplateAnswerView>(answer);
+      }),
     [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the words, because they are the developer's voice.
@@ -252,6 +293,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.rename(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_SERVERS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentServersParamsSchema,
+          params,
+          "switching an agent's MCP servers names the agent and the servers off",
+        );
+        const answer = yield* asked(client.switchServers(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {
         const { agentId, ...request } = yield* read(
@@ -281,6 +332,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.pullRequest(agentId));
         return carried<CodingAgentPullRequestAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHANGES]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading an agent's changes names one agent",
+        );
+        const answer = yield* asked(client.changes(agentId));
+        return carried<CodingAgentChangesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
       Effect.gen(function* () {

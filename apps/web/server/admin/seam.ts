@@ -1,4 +1,4 @@
-import { unlessInterrupted } from "@sidecar/runtime/effect";
+import { causeKind, unlessInterrupted } from "@sidecar/runtime/effect";
 import { type Cause, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -33,7 +33,7 @@ export function unavailableSeam<Failure>(
 ): Effect.Effect<Response> {
   return unlessInterrupted(cause, (other) =>
     Effect.as(
-      Effect.logError(message, other),
+      Effect.logError(`${message}: ${causeKind(other)}`),
       errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE),
     ),
   );

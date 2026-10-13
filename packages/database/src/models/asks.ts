@@ -1,0 +1,550 @@
+import { ASK_ORIGIN, type AskOrigin } from "@sidecar/hosted";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { asks, conversations } from "../schemas/storage.js";
+import { InstantColumnSchema } from "./columns.js";
+import { recordedRuntimeSession } from "./recorded-session.js";
+import type { ConversationTarget } from "./writer.js";
+
+/**
+ * The ask record: one row per ask from its accept to its turn, written and
+ * read as effects over the store's one SQL client and answered to its caller
+ * as effects too. An ask is recorded once per conversation and client id, by
+ * the unique index rather than by a read first, so two
+ * arrivals of one client id leave one row and both callers read it. What
+ * eve accepted is written onto the row as it is learned: the session at
+ * dispatch, the delivery a follow-up was named, and the turn once
+ * `turn.started` names that delivery, which is the one place a delivery id
+ * is turned into a turn id. Every read is scoped to the account that asked.
+ */
+
+/** One ask as its record holds it. */
+export interface AskRow {
+  readonly id: string;
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly clientId: string;
+  readonly origin: AskOrigin;
+  readonly createdAt: Date;
+  /** The eve session the ask was handed to, once eve accepted it. */
+  readonly sessionId?: string;
+  /** The delivery eve named for a follow-up; an ask that opened its session has none, its turn is the session's first. */
+  readonly deliveryId?: string;
+  /** The turn the ask ran in, as the store keys it, once known. */
+  readonly turnId?: string;
+  readonly cancelRequestedAt?: Date;
+}
+
+/** Where a spoken ask came from: the voice session it was delegated in and its task revision there. */
+export interface AskVoice {
+  readonly sessionId: string;
+  readonly revision: number;
+}
+
+interface AskWrite {
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly clientId: string;
+  readonly origin: AskOrigin;
+  readonly createdAt: Date;
+  readonly voice?: AskVoice;
+}
+
+/** A spoken ask as a re-attached connection reads it back: its revision, and how much of its run was told. */
+interface SpokenAsk {
+  readonly id: string;
+  readonly clientId: string;
+  readonly revision: number;
+  readonly turnId?: string;
+  readonly cancelRequestedAt?: Date;
+  /** The last event of the turn told to the voice under this ask; 0 for none. */
+  readonly toldSeq: number;
+  /** When the run's end was told under this ask; absent while it has not been. */
+  readonly endToldAt?: Date;
+}
+
+/** How far one telling went: the turn's last event told, and the instant its end was told, where it was. */
+interface AskTold {
+  readonly seq: number;
+  readonly endAt?: Date;
+}
+
+interface AskDispatch {
+  readonly sessionId: string;
+  readonly deliveryId?: string;
+  readonly turnId?: string;
+}
+
+/** The one answer a dispatch gives besides the row: the conversation it would run in no longer stands, a deletion having landed between the ask's admission and the dispatch's lock. */
+export const ASK_DISPATCH_REFUSAL = {
+  NO_CONVERSATION: "no_conversation",
+} as const;
+
+type AskDispatchRefusal = (typeof ASK_DISPATCH_REFUSAL)[keyof typeof ASK_DISPATCH_REFUSAL];
+
+/** The ask record as the routes and the voice function read and write it. */
+export interface AskRecord {
+  /** Records the ask once per conversation and client id; answers the row standing, this call's or an earlier one's. */
+  record(ask: AskWrite): AskEffect<AskRow>;
+  /** The ask the id names, where the account holds it. */
+  named(userId: string, id: string): AskEffect<AskRow | undefined>;
+  /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
+  latestSession(userId: string, conversationId: string): AskEffect<string | undefined>;
+  /**
+   * Runs the dispatch under the conversation's lock unless a session is already written, handing it
+   * the conversation's newest session as read under that lock, and writes what eve answered; answers
+   * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a deletion landing
+   * between the ask's admission and its dispatch is the caller's refusal and not a failure.
+   */
+  dispatchOnce(
+    target: ConversationTarget,
+    id: string,
+    dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
+  ): AskEffect<AskRow | AskDispatchRefusal>;
+  /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
+  cancelRequested(id: string, at: Date): AskEffect<void>;
+  /** The account's spoken asks delegated in the voice session, oldest revision first. */
+  spokenIn(userId: string, voiceSessionId: string): AskEffect<readonly SpokenAsk[]>;
+  /** Moves how far the ask's run was told forward, never back: the seq only grows and the end's first instant stands. */
+  told(id: string, told: AskTold): AskEffect<void>;
+}
+
+/** The binding the relay makes when eve's `turn.started` names the deliveries a turn carries. */
+export interface AskDeliveryBinding {
+  /** Names the turn each delivered ask of the conversation ran in; answers the asks bound, with any Stop stamped on them. */
+  bindDeliveries(
+    target: ConversationTarget,
+    deliveryIds: readonly string[],
+    turnId: string,
+  ): AskEffect<readonly AskRow[]>;
+  /**
+   * The conversation's asks bound to the turn that carry a Stop: the ask that opened the session is
+   * bound at its dispatch with no delivery, and a follow-up's stamp may land after its binding, so the
+   * start reads every ask of the turn rather than only the rows it just bound.
+   */
+  stoppedOn(target: ConversationTarget, turnId: string): AskEffect<readonly AskRow[]>;
+}
+
+type AskFailure = SqlError | Schema.SchemaError;
+
+/** What every method of the record answers: an effect over the ambient client. */
+type AskEffect<A> = Effect.Effect<A, AskFailure, SqlClient.SqlClient>;
+
+/** The whole of an ask's row, as every read of one projects it and the binding returns it. */
+const ASK_COLUMNS = {
+  id: asks.id,
+  userId: asks.userId,
+  conversationId: asks.conversationId,
+  clientId: asks.clientId,
+  origin: asks.origin,
+  createdAt: asks.createdAt,
+  sessionId: asks.sessionId,
+  deliveryId: asks.deliveryId,
+  turnId: asks.turnId,
+  cancelRequestedAt: asks.cancelRequestedAt,
+} as const;
+
+const AskRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+  conversationId: Schema.String,
+  clientId: Schema.String,
+  origin: Schema.Literals(Object.values(ASK_ORIGIN)),
+  createdAt: InstantColumnSchema,
+  sessionId: Schema.NullOr(Schema.String),
+  deliveryId: Schema.NullOr(Schema.String),
+  turnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+type AskRowRead = Schema.Schema.Type<typeof AskRowSchema>;
+
+/** The row as the record answers it: a column that is null is a field that is absent. */
+function askRow(read: AskRowRead): AskRow {
+  return {
+    id: read.id,
+    userId: read.userId,
+    conversationId: read.conversationId,
+    clientId: read.clientId,
+    origin: read.origin,
+    createdAt: read.createdAt,
+    ...(read.sessionId !== null ? { sessionId: read.sessionId } : undefined),
+    ...(read.deliveryId !== null ? { deliveryId: read.deliveryId } : undefined),
+    ...(read.turnId !== null ? { turnId: read.turnId } : undefined),
+    ...(read.cancelRequestedAt !== null
+      ? { cancelRequestedAt: read.cancelRequestedAt }
+      : undefined),
+  };
+}
+
+const AskWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  clientId: Schema.String,
+  origin: Schema.Literals(Object.values(ASK_ORIGIN)),
+  createdAt: Schema.Date,
+  voice: Schema.optional(Schema.Struct({ sessionId: Schema.String, revision: Schema.Int })),
+});
+
+/** The insert lands or finds the client id already standing in the conversation; either way the row is read back by that pair. */
+const insertAsk = SqlSchema.void({
+  Request: AskWriteSchema,
+  execute: (ask) =>
+    db
+      .insert(asks)
+      .values({
+        userId: ask.userId,
+        conversationId: ask.conversationId,
+        clientId: ask.clientId,
+        origin: ask.origin,
+        createdAt: ask.createdAt,
+        voiceSessionId: ask.voice?.sessionId ?? null,
+        taskRevision: ask.voice?.revision ?? null,
+      })
+      .onConflictDoNothing({ target: [asks.conversationId, asks.clientId] }),
+});
+
+const AskByClientSchema = Schema.Struct({ conversationId: Schema.String, clientId: Schema.String });
+
+const findAskByClient = SqlSchema.findOneOption({
+  Request: AskByClientSchema,
+  Result: AskRowSchema,
+  execute: (key) =>
+    db
+      .select(ASK_COLUMNS)
+      .from(asks)
+      .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
+});
+
+const AskByIdSchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
+
+const findAskById = SqlSchema.findOneOption({
+  Request: AskByIdSchema,
+  Result: AskRowSchema,
+  execute: (key) =>
+    db
+      .select(ASK_COLUMNS)
+      .from(asks)
+      .where(and(eq(asks.id, key.id), eq(asks.userId, key.userId))),
+});
+
+const LatestSessionSchema = Schema.Struct({ userId: Schema.String, conversationId: Schema.String });
+
+const SessionRowSchema = Schema.Struct({ sessionId: Schema.String });
+
+const findLatestSession = SqlSchema.findOneOption({
+  Request: LatestSessionSchema,
+  Result: SessionRowSchema,
+  execute: (key) =>
+    db
+      .select({ sessionId: asks.sessionId })
+      .from(asks)
+      .where(
+        and(
+          eq(asks.userId, key.userId),
+          eq(asks.conversationId, key.conversationId),
+          isNotNull(asks.sessionId),
+        ),
+      )
+      .orderBy(desc(asks.sessionId))
+      .limit(1),
+});
+
+/** The newest session any of the conversation's asks was handed to, by eve's sortable ids. */
+function latestSessionOf(
+  target: ConversationTarget,
+): Effect.Effect<string | undefined, AskFailure, SqlClient.SqlClient> {
+  return Effect.map(findLatestSession(target), (found) =>
+    Option.getOrUndefined(Option.map(found, (row) => row.sessionId)),
+  );
+}
+
+/**
+ * The session a follow-up goes to: the newest the account's record knows of,
+ * whether the conversation row has recorded it yet or only the ask that
+ * opened it has. eve's session ids sort by the instant they were minted,
+ * the same ordering the row's forward-only claim relies on, so the greater
+ * id is the newer session; a row still recording a session the last ask
+ * moved on from would otherwise be sent to, retried against, and reopened
+ * beside.
+ */
+export function newestSession(
+  recorded: string | undefined,
+  latestDispatched: string | undefined,
+): string | undefined {
+  if (recorded === undefined) return latestDispatched;
+  if (latestDispatched === undefined) return recorded;
+  return latestDispatched > recorded ? latestDispatched : recorded;
+}
+
+const DispatchSchema = Schema.Struct({
+  id: Schema.String,
+  sessionId: Schema.String,
+  deliveryId: Schema.NullOr(Schema.String),
+  turnId: Schema.NullOr(Schema.String),
+});
+
+/**
+ * The dispatch writes what it learned and keeps what an earlier one learned:
+ * a delivery or a turn already named is never blanked. The builder has no
+ * spelling for keeping what stands, so each is a fragment over the column
+ * beside the value the dispatch carried; the turn's is cast because a
+ * parameter that may be null decides no type of its own beside a `uuid`.
+ */
+const markDispatched = SqlSchema.void({
+  Request: DispatchSchema,
+  execute: (dispatch) =>
+    db
+      .update(asks)
+      .set({
+        sessionId: dispatch.sessionId,
+        deliveryId: sql`coalesce(${dispatch.deliveryId}, ${asks.deliveryId})`,
+        turnId: sql`coalesce(${dispatch.turnId}::uuid, ${asks.turnId})`,
+      })
+      .where(eq(asks.id, dispatch.id)),
+});
+
+const CancelSchema = Schema.Struct({ id: Schema.String, at: Schema.Date });
+
+/** The first Stop stands; a second leaves the first instant in place. */
+const markCancelRequested = SqlSchema.void({
+  Request: CancelSchema,
+  execute: (cancel) =>
+    db
+      .update(asks)
+      .set({ cancelRequestedAt: cancel.at })
+      .where(and(eq(asks.id, cancel.id), isNull(asks.cancelRequestedAt))),
+});
+
+const SpokenInSchema = Schema.Struct({ userId: Schema.String, voiceSessionId: Schema.String });
+
+const SpokenAskRowSchema = Schema.Struct({
+  id: Schema.String,
+  clientId: Schema.String,
+  revision: Schema.Int,
+  turnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  toldSeq: Schema.Int,
+  endToldAt: Schema.NullOr(InstantColumnSchema),
+});
+
+const findSpokenIn = SqlSchema.findAll({
+  Request: SpokenInSchema,
+  Result: SpokenAskRowSchema,
+  execute: (key) =>
+    db
+      .select({
+        id: asks.id,
+        clientId: asks.clientId,
+        revision: sql<number>`coalesce(${asks.taskRevision}, 0)`,
+        turnId: asks.turnId,
+        cancelRequestedAt: asks.cancelRequestedAt,
+        toldSeq: asks.toldSeq,
+        endToldAt: asks.endToldAt,
+      })
+      .from(asks)
+      .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
+      .orderBy(asc(asks.taskRevision), asc(asks.createdAt)),
+});
+
+function spokenAsk(read: Schema.Schema.Type<typeof SpokenAskRowSchema>): SpokenAsk {
+  return {
+    id: read.id,
+    clientId: read.clientId,
+    revision: read.revision,
+    toldSeq: read.toldSeq,
+    ...(read.turnId !== null ? { turnId: read.turnId } : undefined),
+    ...(read.cancelRequestedAt !== null
+      ? { cancelRequestedAt: read.cancelRequestedAt }
+      : undefined),
+    ...(read.endToldAt !== null ? { endToldAt: read.endToldAt } : undefined),
+  };
+}
+
+const ToldSchema = Schema.Struct({
+  id: Schema.String,
+  seq: Schema.Int,
+  /** The instant as ISO text, which `::timestamptz` reads exactly. */
+  endAt: Schema.NullOr(Schema.String),
+});
+
+/** The seq only grows, and the first instant an end was told stands. */
+const markTold = SqlSchema.void({
+  Request: ToldSchema,
+  execute: (told) =>
+    db
+      .update(asks)
+      .set({
+        toldSeq: sql`greatest(${asks.toldSeq}, ${told.seq})`,
+        endToldAt: sql`coalesce(${asks.endToldAt}, ${told.endAt}::timestamptz)`,
+      })
+      .where(eq(asks.id, told.id)),
+});
+
+const BindSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  deliveryIds: Schema.Array(Schema.String),
+  turnId: Schema.String,
+});
+
+const StoppedOnSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  turnId: Schema.String,
+});
+
+const findStoppedOn = SqlSchema.findAll({
+  Request: StoppedOnSchema,
+  Result: AskRowSchema,
+  execute: (key) =>
+    db
+      .select(ASK_COLUMNS)
+      .from(asks)
+      .where(
+        and(
+          eq(asks.userId, key.userId),
+          eq(asks.conversationId, key.conversationId),
+          eq(asks.turnId, key.turnId),
+          isNotNull(asks.cancelRequestedAt),
+        ),
+      )
+      .orderBy(asks.id),
+});
+
+/** Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and changes nothing. */
+const bindDeliveredAsks = SqlSchema.findAll({
+  Request: BindSchema,
+  Result: AskRowSchema,
+  execute: (bind) =>
+    db
+      .update(asks)
+      .set({ turnId: bind.turnId })
+      .where(
+        and(
+          eq(asks.userId, bind.userId),
+          eq(asks.conversationId, bind.conversationId),
+          inArray(asks.deliveryId, [...bind.deliveryIds]),
+          isNull(asks.turnId),
+        ),
+      )
+      .returning(ASK_COLUMNS),
+});
+
+const ConversationLockSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+});
+
+/** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
+const lockConversation = SqlSchema.findOneOption({
+  Request: ConversationLockSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (target) =>
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, target.conversationId),
+          eq(conversations.userId, target.userId),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .for("update"),
+});
+
+/** The ask's row, read inside the conversation's lock. */
+const readAsk = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: AskRowSchema,
+  execute: (id) => db.select(ASK_COLUMNS).from(asks).where(eq(asks.id, id)),
+});
+
+/**
+ * One dispatch at a time per conversation: the conversation row is locked,
+ * the ask row is read under it, a session already written ends the call
+ * with nothing dispatched, and otherwise the caller's dispatch runs under
+ * the lock and what eve answered is written before it is released. The lock
+ * is the conversation's rather than the ask's on purpose: two first asks of
+ * different client ids on a conversation with no session would each open
+ * one, and the ask bound to the session the forward-only claim loses would
+ * never read a turn; under the conversation's lock the second waits, reads
+ * the session the first opened, and sends into it. A dispatch that answers
+ * nothing leaves the row as it was, for a retry. The order is the one every
+ * lock here keeps: the user's row, then the conversation's, and never an
+ * ask's row held while a conversation's is wanted.
+ */
+function dispatchAskOnce(
+  target: ConversationTarget,
+  id: string,
+  dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
+): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockConversation(target);
+        if (Option.isNone(locked)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
+        const read = yield* readAsk(id);
+        if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
+        const standing = askRow(read.value);
+        if (standing.sessionId !== undefined) return standing;
+        const session = newestSession(
+          yield* recordedRuntimeSession(target),
+          yield* latestSessionOf(target),
+        );
+        const answered = yield* dispatch(session);
+        if (answered === undefined) return standing;
+        yield* markDispatched({
+          id,
+          sessionId: answered.sessionId,
+          deliveryId: answered.deliveryId ?? null,
+          turnId: answered.turnId ?? null,
+        });
+        return { ...standing, ...answered };
+      }),
+    ),
+  );
+}
+
+/** The one place a client id becomes a row: the insert lands or is refused by the index, and the row is read back either way. */
+const recordAsk = /* @__PURE__ */ Effect.fn("web/recordAsk")(function* (
+  ask: AskWrite,
+): Effect.fn.Return<AskRow, AskFailure, SqlClient.SqlClient> {
+  yield* insertAsk(ask);
+  const row = yield* findAskByClient({
+    conversationId: ask.conversationId,
+    clientId: ask.clientId,
+  });
+  if (Option.isNone(row)) throw new Error("the ask's row is not standing after its insert");
+  return askRow(row.value);
+});
+
+/** The record over the ambient client: every method an effect its caller composes into its own request. */
+export function askRecord(): AskRecord & AskDeliveryBinding {
+  return {
+    record: (ask) => recordAsk(ask),
+    named: (userId, id) =>
+      Effect.map(findAskById({ userId, id }), (found) =>
+        Option.getOrUndefined(Option.map(found, askRow)),
+      ),
+    latestSession: (userId, conversationId) => latestSessionOf({ userId, conversationId }),
+    dispatchOnce: (target, id, dispatch) => dispatchAskOnce(target, id, dispatch),
+    cancelRequested: (id, at) => markCancelRequested({ id, at }),
+    spokenIn: (userId, voiceSessionId) =>
+      Effect.map(findSpokenIn({ userId, voiceSessionId }), (rows) => rows.map(spokenAsk)),
+    told: (id, told) => markTold({ id, seq: told.seq, endAt: told.endAt?.toISOString() ?? null }),
+    bindDeliveries: (target, deliveryIds, turnId) =>
+      deliveryIds.length === 0
+        ? Effect.succeed([])
+        : Effect.map(
+            bindDeliveredAsks({ ...target, deliveryIds: [...deliveryIds], turnId }),
+            (rows) => rows.map(askRow),
+          ),
+    stoppedOn: (target, turnId) =>
+      Effect.map(findStoppedOn({ ...target, turnId }), (rows) => rows.map(askRow)),
+  };
+}

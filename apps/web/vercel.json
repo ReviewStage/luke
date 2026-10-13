@@ -13,6 +13,18 @@
           "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
         {
+          "src": "/api/account/integrations/([^/]+)/connect",
+          "dest": "/api/default.js?route=account/integrations/connect&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/tools",
+          "dest": "/api/default.js?route=account/integrations/tools&provider=$1"
+        },
+        {
+          "src": "/api/account/integrations/([^/]+)/disconnect",
+          "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/board",
           "dest": "/api/default.js?route=plans/board&id=$1"
         },
@@ -31,6 +43,10 @@
         {
           "src": "/api/plans/([^/]+)/tree",
           "dest": "/api/default.js?route=plans/tree&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/skills",
+          "dest": "/api/default.js?route=plans/skills&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/edit",
@@ -57,8 +73,24 @@
           "dest": "/api/default.js?route=plans/revisions&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
+          "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
+        },
+        {
+          "src": "/api/plans/([^/]+)/pages",
+          "dest": "/api/default.js?route=plans/pages&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)",
           "dest": "/api/default.js?route=plans/plan&id=$1"
+        },
+        {
+          "src": "/api/account/plan-template/revisions/([^/]+)/restore",
+          "dest": "/api/default.js?route=account/plan-template/restore&seq=$1"
+        },
+        {
+          "src": "/api/account/plan-template/revisions/([^/]+)",
+          "dest": "/api/default.js?route=account/plan-template/revision&seq=$1"
         },
         {
           "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
@@ -77,6 +109,10 @@
           "dest": "/api/default.js?route=agents/pull-request&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/changes",
+          "dest": "/api/default.js?route=agents/changes&id=$1"
+        },
+        {
           "src": "/api/agents/([^/]+)",
           "dest": "/api/default.js?route=agents/agent&id=$1"
         },
@@ -93,24 +129,20 @@
           "dest": "/api/default.js?route=account/delete"
         },
         {
-          "src": "/api/account/linear",
-          "dest": "/api/default.js?route=account/linear"
+          "src": "/api/account/integrations",
+          "dest": "/api/default.js?route=account/integrations"
         },
         {
-          "src": "/api/account/linear/connect",
-          "dest": "/api/default.js?route=account/linear/connect"
-        },
-        {
-          "src": "/api/account/linear/connected",
-          "dest": "/api/default.js?route=account/linear/connected"
-        },
-        {
-          "src": "/api/account/linear/disconnect",
-          "dest": "/api/default.js?route=account/linear/disconnect"
+          "src": "/api/account/integrations/connected",
+          "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
           "src": "/api/account/plan-template",
           "dest": "/api/default.js?route=account/plan-template"
+        },
+        {
+          "src": "/api/account/plan-template/revisions",
+          "dest": "/api/default.js?route=account/plan-template/revisions"
         },
         {
           "src": "/api/account/preferences",
@@ -167,6 +199,10 @@
         {
           "src": "/api/inbox",
           "dest": "/api/default.js?route=inbox"
+        },
+        {
+          "src": "/api/mac-commands",
+          "dest": "/api/default.js?route=mac-commands"
         },
         {
           "src": "/api/maintenance/provider-keys-rewrap",

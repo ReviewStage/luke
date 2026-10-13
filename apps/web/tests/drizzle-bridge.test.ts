@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { it } from "@effect/vitest";
+import { bridgedRows, DRIZZLE_METHOD, drizzleOverSqlClient } from "@sidecar/database/core/drizzle";
+import { getTestDB } from "@sidecar/database/testing";
 import { DrizzleQueryError, eq } from "drizzle-orm";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { bridgedRows, DRIZZLE_METHOD, drizzleOverSqlClient } from "../server/db/drizzle.js";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Drizzle bridge over the ambient `SqlClient`, on whichever dialect this
@@ -87,7 +87,7 @@ const underContention = (statement: Statement) =>
     concurrency: "unbounded",
   });
 
-it.layer(testSqlClient)("the Drizzle bridge over the ambient SqlClient", (it) => {
+it.layer(getTestDB())("the Drizzle bridge over the ambient SqlClient", (it) => {
   it.effect("a builder is yielded as an Effect and lands on the ambient client", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

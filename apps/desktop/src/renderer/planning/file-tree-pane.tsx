@@ -55,7 +55,7 @@ function TreeSearch({
   onQuery: (query: string) => void;
 }): React.JSX.Element {
   return (
-    <label className="settings-search-well file-tree-search-well">
+    <label className="settings-search-well field-well file-tree-search-well">
       <SearchIcon />
       <input
         ref={field}
@@ -98,6 +98,8 @@ export function FileTreePane({
   listFolder,
   readWhole,
   onOpen,
+  pane,
+  leaving = false,
 }: {
   /** The File tab's file, revealed in the tree. */
   file: string;
@@ -108,6 +110,10 @@ export function FileTreePane({
   readWhole: () => Promise<PlanningTreeAnswer>;
   /** A file chosen in the tree, to open in the tab, or in a tab of its own where ⌘ was held. */
   onOpen: (path: string, newTab: boolean) => void;
+  /** The pane's own box, which its slide in and out plays on (`file-view.tsx`). */
+  pane?: React.Ref<HTMLElement> | undefined;
+  /** Whether it is on its way out: drawn over the file's edge rather than beside it, and out of reach. */
+  leaving?: boolean;
 }): React.JSX.Element {
   const loaded = useAtomValue(fileTreeModuleAtom);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -184,8 +190,11 @@ export function FileTreePane({
   const filterLabel = onlyShown ? "Show all files" : "Show only files Luke showed";
   return (
     <aside
+      ref={pane}
       className="file-tree-pane ph-no-capture"
       aria-label="Files"
+      data-leaving={leaving ? "" : undefined}
+      inert={leaving}
       onKeyDown={(event) => {
         if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey)) return;
         // Note that the press goes no further, because the window's ⌘F would

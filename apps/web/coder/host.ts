@@ -2,6 +2,9 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import type { UnparsedWireValue } from "../server/core.js";
+import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
+import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
+import { turnServers } from "../server/hosted/agent-runtime/servers.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
@@ -11,12 +14,9 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import type { CoderSkill } from "../server/hosted/coder-host/skills.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
-import {
-  type LinearAdmission,
-  linearAccessToken,
-  linearConnection,
-} from "../server/hosted/linear-connection.js";
+import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -126,12 +126,39 @@ export function runInboxTool(
 }
 
 /**
- * The Linear connection under one of this project's ownership checks, the
- * agent's or the worker's, for each one's own `connections/linear.ts`, on the
- * same terms as the planning project's (`../eve/host.ts`).
+ * The skills the session is offered as it starts, for the agent's own
+ * `skills/repository.ts`: the ones its repository keeps, or none for a
+ * session the host does not admit or whose conversation is no agent's.
  */
-export function linearConnectionFor(
-  admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
+export function sessionSkills(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<readonly CoderSkill[]> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return [];
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return [];
+      return yield* host.skills(admitted.success, agent.success);
+    }),
+  );
+}
+
+/**
+ * Every integration one of this project's agents is handed, for that
+ * agent's own `connections/integrations.ts`, on the same terms as the
+ * planning project's (`../eve/host.ts`): a turn is handed only the servers
+ * the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
+ */
+export function integrationConnectionsFor(
+  role: typeof AGENT_ROLE.CODER | typeof AGENT_ROLE.CODER_WORKER,
 ) {
-  return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
+  const profile = ROLE_PROFILE[role];
+  const admit = profile.delegated ? host.admitDelegated : host.admit;
+  return integrationConnections({
+    servers: (auth, sessionId) => runWeb(turnServers(admit(auth, sessionId), profile.connections)),
+    token: (provider) => (auth, sessionId) =>
+      runWeb(integrationAccessToken(provider, admit(auth, sessionId))),
+  });
 }

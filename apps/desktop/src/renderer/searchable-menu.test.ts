@@ -120,25 +120,70 @@ function hover(element: Element | undefined): void {
   act(() => element?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
 }
 
+/**
+ * A computed length with the sheet's tokens resolved, which jsdom leaves as
+ * `var(--…)`: a token the sheet's `:root` names reads as what it names there.
+ */
+function sized(element: Element, property: "width" | "height" | "minHeight"): string {
+  let length = getComputedStyle(element)[property];
+  const root = getComputedStyle(document.documentElement);
+  for (let token = /^var\((--[\w-]+)\)$/u.exec(length); token; ) {
+    length = root.getPropertyValue(token[1] ?? "").trim();
+    token = /^var\((--[\w-]+)\)$/u.exec(length);
+  }
+  return length;
+}
+
 /** The pixel count a computed length names. */
 function px(length: string): number {
   assert.match(length, /^\d+(\.\d+)?px$/u, `${length} is a length in pixels`);
   return Number.parseFloat(length);
 }
 
+test("a menu its owner holds through its exit takes nothing, and takes the field's focus back when it stands again", () => {
+  const menu = mount();
+  const root = menu.find<HTMLElement>("[role=dialog]");
+  const field = menu.find<HTMLInputElement>("input");
+  assert.ok(document.activeElement === field, "the field takes focus as the menu opens");
+
+  // The owner hands focus back to its trigger as it closes, then holds the menu leaving.
+  const trigger = document.body.appendChild(document.createElement("button"));
+  act(() => trigger.focus());
+  menu.restand({ leaving: true });
+  assert.equal(root.dataset.leaving, "true");
+  assert.equal(root.hasAttribute("inert"), true, "nothing reaches the menu on its way out");
+  assert.ok(document.activeElement === trigger, "focus stays where the owner handed it");
+
+  menu.restand({ leaving: false });
+  assert.equal(root.hasAttribute("inert"), false);
+  assert.ok(document.activeElement === field, "the field takes focus again");
+});
+
+test("a menu opened again while it was leaving starts afresh, its search cleared", () => {
+  const menu = mount();
+  type(menu.find<HTMLInputElement>("input"), "billing");
+  assert.equal(menu.rows().length, 1);
+
+  menu.restand({ leaving: true });
+  menu.restand({ leaving: false });
+  assert.equal(menu.find<HTMLInputElement>("input").value, "");
+  assert.equal(menu.rows().length, 3);
+});
+
 test("a row is one height whether forty rows match or one: the list is no flex column and a row flexes in no column it stands in", () => {
   const menu = mount({ rows: MANY, value: undefined });
   const field = menu.find<HTMLInputElement>("input[role=combobox]");
   const list = menu.find(".plan-compose-menu-list");
   assert.equal(menu.rows().length, 40);
-  const tall = menu.rows().map((row) => getComputedStyle(row));
+  const tall = menu.rows().map((row) => sized(row, "height"));
   type(field, "repo-7");
   assert.equal(menu.rows().length, 1);
-  const [one] = menu.rows().map((row) => getComputedStyle(row));
-  assert.ok(one);
-  assert.equal(px(one.height), px(tall[0]?.height ?? ""));
+  const [row] = menu.rows();
+  assert.ok(row);
+  const one = getComputedStyle(row);
+  assert.equal(px(sized(row, "height")), px(tall[0] ?? ""));
   assert.ok(
-    tall.every((row) => row.height === one.height),
+    tall.every((height) => height === sized(row, "height")),
     "every row is the same height",
   );
   // Note that the height alone is not the whole invariant, because a flex
@@ -155,26 +200,25 @@ test("the check stands in an end slot every row draws at one width, so a name en
   assert.equal(slots.length, ROWS.length);
   for (const slot of slots) {
     assert.ok(slot, "every row has the slot, checked or not");
-    const style = getComputedStyle(slot);
-    assert.equal(style.width, "16px");
-    assert.equal(style.height, "16px");
-    assert.equal(style.flexShrink, "0");
+    assert.equal(sized(slot, "width"), "16px");
+    assert.equal(sized(slot, "height"), "16px");
+    assert.equal(getComputedStyle(slot).flexShrink, "0");
   }
   const checked = menu.rows().find((row) => row.getAttribute("aria-current") === "true");
   const check = checked?.querySelector(".plan-compose-menu-end svg.credential-check");
   assert.ok(check, "the check stands in the chosen row's slot");
-  assert.equal(getComputedStyle(check).width, "16px");
+  assert.equal(sized(check, "width"), "16px");
   const unchecked = menu.rows().find((row) => row.getAttribute("aria-current") !== "true");
   assert.equal(unchecked?.querySelector(".plan-compose-menu-end")?.childElementCount, 0);
 });
 
 test("a search that matches nothing leaves one quiet line at a row's height or more, never a sliver", () => {
   const menu = mount();
-  const rowHeight = px(getComputedStyle(menu.rows()[0] ?? menu.container).height);
+  const rowHeight = px(sized(menu.rows()[0] ?? menu.container, "height"));
   type(menu.find<HTMLInputElement>("input[role=combobox]"), "nothing here");
   const note = menu.find(".plan-compose-menu-note");
   assert.equal(note.textContent, "No repositories match");
-  assert.ok(px(getComputedStyle(note).minHeight) >= rowHeight, "at least a row tall");
+  assert.ok(px(sized(note, "minHeight")) >= rowHeight, "at least a row tall");
   assert.equal(getComputedStyle(note).textAlign, "center");
 });
 
@@ -410,11 +454,11 @@ test("every icon in the menu has a size from the sheet, so none fills the compos
   const icons = [...menu.container.querySelectorAll("svg")];
   assert.ok(icons.length >= ROWS.length + 2, "the search glyph, each row's mark, and the check");
   for (const icon of icons) {
-    const { width, height } = getComputedStyle(icon);
+    const width = sized(icon, "width");
     assert.match(width, /^\d+px$/u, `${icon.getAttribute("class")} has a width`);
-    assert.equal(height, width, `${icon.getAttribute("class")} is square`);
+    assert.equal(sized(icon, "height"), width, `${icon.getAttribute("class")} is square`);
   }
-  assert.equal(getComputedStyle(menu.find(".plan-compose-menu-search svg")).width, "16px");
+  assert.equal(sized(menu.find(".plan-compose-menu-search svg"), "width"), "16px");
 });
 
 test("the list scrolls past a bounded height, inside itself and never sideways, and the foot stands outside it", () => {
@@ -723,4 +767,102 @@ test("a name or a detail cut short by the menu's width is marked to fade at its 
   ]);
   const fade = getComputedStyle(menu.find('.plan-compose-menu-name[data-overflow="true"]'));
   assert.equal(fade.textOverflow, "clip", "a fade, not an ellipsis");
+});
+
+/**
+ * The row the focused field or list names to assistive technology, read by
+ * its words; none where it names nothing. A row the field names stands in a
+ * popup the field controls, and a row the list names stands in the list.
+ */
+function named(): string | undefined {
+  const keys = document.activeElement;
+  const id = keys?.getAttribute("aria-activedescendant");
+  if (keys === null || keys === undefined || id === null || id === undefined) return undefined;
+  const row = document.getElementById(id);
+  assert.ok(row, "the id names an element in the document");
+  const holders =
+    keys.getAttribute("role") === "combobox"
+      ? (keys.getAttribute("aria-controls") ?? "")
+          .split(" ")
+          .map((held) => document.getElementById(held))
+      : [keys];
+  assert.ok(
+    holders.some((holder) => holder?.contains(row)),
+    "the named row stands in what the focused element controls or holds",
+  );
+  return row.textContent ?? undefined;
+}
+
+test("the field names the highlighted row to a reader as the arrows, the pointer, and a search move it, each row by an id of its own that the highlight moving leaves alone", () => {
+  const picks: string[] = [];
+  const menu = mount({ foot: effortFoot(picks) });
+  const field = menu.find<HTMLInputElement>("input[role=combobox]");
+  const ids = () => menu.rows().map((row) => row.id);
+  const first = ids();
+  assert.equal(
+    new Set(first.filter(Boolean)).size,
+    ROWS.length,
+    "every row has an id, none shared",
+  );
+  assert.equal(named(), "acme/billing", "the chosen row, named as the menu opens");
+
+  press("ArrowDown");
+  assert.equal(named(), "acme/site");
+  hover(menu.rows()[0]);
+  assert.equal(named(), "acme/relay");
+  assert.deepEqual(ids(), first, "a row keeps its id as the highlight moves");
+
+  press("ArrowUp");
+  assert.equal(named(), "EffortHigh", "a pinned row is named too");
+  press("ArrowRight");
+  assert.equal(named(), "High", "inside an open submenu, its highlighted row");
+  press("ArrowLeft");
+  assert.equal(named(), "EffortHigh");
+
+  type(field, "zzz");
+  assert.equal(named(), undefined, "nothing is named while nothing matches");
+  type(field, "site");
+  assert.equal(named(), "acme/site");
+});
+
+test("with no field the list, holding focus, names the highlighted row", () => {
+  mount({ placeholder: undefined });
+  assert.equal(named(), "acme/billing");
+  press("ArrowUp");
+  assert.equal(named(), "acme/relay");
+});
+
+test("Home and End take the highlight to the first and the last row that may be picked, pinned rows included, and inside an open submenu to its own first and last", () => {
+  const picks: string[] = [];
+  const menu = mount({
+    rows: ROWS.map((row, index) => (index === 0 ? { ...row, disabled: "Open" } : row)),
+    foot: [...effortFoot(picks), { id: "github", label: "GitHub", disabled: "Not connected" }],
+  });
+  press("End");
+  assert.equal(menu.highlighted(), "EffortHigh", "the last row past the muted one");
+  press("Home");
+  assert.equal(menu.highlighted(), "acme/billing", "the first row past the muted one");
+
+  press("End");
+  press("ArrowRight");
+  press("Home");
+  assert.deepEqual(
+    subRows(menu).map((row) => row[1]),
+    ["true", "false", "false"],
+  );
+  press("End");
+  assert.deepEqual(
+    subRows(menu).map((row) => row[1]),
+    ["false", "false", "true"],
+  );
+  press("Enter");
+  assert.deepEqual(picks, ["max"]);
+});
+
+test("Home and End in the field move the highlight rather than the caret", () => {
+  mount();
+  const home = new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true });
+  act(() => document.activeElement?.dispatchEvent(home));
+  assert.equal(home.defaultPrevented, true);
+  assert.equal(named(), "acme/relay");
 });

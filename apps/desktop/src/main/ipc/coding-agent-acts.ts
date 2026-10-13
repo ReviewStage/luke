@@ -2,6 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
@@ -19,11 +20,16 @@ import {
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
+  type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
@@ -69,16 +75,27 @@ export interface CodingAgentActsDependencies {
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+    codingAgentChanges(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentChangesAnswerView>;
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
     planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
+    planTemplateRevisions(
+      params: PlanTemplateRevisionsParams,
+    ): Effect.Effect<PlanTemplateRevisionsAnswerView>;
+    planTemplateRevision(
+      params: PlanTemplateRevisionParams,
+    ): Effect.Effect<PlanTemplateRevisionAnswerView>;
+    planTemplateRestore(params: PlanTemplateRevisionParams): Effect.Effect<PlanTemplateAnswerView>;
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
@@ -115,15 +132,20 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_MESSAGE
   | typeof ACT_KIND.CODING_AGENTS_CHOOSE
   | typeof ACT_KIND.CODING_AGENTS_RENAME
+  | typeof ACT_KIND.CODING_AGENTS_SERVERS
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
+  | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
   | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
   | typeof ACT_KIND.PLAN_TEMPLATE_READ
   | typeof ACT_KIND.PLAN_TEMPLATE_WRITE
+  | typeof ACT_KIND.PLAN_TEMPLATE_REVISIONS
+  | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
+  | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
@@ -203,6 +225,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_RENAME, sender);
       return notedAgent(host.codingAgentRename(params));
     },
+    [ACT_KIND.CODING_AGENTS_SERVERS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SERVERS, sender);
+      return notedAgent(host.codingAgentServers(params));
+    },
     [ACT_KIND.CODING_AGENTS_STOP]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);
       return notedAgent(host.codingAgentStop(params));
@@ -221,6 +247,10 @@ export function codingAgentActRows(
       return noted(host.codingAgentPullRequest(params), (answer) => {
         if ("pullRequest" in answer) notices.observePublished(params.agentId, answer.pullRequest);
       });
+    },
+    [ACT_KIND.CODING_AGENTS_CHANGES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHANGES, sender);
+      return host.codingAgentChanges(params);
     },
     [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);
@@ -241,6 +271,18 @@ export function codingAgentActRows(
     [ACT_KIND.PLAN_TEMPLATE_WRITE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_WRITE, sender);
       return host.planTemplateWrite(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISIONS, sender);
+      return host.planTemplateRevisions(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_REVISION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_REVISION, sender);
+      return host.planTemplateRevision(params);
+    },
+    [ACT_KIND.PLAN_TEMPLATE_RESTORE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLAN_TEMPLATE_RESTORE, sender);
+      return host.planTemplateRestore(params);
     },
     [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);

@@ -29,7 +29,11 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
-import { type AppInboxPlan, RUN_PROFILE } from "#shared/messages/app-state";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+} from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -88,6 +92,7 @@ interface Standing {
   voice: VoiceView;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxPlan[];
+  inboxPlans: readonly AppInboxPlanHolding[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
 }
@@ -122,6 +127,7 @@ function mount(
     voice: IDLE_VOICE_VIEW,
     unseenAgents: [],
     inboxWaiting: [],
+    inboxPlans: [],
     signedIn: true,
     ...initial,
   };
@@ -163,7 +169,9 @@ function mount(
       shown: held.shown,
       unseenAgents: held.unseenAgents,
       inboxWaiting: held.inboxWaiting,
+      inboxPlans: held.inboxPlans,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
+      onOpenIntegrations: () => undefined,
     });
     return null;
   }
@@ -421,6 +429,45 @@ it.effect(
       act(() => tab.control().history.onOpen(PLAN.id));
       yield* landed;
       assert.equal(tab.control().history.viewing?.line.seq, 2);
+    }),
+);
+
+it.effect(
+  "Version history gone back to opens where it was left, on its version with its sections open on the section drawn, and opened afresh on the newest",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, planning: EDITED },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      act(() => tab.control().history.onOpenSections(1));
+      act(() => tab.control().history.onChooseSection("Goal"));
+      yield* landed;
+      const { spot } = tab.control().history;
+      assert.deepEqual(spot, { revision: 1, opened: { seq: 1, heading: "Goal" } });
+
+      act(() => tab.control().onShowSource(PLAN.id, { kind: REVISION_SOURCE.WORK, at: 10 }));
+      assert.equal(tab.control().history.open, false);
+      assert.equal(tab.control().history.spot, undefined);
+      act(() => tab.control().history.onReturn(PLAN.id, spot));
+      yield* landed;
+      assert.equal(tab.control().history.open, true);
+      assert.equal(tab.control().history.viewing?.line.seq, 1);
+      assert.deepEqual(tab.control().history.spot, spot);
+
+      act(() => tab.control().history.onClose());
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+      assert.deepEqual(tab.control().history.spot, { revision: undefined, opened: undefined });
     }),
 );
 
@@ -2287,6 +2334,32 @@ test("an agent pinned to the sidebar opens its plan on the agent's tab in the pl
   assert.equal(panelOf(tab).open, false);
 });
 
+test("an Inbox pinned to the sidebar opens its plan on the Inbox in the plan's column, though it stood closed, and leaves the side panel shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  act(() => tab.control().sidePanel.onPin(MAIN_TAB.INBOX, "Inbox"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.INBOX);
+  assert.equal(panelOf(tab).open, false);
+});
+
 test("a tab pinned to the sidebar opens its plan and the panel on that tab from another plan, and its tab closed leaves the pin", () => {
   const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
   const tab = mount({ shown: true, planning: OPEN });
@@ -2315,10 +2388,140 @@ test("a tab pinned to the sidebar opens its plan and the panel on that tab from 
   assert.deepEqual(tab.control().sidePanel.pins, [pin]);
 });
 
+test("a plan opened from its pin keeps the pin chosen through its other tabs, until a plan is opened by its row or another plan opens", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  const elsewhere = {
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  };
+  assert.equal(tab.control().chosenPin, undefined);
+
+  act(() => tab.control().onOpenPinnedTab(pin));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.INBOX));
+  assert.equal(tab.control().chosenPin, pin, "the plan's other tabs leave the pin chosen");
+
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().chosenPin, undefined, "the plan's own row takes it back");
+
+  act(() => tab.control().onOpenPinnedTab(pin));
+  tab.stand(elsewhere);
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().chosenPin, undefined, "another plan opening lets it go");
+
+  tab.stand(elsewhere);
+  act(() => tab.control().onOpenPinnedTab(pin));
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().chosenPin, pin, "a pin opens its plan chosen from another");
+});
+
+test("a plan the host refuses to open leaves the pin the open plan was opened from chosen", async () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  act(() => tab.control().onOpenPinnedTab(pin));
+
+  act(() => tab.control().onSelect("9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32"));
+  await settle();
+
+  assert.equal(tab.control().boundFor, PLAN.id);
+  assert.equal(tab.control().chosenPin, pin);
+});
+
 test("an agent main says ended unseen dots its tab beside the arrivals", () => {
   const tab = mount({ shown: true, planning: OPEN, unseenAgents: [AGENT_ID] });
   assert.deepEqual(tab.control().unreadTabs, [{ agent: AGENT_ID }]);
 
   tab.stand({ unseenAgents: [] });
   assert.deepEqual(tab.control().unreadTabs, []);
+});
+
+test("the window's Inbox stands over the open plan without opening another, tells main the plan chosen in it is the Inbox on screen, and opening a plan leaves it", async () => {
+  const other = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.open, true);
+  act(() => tab.control().inboxView.onChoose(other));
+  act(() => tab.control().inboxView.onUnreadOnly(true));
+  assert.equal(tab.control().inboxView.planId, other);
+  assert.equal(tab.control().inboxView.unreadOnly, true);
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_SELECT), false, "the open plan stands");
+  assert.deepEqual(tab.shownInboxes, [null, other]);
+
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().inboxView.open, false);
+  assert.deepEqual(tab.shownInboxes, [null, other, null]);
+
+  // Opened again, it starts on the list's first plan and lists every plan.
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.planId, undefined);
+  assert.equal(tab.control().inboxView.unreadOnly, false);
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.control().inboxView.open, false);
+});
+
+test("an inbox item's code opens its file in the side panel, on a plan not yet open once the host has opened it, leaving the Inbox", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+    },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onShowFile(PLAN.id, ref, "4f2a9c1d"));
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined }, "nothing of the other plan's");
+
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: true, tab: { file: ref.path } });
+});
+
+test("New plan pressed on the new-plan page under the window's Inbox leaves the Inbox for the page", () => {
+  const tab = mount({ shown: true, planning: IDLE_PLANNING_VIEW });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().newPlan.presses, 1);
+});
+
+test("an inbox item's file asked on a plan the host refused to open is let go, so opening that plan later opens no file", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const onOther = {
+    ...OPEN,
+    activePlanId: other.id,
+    document: { status: PLANNING_READ.READY, plan: other },
+  };
+  const tab = mount(
+    { shown: true, planning: onOther },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  act(() =>
+    tab
+      .control()
+      .onShowFile(PLAN.id, { path: "src/invite.ts", startLine: 3, endLine: 5 }, "4f2a9c1d"),
+  );
+  await settle();
+
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
 });

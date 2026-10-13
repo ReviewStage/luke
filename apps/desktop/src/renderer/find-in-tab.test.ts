@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { installExits, uninstallExits } from "#testing/exits";
 import { installHighlights } from "#testing/find-highlights";
 import { Fold, FoldBody, FoldSummary } from "./ai-elements/fold";
 import { TOOL_BLOCK, TOOL_STATE } from "./ai-elements/tool";
@@ -24,6 +25,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
+  uninstallExits();
 });
 
 /** A tab's words: one line split over inline spans, as a word over a code line's tokens is, then two lines more. */
@@ -243,6 +245,7 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   assert.equal(tally(tab.container), "1 of 1");
   assert.equal(painted.current(), "--filter");
   assert.equal(ran.open, true, "the fold holding the match is opened");
+  assert.equal(ran.dataset.disclosure, undefined, "and opened at once, with no motion");
   assert.equal(read.open, false);
 
   key(field(tab.container), { key: "Escape" });
@@ -250,7 +253,30 @@ test("a match folded away in a closed fold is found, and showing it opens the fo
   assert.equal(read.querySelector("pre"), null, "the closed fold draws nothing again");
 });
 
-test("a closed thought's or command's words are found once, in the body the line previews, and showing them opens its fold", () => {
+test("a fold closed while the bar is open closes at once, with no fade a match shown in it could be closed over", () => {
+  installHighlights();
+  installExits('[data-disclosure="closing"] > .disclosure-body');
+  const tab = mounted([
+    createElement(
+      Fold,
+      { key: "ran" },
+      createElement(FoldSummary, null, "Ran 2 commands"),
+      createElement(FoldBody, null, createElement("pre", null, "pnpm test --filter relay")),
+    ),
+  ]);
+  const ran = tab.container.querySelector("details");
+  assert.ok(ran);
+  act(() => ran.querySelector("summary")?.click());
+  chord(FIND);
+
+  act(() => ran.querySelector("summary")?.click());
+  assert.equal(ran.open, false);
+  assert.equal(ran.dataset.disclosure, undefined);
+  typeInto(field(tab.container), "--filter");
+  assert.equal(ran.open, true, "the find opens it again onto the match");
+});
+
+test("a closed thought's or command's words, described or not, are found once, in the body the line previews, and showing them opens its fold", () => {
   installHighlights();
   const tab = mounted([
     createElement(TranscriptReasoning, { key: "thought", text: "List the sources first." }),
@@ -263,9 +289,19 @@ test("a closed thought's or command's words are found once, in the body the line
       output: { kind: TOOL_BLOCK.TEXT, text: "invite.ts" },
       errorText: undefined,
     }),
+    createElement(TranscriptTool, {
+      key: "described",
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind: CALL_KIND.COMMAND,
+      subject: "pnpm test",
+      description: "Run the tests",
+      input: { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "passed" },
+      errorText: undefined,
+    }),
   ]);
-  const [thought, command] = [...tab.container.querySelectorAll("details")];
-  assert.ok(thought && command);
+  const [thought, command, described] = [...tab.container.querySelectorAll("details")];
+  assert.ok(thought && command && described);
 
   chord(FIND);
   typeInto(field(tab.container), "sources");
@@ -276,6 +312,10 @@ test("a closed thought's or command's words are found once, in the body the line
   typeInto(field(tab.container), "ls src");
   assert.equal(tally(tab.container), "1 of 1");
   assert.equal(command.open, true);
+
+  typeInto(field(tab.container), "pnpm test");
+  assert.equal(tally(tab.container), "1 of 1");
+  assert.equal(described.open, true);
 });
 
 test("text arriving in the tab while the bar is open is found without moving the match the find is at", async () => {

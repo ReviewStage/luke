@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { account, user } from "@sidecar/database/schemas/auth";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { Effect } from "effect";
 import { USER_ROLE } from "../server/admin/admin-access";
 import { readAdminMetricsSource } from "../server/admin/admin-queries";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "../server/admin/http";
-import { account, user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { hostedUsage } from "../server/db/usage-schema";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The dashboard's aggregates against a real Postgres dialect. Every seeded
@@ -88,7 +88,7 @@ const seed = Effect.gen(function* () {
   return { ordinary, quiet, maintainer };
 });
 
-it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (it) => {
+it.layer(getTestDB())("the dashboard's aggregates over effect/unstable/sql", (it) => {
   it.effect("one window's aggregates, and what the two scopes keep of them", () =>
     Effect.gen(function* () {
       const { ordinary, quiet, maintainer } = yield* seed;

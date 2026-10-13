@@ -27,7 +27,9 @@
  * the window, so Escape closes the palette and nothing else, a call's reply
  * included, and no chord changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
- * acts from where the developer was, as its shortcut would have.
+ * acts from where the developer was, as its shortcut would have. It then
+ * fades out over `--duration-exit`, held by Radix's dialog through the exit
+ * its `data-state` plays, and inert while it does.
  *
  * Every row's value is its place in the list, never words: cmdk writes it
  * into an attribute, which the session recording does not mask
@@ -50,10 +52,10 @@ import {
   commandForKey,
   isKeyedCommand,
   type KeyedCommand,
-  shortcutGlyphs,
+  SHORTCUT_KEY,
+  type ShortcutChord,
 } from "#shared/shortcuts";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
-import { Keycaps } from "../keycaps";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { fileName } from "../planning/code-pane-model";
 import { refusalLine } from "../planning/file-tab-model";
@@ -66,8 +68,9 @@ import { Highlighted } from "../search-field";
 import { matchesTokens, searchTokens } from "../search-tokens";
 import { landOnSettingsRow, RESULT_PAGE_WORD, settingsSearchEntries } from "../settings-search";
 import type { SettingsView } from "../settings-views";
+import { Shortcut } from "../shortcut";
 import { agentEntries, inboxEntries } from "./main-tabs";
-import { panelEntries, planWorkers } from "./side-panel";
+import { panelEntries, planWorkers, TAB_ICON } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -146,18 +149,21 @@ const READING_LINE = "Reading the repository's files…";
 /** What the Files filter says under a listing cut short at the wire's bound. */
 const TRUNCATED_LINE = `Only the repository's first ${PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
 
-/** The footer's hints, each the chords drawn as keys and what they do. */
-const FOOTER_HINTS: readonly { chords: readonly (readonly string[])[]; label: string }[] = [
-  { chords: [["↑"], ["↓"]], label: "Select" },
-  { chords: [["↩"]], label: "Open" },
+/** The footer's hints, each the chords it names and what they do; the list's own keys are bare. */
+const FOOTER_HINTS: readonly { chords: readonly ShortcutChord[]; label: string }[] = [
   {
     chords: [
-      shortcutGlyphs(APP_SHORTCUTS[APP_COMMAND.BACK].chord),
-      shortcutGlyphs(APP_SHORTCUTS[APP_COMMAND.FORWARD].chord),
+      { key: SHORTCUT_KEY.UP, bare: true },
+      { key: SHORTCUT_KEY.DOWN, bare: true },
     ],
+    label: "Select",
+  },
+  { chords: [{ key: SHORTCUT_KEY.ENTER, bare: true }], label: "Open" },
+  {
+    chords: [APP_SHORTCUTS[APP_COMMAND.BACK].chord, APP_SHORTCUTS[APP_COMMAND.FORWARD].chord],
     label: "Change filter",
   },
-  { chords: [["Esc"]], label: "Close" },
+  { chords: [{ key: SHORTCUT_KEY.ESCAPE, bare: true }], label: "Close" },
 ];
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
@@ -374,7 +380,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 
 /**
  * The side panel's kinds, listed with the commands as Show board and the
- * rest, each showing the panel on its tab as the panel's "+" does, over
+ * rest, each wearing its kind's glyph as its tab does and showing the panel on its tab as the panel's "+" does, over
  * the version history; none while the plan is not drawn, since there is
  * no panel to show. No chord reaches them.
  */
@@ -386,7 +392,7 @@ function panelTabRows(
   return SIDE_PANEL_TABS.map((tab) => {
     const label = `Show ${SIDE_PANEL_TAB_KIND[tab].label.toLowerCase()}`;
     const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
-    return { label, terms: [label], onChoose: () => show(pick) };
+    return { icon: TAB_ICON[tab], label, terms: [label], onChoose: () => show(pick) };
   });
 }
 
@@ -428,7 +434,9 @@ function PaletteItem({
       )}
       {row.command === undefined ? null : (
         <span className="command-palette-hint">
-          <Keycaps caps={shortcutGlyphs(APP_SHORTCUTS[row.command].chord)} />
+          {/* Spoken, since a palette row is an option, which carries no
+              `aria-keyshortcuts` to say the chord for it. */}
+          <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
         </span>
       )}
       {row.endMark === undefined ? null : (
@@ -472,8 +480,8 @@ function PaletteFooter(): React.JSX.Element {
     <div className="command-palette-footer" aria-hidden="true">
       {FOOTER_HINTS.map((hint) => (
         <span key={hint.label} className="command-palette-footer-hint">
-          {hint.chords.map((caps) => (
-            <Keycaps key={caps.at(-1)} caps={caps} />
+          {hint.chords.map((chord) => (
+            <Shortcut key={chord.key.accelerator} chord={chord} />
           ))}
           {hint.label}
         </span>
@@ -523,6 +531,7 @@ export function CommandPalette({
   const invoker = useRef<HTMLElement | null>(null);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
+  const field = useRef<HTMLInputElement>(null);
 
   useAppCommand(
     APP_COMMAND.COMMAND_PALETTE,
@@ -545,10 +554,13 @@ export function CommandPalette({
   // Note that what was chosen runs once the palette is gone and focus is
   // back where it was, because a command that moves focus (Delete's
   // question, the new-plan field) would otherwise lose it to the palette's
-  // own going.
+  // own going. The field takes focus as the palette opens, as the dialog
+  // gives it, and also where it opens again while it is still leaving,
+  // which the dialog, never having let it go, does not give it again.
   useEffect(() => {
     if (open) {
       shown.current = true;
+      field.current?.focus();
       return;
     }
     if (!shown.current) return;
@@ -693,11 +705,13 @@ export function CommandPalette({
       loop
       overlayClassName="command-palette-backdrop"
       contentClassName="command-palette"
+      inert={!open}
       onKeyDown={keyDown}
     >
       <div className="command-palette-search">
         <SearchIcon />
         <Command.Input
+          ref={field}
           placeholder={FILTER_PLACEHOLDER[filter]}
           value={query}
           onValueChange={setQuery}

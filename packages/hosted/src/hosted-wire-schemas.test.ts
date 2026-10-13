@@ -14,8 +14,8 @@ import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
-import * as linearView from "./linear-view.js";
-import * as linearWire from "./linear-wire.js";
+import * as integrationView from "./integration-view.js";
+import * as integrationWire from "./integration-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
@@ -41,6 +41,7 @@ const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 const EFFECT_MODULE_SCHEMAS = {
   "account-inbox-wire": {
     accountInboxEntrySchema: accountInboxWire.accountInboxEntrySchema,
+    accountInboxPlanSchema: accountInboxWire.accountInboxPlanSchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
@@ -57,6 +58,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
     codingAgentRenameRequestSchema: codingAgentWire.codingAgentRenameRequestSchema,
     codingAgentArchiveRequestSchema: codingAgentWire.codingAgentArchiveRequestSchema,
+    disabledServersSchema: codingAgentWire.disabledServersSchema,
+    codingAgentServersRequestSchema: codingAgentWire.codingAgentServersRequestSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,
@@ -67,6 +70,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessagesAnswerSchema: codingAgentWire.codingAgentMessagesAnswerSchema,
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
+    codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
@@ -103,12 +107,17 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDefaultWriteParamsSchema: codingAgentView.codingAgentDefaultWriteParamsSchema,
     planTemplateAnswerViewSchema: codingAgentView.planTemplateAnswerViewSchema,
     planTemplateWriteParamsSchema: codingAgentView.planTemplateWriteParamsSchema,
+    planTemplateRevisionsParamsSchema: codingAgentView.planTemplateRevisionsParamsSchema,
+    planTemplateRevisionsAnswerViewSchema: codingAgentView.planTemplateRevisionsAnswerViewSchema,
+    planTemplateRevisionParamsSchema: codingAgentView.planTemplateRevisionParamsSchema,
+    planTemplateRevisionAnswerViewSchema: codingAgentView.planTemplateRevisionAnswerViewSchema,
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
     dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
     dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
+    codingAgentServersParamsSchema: codingAgentView.codingAgentServersParamsSchema,
     codingAgentListAnswerViewSchema: codingAgentView.codingAgentListAnswerViewSchema,
     codingAgentStartParamsSchema: codingAgentView.codingAgentStartParamsSchema,
     codingAgentAgentAnswerSchema: codingAgentView.codingAgentAgentAnswerSchema,
@@ -121,6 +130,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentArchiveParamsSchema: codingAgentView.codingAgentArchiveParamsSchema,
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
+    codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
     codingAgentInboxParamsSchema: codingAgentView.codingAgentInboxParamsSchema,
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
@@ -140,14 +150,20 @@ const EFFECT_MODULE_SCHEMAS = {
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
     githubRepositoriesAnswerSchema: githubRepositoriesWire.githubRepositoriesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
-  "linear-view": {
-    linearStatusViewSchema: linearView.linearStatusViewSchema,
-    linearConnectViewSchema: linearView.linearConnectViewSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof linearView>,
-  "linear-wire": {
-    linearStatusAnswerSchema: linearWire.linearStatusAnswerSchema,
-    linearConnectAnswerSchema: linearWire.linearConnectAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
+  "integration-view": {
+    integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
+    integrationStatusesViewSchema: integrationView.integrationStatusesViewSchema,
+    integrationStatusViewSchema: integrationView.integrationStatusViewSchema,
+    integrationConnectViewSchema: integrationView.integrationConnectViewSchema,
+    integrationToolsViewSchema: integrationView.integrationToolsViewSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof integrationView>,
+  "integration-wire": {
+    integrationProviderSchema: integrationWire.integrationProviderSchema,
+    integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
+    integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,
+    integrationConnectAnswerSchema: integrationWire.integrationConnectAnswerSchema,
+    integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
@@ -175,6 +191,9 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-document-template": {
     planTemplateAnswerSchema: planDocumentTemplate.planTemplateAnswerSchema,
     planTemplateWriteRequestSchema: planDocumentTemplate.planTemplateWriteRequestSchema,
+    planTemplateRevisionLineSchema: planDocumentTemplate.planTemplateRevisionLineSchema,
+    planTemplateRevisionsAnswerSchema: planDocumentTemplate.planTemplateRevisionsAnswerSchema,
+    planTemplateRevisionAnswerSchema: planDocumentTemplate.planTemplateRevisionAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planDocumentTemplate>,
   "plan-edit": {
     planEditRequestSchema: planEdit.planEditRequestSchema,
@@ -220,6 +239,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planTreeEntrySchema: planWire.planTreeEntrySchema,
     planTreeFolderSchema: planWire.planTreeFolderSchema,
     planTreeAnswerSchema: planWire.planTreeAnswerSchema,
+    planSkillSchema: planWire.planSkillSchema,
+    planSkillsSchema: planWire.planSkillsSchema,
+    planSkillsAnswerSchema: planWire.planSkillsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "provider-key-wire": {
     providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,

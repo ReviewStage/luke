@@ -10,10 +10,10 @@
  * plan's work read back and by the live follow.
  */
 
+import { turnsNamed } from "@sidecar/database/models/message-reads";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { Effect } from "effect";
 import type { SubagentJournal } from "../voice/plan-work.js";
-import { turnsNamed } from "./store/message-reads.js";
 import { turnRecordOf } from "./turn-record.js";
 
 /** What each subagent's newest task ran on and spent, by the call its session is read under; none where its journal names no turn row. */

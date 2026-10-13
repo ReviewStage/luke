@@ -4,8 +4,8 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CopyIcon } from "@sidecar/panel";
-import { GitBranchIcon, TerminalIcon } from "lucide-react";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { GitHubMark } from "../account-marks";
 import {
   ActionMenu,
@@ -13,7 +13,7 @@ import {
   MENU_DROP,
   type MenuAction,
   type MenuPlacement,
-  type OpenMenu,
+  useActionMenu,
 } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
@@ -39,13 +39,17 @@ import {
  * the pull request stands only where that changes what the developer would
  * do; a press of it opens the pull request. Nothing here is drawn before
  * the service has said what stands, so a tab on an agent still reading the
- * repository wears nothing yet.
+ * repository wears nothing yet. Beside the pull request's chip stands a
+ * Changes chip, which opens the pull request's files and their diffs in
+ * the side panel (`agent-changes-tab.tsx`).
  */
 
 /** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
 export interface PublishedDoors {
   openGitHub: (url: string) => void;
   copy: (words: string, label: string) => void;
+  /** Opens the agent's changes in a tab of the side panel's own; none where the view stands in no panel. */
+  openChanges?: (() => void) | undefined;
 }
 
 const MENU_LABEL = "Branch actions";
@@ -105,12 +109,7 @@ export function PublishedChip({
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
 }): ReactNode {
-  const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
-  const opener = useRef<HTMLButtonElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setOpen(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
+  const menu = useActionMenu(true);
   const url = published === undefined ? undefined : publishedUrl(published);
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
@@ -119,14 +118,13 @@ export function PublishedChip({
     <>
       <Tooltip label={OPEN_HINT}>
         <button
-          ref={opener}
           type="button"
           className="plan-compose-chip agent-published-chip"
           data-state={pullRequest?.state}
-          data-menu-open={String(open !== undefined)}
+          data-menu-open={String(menu.open !== undefined)}
           aria-label={label}
           onClick={() => {
-            close(false);
+            menu.close(false);
             doors.openGitHub(url);
           }}
           onContextMenu={
@@ -134,22 +132,65 @@ export function PublishedChip({
               ? undefined
               : (event) => {
                   event.preventDefault();
-                  setOpen({ placement: menuPlacement(event), opener: event.currentTarget });
+                  menu.show(menuPlacement(event), event.currentTarget);
                 }
           }
         >
           <PublishedFace published={published} />
         </button>
       </Tooltip>
-      {open === undefined || branch === null ? null : (
+      {menu.drawn === undefined || branch === null ? null : (
         <ActionMenu
-          menu={open}
+          menu={menu.drawn}
           groups={branchActions(branch, doors)}
           label={MENU_LABEL}
-          onClose={close}
+          onClose={menu.close}
         />
       )}
     </>
+  );
+}
+
+/** The chip that opens the pull request's changes in the side panel, worn beside its own chip; nothing before a pull request stands or where no panel takes the tab. */
+export function ChangesChip({
+  published,
+  doors,
+}: {
+  published: CodingAgentPullRequestAnswer | undefined;
+  doors: PublishedDoors;
+}): ReactNode {
+  const { openChanges } = doors;
+  if (published === undefined || published.pullRequest === null || openChanges === undefined) {
+    return null;
+  }
+  return (
+    <Tooltip label="Show changes">
+      <button
+        type="button"
+        className="plan-compose-chip agent-changes-chip"
+        aria-label="Show changes"
+        onClick={openChanges}
+      >
+        <FileDiffIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="plan-compose-chip-name">Changes</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The lines a change adds and removes, as GitHub counts them: green, then red. */
+export function LinesChanged({
+  additions,
+  deletions,
+}: {
+  additions: number;
+  deletions: number;
+}): React.JSX.Element {
+  return (
+    <span className="agent-published-lines">
+      <span className="agent-published-added">+{additions}</span>{" "}
+      <span className="agent-published-removed">−{deletions}</span>
+    </span>
   );
 }
 
@@ -181,10 +222,7 @@ export function PublishedRow({
           <span className="agent-published-checks">{CHECKS_FAILING}</span>
         ) : null}
         {state === undefined ? null : <span className="agent-published-state">{state}</span>}
-        <span className="agent-published-lines">
-          <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
-          <span className="agent-published-removed">−{pullRequest.deletions}</span>
-        </span>
+        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
       </button>
     </Tooltip>
   );

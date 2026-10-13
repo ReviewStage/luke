@@ -1,8 +1,9 @@
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { KeyedCommand } from "#shared/shortcuts";
-import { ShortcutGlyphs } from "../tooltip";
+import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
+import { Shortcut } from "../shortcut";
+import { useDisclosure } from "../use-disclosure";
 
 /**
  * action-menu.tsx -- the window's own drop-down menu: a plan's actions, a repository's, a side panel tab's, and the account's.
@@ -18,7 +19,10 @@ import { ShortcutGlyphs } from "../tooltip";
  * not apply now is drawn dimmed and passed over, as a system menu's is. An
  * item may open a submenu beside it instead of acting, as a system menu's
  * does: resting on it, pressing it, or Right opens it, Left or Escape in it
- * closes it alone, and resting on another item closes it.
+ * closes it alone, and resting on another item closes it. Closing hands
+ * focus back at once and plays the menu's exit after it: the menu is held
+ * drawn, inert, until the exit is done, and opening it again in that time
+ * takes it back as it stands.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -92,6 +96,12 @@ export interface OpenMenu {
   opener: HTMLElement;
 }
 
+/** A menu drawn: standing open, or on its way out, and the element its exit is waited on. */
+export interface DrawnMenu extends OpenMenu {
+  leaving: boolean;
+  ref: (element: HTMLElement | null) => void;
+}
+
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
 export function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
@@ -110,24 +120,31 @@ export function atPointer(event: React.MouseEvent): MenuPlacement {
 }
 
 /**
- * One control's menu: where it hangs while it stands, the door that opens it
- * from an element, which takes focus back when it closes by key, and the
- * close. A menu does not outlive the surface it stands on, so it is taken
- * down in the render that finds the surface off screen.
+ * One control's menu: where it hangs while it stands open, the door that
+ * opens it from an element, which takes focus back when it closes by key,
+ * and the close; and `drawn`, the menu to draw, which goes on through its
+ * exit at the last place it hung. A menu does not outlive the surface it
+ * stands on, so it starts leaving in the render that finds the surface off
+ * screen.
  */
 export function useActionMenu(shown: boolean) {
-  const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
-  if (open !== undefined && !shown) setOpen(undefined);
+  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
+  const [standing, setStanding] = useState(false);
+  if (standing && !shown) setStanding(false);
+  const { mounted, leaving, ref } = useDisclosure(standing);
   const opener = useRef<HTMLElement | null>(null);
   const close = useCallback((returnFocus: boolean) => {
-    setOpen(undefined);
+    setStanding(false);
     if (returnFocus) opener.current?.focus();
   }, []);
   const show = useCallback((placement: MenuPlacement, element: HTMLElement) => {
     opener.current = element;
-    setOpen({ placement, opener: element });
+    setMenu({ placement, opener: element });
+    setStanding(true);
   }, []);
-  return { open: shown ? open : undefined, show, close };
+  const drawn: DrawnMenu | undefined =
+    mounted && menu !== undefined ? { ...menu, leaving, ref } : undefined;
+  return { open: standing ? menu : undefined, drawn, show, close };
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -175,7 +192,7 @@ function moveFocus(event: React.KeyboardEvent<HTMLElement>): boolean {
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   if (action.checked === true) return <CheckIcon aria-hidden="true" className="plan-menu-check" />;
   if (action.command === undefined) return null;
-  return <ShortcutGlyphs command={action.command} className="plan-menu-end" />;
+  return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="plan-menu-end" />;
 }
 
 /** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */
@@ -347,16 +364,30 @@ export function ActionMenu({
   onClose,
 }: {
   label: string;
-  menu: OpenMenu;
+  /** Where it hangs, and whether it is on its way out (`useActionMenu`'s `drawn`). */
+  menu: DrawnMenu;
   heading?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }): React.JSX.Element {
-  const { placement, opener } = menu;
+  const { placement, opener, leaving, ref: hold } = menu;
   const element = useRef<HTMLDivElement | null>(null);
+  const drawn = useCallback(
+    (node: HTMLDivElement | null) => {
+      element.current = node;
+      hold(node);
+    },
+    [hold],
+  );
   const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
   const [submenu, setSubmenu] = useState<OpenSubmenu | undefined>(undefined);
+  // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
+  const [wasLeaving, setWasLeaving] = useState(leaving);
+  if (wasLeaving !== leaving) {
+    setWasLeaving(leaving);
+    if (!leaving) setSubmenu(undefined);
+  }
 
   useLayoutEffect(() => {
     const drawn = element.current;
@@ -370,14 +401,18 @@ export function ActionMenu({
     });
   }, [placement]);
 
+  // Focus lands on the first item as the menu is placed, and again as it is
+  // opened while it was leaving.
   const placed = at !== undefined;
   useEffect(() => {
-    if (placed) element.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
-  }, [placed]);
+    if (placed && !leaving) element.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
+  }, [placed, leaving]);
 
   // Note that a press on the opener is left to the opener, because the
-  // button's own press is what closes the menu it opened.
+  // button's own press is what closes the menu it opened; and that a menu
+  // leaving hears nothing, since it has closed already.
   useEffect(() => {
+    if (leaving) return;
     const pressed = (event: PointerEvent) => {
       const target = event.target instanceof Node ? event.target : null;
       if (element.current?.contains(target) || opener.contains(target)) return;
@@ -392,7 +427,7 @@ export function ActionMenu({
       window.removeEventListener("blur", leave);
       window.removeEventListener("resize", leave);
     };
-  }, [onClose, opener]);
+  }, [onClose, opener, leaving]);
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // The menu is the nearest open layer, so Escape closes it alone and
@@ -427,11 +462,13 @@ export function ActionMenu({
 
   return createPortal(
     <div
-      ref={element}
+      ref={drawn}
       className="plan-menu"
       role="menu"
       aria-label={label}
       data-placed={String(placed)}
+      data-leaving={leaving ? "true" : undefined}
+      inert={leaving}
       style={at ?? { left: placement.x, top: placement.y }}
       onKeyDown={keyDown}
       onPointerOver={pointerOver}

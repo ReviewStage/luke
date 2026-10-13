@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createPlan } from "@sidecar/database/models/plan-store";
+import { getTestDB } from "@sidecar/database/testing";
 import { unparsedWire } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -20,7 +22,6 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
-import { testSqlClient } from "./support/sql-client";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -75,7 +76,7 @@ function carriesToken(text: string): boolean {
   return text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN) || text.includes(TOKEN_HEADER);
 }
 
-it.layer(testSqlClient)("run_in_repository in the session's sandbox", (it) => {
+it.layer(getTestDB())("run_in_repository in the session's sandbox", (it) => {
   it.effect(
     "the first call checks the repository out at its default branch through the firewall, and the next reuses it",
     () =>

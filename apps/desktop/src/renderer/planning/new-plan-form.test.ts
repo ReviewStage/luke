@@ -10,6 +10,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { NewPlanForm } from "./new-plan-form";
@@ -186,6 +187,7 @@ test("start waits for a name alone, and Enter, with or without Shift, starts the
 
   // With none recent, the menu lists the repositories Luke reaches as the service ordered them.
   act(() => page.chip().click());
+  assertOpensWhatItNames(page.chip());
   assert.deepEqual(
     page.rows().map((row) => row.textContent),
     [RELAY, BILLING],

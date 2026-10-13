@@ -7,7 +7,7 @@ import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { sheetStyle } from "#testing/css-rules";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
@@ -150,7 +150,6 @@ function surfaces(
     failed: false,
     working: false,
     onRetry: () => undefined,
-    openGitHub: () => undefined,
   });
   return [
     ["the Work tab", work],
@@ -192,7 +191,7 @@ test.each(surfaces(false))(
 );
 
 test.each(surfaces(false, DESCRIPTION))(
-  "on %s a command the model described is a row saying what it is for, in words, which it keeps open, and the command is what it opens onto",
+  "on %s a command the model described is a row saying what it is for, in words, then previewing the command in code while closed, and the command is what it opens onto",
   (_surface, element) => {
     const container = mounted(element);
 
@@ -200,14 +199,34 @@ test.each(surfaces(false, DESCRIPTION))(
     const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
     assert.ok(call);
     const line = call.querySelector("summary");
-    assert.equal(line?.textContent, DESCRIPTION);
-    assert.equal(line?.querySelector(".font-mono"), null);
+    assert.equal(line?.textContent, `${DESCRIPTION} ${COMMAND}`);
+    assert.equal(line?.querySelector(".font-mono")?.textContent, COMMAND);
     act(() => line?.click());
     assert.equal(line?.textContent, DESCRIPTION);
     assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
     assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
   },
 );
+
+test("a described command's closed row previews the command's first line alone, while an undescribed command's row still says it all", () => {
+  const command = "\ncd apps/web\npnpm test --filter web";
+  const row = (description: string | undefined) =>
+    mounted(
+      createElement(TranscriptTool, {
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        kind: CALL_KIND.COMMAND,
+        subject: command,
+        description,
+        input: { kind: TOOL_BLOCK.COMMAND, text: command },
+        output: { kind: TOOL_BLOCK.TEXT, text: OUTPUT },
+        errorText: undefined,
+      }),
+    );
+  const described = row("Run the web tests");
+  assert.equal(described.querySelector("summary")?.textContent, "Run the web tests cd apps/web");
+  const undescribed = row(undefined);
+  assert.equal(undescribed.querySelector("summary")?.textContent, `Ran ${command}`);
+});
 
 test.each(surfaces(true))(
   "on %s a finished turn folds what came before its last words under one line, its calls on rows of their own inside it, never grouped a second time",
@@ -317,6 +336,41 @@ test("a call that is not a command keeps its subject on the open row", () => {
 /** The inks a muted line is drawn in: the utility's token, and the token it names, which a row written in CSS uses. */
 const MUTED_INK = new Set(["var(--color-muted-foreground)", "var(--text-secondary)"]);
 
+/** The inks words in full are drawn in, by the same two names. */
+const FULL_INK = new Set(["var(--color-foreground)", "var(--text-primary)"]);
+
+/** The ink a text node is drawn in, as the nearest rule setting one says. */
+async function inkReader(): Promise<(node: Node) => string | undefined> {
+  const style = await sheetStyle();
+  return (node) => {
+    for (let element = node.parentElement; element !== null; element = element.parentElement) {
+      const color = style(element, "color");
+      if (color !== undefined) return color;
+    }
+    return undefined;
+  };
+}
+
+/** The text nodes under an element that hold words. */
+function texts(root: Element): Text[] {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node instanceof Text && node.data.trim() !== "") found.push(node);
+  }
+  return found;
+}
+
+/** Asserts a line's first words, what it did, are in full ink, and every word after them, its preview, in the muted ink. */
+function assertTitleThenPreview(line: Element, inkOf: (node: Node) => string | undefined): void {
+  const [title, ...preview] = texts(line);
+  assert.ok(title, "the line says what it did");
+  assert.ok(FULL_INK.has(inkOf(title) ?? ""), `"${title.data}" is drawn in ${inkOf(title)}`);
+  for (const text of preview) {
+    assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
+  }
+}
+
 /** One turn of an agent's: words, then a call of each shape a row draws, one of them failed, then a subagent and a to-do list. */
 const MIXED_TURN: CodingAgentMessage = {
   id: "m-mixed",
@@ -324,6 +378,7 @@ const MIXED_TURN: CodingAgentMessage = {
   parts: [
     { type: "text", text: "Looking at the sources." },
     agentCall("call-1", COMMAND),
+    agentCall("call-8", COMMAND, DESCRIPTION),
     {
       type: "tool-read_file",
       toolCallId: "call-2",
@@ -361,23 +416,8 @@ const MIXED_TURN: CodingAgentMessage = {
   ],
 };
 
-test("every call's line is drawn in the muted ink, its subject included, while the model's words, an opened body, and an error keep their own", async () => {
-  const style = await sheetStyle();
-  const inkOf = (node: Node): string | undefined => {
-    for (let element = node.parentElement; element !== null; element = element.parentElement) {
-      const color = style(element, "color");
-      if (color !== undefined) return color;
-    }
-    return undefined;
-  };
-  const texts = (root: Element): Text[] => {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const found: Text[] = [];
-    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-      if (node instanceof Text && node.data.trim() !== "") found.push(node);
-    }
-    return found;
-  };
+test("every call's line says what it did in full ink and its icon and subject in the muted ink, while the model's words, an opened body, and an error keep their own", async () => {
+  const inkOf = await inkReader();
   const container = mounted(
     createElement("div", null, [
       createElement(AgentTranscriptView, {
@@ -387,7 +427,6 @@ test("every call's line is drawn in the muted ink, its subject included, while t
         failed: false,
         working: true,
         onRetry: () => undefined,
-        openGitHub: () => undefined,
       }),
       createElement(TranscriptOpeningCall, {
         key: "opening",
@@ -411,11 +450,12 @@ test("every call's line is drawn in the muted ink, its subject included, while t
       "details[data-call-id] > summary, [data-subagent-row], button[data-call-id]",
     ),
   ];
-  assert.equal(lines.length, 7, "a line for every call");
+  assert.equal(lines.length, 8, "a line for every call");
   for (const line of lines) {
-    for (const text of texts(line)) {
-      assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
-    }
+    assertTitleThenPreview(line, inkOf);
+    // Note that the icon is read from inside it, because the ink is read from a node's parent up.
+    const icon = line.firstElementChild?.firstChild;
+    assert.ok(icon && MUTED_INK.has(inkOf(icon) ?? ""), "the icon is muted");
   }
 
   const words = texts(container).find((text) => text.data.includes("Looking at the sources."));
@@ -432,6 +472,52 @@ test("every call's line is drawn in the muted ink, its subject included, while t
   }
 });
 
+test("what a call answered, and the error it ended in, select and copy as text", async () => {
+  const style = await sheetStyle();
+  const container = mounted(
+    createElement(AgentTranscriptView, {
+      messages: [MIXED_TURN],
+      reading: false,
+      failed: false,
+      working: true,
+      onRetry: () => undefined,
+    }),
+  );
+  for (
+    let fold = container.querySelector("[data-turn-fold]:not([open]) > summary");
+    fold instanceof HTMLElement;
+    fold = container.querySelector("[data-turn-fold]:not([open]) > summary")
+  ) {
+    act(() => fold.click());
+  }
+  for (const id of ["call-2", "call-4"]) {
+    act(() => container.querySelector<HTMLElement>(`[data-call-id="${id}"] > summary`)?.click());
+  }
+
+  const answer = container.querySelector('[data-call-id="call-2"] [data-tool-output]');
+  const error = container.querySelector('[data-call-id="call-4"] [role="alert"]');
+  assert.ok(answer && error);
+  assert.equal(selectedText(style, answer), "export const seats = 3;");
+  assert.equal(selectedText(style, error), "grep exited 2");
+});
+
+test.each(surfaces(true))(
+  "on %s a finished turn's fold counting its rows is all muted, while the thought, a row of its own, says it is one in full ink and previews it muted",
+  async (_surface, element) => {
+    const inkOf = await inkReader();
+    const container = mounted(element);
+    const lead = foldSaying(container, "2 tool calls");
+    act(() => lead.querySelector("summary")?.click());
+    for (const text of texts(lead.querySelector("summary") ?? lead)) {
+      assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
+    }
+    const thought = foldSaying(container, "Thought").querySelector("summary");
+    assert.ok(thought);
+    assertTitleThenPreview(thought, inkOf);
+    assert.equal(texts(thought).length, 2, "a preview");
+  },
+);
+
 const GPT: CatalogModel = {
   id: "openai/gpt-5.6-sol",
   name: "GPT-5.6 Sol",
@@ -447,9 +533,46 @@ const HAIKU: CatalogModel = {
 };
 
 test.each([
+  [
+    "code shown wears the Code tab's brackets, not the file glyph",
+    CALL_KIND.SHOW_CODE,
+    "lucide-code-xml",
+  ],
+  [
+    "the agents listed wear the Coding agents glyph, not a terminal or the subagent's robot",
+    CALL_KIND.LIST_AGENTS,
+    "lucide-workflow",
+  ],
+  ["an agent read wears the Coding agents glyph too", CALL_KIND.READ_AGENT, "lucide-workflow"],
+] as const)("a call's row: %s", (_what, kind, glyph) => {
+  const container = mounted(
+    createElement(TranscriptTool, {
+      state: TOOL_STATE.OUTPUT_AVAILABLE,
+      kind,
+      subject: "src/invite.ts",
+      input: { kind: TOOL_BLOCK.TEXT, text: "{}" },
+      output: { kind: TOOL_BLOCK.TEXT, text: "{}" },
+      errorText: undefined,
+    }),
+  );
+  assert.equal(container.querySelector(`summary svg.${glyph}`) === null, false);
+  assert.equal(
+    container.querySelector(
+      "summary svg.lucide-file-code, summary svg.lucide-bot, summary svg.lucide-square-terminal",
+    ) === null,
+    true,
+  );
+});
+
+test.each([
   ["Claude Code's Clawd for an Anthropic model", HAIKU.id, "svg.provider-mark"],
   ["Codex's cloud for an OpenAI model", GPT.id, 'img.provider-mark[src="marks/codex-16.png"]'],
-  ["the robot for a model the catalog does not list", "anthropic/claude-haiku-9", "svg.lucide-bot"],
+  [
+    "Clawd for an Anthropic model the catalog does not list yet",
+    "anthropic/claude-haiku-9",
+    "svg.provider-mark",
+  ],
+  ["the robot for a model of no provider Luke runs agents on", "mistral/large-3", "svg.lucide-bot"],
 ] as const)("a subagent's row leads with %s", (_glyph, model, drawn) => {
   const container = mounted(
     createElement(TranscriptSubagent, {

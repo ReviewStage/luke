@@ -1,10 +1,36 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@sidecar/database/models/account-store";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
+import {
+  awaitingLinesOf,
+  createCodingAgent,
+  fillCodingAgentTitle,
+  listCodingAgents,
+  listPublishedCodingAgents,
+  readCodingAgent,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
+import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
+import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
+import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
+import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
+import { storeWriter } from "@sidecar/database/models/writer";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
   base64Chars,
+  CHANGED_FILE_STATUS,
+  CHANGES_BOUNDS,
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -14,9 +40,11 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  PATCH_OMITTED,
   PULL_REQUEST_STATE,
   TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -32,7 +60,8 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
@@ -74,36 +103,20 @@ import {
   userMessage,
   userMetadataOf,
 } from "../server/core";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {
   EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
-import { childConversationId, sentLineId } from "../server/hosted/brain-host/ids";
-import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
-import { fillChildTitle } from "../server/hosted/child-titles";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { cursorOfWire } from "../server/hosted/coder-host/transcript";
-import {
-  awaitingLinesOf,
-  createCodingAgent,
-  fillCodingAgentTitle,
-  listCodingAgents,
-  listPublishedCodingAgents,
-  readCodingAgent,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
@@ -112,22 +125,15 @@ import {
   postInboxItem,
   readInboxItem,
 } from "../server/hosted/inbox-store";
-import {
-  CODING_AGENT_DEFAULT_CHOICE,
-  modelCatalogOf,
-  type OfferedModel,
-} from "../server/hosted/model-catalog";
-import { savePlanText, updatePlan } from "../server/hosted/plan-store";
-import { listMessagesPast, storeWriter } from "../server/hosted/store";
-import { sentLineStands } from "../server/hosted/store/message-reads";
+import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
+import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
   githubReaching,
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
-import { joinWorkspace, startPlan } from "./support/workspaces";
+import { fakeWorkspaceSeams, joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -146,7 +152,10 @@ const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_STOP = "/api/agents/stop";
+/** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
+const PLAN = "/api/plans/plan";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+const AGENT_CHANGES = "/api/agents/changes";
 const AGENT_SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -232,6 +241,8 @@ function fakeEve(
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
+  /** Every session eve was asked to retire, in order. */
+  const reset: string[] = [];
   let sessions = 0;
   let deliveries = 0;
   const eve = (authorization: string): EveSessions => ({
@@ -280,8 +291,13 @@ function fakeEve(
           ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
           : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
       }),
+    reset: (sessionId) =>
+      Effect.sync(() => {
+        reset.push(sessionId);
+        return { outcome: EVE_RESET_OUTCOME.RESET };
+      }),
   });
-  return { eve, opened, sent, cancelled };
+  return { eve, opened, sent, cancelled, reset };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
@@ -322,20 +338,31 @@ const standing = (
       github.layer,
       modelCatalogOf(CATALOG),
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      codingAgentsApp({
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
-          ),
-        eveOrigin: () => ORIGIN,
-        eve: (authorization) => eve.eve(Redacted.value(authorization)),
-      }).pipe(HttpRouter.provideRequest(services)),
+    const seams = {
+      resolveUserId: (incoming: Request) =>
+        Effect.succeed(
+          Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+        ),
+      eveOrigin: () => ORIGIN,
+      eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+      workspaces: yield* fakeWorkspaceSeams,
+    };
+    const agents = HttpRouter.toWebHandler(
+      codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    yield* Effect.addFinalizer(() => Effect.promise(() => dispose()));
-    /** The response as the function answers it, for the one route that answers bytes. */
-    const fetch = (request: Request) => Effect.promise(() => handler(request));
+    const plans = HttpRouter.toWebHandler(
+      plansApp(seams).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => Promise.all([agents.dispose(), plans.dispose()])),
+    );
+    /** The response as the function answers it, for the one route that answers bytes; a plan's own path lands on the plans group. */
+    const fetch = (request: Request) =>
+      Effect.promise(() =>
+        new URL(request.url).pathname === PLAN ? plans.handler(request) : agents.handler(request),
+      );
     const ask = (request: Request) =>
       Effect.gen(function* () {
         const response = yield* fetch(request);
@@ -442,7 +469,7 @@ const openPlan = (
     return { owner, other, plan, eve, github, ask, fetch };
   });
 
-it.layer(testSqlClient)("the coding-agent routes", (it) => {
+it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
     "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session as the developer with the snapshot first",
     () =>
@@ -1243,6 +1270,99 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
       }),
   );
 
+  it.effect(
+    "a plan's delete stops its agent's turn under way at eve by its own id, then retires its session, before the plan goes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        const sessionId = eve.opened[0]?.sessionId ?? "";
+        yield* claimRuntimeSession(target, sessionId, new Date());
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+
+        assert.deepEqual(
+          yield* ask(request(PLAN, other, { method: "DELETE", id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(eve.cancelled, []);
+        assert.deepEqual(yield* ask(request(PLAN, owner, { method: "DELETE", id: plan.id })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        // Stopped, its session is retired for good before the plan's conversations are cleared.
+        assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan whose agent eve will not stop, or whose agent is still starting, is not deleted; past the grace the starting one reads failed and the plan goes",
+    () =>
+      Effect.gen(function* () {
+        const refusing = fakeEve({ cancels: false });
+        const refused = yield* openPlan({ eve: refusing });
+        const running = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* refused.ask(
+            startAs(refused.owner, refused.plan.id, { idempotencyKey: randomUUID() }),
+          ),
+        ).agent;
+        const stored = yield* readCodingAgent(refused.owner, running.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: refused.owner, conversationId: stored.value.conversationId };
+        yield* claimRuntimeSession(target, refusing.opened[0]?.sessionId ?? "", new Date());
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+        const statuses = (opened: typeof refused) =>
+          Effect.map(
+            opened.ask(request(PLAN_AGENTS, opened.owner, { id: opened.plan.id })),
+            (answer) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).agents.map(
+                ({ status }) => status,
+              ),
+          );
+        const remove = (opened: typeof refused) =>
+          opened.ask(request(PLAN, opened.owner, { method: "DELETE", id: opened.plan.id }));
+
+        assert.deepEqual(
+          yield* remove(refused),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.deepEqual(yield* statuses(refused), [CODING_AGENT_STATUS.RUNNING]);
+        assert.deepEqual(refusing.reset, []);
+
+        // Still starting, its session may yet open a turn no Stop could name, so the plan stays.
+        const starting = yield* openPlan();
+        yield* starting.ask(
+          startAs(starting.owner, starting.plan.id, { idempotencyKey: randomUUID() }),
+        );
+        assert.deepEqual(
+          yield* remove(starting),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.deepEqual(yield* statuses(starting), [CODING_AGENT_STATUS.STARTING]);
+
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.seconds(1)));
+        assert.deepEqual(yield* remove(starting), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
+      }),
+  );
+
   it.effect("a Stop eve refuses is unavailable, and the turn reads as it was", () =>
     Effect.gen(function* () {
       const refusing = fakeEve({ cancels: false });
@@ -1465,6 +1585,70 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "the MCP servers a Start or a change switches off are written on the agent's row and answered on it, which the list reads back, an empty list switches every one back on; another account's agent is not found, and a list that is not one is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const drafted = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+            }),
+          ),
+        ).agent;
+        assert.deepEqual(drafted.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        assert.equal(agent.disabledServers, undefined);
+        const switchAs = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body }));
+
+        const off = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* switchAs(owner, { disabledServers: [INTEGRATION_PROVIDER.LINEAR] }),
+        );
+        assert.deepEqual(off.agent.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map(({ id, disabledServers }) => ({ id, disabledServers })),
+          [
+            { id: drafted.id, disabledServers: [INTEGRATION_PROVIDER.LINEAR] },
+            { id: agent.id, disabledServers: [INTEGRATION_PROVIDER.LINEAR] },
+          ],
+        );
+
+        assert.deepEqual(
+          yield* switchAs(other, { disabledServers: [] }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* switchAs(owner, { disabledServers: INTEGRATION_PROVIDER.LINEAR }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const on = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* switchAs(owner, { disabledServers: [] }),
+        );
+        assert.equal(on.agent.disabledServers, undefined);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.deepEqual(Option.getOrUndefined(stored)?.disabledServers, []);
+      }),
+  );
+
+  it.effect(
     "a Start and a change may name the standard window of a model that offers two, which the agent and the default carry; a change naming none is the model's whole window again, a model with one window drops it, and a window without a model is refused",
     () =>
       Effect.gen(function* () {
@@ -1652,6 +1836,159 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "an agent's changes are its pull request's files as GitHub lists them, each with its patch, a file with none saying whether it is binary or too large rather than reading as unchanged, a file only moved carrying an empty patch, and none to read before a pull request stands",
+    () =>
+      Effect.gen(function* () {
+        const pullRequest = pullRequestFixture({
+          files: [
+            {
+              filename: "src/invite.ts",
+              status: "modified",
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch: "@@ -1,2 +1,2 @@\n-old\n+new\n context",
+            },
+            {
+              filename: "src/invites/send.ts",
+              previous_filename: "src/send.ts",
+              status: "renamed",
+              additions: 0,
+              deletions: 0,
+              changes: 0,
+            },
+            { filename: "logo.png", status: "added", additions: 0, deletions: 0, changes: 0 },
+            {
+              filename: "fixtures/big.json",
+              status: "modified",
+              additions: 9000,
+              deletions: 0,
+              changes: 9000,
+            },
+            {
+              filename: "src/generated.ts",
+              status: "removed",
+              additions: 0,
+              deletions: 1,
+              changes: 1,
+              patch: `@@ -1 +0,0 @@\n-${"x".repeat(CHANGES_BOUNDS.MAX_PATCH_CHARS)}`,
+            },
+          ],
+          changedFiles: 5,
+        });
+        const repository: RepositoryFixture = { pullRequest: undefined, pushed: true };
+        const { owner, other, plan, ask } = yield* openPlan({
+          github: relayRepository(repository),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+        const read = () =>
+          Effect.map(ask(request(AGENT_CHANGES, owner, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentChangesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        // A branch pushed with no pull request from it has none to read yet.
+        assert.deepEqual(yield* read(), { pullRequest: null });
+
+        repository.pullRequest = pullRequest;
+        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
+        const answered = (yield* read()).pullRequest;
+        assert.ok(answered);
+        assert.equal(
+          answered.url,
+          `https://github.com/${RELAY_FULL_NAME}/pull/${pullRequest.number}`,
+        );
+        assert.equal(answered.truncated, false);
+        assert.deepEqual(answered.files, [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 1,
+            deletions: 1,
+            patch: "@@ -1,2 +1,2 @@\n-old\n+new\n context",
+            omitted: null,
+          },
+          {
+            path: "src/invites/send.ts",
+            previousPath: "src/send.ts",
+            status: CHANGED_FILE_STATUS.RENAMED,
+            additions: 0,
+            deletions: 0,
+            patch: "",
+            omitted: null,
+          },
+          {
+            path: "logo.png",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.ADDED,
+            additions: 0,
+            deletions: 0,
+            patch: null,
+            omitted: PATCH_OMITTED.BINARY,
+          },
+          {
+            path: "fixtures/big.json",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 9000,
+            deletions: 0,
+            patch: null,
+            omitted: PATCH_OMITTED.TOO_LARGE,
+          },
+          {
+            path: "src/generated.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.DELETED,
+            additions: 0,
+            deletions: 1,
+            patch: null,
+            omitted: PATCH_OMITTED.TOO_LARGE,
+          },
+        ]);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_CHANGES, other, { id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_CHANGES, owner, { method: "POST", id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a pull request with more files than a read carries is read a page at a time up to the bound and says it was cut short",
+    () =>
+      Effect.gen(function* () {
+        const files = Array.from({ length: CHANGES_BOUNDS.MAX_FILES + 20 }, (_, index) => ({
+          filename: `src/file-${index}.ts`,
+          status: "added",
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: "@@ -0,0 +1 @@\n+line",
+        }));
+        const pullRequest = pullRequestFixture({ files, changedFiles: files.length });
+        const { owner, plan, ask } = yield* openPlan({
+          github: relayRepository({ pullRequest, pushed: true }),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+        const answered = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        ).pullRequest;
+        assert.ok(answered);
+        assert.equal(answered.files.length, CHANGES_BOUNDS.MAX_FILES);
+        assert.equal(answered.files.at(-1)?.path, `src/file-${CHANGES_BOUNDS.MAX_FILES - 1}.ts`);
+        assert.equal(answered.truncated, true);
+      }),
+  );
+
+  it.effect(
     "every pull request a read of what an agent published finds is kept on the agent's row as GitHub answered it, which is what the plan list reads",
     () =>
       Effect.gen(function* () {
@@ -1788,7 +2125,7 @@ function userTexts(page: {
     });
 }
 
-it.layer(testSqlClient)("messaging a coding agent", (it) => {
+it.layer(getTestDB())("messaging a coding agent", (it) => {
   /** An agent started on the owner's plan, its session claimed, and its first turn where asked. */
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
@@ -3109,6 +3446,21 @@ interface PullRequestFixture {
   statuses: readonly string[];
   /** Whether the App may read the head's check runs; a refusal is 403. */
   checksReadable: boolean;
+  /** Its files as GitHub lists them, in GitHub's own spelling. */
+  files: readonly GitHubFileFixture[];
+  /** How many files the pull request counts, which may be more than `files` lists. */
+  changedFiles: number;
+}
+
+/** One file of a pull request as GitHub's listing spells it. */
+interface GitHubFileFixture {
+  filename: string;
+  previous_filename?: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
 }
 
 const HEAD = { ref: "luke/teammate-invitations", sha: "0123abcd" } as const;
@@ -3122,6 +3474,8 @@ function pullRequestFixture(overrides: Partial<PullRequestFixture> = {}): PullRe
     runs: [{ status: "completed", conclusion: "success" }],
     statuses: [],
     checksReadable: true,
+    files: [],
+    changedFiles: 6,
     ...overrides,
   };
 }
@@ -3148,7 +3502,7 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     merged: pull.merged,
     additions: 210,
     deletions: 14,
-    changed_files: 6,
+    changed_files: pull.changedFiles,
     head: { ref: HEAD.ref, sha: HEAD.sha, label: `${RELAY.owner}:${HEAD.ref}` },
     user: { login: "luke[bot]", type: "Bot" },
   });
@@ -3168,6 +3522,11 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     }
     if (path === `/pulls/${pullRequest?.number}` && pullRequest !== undefined) {
       return Response.json(pullJson(pullRequest));
+    }
+    if (path === `/pulls/${pullRequest?.number}/files` && pullRequest !== undefined) {
+      const perPage = Number(url.searchParams.get("per_page") ?? "30");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      return Response.json(pullRequest.files.slice((page - 1) * perPage, page * perPage));
     }
     if (path === `/branches/${encodeURIComponent(HEAD.ref)}`) {
       return fixture.pushed
@@ -3350,7 +3709,7 @@ const INBOX_ATTACHMENT = "/api/inbox/attachment";
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
-it.layer(testSqlClient)("the developer's inbox", (it) => {
+it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
     Effect.gen(function* () {
@@ -3845,6 +4204,64 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           yield* ask(request(ACCOUNT_INBOX, undefined)),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
+      }),
+  );
+
+  it.effect(
+    "the account's inbox lists every plan holding an item, waiting or settled, the plan whose item changed latest first, with how many it holds, and leaves out an archived plan's and another account's",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask, post, waiting } = yield* openInbox();
+        const second = yield* startPlan(owner, {
+          name: "Billing export",
+          repository: RELAY_FULL_NAME,
+        });
+        yield* savePlanText(owner, second.id, SAVED);
+        const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
+        const third = yield* startPlan(owner, { name: "Audit log", repository: RELAY_FULL_NAME });
+        yield* savePlanText(owner, third.id, SAVED);
+        const thirdAgent = (yield* startedAgent(owner, third.id, ask)).agent;
+        assert.deepEqual((yield* waiting()).plans, [], "no plan holds an item yet");
+
+        yield* post(QUESTION);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* post({ ...QUESTION, key: "second", title: "And a second?" });
+        yield* TestClock.adjust(Duration.seconds(1));
+        const settled = yield* postInboxItem(
+          { userId: owner, planId: second.id, agentId: secondAgent.id },
+          { ...QUESTION, key: "export-format", title: "CSV or JSON?" },
+        );
+        assert.ok(Result.isSuccess(settled));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* answerInboxItem(
+          owner,
+          settled.success.id,
+          settled.success.revision,
+          { reply: INBOX_REPLY.ANSWERED, note: "CSV." },
+          randomUUID(),
+        );
+        yield* postInboxItem(
+          { userId: owner, planId: third.id, agentId: thirdAgent.id },
+          { ...QUESTION, key: "retention", title: "Keep logs how long?" },
+        );
+        yield* updatePlan(owner, third.id, { archived: true });
+
+        const all = yield* waiting();
+        assert.deepEqual(
+          all.plans.map((each) => [each.planId, each.items]),
+          [
+            [second.id, 1],
+            [plan.id, 2],
+          ],
+          "the settled plan, changed latest, first; the archived plan nowhere",
+        );
+        assert.ok((all.plans[0]?.updatedAt ?? 0) > (all.plans[1]?.updatedAt ?? 0));
+        assert.deepEqual(
+          all.items.map((item) => item.planId),
+          [plan.id, plan.id],
+          "only the waiting items",
+        );
+        assert.deepEqual((yield* waiting(undefined, other)).plans, []);
       }),
   );
 

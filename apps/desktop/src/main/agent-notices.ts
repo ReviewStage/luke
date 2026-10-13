@@ -1,4 +1,8 @@
-import type { AccountInboxAnswer, AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
+import type {
+  AccountInboxAnswer,
+  AccountInboxEntry,
+  AccountInboxPlan,
+} from "@sidecar/hosted/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -16,7 +20,7 @@ import { modelLabel } from "@sidecar/hosted/model-label";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
-import type { AppInboxPlan } from "#shared/messages/app-state";
+import type { AppInboxSlice } from "#shared/messages/app-state";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
@@ -187,8 +191,8 @@ export interface AgentNoticesDependencies {
   readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
-  /** Where each plan's waiting items are written, for the sidebar to count. */
-  onWaitingChanged: (waiting: readonly AppInboxPlan[]) => void;
+  /** Where each plan's waiting items, and every plan holding an item, are written, for the window's Inbox. */
+  onInboxChanged: (inbox: AppInboxSlice) => void;
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
   watchInterval?: Duration.Duration;
@@ -300,7 +304,7 @@ function inboxNoticeText(
 }
 
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
-function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxPlan[] {
+function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
   const plans = new Map<string, string[]>();
   for (const item of items) {
     const held = plans.get(item.planId);
@@ -308,6 +312,22 @@ function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxPlan[] {
     else held.push(item.id);
   }
   return [...plans].map(([planId, ids]) => ({ planId, items: ids }));
+}
+
+/** Whether two answers list the same plans holding items, alike in order, count, and instant. */
+function samePlans(one: readonly AccountInboxPlan[], other: readonly AccountInboxPlan[]): boolean {
+  return (
+    one.length === other.length &&
+    one.every((plan, at) => {
+      const was = other[at];
+      return (
+        was !== undefined &&
+        was.planId === plan.planId &&
+        was.items === plan.items &&
+        was.updatedAt === plan.updatedAt
+      );
+    })
+  );
 }
 
 /**
@@ -420,9 +440,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
-    /** Writes what waits, each plan's items for the sidebar and their number for the Dock. */
-    function publishWaiting(items: readonly AccountInboxEntry[]): void {
-      dependencies.onWaitingChanged(waitingPlans(items));
+    /** Writes what waits, each plan's items and every plan holding one for the window, and their number for the Dock. */
+    function publishWaiting(
+      items: readonly AccountInboxEntry[],
+      plans: readonly AccountInboxPlan[],
+    ): void {
+      dependencies.onInboxChanged({ waiting: waitingPlans(items), plans });
       doors.badge(items.length);
     }
 
@@ -455,9 +478,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      */
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
-      if (was?.answer.cursor === answer.cursor) return;
+      if (was?.answer.cursor === answer.cursor) {
+        // Note that the plans holding items may move with nothing waiting moving, an archive or a hold let go, so they are written alone.
+        if (samePlans(was.answer.plans, answer.plans)) return;
+        waiting = { ...was, answer: { ...was.answer, plans: answer.plans } };
+        dependencies.onInboxChanged({
+          waiting: waitingPlans(was.answer.items),
+          plans: answer.plans,
+        });
+        return;
+      }
       waiting = { answer, items: new Set(answer.items.map((item) => item.id)) };
-      publishWaiting(answer.items);
+      publishWaiting(answer.items, answer.plans);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
       for (const item of answer.items) {
@@ -481,7 +513,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Effect.suspend(() => {
         waiting = undefined;
         seenRevision.clear();
-        publishWaiting([]);
+        publishWaiting([], []);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
         const look = Effect.gen(function* () {

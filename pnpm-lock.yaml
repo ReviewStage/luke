@@ -295,6 +295,9 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../../packages/brain
+      '@sidecar/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
@@ -325,6 +328,9 @@ importers:
       '@vercel/connect':
         specifier: 2.4.1
         version: 2.4.1(ai@7.0.135(zod@4.5.4))(better-auth@1.6.29(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(kysely@0.29.5)(pg@8.23.0))(next@16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4)))
+      '@vercel/oidc':
+        specifier: 4.0.0
+        version: 4.0.0
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
@@ -395,6 +401,9 @@ importers:
       esbuild:
         specifier: 0.27.7
         version: 0.27.7
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1(@noble/hashes@2.3.0)
       tsx:
         specifier: 'catalog:'
         version: 4.23.12
@@ -512,6 +521,70 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/database:
+    dependencies:
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
+      '@sidecar/brain':
+        specifier: workspace:*
+        version: link:../brain
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(kysely@0.29.5)(pg@8.23.0)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      '@types/pg':
+        specifier: 8.21.0
+        version: 8.21.0
+      drizzle-kit:
+        specifier: 0.31.10
+        version: 0.31.10
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -7712,8 +7785,7 @@ snapshots:
       ajv: 6.15.0
       ajv-keywords: 3.5.2(ajv@6.15.0)
 
-  '@drizzle-team/brocli@0.10.2':
-    optional: true
+  '@drizzle-team/brocli@0.10.2': {}
 
   '@effect/atom-react@4.0.0-rc.115(effect@4.0.0-rc.115)(react@19.2.8)(scheduler@0.27.0)':
     dependencies:
@@ -7870,13 +7942,11 @@ snapshots:
     dependencies:
       esbuild: 0.18.20
       source-map-support: 0.5.21
-    optional: true
 
   '@esbuild-kit/esm-loader@2.6.5':
     dependencies:
       '@esbuild-kit/core-utils': 3.3.2
       get-tsconfig: 4.14.3
-    optional: true
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
@@ -10796,7 +10866,6 @@ snapshots:
       '@esbuild-kit/esm-loader': 2.6.5
       esbuild: 0.25.12
       tsx: 4.23.12
-    optional: true
 
   drizzle-orm@0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(kysely@0.29.5)(pg@8.23.0):
     optionalDependencies:
@@ -10967,7 +11036,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.18.20
       '@esbuild/win32-ia32': 0.18.20
       '@esbuild/win32-x64': 0.18.20
-    optional: true
 
   esbuild@0.25.12:
     optionalDependencies:
@@ -10997,7 +11065,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
-    optional: true
 
   esbuild@0.27.7:
     optionalDependencies:

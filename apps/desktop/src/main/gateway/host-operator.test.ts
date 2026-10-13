@@ -4,6 +4,8 @@ import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from 
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_REPLY } from "@sidecar/hosted/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -156,6 +158,43 @@ it.effect(
 );
 
 it.effect(
+  "a repository's skills are asked of the host by the plan alone, and an answer the window does not read is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+      const skills = {
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name: "release", description: "Cut a release of the relay." }],
+        },
+      };
+      const answers = [carried(skills), carried({ skills: "none" })];
+      const requests: RecordedCall[] = [];
+      const operator = operatorOver({
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            return { ok: true, result: answers.shift() ?? carried({}) };
+          }),
+        on: () => () => undefined,
+      });
+
+      assert.deepEqual(yield* operator.planningSkills({ planId }), skills);
+      assert.deepEqual(yield* operator.planningSkills({ planId }), {
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
+      });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLANNING_SKILLS, { planId }],
+          [GATEWAY_METHOD.PLANNING_SKILLS, { planId }],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "a board save carries the image of the scene to the host, and a save without one carries none",
   () =>
     Effect.gen(function* () {
@@ -273,7 +312,7 @@ it.effect(
 );
 
 it.effect(
-  "the files attached to a task or a message travel to the host with it, and a Start or a message with none carries no files field",
+  "the files attached to a task or a message, and the MCP servers a draft switched off, travel to the host with it, and a Start or a message with none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -288,6 +327,7 @@ it.effect(
         idempotencyKey: "press-1",
         task: "Fix what this shows.",
         attachments,
+        disabledServers: [INTEGRATION_PROVIDER.LINEAR],
       });
       yield* operator.codingAgentMessage({
         agentId: "agent-1",
@@ -306,7 +346,13 @@ it.effect(
         [
           [
             GATEWAY_METHOD.CODING_AGENTS_START,
-            { planId, idempotencyKey: "press-1", task: "Fix what this shows.", attachments },
+            {
+              planId,
+              idempotencyKey: "press-1",
+              task: "Fix what this shows.",
+              attachments,
+              disabledServers: [INTEGRATION_PROVIDER.LINEAR],
+            },
           ],
           [
             GATEWAY_METHOD.CODING_AGENTS_MESSAGE,
@@ -394,6 +440,47 @@ it.effect(
 );
 
 it.effect(
+  "the plan template's history travels to the host as the methods' page and revision, and an answer the view cannot read is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const requests: RecordedCall[] = [];
+      const client: GatewayClient = {
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            const result =
+              method === GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS
+                ? { revisions: [] }
+                : method === GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE
+                  ? { template: "## Why\n", custom: true }
+                  : { revision: { seq: 0 } };
+            return { ok: true, result: carried(result) };
+          }),
+        on: () => () => undefined,
+      };
+      const operator = operatorOver(client);
+
+      const newest = yield* operator.planTemplateRevisions({});
+      yield* operator.planTemplateRevisions({ before: 3 });
+      const unreadable = yield* operator.planTemplateRevision({ seq: 2 });
+      const restored = yield* operator.planTemplateRestore({ seq: 2 });
+
+      assert.deepEqual(newest, { revisions: [] });
+      assert.deepEqual(unreadable, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(restored, { template: "## Why\n", custom: true });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {}],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, { before: 3 }],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: 2 }],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 2 }],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "what waits across the account is asked of the host past its cursor and read as the view declares it, and an answer it cannot read is unanswered",
   () =>
     Effect.gen(function* () {
@@ -408,6 +495,13 @@ it.effect(
             title: "Push to the release branch?",
             revision: 2,
             postedAt: 1_800_000_000_000,
+            updatedAt: 1_800_000_060_000,
+          },
+        ],
+        plans: [
+          {
+            planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+            items: 3,
             updatedAt: 1_800_000_060_000,
           },
         ],

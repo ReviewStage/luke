@@ -10,7 +10,7 @@ import { focusSeek } from "./focus-seek";
  * to stop waiting. An element that is not there at all is given up on at once:
  * the caller already holds it, so no later frame could find a different one.
  */
-export function focusWhenVisible(element: HTMLElement | null): () => void {
+function focusWhenVisible(element: HTMLElement | null): () => void {
   if (!element) return () => undefined;
   return focusSeek({
     find: () => element,

@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { Cause, DateTime, Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
-import { member, organization } from "../../server/db/auth-schema";
-import { githubInstallation } from "../../server/db/github-installation-schema";
+import { db } from "@sidecar/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
-} from "../../server/db/github-installation-vocabulary";
-import { db } from "../../server/db/query";
-import { createPlan, type NewPlan } from "../../server/hosted/plan-store";
-import type { WorkspaceSeams } from "../../server/hosted/workspace-seams";
+} from "@sidecar/database/github-installation-vocabulary";
+import { createPlan, type NewPlan } from "@sidecar/database/models/plan-store";
+import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
+import { member, organization } from "@sidecar/database/schemas/auth";
+import { githubInstallation } from "@sidecar/database/schemas/github-installation";
+import { and, eq } from "drizzle-orm";
+import { Cause, DateTime, Effect } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 /**
  * workspaces.ts -- workspaces for a test, the plugin's write faked over them, and a plan started in one.

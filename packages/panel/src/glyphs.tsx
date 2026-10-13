@@ -37,13 +37,21 @@ function Glyph({
   );
 }
 
-export function KeyIcon(): React.JSX.Element {
+/**
+ * Two halves of a plug joined, for the services an account connects: Settings'
+ * Integrations page. Its paths are Tabler Icons' `plug-connected`
+ * (https://tabler.io/icons, MIT licence, copyright (c) 2020-2026 Paweł Kuna),
+ * drawn in our stroke.
+ */
+export function PlugIcon(): React.JSX.Element {
   return (
     <Glyph>
-      <circle cx="8" cy="12" r="4.2" />
-      <path d="M12.2 12H21" />
-      <path d="M17.6 12v3.1" />
-      <path d="M20.4 12v2.2" />
+      <path d="M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5z" />
+      <path d="M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5z" />
+      <path d="M3 21l2.5 -2.5" />
+      <path d="M18.5 5.5l2.5 -2.5" />
+      <path d="M10 11l-2 2" />
+      <path d="M13 14l-2 2" />
     </Glyph>
   );
 }
@@ -256,16 +264,6 @@ export function KeyboardIcon(): React.JSX.Element {
   );
 }
 
-/** What the app has been allowed to reach, which is what this group is about. */
-export function ShieldIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M12 2.6 4.8 5.6v5.5c0 4.4 3 8.4 7.2 9.9 4.2-1.5 7.2-5.5 7.2-9.9V5.6Z" />
-      <path d="m8.9 11.9 2.2 2.2 4-4.2" />
-    </Glyph>
-  );
-}
-
 /** Heads the Updates section: the arrival a newer release waits as. */
 export function DownloadIcon(): React.JSX.Element {
   return (
@@ -362,25 +360,6 @@ export function MicrophoneOffIcon(): React.JSX.Element {
   );
 }
 
-/** Words meant to carry: what the feedback section is for. */
-export function MegaphoneIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M3.4 10.2v3.6a1.6 1.6 0 0 0 1.6 1.6h1.8l1.2 4.2a1.3 1.3 0 0 0 1.3 1h.9a1 1 0 0 0 1-1.3l-1.1-3.9h1.7l7.4 3.4a1 1 0 0 0 1.4-.9V6.1a1 1 0 0 0-1.4-.9l-7.4 3.4H5a1.6 1.6 0 0 0-1.6 1.6Z" />
-    </Glyph>
-  );
-}
-
-/** A bell: what the notifications section is for. */
-export function BellIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.8H4.6Z" />
-      <path d="M10 20.4a2.2 2.2 0 0 0 4 0" />
-    </Glyph>
-  );
-}
-
 /** A picture, on the control that attaches one. */
 export function ImageIcon(): React.JSX.Element {
   return (
@@ -420,6 +399,21 @@ export function PlusIcon(): React.JSX.Element {
     <Glyph className="icon-button-glyph">
       <path d="M12 5.4v13.2" />
       <path d="M5.4 12h13.2" />
+    </Glyph>
+  );
+}
+
+/**
+ * The Model Context Protocol's mark, its three strokes redrawn in this
+ * file's weight and box rather than shipped as the project's artwork: the
+ * composer's button over the MCP servers an agent is handed.
+ */
+export function McpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2.44 11.45l8.92-8.92c1.23-1.23 3.23-1.23 4.46 0 1.23 1.23 1.23 3.23 0 4.46l-6.73 6.73" />
+      <path d="M9.18 13.63l6.64-6.64c1.23-1.23 3.23-1.23 4.46 0l.05.05c1.23 1.23 1.23 3.23 0 4.46l-8.06 8.06c-.41.41-.41 1.08 0 1.49l1.66 1.66" />
+      <path d="M13.59 4.76 7 11.35c-1.23 1.23-1.23 3.23 0 4.46 1.23 1.23 3.23 1.23 4.46 0l6.59-6.59" />
     </Glyph>
   );
 }
@@ -488,13 +482,30 @@ export function GearIcon(): React.JSX.Element {
   );
 }
 
-/** A terminal's prompt: the page about the coding agents that run in one. Outline, like the other pages' glyphs. */
+/** A terminal's prompt: the Settings page about the coding agents that run in one. Outline, like the other pages' glyphs. */
 export function TerminalIcon(): React.JSX.Element {
   return (
     <Glyph>
       <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.4" />
       <path d="m7 9.2 3.2 2.8L7 14.8" />
       <path d="M12.6 14.8h4.2" />
+    </Glyph>
+  );
+}
+
+/**
+ * Two steps and the path between them, lucide's workflow: the coding agents
+ * as a group, and an agent whose harness is not known.
+ * Note that it is no terminal, because a terminal stands for a shell
+ * command alone, and that a transcript's row about the agents draws lucide's
+ * own `WorkflowIcon`, the same paths. Outline, like the other pages' glyphs.
+ */
+export function CodingAgentsIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="3" y="3" width="8" height="8" rx="2" />
+      <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+      <rect x="13" y="13" width="8" height="8" rx="2" />
     </Glyph>
   );
 }

@@ -147,6 +147,37 @@ says why where it is drawn: the call bar's round mutes, its solid End call
 disc, and its start pill, the new-plan composer's round start, and a tab's ×,
 which brightens without a fill.
 
+The keyboard's ring is one rule in `base.css`. Every button, link, tab,
+switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,
+`--focus-ring-offset` off its edge, and only once the keyboard has moved focus
+(`keyboard-modality.ts`), so a press never rings a control. One that clips what
+it holds sets the offset to less the width, so the ring is drawn inside it. A
+scroller whose rows run edge to edge pads by `--focus-ring-reach` and gives it
+back as a negative margin, so a row's ring is never cut off at its sides, and a
+row holding the keyboard stands over its neighbours, so the next row's fill
+leaves its ring whole. A row that runs the scroller's width by design, a line of
+code or Pierre's tree, draws the ring inside it instead. A
+field holding the caret wears the same ring centred on its edge however the
+caret arrived, and a field set borderless in a well, a search's or the
+composer's, rings the well (`.field-well`). A rule that takes the ring away
+marks it `/* no ring: … */` with what shows focus instead; menus mark a row
+with its fill. `check-design-contract.mjs` refuses an unmarked one, and a ring
+drawn off the tokens.
+
+Every menu and popover is one surface, from the menu tokens in `desktop.css`'s
+`:root`: the `--surface-popover` ground in a `--hairline-strong` edge, the
+`--menu-radius` corner and `--menu-shadow` under it, its items `--menu-inset`
+from its edge, each row `--menu-row-height` tall with a `--menu-row-radius`
+highlight and a `--menu-glyph` glyph. The corner is the row's corner plus the
+inset, so a highlighted row follows the menu's curve. A plan's menu, a picker,
+a submenu, a crumb's tree, the find bar, a tooltip card, and the context
+popover all draw it, and `check-design-contract.mjs` refuses one
+that spends its own corner, shadow, ground, or row. The command palette is a
+dialog rather than a menu, so it keeps a dialog's 14px corner and deeper
+shadow, as the confirm dialog does; its rows are a menu's. The summary card
+is a panel of the summary's own rows rather than a menu, so it keeps the 12px
+corner those rows' `--control-radius` sits concentric in.
+
 ## The keys Luke takes from the machine
 
 A key Luke registers takes its chord away from every other app on the Mac, so

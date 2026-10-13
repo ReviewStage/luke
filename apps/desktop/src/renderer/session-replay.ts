@@ -19,18 +19,17 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
  * every input is masked, the attributes that carry words or an image are
  * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. Ten elements also block
- * their whole subtree with the library's fixed `ph-no-capture` class as a
- * second line: the feedback dialog, whose screenshots are pictures of the
- * person's screen, the Settings tab's Memory page, a plan's whiteboard,
- * a plan's transcript, a plan's Work tab, the code on screen, a plan's
- * version history's list, the version of the plan drawn beside it, each
- * coding agent's tab, and the editor a field of a plan is edited in, whose masked value
- * would still record the rhythm of the typing. The whiteboard is the one
- * surface that draws its words on a canvas, which the text masking cannot
- * reach, so its block is its only
- * line, and canvas recording is held off by name rather than by the
- * library's default.
+ * positions, and asterisks of the right length. The surfaces that hold the
+ * most of a person's words also block their whole subtree with the library's
+ * fixed `ph-no-capture` class as a second line, each named where it is drawn
+ * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
+ * pictures of the person's screen, a plan's title and the editor its document
+ * is edited in, whose masked value would still record the rhythm of the
+ * typing, and its whiteboard, transcript, Work, Code, and File tabs, version
+ * history, Inbox, and coding agents' tabs, among others. The whiteboard is
+ * the one surface that draws its words on a canvas, which the text masking
+ * cannot reach, so its block is its only line, and canvas recording is held
+ * off by name rather than by the library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.
@@ -250,14 +249,17 @@ function preloadRemoteConfig(key: string): void {
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked while `class` and `style` still lay out,
- * autocapture off, since a click event carries the text of what was clicked,
+ * words or an image asterisked while `class` and `style` still lay out, every
+ * `href` among them but the two the replay lays out by (a stylesheet's and an
+ * icon's symbol), because a link in a transcript or an Inbox item may go to
+ * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
  * and canvas recording off, since a canvas carries its words as pixels. Note
  * that the canvas option is set here rather than left to the library's
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
  */
 const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
+const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
   autocapture: false,
   capture_dead_clicks: false,
@@ -265,8 +267,10 @@ const SESSION_REPLAY_MASKING = {
   session_recording: {
     captureCanvas: { recordCanvas: false },
     maskTextSelector: "*",
-    maskAttributeFn: (name: string, value: string): string =>
-      WORDS.has(name) ? "*".repeat(value.length) : value,
+    maskAttributeFn: (name: string, value: string, element?: Element): string =>
+      WORDS.has(name) || (name === "href" && !LAYOUT_HREFS.has(element?.localName ?? ""))
+        ? "*".repeat(value.length)
+        : value,
   },
 } as const;
 

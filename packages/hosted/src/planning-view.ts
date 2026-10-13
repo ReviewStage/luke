@@ -17,6 +17,7 @@ import {
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
   planSchema,
+  planSkillsSchema,
   planSummarySchema,
   planTreeFolderSchema,
   planTreeRequestSchema,
@@ -307,6 +308,8 @@ const planCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
   /** The repository the lines were read from, `owner/name`. */
   repository: EffectSchema.String,
+  /** The commit the checkout stood at when the lines were read; absent on code shown before it was recorded. */
+  commit: EffectSchema.optionalKey(EffectSchema.String),
   /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
   firstLine: EffectSchema.Int,
   /** How many lines the whole file has. */
@@ -542,7 +545,7 @@ export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
 
 export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;
 
-/** The developer's edit of one field of a plan, as the window asks it saved: the plan, and the edit as the service takes it. */
+/** The developer's edit of a plan's document, as the window asks it saved: the plan, and the edit as the service takes it. */
 export const planningEditParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   edit: planEditRequestSchema,
@@ -619,6 +622,22 @@ export const planningTreeAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
+
+/** The skills a developer may choose of a plan's repository, as the window asks the host for them: the plan. */
+export const planningSkillsParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+});
+
+export type PlanningSkillsParams = typeof planningSkillsParamsSchema.Type;
+
+/** The read of a repository's skills, as the window hears it: the skills, why they are not read, or that the service did not answer. */
+export const planningSkillsAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ skills: planSkillsSchema }),
+  planFileRefusalSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningSkillsAnswer = typeof planningSkillsAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({

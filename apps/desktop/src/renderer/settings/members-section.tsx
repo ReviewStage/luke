@@ -8,8 +8,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { useConfirm } from "./confirm-state";
-import { ConfirmSwap } from "./confirm-swap";
+import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 
 /**
  * members-section.tsx -- Settings' Workspace section: the chosen workspace's members, the removal and the leave, and the way to install Luke on GitHub.
@@ -63,7 +62,7 @@ function MemberRow({
   removable: boolean;
   onRemove: (userId: string) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const removal = useConfirm({ subject: removable, surfaceOpen: true }, () =>
+  const removal = useConfirmDialog({ subject: removable, surfaceOpen: true }, () =>
     onRemove(member.userId),
   );
   return (
@@ -75,32 +74,25 @@ function MemberRow({
         <small>{`${member.email} · ${ROLE_WORDS[member.role]}`}</small>
       </span>
       {removable ? (
-        <ConfirmSwap
-          confirm={{
-            question: `Remove ${member.name} from this workspace?`,
-            stage: removal.stage,
-            verb: "Remove",
-            running: "Removing",
-            onKeep: removal.keep,
-            onAct: removal.run,
-          }}
+        <button
+          type="button"
+          className="toolbar-button account-delete"
+          disabled={removal.busy}
+          title="Remove…"
+          onClick={removal.ask}
         >
-          <button
-            type="button"
-            className="toolbar-button account-delete"
-            disabled={removal.busy}
-            title="Remove…"
-            onClick={removal.ask}
-          >
-            Remove
-          </button>
-        </ConfirmSwap>
+          Remove
+        </button>
       ) : null}
-      {removal.rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {removal.rejection}
-        </p>
-      )}
+      <ConfirmDialog
+        confirm={removal}
+        question={{
+          title: `Remove ${member.name} from this workspace?`,
+          body: "They lose its plans until they join again.",
+          verb: "Remove",
+          running: "Removing",
+        }}
+      />
     </div>
   );
 }
@@ -147,7 +139,7 @@ function TeamMembers({
 
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   const manages = owner || workspace.role === WORKSPACE_ROLE.ADMIN;
-  const leave = useConfirm({ subject: !owner, surfaceOpen: true }, () =>
+  const leave = useConfirmDialog({ subject: !owner, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then((): ActionResult => {
       onLeft();
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -176,31 +168,24 @@ function TeamMembers({
             <strong>{`Leave ${workspace.name}`}</strong>
             <small>Its plans leave your sidebar until you join again.</small>
           </span>
-          <ConfirmSwap
-            confirm={{
-              question: `Leave ${workspace.name}?`,
-              stage: leave.stage,
+          <button
+            type="button"
+            className="toolbar-button account-delete"
+            disabled={leave.busy}
+            title="Leave…"
+            onClick={leave.ask}
+          >
+            Leave
+          </button>
+          <ConfirmDialog
+            confirm={leave}
+            question={{
+              title: `Leave ${workspace.name}?`,
+              body: "Its plans leave your sidebar until you join again.",
               verb: "Leave",
               running: "Leaving",
-              onKeep: leave.keep,
-              onAct: leave.run,
             }}
-          >
-            <button
-              type="button"
-              className="toolbar-button account-delete"
-              disabled={leave.busy}
-              title="Leave…"
-              onClick={leave.ask}
-            >
-              Leave
-            </button>
-          </ConfirmSwap>
-          {leave.rejection === undefined ? null : (
-            <p className="error-message" role="alert">
-              {leave.rejection}
-            </p>
-          )}
+          />
         </div>
       )}
     </>

@@ -1,5 +1,9 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentStatus,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_STATE,
@@ -12,11 +16,10 @@ import {
   CollapseIcon,
   ExpandIcon,
   SidePanelIcon,
-  TerminalIcon,
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { BotIcon, FileCodeIcon } from "lucide-react";
+import { FileDiffIcon, InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -24,17 +27,19 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentSubagentTab } from "../planning/agent-tab";
+import { AgentChangesTab, changesTabLabel } from "../planning/agent-changes-tab";
+import { AgentGlyph, AgentMark, AgentSubagentTab, SubagentMark } from "../planning/agent-tab";
 import {
   AgentTabCard,
+  type CardReading,
   cardCorner,
   delegatedChoice,
   heldLatest,
   lastFinished,
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
-import { fileName, shownFiles } from "../planning/code-pane-model";
-import { agentGlyphState, agentStateWords } from "../planning/coding-agent-model";
+import { fileName, type ShownFile, shownFiles } from "../planning/code-pane-model";
+import { agentGlyphState, agentStateWords, providerOf } from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
@@ -42,8 +47,10 @@ import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
 import {
+  type ChangesStripTab,
   inPlanOrder,
   isAgentTab,
+  isChangesTab,
   isFileTab,
   isSubagentTab,
   type StripTab,
@@ -60,14 +67,16 @@ import {
 } from "../planning/transcript-copy";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import {
   type DrawnTabs,
+  drawsChanges,
   drawsSubagent,
   type FileHistoryStep,
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
-  type PinnableTab,
+  type PinnedTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
@@ -82,6 +91,7 @@ import {
   workerChoice,
   workerJob,
   workerOf,
+  workFailed,
   workRowsOf,
 } from "../planning/work-model";
 import type { MenuRow } from "../searchable-menu";
@@ -173,8 +183,8 @@ function documentReserve(area: HTMLElement): number {
   return Number.isFinite(declared) ? declared : SIDE_PANEL_WIDTH.MIN;
 }
 
-/** Each kind's glyph, leading its tab, its row in the "+" menu, and its pin in the sidebar (`pinnedTabIcon`). */
-const TAB_ICON = {
+/** Each kind's glyph, leading its tab, its row in the "+" menu, its pin in the sidebar (`pinnedTabIcon`), and its row in ⌘K. */
+export const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
@@ -231,11 +241,11 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * "+" and those the plan has used for the summary; then, under Subagents,
  * each subagent the plan's work holds; then, under Files, each file Luke
  * showed on the plan, by name with its folder beside it. A subagent's row
- * wears the worker's glyph, and where the worker stands only where
+ * wears its model's mark (`SubagentMark`), and where the worker stands only where
  * `standing` asks: the "+" leaves that to its tab, beside it, and the
  * summary has no tab beside it to say it. A file's row wears its type's
- * coloured icon there too, as the file tree draws it (`file-type-icon.tsx`),
- * where the "+" keeps every file's one glyph. Picking a row whose tab is open
+ * coloured icon, as the file tree draws it (`file-type-icon.tsx`), in the
+ * "+" and the summary alike. Picking a row whose tab is open
  * chooses that tab rather than opening another, as a browser's tab search
  * does, so no row says it is open; a file not open opens on the newest
  * snippet of it. The plan's coding agents are opened from the plan's
@@ -245,7 +255,7 @@ export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
-  files: readonly CodeRef[];
+  files: readonly ShownFile[];
   standing: boolean;
 }): AddEntry[] {
   const { panel, workers, files, standing } = input;
@@ -258,9 +268,12 @@ export function panelEntries(input: {
       id: worker.call.id,
       label: worker.session?.title ?? workerJob(worker.call),
       icon: standing ? (
-        <StateGlyph glyph={<BotIcon />} state={workerStanding(worker).state} />
+        <StateGlyph
+          glyph={<SubagentMark model={workerChoice(worker)?.model} />}
+          state={workerStanding(worker).state}
+        />
       ) : (
-        <BotIcon />
+        <SubagentMark model={workerChoice(worker)?.model} />
       ),
       section: ADD_SECTION.SUBAGENTS,
     },
@@ -275,12 +288,12 @@ export function panelEntries(input: {
       row: {
         id: String(at),
         label: name,
-        icon: standing ? <FileTypeIcon name={name} /> : <FileCodeIcon />,
+        icon: <FileTypeIcon name={name} />,
         detail: ref.path.slice(0, -name.length - 1) || undefined,
         terms: [ref.path],
         section: ADD_SECTION.FILES,
       },
-      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref)),
+      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref, ref.commit)),
     };
   });
   return [...kinds, ...subagentRows, ...fileRows];
@@ -297,10 +310,23 @@ export function planWorkers(
   });
 }
 
-/** The glyph a tab's pin wears in the sidebar: its kind's, the Coding agents glyph the "+" menu gives an agent, or a file's. */
-export function pinnedTabIcon(tab: PinnableTab): React.JSX.Element {
-  if (isAgentTab(tab)) return <TerminalIcon />;
-  return isFileTab(tab) ? <FileCodeIcon /> : TAB_ICON[tab];
+/**
+ * The glyph a tab's pin wears in the sidebar: its kind's, a file's, the
+ * Inbox's tray, or an agent's as its tab wears it, where it stands included, wherever the
+ * window last read the agent (`agent`), and otherwise the mark of the
+ * harness it ran in when it was pinned.
+ */
+export function pinnedTabIcon(
+  pin: PinnedTab,
+  agent: Pick<CodingAgentSummary, "model" | "status"> | undefined,
+): React.JSX.Element {
+  const { tab } = pin;
+  if (isAgentTab(tab)) {
+    if (agent !== undefined) return <AgentGlyph agent={agent} />;
+    return <AgentMark provider={pin.model === undefined ? undefined : providerOf(pin.model)} />;
+  }
+  if (tab === MAIN_TAB.INBOX) return <InboxIcon />;
+  return isFileTab(tab) ? <FileTypeIcon name={fileName(tab.file)} /> : TAB_ICON[tab];
 }
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
@@ -314,12 +340,12 @@ interface DrawnTab {
 
 /**
  * The tabs the strip draws, in their kinds' order: the open fixed tabs, the
- * subagents, and the files. A delegated worker's transcript is read whole
- * from the service for a copy, since its tab holds it only while shown; a
- * planning worker's is the session the plan's work already holds. A
- * subagent's tab hangs a card on hover, previewing its latest step from
- * what its tab last held (`heldLatest`) or the plan's work holds, and never
- * reading the service for it.
+ * subagents, the files, and the agents' changes. A delegated worker's
+ * transcript is read whole from the service for a copy, since its tab
+ * holds it only while shown; a planning worker's is the session the plan's
+ * work already holds. A subagent's tab hangs a card on hover, previewing
+ * its latest step from what its tab last held (`heldLatest`) or the plan's
+ * work holds, and never reading the service for it.
  */
 function stripTabs(input: {
   panel: SidePanelControl;
@@ -327,10 +353,11 @@ function stripTabs(input: {
   agents: CodingAgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
+  changes: readonly ChangesStripTab[];
   held: HeldTranscripts;
   copied: TranscriptCopier;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, held, copied } = input;
+  const { panel, unread, agents, subagents, files, changes, held, copied } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -350,27 +377,25 @@ function stripTabs(input: {
   const subagentTabs = subagents.map(({ tab, label, untitled, state, stateWords, worker }) => {
     const running = state === GLYPH_STATE.WORKING;
     const { delegation } = tab;
+    // Note that a delegated worker's pair is read from the call that started
+    // it, among what its agent's tab last held, whatever turn that was,
+    // because the call says it once and for good; its agent's own model
+    // stands in for the mark until that call is held.
+    const parent =
+      delegation === undefined
+        ? undefined
+        : agents.agents?.find((agent) => agent.id === delegation.agent);
+    const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
+    const started =
+      delegation === undefined ? undefined : held.agents.get(delegation.agent)?.messages;
+    const delegated = own && delegatedChoice(started, tab.subagent, own);
+    const model =
+      delegation === undefined
+        ? worker && workerChoice(worker)?.model
+        : (delegated?.model ?? parent?.model);
     // A worker runs one turn, so the run its tab last read is its run for good.
     const readCard = () => {
-      if (delegation === undefined) {
-        const session = worker?.session;
-        return {
-          corner: cardCorner({
-            writing: running,
-            startedAt: session?.startedAt,
-            movedAt: session?.endedAt,
-            state: stateWords,
-          }),
-          choice: worker && workerChoice(worker),
-          transcript: worker && workerTranscript(worker),
-        };
-      }
-      // Note that the pair is read from the call that started the worker,
-      // among what its agent's tab last held, whatever turn that was, because
-      // the call says it once and for good.
-      const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
-      const own = parent === undefined ? undefined : { model: parent.model, effort: parent.effort };
-      const started = held.agents.get(delegation.agent)?.messages;
+      if (delegation === undefined) return workerCardReading(worker);
       const drawn = held.workers.get(tab.subagent);
       const now = { writing: running, runStartedAt: drawn?.runStartedAt };
       const messages = heldLatest(drawn, now, chosen(tab));
@@ -381,7 +406,7 @@ function stripTabs(input: {
           movedAt: lastFinished(messages),
           state: stateWords,
         }),
-        choice: own && delegatedChoice(started, tab.subagent, own),
+        choice: delegated,
         transcript:
           messages &&
           agentTranscript({ title: label, messages, brief: undefined, task: delegation.task }),
@@ -406,7 +431,7 @@ function stripTabs(input: {
     return {
       tab,
       look: look(tab, {
-        icon: <StateGlyph glyph={<BotIcon />} state={state} />,
+        icon: <StateGlyph glyph={<SubagentMark model={model} />} state={state} />,
         endMark: stateEndMark(state, false),
         label,
         card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,
@@ -417,10 +442,18 @@ function stripTabs(input: {
   });
   const fileTabs = files.map(({ path }) => ({
     tab: { file: path },
-    look: look({ file: path }, { icon: <FileCodeIcon />, label: fileName(path), tooltip: path }),
+    look: look(
+      { file: path },
+      { icon: <FileTypeIcon name={fileName(path)} />, label: fileName(path), tooltip: path },
+    ),
     close: () => panel.onClose({ file: path }),
   }));
-  return [...fixed, ...subagentTabs, ...fileTabs];
+  const changesTabs = changes.map((tab) => ({
+    tab,
+    look: look(tab, { icon: <FileDiffIcon />, label: changesTabLabel(tab.changes, agents) }),
+    close: () => panel.onClose(tab),
+  }));
+  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs];
 }
 
 /**
@@ -452,6 +485,7 @@ function PanelTabs({
   subagents,
   workers,
   files,
+  changes,
   shownFiles,
   held,
 }: {
@@ -468,13 +502,15 @@ function PanelTabs({
   workers: readonly WorkWorkerBlock[];
   /** The open file tabs of files shown on the plan, in the strip's order. */
   files: readonly OpenFile[];
+  /** The open Changes tabs of agents whose tabs stand open, in the order opened. */
+  changes: readonly ChangesStripTab[];
   /** Each file Luke showed on the plan, which the "+" offers. */
-  shownFiles: readonly CodeRef[];
+  shownFiles: readonly ShownFile[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const kinds = stripTabs({ panel, unread, agents, subagents, files, held, copied });
+  const kinds = stripTabs({ panel, unread, agents, subagents, files, changes, held, copied });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
@@ -582,17 +618,47 @@ interface DrawnSubagent {
 
 /**
  * Where a planning worker stands as its tab wears it: working while its
- * call still moves, and at rest once it ended. Note that a worker whose call
- * failed is said to have stopped rather than failed, because that is a
- * worker whose planning call ended under it, as its own transcript's end
- * line says (`plan-work.tsx`), and no failure of its own.
+ * call still moves, failed where its session's own task failed, as an
+ * agent's failed turn is, even where the planning model answered the call
+ * and went on, and at rest once it ended otherwise. Note that a
+ * worker whose call ended without answering and whose task recorded no
+ * failure is said to have stopped, because that is a worker the developer
+ * stopped or whose planning call ended under it, as its own transcript's
+ * end line says (`plan-work.tsx`), and no failure of its own.
  */
 function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
   if (worker.call.running) {
     return { state: GLYPH_STATE.WORKING, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.WORKING] };
   }
+  if (workFailed(worker.session?.record)) {
+    return { state: GLYPH_STATE.FAILED, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.FAILED] };
+  }
   const stopped = worker.call.state === PLAN_WORK_STATE.FAILED;
   return { state: GLYPH_STATE.REST, stateWords: stopped ? "Stopped" : undefined };
+}
+
+/**
+ * What a planning worker's card says: where it stands and when it last
+ * moved, the model it ran on, and its latest step, from the session the
+ * plan's work holds. Its tab's card and its row's in the plan's summary both
+ * say it. A worker the work no longer holds says nothing, as its tab is
+ * then not drawn (`drawnSubagents`).
+ */
+export function workerCardReading(worker: WorkWorkerBlock | undefined): CardReading {
+  const { state, stateWords } =
+    worker === undefined
+      ? { state: GLYPH_STATE.REST, stateWords: undefined }
+      : workerStanding(worker);
+  return {
+    corner: cardCorner({
+      writing: state === GLYPH_STATE.WORKING,
+      startedAt: worker?.session?.startedAt,
+      movedAt: worker?.session?.endedAt,
+      state: stateWords,
+    }),
+    choice: worker && workerChoice(worker),
+    transcript: worker && workerTranscript(worker),
+  };
 }
 
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
@@ -683,7 +749,7 @@ function TabContent({
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
-  onOpenFile: (ref: CodeRef) => void;
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File tab's tree is open, which holds for every File tab alike, and its toggle. */
   fileTree: { readonly open: boolean; readonly onToggle: () => void };
   /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
@@ -700,6 +766,11 @@ function TabContent({
   onRevealed: () => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isChangesTab(tab)) {
+    return (
+      <AgentChangesTab key={tab.changes} agentId={tab.changes} control={agents} shown={shown} />
+    );
+  }
   if (isFileTab(tab)) {
     const file = files.find((each) => each.path === tab.file);
     // The tab stands for a file no longer open only until the panel moves
@@ -1066,6 +1137,8 @@ export function SidePanel({
   const files = panel.files.filter(
     (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
   );
+  // An agent's Changes tab stands while the agent's own tab does.
+  const changes = panel.changes.filter((each) => drawsChanges(each, { agents: openAgents }));
   const label =
     tab === undefined
       ? undefined
@@ -1073,7 +1146,9 @@ export function SidePanel({
         ? subagents.find((each) => sameTab(each.tab, tab))?.label
         : isFileTab(tab)
           ? tab.file
-          : SIDE_PANEL_TAB_KIND[tab].label;
+          : isChangesTab(tab)
+            ? changesTabLabel(tab.changes, agents)
+            : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1123,6 +1198,7 @@ export function SidePanel({
             subagents={subagents}
             workers={workers}
             files={files}
+            changes={changes}
             shownFiles={offered}
             held={drawnTranscripts}
           />

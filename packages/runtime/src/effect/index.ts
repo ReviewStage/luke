@@ -1,3 +1,4 @@
+export { causeKind, failureKind } from "./failure-kind.js";
 export { catchAllButInterrupt, unlessInterrupted } from "./fallback.js";
 export { onOwnFiber } from "./own-fiber.js";
 export {

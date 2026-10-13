@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { GITHUB_ACCOUNT_TYPE } from "@sidecar/database/github-installation-vocabulary";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
+import { account, user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
-import { account, user } from "../server/db/auth-schema";
-import { GITHUB_ACCOUNT_TYPE } from "../server/db/github-installation-vocabulary";
-import { db } from "../server/db/query";
 import {
   CI_READ_PERMISSIONS,
   GITHUB_FAILURE,
@@ -18,7 +20,6 @@ import {
   githubAppFromEnvironment,
   SIGN_IN_REQUIRED,
 } from "../server/github/github-app";
-import { InstantColumnSchema } from "../server/hosted/store/database";
 import {
   fakeGitHub,
   GITHUB_APP_PUBLIC_KEY,
@@ -30,7 +31,6 @@ import {
   type RepositoryFixture,
   standingGithubRow,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the
@@ -276,7 +276,7 @@ function instantOf(value: Date | null): number | null {
   return decodeInstant(value)?.getTime() ?? null;
 }
 
-it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => {
+it.layer(getTestDB())("a signed-in user's token off the account row", (it) => {
   it.effect("a token with hours left is handed out as stored, with no word to GitHub", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;

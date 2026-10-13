@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import {
+  recordVoiceSeconds,
+  utcDayKey,
+  VOICE_SECONDS_OUTCOME,
+} from "@sidecar/database/models/quota";
+import { user } from "@sidecar/database/schemas/auth";
+import { voiceSessionUsage } from "@sidecar/database/schemas/usage";
+import { getTestDB } from "@sidecar/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { voiceSessionUsage } from "../server/db/usage-schema";
-import { recordVoiceSeconds, utcDayKey, VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
-import { testSqlClient } from "./support/sql-client";
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 
@@ -24,7 +28,7 @@ const sessionUsageRows = (sessionId: string) =>
     .from(voiceSessionUsage)
     .where(eq(voiceSessionUsage.sessionId, sessionId));
 
-it.layer(testSqlClient)("recording a live session's billed seconds", (it) => {
+it.layer(getTestDB())("recording a live session's billed seconds", (it) => {
   it.effect(
     "records a session's seconds once, and a report repeated for the same session records nothing",
     () =>

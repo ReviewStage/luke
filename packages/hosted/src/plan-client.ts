@@ -36,6 +36,7 @@ import {
   type PlanRenameRequest,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
+  type PlanSkillsAnswer,
   type PlanSummary,
   type PlanTreeAnswer,
   type PlanTreeRequest,
@@ -49,6 +50,7 @@ import {
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planSkillsAnswerSchema,
   planTreeAnswerSchema,
   planTreeRequestSchema,
   planUpdateRequestSchema,
@@ -73,6 +75,7 @@ import {
   planRestorePath,
   planRevisionPath,
   planRevisionsPath,
+  planSkillsPath,
   planTranscriptPath,
   planTreePath,
   planWorkPath,
@@ -187,8 +190,8 @@ export class HostedPlanClient {
   }
 
   /**
-   * Saves the developer's edit of one field, answering the plan as saved,
-   * the field as it now stands where the edit no longer lands in it, or why
+   * Saves the developer's edit of the document, answering the plan as saved,
+   * the text as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
    * the plan is gone, or it is archived. An edit the service would refuse by shape is
    * refused here without traveling at all.
@@ -362,6 +365,16 @@ export class HostedPlanClient {
     );
   }
 
+  /** The skills a developer may choose of the plan's repository as GitHub holds it now, or why they are not read; nothing where the service did not answer. */
+  readSkills(
+    planId: string,
+  ): Effect.Effect<PlanSkillsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planSkillsPath(planId) },
+      planSkillsAnswerSchema,
+    );
+  }
+
   /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
   readRevisions(
     planId: string,
@@ -514,7 +527,7 @@ export class HostedPlanClient {
   }
 
   /**
-   * Starts a plan with the fixed template untouched, on the repository the
+   * Starts a plan from the account's template, on the repository the
    * request names where it names one; a request the service would refuse by
    * shape is refused here without traveling at all, and a repository the
    * service refused is answered as the refusal it was.

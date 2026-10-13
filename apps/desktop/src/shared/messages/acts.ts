@@ -15,6 +15,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type CodingAgentAgentAnswer,
+  type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -25,6 +26,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
+  codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -43,25 +45,37 @@ import {
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionsAnswerView,
   type ProviderKeysAnswerView,
   planTemplateAnswerViewSchema,
+  planTemplateRevisionAnswerViewSchema,
+  planTemplateRevisionParamsSchema,
+  planTemplateRevisionsAnswerViewSchema,
+  planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  type LinearConnectView,
-  type LinearStatusView,
-  linearConnectViewSchema,
-  linearStatusViewSchema,
-} from "@sidecar/hosted/linear-view";
+  type IntegrationConnectView,
+  type IntegrationStatusesView,
+  type IntegrationStatusView,
+  type IntegrationToolsView,
+  integrationConnectViewSchema,
+  integrationProviderParamsSchema,
+  integrationStatusesViewSchema,
+  integrationStatusViewSchema,
+  integrationToolsViewSchema,
+} from "@sidecar/hosted/integration-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type CodeLines,
@@ -72,6 +86,7 @@ import {
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
+  type PlanningSkillsAnswer,
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
   planningArchiveParamsSchema,
@@ -91,6 +106,8 @@ import {
   planningRevisionsParamsSchema,
   planningSetRepositoryAnswerSchema,
   planningSetRepositoryParamsSchema,
+  planningSkillsAnswerSchema,
+  planningSkillsParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
   planningTreeAnswerSchema,
@@ -151,13 +168,16 @@ export const ACT_KIND = {
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
   /**
-   * The account's Linear connection: where it stands, a browser sign-in
-   * begun and opened by the host, and the connection ended. The window
-   * hears whether the browser was sent, never the address it was sent to.
+   * The account's integrations: where every one stands, a browser sign-in
+   * to one begun and opened by the host, and one connection ended. The
+   * window hears whether the browser was sent, never the address it was
+   * sent to.
    */
-  LINEAR_STATUS: "linear.status",
-  LINEAR_CONNECT: "linear.connect",
-  LINEAR_DISCONNECT: "linear.disconnect",
+  INTEGRATIONS_STATUS: "integrations.status",
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** The tools one provider's server offers the account's agents, read from the service when a list of them is shown. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   UPDATE_CHECK: "update.check",
@@ -187,10 +207,12 @@ export const ACT_KIND = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
-  /** The developer's edit of one field of the open plan, saved on the service; answers saved, a conflict with what the field holds now, or why nothing was saved. */
+  /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
+  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
+  WEB_OPEN: "web.open",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -201,6 +223,8 @@ export const ACT_KIND = {
   PLANNING_FILE: "planning.file",
   /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
   PLANNING_TREE: "planning.tree",
+  /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  PLANNING_SKILLS: "planning.skills",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -242,6 +266,7 @@ export const ACT_KIND = {
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /**
@@ -251,6 +276,8 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -264,10 +291,14 @@ export const ACT_KIND = {
    * Settings › Plan template: the Markdown the account's new plans start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then
-   * keeps it.
+   * keeps it. Its version history reads a page of revisions and one
+   * revision at a time, and a restore answers the template as a write does.
    */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * A clip dictated into a message box, carried once from the panel that
    * recorded it to the service and answered with its words. Nothing on the
@@ -478,6 +509,28 @@ const githubAddress = EffectSchema.String.check(
   EffectSchema.isPattern(GITHUB_ADDRESS),
 );
 
+/** Whether `github.open` takes an address, so a link drawn as a press is one the act will open. */
+export const isGitHubAddress: (address: string) => boolean = EffectSchema.is(githubAddress);
+
+/** An absolute web address's scheme, which is all `web.open` lets through to the browser. */
+const WEB_ADDRESS = /^https?:\/\//iu;
+
+/**
+ * An address on the web, wherever it is: an absolute http or https address
+ * the URL parser reads. Note that the scheme is the whole of the check,
+ * because the browser is the one thing it opens in, and a `file:`,
+ * `javascript:`, or another app's scheme would hand the address to
+ * something else.
+ */
+const webAddress = EffectSchema.String.check(
+  EffectSchema.isMaxLength(2_048),
+  EffectSchema.isPattern(WEB_ADDRESS),
+  EffectSchema.makeFilter((address) => URL.canParse(address)),
+);
+
+/** Whether `web.open` takes an address, so a link drawn as a press is one the act will open. */
+export const isWebAddress: (address: string) => boolean = EffectSchema.is(webAddress);
+
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in AppSettingField]: {
@@ -635,6 +688,11 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not open GitHub on this system.",
   },
+  [ACT_KIND.WEB_OPEN]: {
+    payload: record({ url: webAddress }),
+    result: answersNothing,
+    refusal: "Could not open that link on this system.",
+  },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.WORKSPACE_JOIN]: {
     payload: actSchema(planningWorkspaceJoinParamsSchema),
@@ -671,6 +729,11 @@ export const ACT = {
     result: wireResult<PlanningTreeAnswer>(isReadable(planningTreeAnswerSchema)),
     refusal: "Could not list that folder on this system.",
   },
+  [ACT_KIND.PLANNING_SKILLS]: {
+    payload: actSchema(planningSkillsParamsSchema),
+    result: wireResult<PlanningSkillsAnswer>(isReadable(planningSkillsAnswerSchema)),
+    refusal: "Could not read this repository's skills on this system.",
+  },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     payload: record({
       language: exactText(FENCE_LANGUAGE_MAX_CHARS),
@@ -697,20 +760,25 @@ export const ACT = {
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",
   ),
-  [ACT_KIND.LINEAR_STATUS]: {
+  [ACT_KIND.INTEGRATIONS_STATUS]: {
     payload: noPayload,
-    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
-    refusal: "Could not read the Linear connection on this system.",
+    result: wireResult<IntegrationStatusesView>(isReadable(integrationStatusesViewSchema)),
+    refusal: "Could not read your integrations on this system.",
   },
-  [ACT_KIND.LINEAR_CONNECT]: {
-    payload: noPayload,
-    result: wireResult<LinearConnectView>(isReadable(linearConnectViewSchema)),
-    refusal: "Could not connect Linear on this system.",
+  [ACT_KIND.INTEGRATIONS_CONNECT]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationConnectView>(isReadable(integrationConnectViewSchema)),
+    refusal: "Could not connect that integration on this system.",
   },
-  [ACT_KIND.LINEAR_DISCONNECT]: {
-    payload: noPayload,
-    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
-    refusal: "Could not disconnect Linear on this system.",
+  [ACT_KIND.INTEGRATIONS_TOOLS]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationToolsView>(isReadable(integrationToolsViewSchema)),
+    refusal: "Could not read that integration's tools on this system.",
+  },
+  [ACT_KIND.INTEGRATIONS_DISCONNECT]: {
+    payload: actSchema(integrationProviderParamsSchema),
+    result: wireResult<IntegrationStatusView>(isReadable(integrationStatusViewSchema)),
+    refusal: "Could not disconnect that integration on this system.",
   },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,
@@ -759,6 +827,11 @@ export const ACT = {
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not rename the agent on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_SERVERS]: {
+    payload: actSchema(codingAgentServersParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not switch the agent's MCP servers on this system.",
+  },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     payload: actSchema(codingAgentStopParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
@@ -784,6 +857,13 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's pull request on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_CHANGES]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentChangesAnswerView>(
+      isReadable(codingAgentChangesAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's changes on this system.",
+  },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,
     result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
@@ -808,6 +888,25 @@ export const ACT = {
     payload: actSchema(planTemplateWriteParamsSchema),
     result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
     refusal: "Could not save your plan template on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: {
+    payload: actSchema(planTemplateRevisionsParamsSchema),
+    result: wireResult<PlanTemplateRevisionsAnswerView>(
+      isReadable(planTemplateRevisionsAnswerViewSchema),
+    ),
+    refusal: "Could not read your plan template's history on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
+    payload: actSchema(planTemplateRevisionParamsSchema),
+    result: wireResult<PlanTemplateRevisionAnswerView>(
+      isReadable(planTemplateRevisionAnswerViewSchema),
+    ),
+    refusal: "Could not read that version on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
+    payload: actSchema(planTemplateRevisionParamsSchema),
+    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
+    refusal: "Could not restore that version on this system.",
   },
   [ACT_KIND.DICTATION_TRANSCRIBE]: {
     payload: actSchema(dictationTranscribeParamsSchema),

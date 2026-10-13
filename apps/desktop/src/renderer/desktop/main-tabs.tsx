@@ -5,14 +5,25 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { DocumentIcon, PlusIcon, TerminalIcon } from "@sidecar/panel";
+import { DocumentIcon, PlusIcon } from "@sidecar/panel";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { AgentGlyph, AgentTab, agentEndMark } from "../planning/agent-tab";
-import { AgentTabCard, cardCorner, heldLatest, lastFinished } from "../planning/agent-tab-card";
-import { agentStateWords, agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
+import { AgentGlyph, AgentMark, AgentTab, agentEndMark } from "../planning/agent-tab";
+import {
+  AgentTabCard,
+  type CardReading,
+  cardCorner,
+  heldLatest,
+  lastFinished,
+} from "../planning/agent-tab-card";
+import {
+  agentStateWords,
+  agentStillWriting,
+  agentTabLabel,
+  providerOf,
+} from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import {
   inPlanOrder,
@@ -28,7 +39,7 @@ import {
 } from "../planning/transcript-copy";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-main-tabs";
-import type { PinnedTab } from "../planning/use-side-panel";
+import type { ColumnPinnableTab, PinnedTab } from "../planning/use-side-panel";
 import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { useAgentArchive } from "./agent-archive";
@@ -37,8 +48,10 @@ import {
   type AddEntry,
   AddTabButton,
   DoorsTab,
+  type HeldTranscripts,
   type TabDoors,
   type TabLook,
+  type TabPin,
   type TabViews,
   type TranscriptCopier,
   type TranscriptRead,
@@ -67,7 +80,9 @@ import { TabStrip } from "./tab-strip";
  * moves as an agent's tab does (`use-main-tabs.ts`). It counts the items
  * that wait on the developer after its name, dimmed as a model's effort is
  * after the model's, so an item posted while the developer reads elsewhere
- * is seen from any tab.
+ * is seen from any tab. Its menu offers Pin tab as an agent's does; pinned,
+ * it wears no × and offers no Close, so it stands on its plan whether or
+ * not anything new waits, until Unpin tab.
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -101,10 +116,10 @@ const NEW_AGENT_ROW = "new-coding-agent";
 const NEW_AGENT_STARTING = "Starting…";
 
 /** What the plan's Inbox tab is called. */
-const INBOX_LABEL = "Inbox";
+export const INBOX_LABEL = "Inbox";
 
-/** The "+" menu's row that opens the plan's Inbox, which no agent's id spells. */
-const INBOX_ROW = "inbox";
+/** The row that opens the plan's Inbox, which no agent's id spells. */
+export const INBOX_ROW = "inbox";
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
@@ -208,6 +223,39 @@ interface DrawnTab {
 }
 
 /**
+ * What an agent's card says, read from what its tab last held as the card
+ * is hung (`heldLatest`): where it stands and when it last moved, its pair,
+ * and its latest step. Its tab's card and its row's in the plan's summary
+ * both say it, `chosen` telling whether its tab is the one shown, whose
+ * transcript follows the run. Note that an agent with no turn finished in
+ * what its tab holds last moved when its newest run began, the latest
+ * moment its summary knows.
+ */
+export function agentCardReading(
+  agent: CodingAgentSummary,
+  label: string,
+  held: HeldTranscripts,
+  chosen: boolean,
+): () => CardReading {
+  return () => {
+    const writing = agentStillWriting(agent.status);
+    const now = { writing, runStartedAt: agent.runStartedAt };
+    const messages = heldLatest(held.agents.get(agent.id), now, chosen);
+    const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
+    return {
+      corner: cardCorner({
+        writing,
+        startedAt: agent.runStartedAt,
+        movedAt,
+        state: agentStateWords(agent.status),
+      }),
+      choice: { model: agent.model, effort: agent.effort },
+      transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
+    };
+  };
+}
+
+/**
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
@@ -234,24 +282,7 @@ function agentTabs(input: {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
     const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
-    // Note that an agent with no turn finished in what its tab holds last
-    // moved when its newest run began, the latest moment its summary knows.
-    const readCard = () => {
-      const writing = agentStillWriting(agent.status);
-      const now = { writing, runStartedAt: agent.runStartedAt };
-      const messages = heldLatest(views.held.agents.get(agent.id), now, chosen(tab));
-      const movedAt = lastFinished(messages) ?? agent.runStartedAt ?? agent.createdAt;
-      return {
-        corner: cardCorner({
-          writing,
-          startedAt: agent.runStartedAt,
-          movedAt,
-          state: agentStateWords(agent.status),
-        }),
-        choice: { model: agent.model, effort: agent.effort },
-        transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
-      };
-    };
+    const readCard = agentCardReading(agent, label, views.held, chosen(tab));
     return {
       tab,
       agent,
@@ -284,11 +315,11 @@ function agentTabs(input: {
 
 /**
  * Each of the plan's agents in the order started, as the "+" menu offers it
- * and the plan's summary lists it (`plan-summary.tsx`). In the "+" it wears
- * the Coding agents glyph and says nothing of where it stands, which its
- * tab does; the summary has no tab beside it to say it, so there it wears
- * its harness's mark for where it stands, and a failure at its end, as its
- * tab does (`standing`).
+ * and the plan's summary lists it (`plan-summary.tsx`), wearing the mark of
+ * its harness. In the "+" the mark says nothing of where the agent stands,
+ * which its tab does; the summary has no tab beside it to say it, so there
+ * the mark wears where it stands, and a failure at its end, as its tab does
+ * (`standing`).
  * Picking an agent whose tab is open chooses that tab rather than opening
  * another, as a browser's tab search does.
  */
@@ -301,7 +332,11 @@ export function agentEntries(
     row: {
       id: agent.id,
       label: agentTabLabel(agent, agents.models),
-      icon: standing ? <AgentGlyph agent={agent} /> : <TerminalIcon />,
+      icon: standing ? (
+        <AgentGlyph agent={agent} />
+      ) : (
+        <AgentMark provider={providerOf(agent.model)} />
+      ),
       section: AGENTS_SECTION,
     },
     endMark: standing ? agentEndMark(agent, true) : undefined,
@@ -311,22 +346,40 @@ export function agentEntries(
 }
 
 /**
- * The plan's Inbox as the "+" menu, the plan's summary, and ⌘K offer it,
- * among the plan's agents, since only they post to it; none on a plan with
+ * The plan's Inbox as a row: its tray and its name, then what waits on the
+ * developer counted at its end in the sidebar's quiet count, and nothing at
+ * none. It names no section, so the summary lists it under Tabs, beside the
+ * panel's kinds.
+ */
+export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
+  const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon /> };
+  const endMark =
+    waiting === 0 ? undefined : (
+      <span className="inbox-row-count">
+        {waiting}
+        <span className="visually-hidden"> waiting</span>
+      </span>
+    );
+  return { row, endMark, onPick };
+}
+
+/**
+ * The plan's Inbox as the "+" menu and ⌘K offer it, by itself rather than
+ * among the plan's agents, though only they post to it; none on a plan with
  * no agent. Picking it opens the tab where it was closed and chooses it,
  * through `onPick`.
  */
 export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the plan holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
-  const row = { id: INBOX_ROW, label: INBOX_LABEL, icon: <InboxIcon />, section: AGENTS_SECTION };
-  return [{ row, onPick }];
+  return [inboxEntry(onPick, 0)];
 }
 
 /**
- * The "+" menu's rows: New coding agent, unavailable with Start's own
- * reason while Start could not run, and left out on an archived plan; then
- * the plan's Inbox and each of its agents (`inboxEntries`, `agentEntries`).
+ * The "+" menu's rows: the plan's Inbox first, by itself under no heading
+ * (`inboxEntries`); New coding agent, unavailable with Start's own reason
+ * while Start could not run, and left out on an archived plan; then each
+ * of its agents under Coding agents (`agentEntries`).
  */
 function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
@@ -342,7 +395,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
   };
   const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
   const agentRows = agentEntries(main, agents, false);
-  return [...(agents.onUnarchive === undefined ? [newAgent] : []), ...inbox, ...agentRows];
+  return [...inbox, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
 /**
@@ -372,8 +425,8 @@ export function MainTabStrip({
   /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
   pins: {
     pinned: readonly PinnedTab[];
-    onPin: (tab: { agent: string }, label: string) => void;
-    onUnpin: (planId: string, tab: { agent: string }) => void;
+    onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
+    onUnpin: (planId: string, tab: ColumnPinnableTab) => void;
   };
   /** The plan's rename, which its tab's menu opens; none while the plan is archived. */
   rename: ReturnType<typeof usePlanRename> | undefined;
@@ -385,6 +438,10 @@ export function MainTabStrip({
   inbox: number;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const pinnedOf = (tab: ColumnPinnableTab) =>
+    pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
+  // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
+  const inboxPinned = pinnedOf(MAIN_TAB.INBOX);
   const inboxTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.INBOX)
     ? [
         {
@@ -396,7 +453,7 @@ export function MainTabStrip({
             selected: main.tab === MAIN_TAB.INBOX,
             onSelect: () => main.onChoose(MAIN_TAB.INBOX),
           },
-          close: () => main.onClose(MAIN_TAB.INBOX),
+          close: inboxPinned ? undefined : () => main.onClose(MAIN_TAB.INBOX),
         },
       ]
     : [];
@@ -423,14 +480,24 @@ export function MainTabStrip({
   const strip = [planTab, ...own];
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
+    const pinned = pinnedOf(tab);
+    return {
+      pinned,
+      onToggle: () => (pinned ? pins.onUnpin(plan.id, tab) : pins.onPin(tab, label, model)),
+    };
+  };
   const doorsOf = (entry: DrawnTab): TabDoors => {
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
     const { agent } = entry;
-    const pinned =
-      agent !== undefined &&
-      pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, { agent: agent.id }));
+    const pinTab: ColumnPinnableTab | undefined =
+      agent !== undefined
+        ? { agent: agent.id }
+        : entry.tab === MAIN_TAB.INBOX
+          ? MAIN_TAB.INBOX
+          : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -441,16 +508,7 @@ export function MainTabStrip({
               for (const close of others) close();
               main.onChoose(entry.tab);
             },
-      pin:
-        agent === undefined
-          ? undefined
-          : {
-              pinned,
-              onToggle: () =>
-                pinned
-                  ? pins.onUnpin(plan.id, { agent: agent.id })
-                  : pins.onPin({ agent: agent.id }, entry.look.label),
-            },
+      pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
     };
   };
@@ -519,7 +577,8 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * What an agent's or the draft's tab shows in the column: the agent's
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
- * `onOpenDelegation`.
+ * `onOpenDelegation`, and its Changes chip its pull request's changes,
+ * through `onOpenChanges`.
  */
 export function MainTabContent({
   tab,
@@ -527,6 +586,7 @@ export function MainTabContent({
   shown,
   views,
   onOpenDelegation,
+  onOpenChanges,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -539,6 +599,8 @@ export function MainTabContent({
     task: string,
     status: CodingAgentStatus,
   ) => void;
+  /** Opens the agent's changes in the side panel, by the agent. */
+  onOpenChanges: (agentId: string) => void;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -561,6 +623,7 @@ export function MainTabContent({
       control={agents}
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+      onOpenChanges={() => onOpenChanges(agent.id)}
       onHeld={views.onAgentHeld}
     />
   );

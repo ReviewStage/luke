@@ -29,7 +29,10 @@ import { Effect, Schema } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { selectedText, sheetStyle } from "#testing/css-rules";
 import { codingAgentsControl } from "#testing/plans-control";
 import { InboxBoard, type InboxCodeDoors } from "./inbox-board";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -297,7 +300,7 @@ function Tab({
         control: inbox,
         agents,
         onOpenAgent: () => undefined,
-        openGitHub: (url) => opened.push(url),
+        openLink: (url) => opened.push(url),
         code,
       })
     : null;
@@ -398,7 +401,7 @@ const taking =
   });
 
 it.effect(
-  "the plan's open items are drawn the oldest first with their blocks and controls, a choice's recommendation marked, a link opening on GitHub and one elsewhere inert with its address, and a task its agent need not hear back from saying so; a later read adds what landed",
+  "the plan's open items are drawn the oldest first with their blocks and controls, a choice's recommendation marked, a link on GitHub and one elsewhere each opening in the browser, and a task its agent need not hear back from saying so; a later read adds what landed",
   () =>
     Effect.gen(function* () {
       const later = item({
@@ -440,9 +443,11 @@ it.effect(
       const links = card(page, SETTINGS.id).querySelectorAll("[data-inbox-link]");
       assert.equal(links.length, 2);
       press(links[0]?.querySelector("a"));
-      assert.deepEqual(opened, ["https://github.com/acme/relay/settings/branches"]);
-      assert.equal(links[1]?.querySelector("a"), null, "a page off GitHub is no press");
-      assert.equal(links[1]?.textContent, "Why https://example.test/why");
+      press(links[1]?.querySelector("a"));
+      assert.deepEqual(opened, [
+        "https://github.com/acme/relay/settings/branches",
+        "https://example.test/why",
+      ]);
       assert.ok(card(page, SETTINGS.id).querySelector("[data-inbox-quiet]"));
       assert.equal(card(page, QUEUE.id).querySelector("[data-inbox-quiet]"), null);
       assert.ok(buttonNamed(card(page, later.id), "Approve"));
@@ -450,7 +455,46 @@ it.effect(
 );
 
 it.effect(
-  "a pick sent answers the item with the option and the note under a key of its own, and the card settles saying what was said",
+  "a link in an item's words opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and a mail address is words that go nowhere",
+  () =>
+    Effect.gen(function* () {
+      const sent = installActBridge();
+      const linked = item({
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "linked",
+        title: "Merge the migration first?",
+        blocks: [
+          {
+            type: INBOX_BLOCK.MARKDOWN,
+            text: "See [the pull request](https://github.com/acme/relay/pull/7), [the docs](https://example.test/docs), and [mail](mailto:dean@example.test).",
+          },
+        ],
+        response: { type: INBOX_RESPONSE.APPROVAL },
+      });
+      const { agents } = service([{ items: [linked], cursor: "1000.1" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+
+      const words = card(page, linked.id).querySelector("[data-inbox-markdown]");
+      assert.ok(words);
+      assert.equal(words.querySelector('[href="mailto:dean@example.test"]'), null);
+      assert.equal(words.querySelector(".agent-link-inert")?.textContent, "mail");
+      for (const link of words.querySelectorAll<HTMLAnchorElement>("a.agent-link")) {
+        const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+        act(() => {
+          link.dispatchEvent(click);
+        });
+        assert.equal(click.defaultPrevented, true);
+      }
+      assert.deepEqual(sent, [
+        { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
+      ]);
+    }),
+);
+
+it.effect(
+  "a pick sent answers the item with the option and the note under a key of its own, and the card settles saying what was said, the note selectable",
   () =>
     Effect.gen(function* () {
       const { agents, sent } = service([{ items: [QUEUE], cursor: "1000.1" }], [taking(QUEUE)]);
@@ -484,10 +528,12 @@ it.effect(
       const settled = card(page, QUEUE.id);
       assert.equal(
         settled.querySelector("summary")?.textContent,
-        "Chose Redis · Which queue sends the invitation emails?",
+        "Chose Redis · Which queue sends the invitation emails?now",
       );
       press(settled.querySelector("summary"));
       assert.ok(settled.textContent?.includes("Keep it simple."), "the note inside");
+      const style = yield* Effect.promise(() => sheetStyle());
+      assert.ok(selectedText(style, settled).includes("Keep it simple."), "the note selects");
     }),
 );
 
@@ -1038,4 +1084,98 @@ it.effect(
       assert.ok(shot.querySelector("[data-inbox-image] img"), "the picture is drawn");
       assert.equal(shot.querySelector("[data-inbox-image-failed]"), null);
     }),
+);
+
+/** The window's one tooltip once the pointer comes over the element: what it says, while one stands. */
+function tooltipOver(element: Element | null | undefined): string | undefined {
+  assert.ok(element, "nothing to point at");
+  act(() => {
+    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return document.body.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+}
+
+it.effect(
+  "an item whose agent this window does not list still leads with a glyph, and its time shows the moment in the shared tooltip",
+  () =>
+    Effect.gen(function* () {
+      const elsewhere = {
+        ...QUEUE,
+        agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b99",
+        postedAt: Date.UTC(2026, 5, 15, 12),
+      };
+      const { agents } = service([{ items: [elsewhere], cursor: "1000.1" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+
+      const queue = card(page, QUEUE.id);
+      assert.ok(queue.querySelector(".state-glyph svg"), "a glyph for the unlisted agent");
+      assert.ok(buttonNamed(queue, "Coding agent"));
+      const time = queue.querySelector("time");
+      assert.equal(time?.getAttribute("title"), null, "no native tooltip");
+      assert.match(tooltipOver(time) ?? "", /Jun 15, 2026/u);
+    }),
+);
+
+it.effect(
+  "a settled card says when it settled, and one with nothing inside is a line rather than a fold that opens on nothing",
+  () =>
+    Effect.gen(function* () {
+      const closed = item({
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        response: { type: INBOX_RESPONSE.TEXT },
+        title: "Which email provider?",
+        status: INBOX_STATUS.CLOSED,
+        updatedAt: Date.UTC(2026, 5, 15, 12),
+      });
+      const answered = {
+        ...QUEUE,
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis"], note: "Keep it simple." },
+      };
+      const { agents } = service([{ items: [answered, closed], cursor: "1000.2" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(page.querySelector("[data-inbox-settled] > summary"));
+
+      const line = card(page, closed.id);
+      assert.ok(line.querySelector("summary") === null, "no fold");
+      assert.match(line.textContent ?? "", /Which email provider\?/u);
+      assert.match(tooltipOver(line.querySelector("time")) ?? "", /Jun 15, 2026/u);
+      assert.ok(card(page, QUEUE.id).querySelector("summary time"), "a fold names its time too");
+    }),
+);
+
+it.effect(
+  "hovering a choice's option fills it no more than picking it does, and a pick is ringed",
+  () =>
+    Effect.gen(function* () {
+      const styled = yield* Effect.promise(() => sheetStyle());
+      const { agents } = service([{ items: [QUEUE], cursor: "1000.1" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const [picked, hovered] = card(page, QUEUE.id).querySelectorAll<HTMLElement>(".inbox-option");
+      assert.ok(picked && hovered);
+      press(picked);
+      hovered.dataset.hovered = "";
+
+      assert.equal(styled(hovered, "background"), styled(picked, "background"));
+      assert.equal(styled(hovered, "box-shadow"), undefined);
+      assert.ok(styled(picked, "box-shadow"));
+    }),
+);
+
+it.effect("a form's text field reads in the card's body type, without Settings' key tracking", () =>
+  Effect.gen(function* () {
+    const styled = yield* Effect.promise(() => sheetStyle());
+    const { agents } = service([{ items: [SMTP], cursor: "1000.1" }], []);
+    const page = mount(agents, yield* registryOnTestClock);
+    yield* settle;
+    const field = card(page, SMTP.id).querySelector("[data-inbox-field='text'] input");
+    const body = card(page, SMTP.id).querySelector("[data-inbox-title]")?.parentElement;
+    assert.ok(field && body);
+
+    assert.equal(styled(field, "font-size"), styled(body, "font-size"));
+    assert.equal(styled(field, "letter-spacing"), "0");
+  }),
 );

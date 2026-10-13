@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { storeWriter } from "@sidecar/database/models/writer";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -9,7 +10,6 @@ import {
 } from "../hosted/brain-host/eve-sessions.js";
 import { openAiBrainModel } from "../hosted/brain-host/model.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { storeWriter } from "../hosted/store/index.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 import { PLAN_SCRIBE } from "./plan-scribe.js";

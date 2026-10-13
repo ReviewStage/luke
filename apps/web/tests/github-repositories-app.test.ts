@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { getTestDB } from "@sidecar/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -8,8 +11,6 @@ import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { GitHubApp } from "../server/github/github-app";
 import { githubRepositoriesApp } from "../server/github-repositories-app";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -20,7 +21,6 @@ import {
   githubReaching,
   openGithubUser,
 } from "./support/github-app-fake";
-import { testSqlClient } from "./support/sql-client";
 import { openInstallationWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
@@ -101,7 +101,7 @@ function listed(answered: Answer) {
   return read.success;
 }
 
-it.layer(testSqlClient)("the repositories route", (it) => {
+it.layer(getTestDB())("the repositories route", (it) => {
   it.effect(
     "lists what the bearer's account reaches through the App, most recently updated first",
     () =>

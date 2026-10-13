@@ -1,7 +1,8 @@
+import type { StoredAgentStep } from "@sidecar/database/schemas/coding-agent";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
-import type { StoredAgentStep } from "../../db/coding-agent-schema.js";
+import loadSkill from "eve/tools/load_skill";
 import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
@@ -82,6 +83,7 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
+  [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
 } as const satisfies Record<
   Exclude<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ProviderRunTool>,
   ShownTool

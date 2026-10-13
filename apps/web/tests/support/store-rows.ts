@@ -1,29 +1,22 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "@sidecar/database/models/columns";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { MessageRoleSchema } from "@sidecar/wire";
 import { and, count, eq, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
-import { user } from "../../server/db/auth-schema";
-import { devices } from "../../server/db/devices-schema";
-import { db } from "../../server/db/query";
-import {
-  conversations,
-  events,
-  messages,
-  providerCursors,
-  turns,
-} from "../../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
-import { voiceSessions, voiceTranscriptSegments } from "../../server/db/voice-schema";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**
  * Rows over the ambient `SqlClient`, for the setup and assertions a test
  * still needs beneath the store's own effects: the same tables `writer.ts`
  * and its neighbors write, reached through the shared Drizzle handle over
- * the tables their own `db/*-schema.ts` modules declare, so a column renamed
+ * the tables their own `schemas/*.ts` modules declare, so a column renamed
  * under `db/` is a type error in this file rather than a statement that
  * still parses. Every insert answers the row's minted id where the table has
  * one; every read answers the row (or rows) as the builder maps them, which
@@ -38,32 +31,22 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** A `timestamptz` column as the instant it holds, whichever of the two readings the dialect gave it. */
-export const instantColumn = Schema.decodeUnknownSync(InstantColumnSchema);
-
 type ConversationInsert = typeof conversations.$inferInsert;
 type MessageInsert = typeof messages.$inferInsert;
 type TurnInsert = typeof turns.$inferInsert;
-type EventInsert = typeof events.$inferInsert;
 type VoiceSessionInsert = typeof voiceSessions.$inferInsert;
 type VoiceSegmentInsert = typeof voiceTranscriptSegments.$inferInsert;
 
 export interface ConversationRow {
   readonly userId: string;
   readonly kind?: ConversationInsert["kind"];
-  readonly providerId?: string | null;
-  readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
-  readonly spawnedByMessageId?: string | null;
   readonly runtimeSessionId?: string | null;
   readonly createdAt?: Date;
   readonly deletedAt?: Date | null;
   readonly nextMessageSeq?: number;
-  readonly nextEventSeq?: number;
   readonly label?: string | null;
   readonly title?: string | null;
-  readonly workspace?: string | null;
-  readonly completionDeliveredAt?: Date | null;
   /** Whether a child's delegation waits on its completion; the column's own default, true, where absent. */
   readonly expectsCompletion?: boolean;
 }
@@ -76,19 +59,13 @@ export function insertConversation(run: HostedStoreTestRun, row: ConversationRow
         .values({
           userId: row.userId,
           kind: row.kind ?? CONVERSATION_KIND.MAIN,
-          providerId: row.providerId ?? null,
-          providerSessionId: row.providerSessionId ?? null,
           parentConversationId: row.parentConversationId ?? null,
-          spawnedByMessageId: row.spawnedByMessageId ?? null,
           runtimeSessionId: row.runtimeSessionId ?? null,
           createdAt: row.createdAt ?? new Date(),
           deletedAt: row.deletedAt ?? null,
           nextMessageSeq: row.nextMessageSeq ?? 1,
-          nextEventSeq: row.nextEventSeq ?? 1,
           label: row.label ?? null,
           title: row.title ?? null,
-          workspace: row.workspace ?? null,
-          completionDeliveredAt: row.completionDeliveredAt ?? null,
           expectsCompletion: row.expectsCompletion ?? true,
         })
         .returning({ id: conversations.id });
@@ -323,60 +300,6 @@ export function readMessagesByConversationTyped(
   );
 }
 
-export interface EventInsertRow {
-  readonly userId: string;
-  readonly conversationId: string;
-  readonly seq: number;
-  readonly messageId: string;
-  readonly kind: EventInsert["kind"];
-  readonly deviceId?: string | null;
-  readonly payload?: unknown;
-  readonly createdAt?: Date;
-}
-
-export function insertEvent(run: HostedStoreTestRun, row: EventInsertRow): Promise<string> {
-  return run(
-    Effect.gen(function* () {
-      const rows = yield* db
-        .insert(events)
-        .values({
-          userId: row.userId,
-          conversationId: row.conversationId,
-          seq: row.seq,
-          messageId: row.messageId,
-          kind: row.kind,
-          deviceId: row.deviceId ?? null,
-          payload: row.payload ?? null,
-          createdAt: row.createdAt ?? new Date(),
-        })
-        .returning({ id: events.id });
-      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
-    }),
-  );
-}
-
-export function readEventsByConversation(run: HostedStoreTestRun, conversationId: string) {
-  return run(
-    db.select().from(events).where(eq(events.conversationId, conversationId)).orderBy(events.seq),
-  );
-}
-
-export interface DeviceInsertRow {
-  readonly id: string;
-  readonly userId: string;
-  readonly installationId: string;
-  readonly platform: string;
-}
-
-/** A device row, for a voice session to name: the column the session's `device_id` references. */
-export function insertDevice(run: HostedStoreTestRun, row: DeviceInsertRow): Promise<void> {
-  return run(Effect.asVoid(db.insert(devices).values({ ...row, lastSeenAt: new Date() })));
-}
-
-export function readEventsByMessage(run: HostedStoreTestRun, messageId: string) {
-  return run(db.select().from(events).where(eq(events.messageId, messageId)).orderBy(events.seq));
-}
-
 export interface VoiceSessionInsertRow {
   readonly userId: string;
   readonly liveSessionId: string;
@@ -478,10 +401,6 @@ export function deleteVoiceSession(run: HostedStoreTestRun, id: string): Promise
   return run(Effect.asVoid(db.delete(voiceSessions).where(eq(voiceSessions.id, id))));
 }
 
-export function deleteDevice(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(Effect.asVoid(db.delete(devices).where(eq(devices.id, id))));
-}
-
 export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
   return run(db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)));
 }
@@ -523,59 +442,6 @@ export function countRowsWhere(
   value: string,
 ): Promise<number> {
   return run(countRows(column, value));
-}
-
-export interface ProviderCursorRow {
-  readonly userId: string;
-  readonly providerId: string;
-  readonly providerSessionId: string;
-  readonly cursor: string;
-}
-
-export function insertProviderCursor(
-  run: HostedStoreTestRun,
-  row: ProviderCursorRow,
-): Promise<void> {
-  return run(Effect.asVoid(db.insert(providerCursors).values(row)));
-}
-
-/**
- * Note that the conflicting update sets the cursor the insert carried rather
- * than reading it back out of `excluded`, because a single-row insert's
- * `excluded` row is exactly that value.
- */
-export function upsertProviderCursor(
-  run: HostedStoreTestRun,
-  row: ProviderCursorRow,
-): Promise<void> {
-  return run(
-    Effect.asVoid(
-      db
-        .insert(providerCursors)
-        .values(row)
-        .onConflictDoUpdate({
-          target: [
-            providerCursors.userId,
-            providerCursors.providerId,
-            providerCursors.providerSessionId,
-          ],
-          set: { cursor: row.cursor },
-        }),
-    ),
-  );
-}
-
-export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: string) {
-  return run(
-    db
-      .select({
-        providerSessionId: providerCursors.providerSessionId,
-        cursor: providerCursors.cursor,
-      })
-      .from(providerCursors)
-      .where(eq(providerCursors.userId, userId))
-      .orderBy(providerCursors.providerSessionId),
-  );
 }
 
 /**

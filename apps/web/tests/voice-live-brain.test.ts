@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
+import { childConversationId } from "@sidecar/database/models/ids";
+import type { MessageListRead } from "@sidecar/database/models/message-reads";
+import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -32,17 +39,13 @@ import {
   type EveSessions,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { childConversationId } from "../server/hosted/brain-host/ids";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { fillChildTitle } from "../server/hosted/child-titles";
-import { openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import {
   SEARCH_WEB_REFUSAL,
@@ -52,9 +55,6 @@ import {
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
-import type { MessageListRead } from "../server/hosted/store/message-reads";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,
@@ -188,6 +188,9 @@ function fakeEve(): FakeEve {
         return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.FAILED, status: eve.refuseCancel });
       }
       return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED });
+    },
+    reset() {
+      return Effect.die(new Error("this suite retires no session"));
     },
   };
   return eve;

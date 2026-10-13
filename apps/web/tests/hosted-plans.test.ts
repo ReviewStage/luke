@@ -1,26 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { planSections } from "@sidecar/hosted/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
-import type { PlanDocument } from "@sidecar/hosted/plan-wire";
-import { eq, sql } from "drizzle-orm";
-import { Effect, Option } from "effect";
-import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { plan } from "../server/db/plan-schema";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { deleteAccount } from "../server/hosted/account-store";
-import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
-  type PlanDocumentBinding,
-  type PlanSaveResult,
-  saveNotes,
-} from "../server/hosted/plan-notes";
+import { db } from "@sidecar/database/core/query";
+import { deleteAccount } from "@sidecar/database/models/account-store";
 import {
   attachPlanConversation,
   createPlan,
@@ -29,11 +11,29 @@ import {
   readPlan,
   savePlanText,
   updatePlan,
-} from "../server/hosted/plan-store";
+} from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { plan } from "@sidecar/database/schemas/plan";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { getTestDB } from "@sidecar/database/testing";
+import { planSections } from "@sidecar/hosted/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
+import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
+import type { PlanDocument } from "@sidecar/hosted/plan-wire";
+import { eq, sql } from "drizzle-orm";
+import { Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
+import {
+  PLAN_SAVE_REFUSAL,
+  PLAN_SAVE_STATUS,
+  type PlanDocumentBinding,
+  type PlanSaveResult,
+  saveNotes,
+} from "../server/hosted/plan-notes";
 import { noDatabase } from "./support/no-database";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
-import { testSqlClient } from "./support/sql-client";
 import { joinWorkspace, openWorkspace, startPlan, type TestPlan } from "./support/workspaces";
 
 /**
@@ -132,7 +132,7 @@ function sectionText(text: string, heading: string): string {
   return section?.text ?? assert.fail(`the text holds no section under ${heading}`);
 }
 
-it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
+it.layer(getTestDB())("named plans and the notes that write them", (it) => {
   it.effect("a plan starts in the workspace it was handed, and its summary names it", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
@@ -156,7 +156,6 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       );
     }),
   );
-
   it.effect("two named plans keep independent documents", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

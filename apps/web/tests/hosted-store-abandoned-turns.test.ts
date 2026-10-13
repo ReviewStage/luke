@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { sweepAbandonedTurns, TURN_ABANDON } from "@sidecar/database/models/abandoned-turns";
+import { storeWriter } from "@sidecar/database/models/writer";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -8,11 +11,8 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { storeWriter } from "../server/hosted/store";
-import { sweepAbandonedTurns, TURN_ABANDON } from "../server/hosted/store/abandoned-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

@@ -165,7 +165,7 @@ function accountMenuGroups(
 
 /**
  * The foot's account button and the menu it raises. Log out asks first, in a
- * dialog over the window, as Settings' Sign out asks in its row: getting back
+ * dialog over the window, as Settings' Sign out does: getting back
  * in costs a whole trip through the browser.
  */
 function AccountMenu({
@@ -181,7 +181,7 @@ function AccountMenu({
 }): React.JSX.Element {
   const { tell } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const { open, show, close } = useActionMenu(shown);
+  const { open, drawn, show, close } = useActionMenu(shown);
   const logOut = useConfirmDialog(
     { subject: signedIn, surfaceOpen: shown },
     // A sign-out main refused keeps the dialog up saying so, rather than
@@ -225,10 +225,10 @@ function AccountMenu({
           {signedIn ? (account.name ?? account.email) : "Not signed in"}
         </span>
       </button>
-      {open === undefined ? null : (
+      {drawn === undefined ? null : (
         <ActionMenu
           label="Account"
-          menu={open}
+          menu={drawn}
           heading={signedIn ? <AccountHeading account={account} /> : undefined}
           groups={groups}
           onClose={close}

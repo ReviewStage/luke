@@ -1,20 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  CHECK_SUMMARY,
-  CONTEXT_WINDOW,
-  type CodingAgentPullRequest,
-  PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
-import { count, eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
-import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { codingAgent } from "../server/db/coding-agent-schema";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { db } from "@sidecar/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentBriefText,
@@ -29,9 +16,24 @@ import {
   recordCodingAgentPublished,
   renameCodingAgent,
   updateCodingAgentChoice,
-} from "../server/hosted/coding-agent-store";
-import { deletePlan } from "../server/hosted/plan-store";
-import { testSqlClient } from "./support/sql-client";
+  updateCodingAgentServers,
+} from "@sidecar/database/models/coding-agent-store";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { user } from "@sidecar/database/schemas/auth";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { getTestDB } from "@sidecar/database/testing";
+import {
+  CHECK_SUMMARY,
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
+import { count, eq, sql } from "drizzle-orm";
+import { Duration, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
@@ -122,7 +124,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 3,
 };
 
-it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
+it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   it.effect(
     "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
     () =>
@@ -201,6 +203,62 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
         const read = yield* readCodingAgent(userId, long.id);
         assert.equal(Option.getOrUndefined(read)?.contextWindow, CONTEXT_WINDOW.LONG);
         assert.equal(Option.getOrUndefined(read)?.effort, "low");
+      }),
+  );
+
+  it.effect(
+    "the MCP servers switched off for an agent read back on it, from its Start or a later change, and another account's change writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openUser;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        assert.deepEqual(agent.disabledServers, []);
+        const drafted = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { disabledServers: [INTEGRATION_PROVIDER.LINEAR] }),
+          ),
+        );
+        assert.deepEqual(drafted.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
+
+        const changed = yield* updateCodingAgentServers(userId, agent.id, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        assert.deepEqual(Option.getOrUndefined(changed)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        assert.deepEqual(yield* updateCodingAgentServers(other, drafted.id, []), Option.none());
+        const ofConversation = yield* readCodingAgentOfConversation(userId, agent.conversationId);
+        assert.deepEqual(Option.getOrUndefined(ofConversation)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+        const untouched = yield* readCodingAgent(userId, drafted.id);
+        assert.deepEqual(Option.getOrUndefined(untouched)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
+
+        yield* updateCodingAgentServers(userId, agent.id, []);
+        const cleared = yield* readCodingAgent(userId, agent.id);
+        assert.deepEqual(Option.getOrUndefined(cleared)?.disabledServers, []);
+      }),
+  );
+
+  it.effect(
+    "a server no longer offered, left on an agent's row, reads as nothing switched off",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        yield* db
+          .update(codingAgent)
+          .set({ disabledServers: sql`'["retired-provider", "linear"]'::jsonb` })
+          .where(eq(codingAgent.id, agent.id));
+
+        const read = yield* readCodingAgent(userId, agent.id);
+        assert.deepEqual(Option.getOrUndefined(read)?.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
       }),
   );
 
@@ -356,6 +414,42 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
       assert.deepEqual(yield* createCodingAgent(userId, start(randomUUID())), Option.none());
       assert.equal(yield* agentRows(userId), 0);
     }),
+  );
+
+  it.effect(
+    "a delete told which agents it stopped refuses while another stands and runs nothing before it, and once each is named runs its step on the agents' conversations and takes the plan",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const stoppedAgent = started(yield* createCodingAgent(userId, start(planId)));
+        // Started while the delete was stopping the others, so the delete never stopped it.
+        const raced = started(yield* createCodingAgent(userId, start(planId)));
+        const handed: (readonly string[])[] = [];
+        const guard = (stoppedAgentIds: ReadonlySet<string>) => ({
+          stoppedAgentIds,
+          beforeDelete: (conversationIds: readonly string[]) =>
+            Effect.sync(() => {
+              handed.push(conversationIds);
+            }),
+        });
+
+        const refused = yield* Effect.flip(
+          deletePlan(userId, planId, guard(new Set([stoppedAgent.id]))),
+        );
+
+        assert.equal(refused._tag, "PlanAgentUnstopped");
+        assert.equal(yield* agentRows(userId), 2);
+        assert.deepEqual(handed, []);
+        assert.equal(
+          yield* deletePlan(userId, planId, guard(new Set([stoppedAgent.id, raced.id]))),
+          true,
+        );
+        assert.equal(yield* agentRows(userId), 0);
+        assert.deepEqual(
+          handed.map((ids) => [...ids].sort()),
+          [[stoppedAgent.conversationId, raced.conversationId].sort()],
+        );
+      }),
   );
 
   it.effect("an agent goes with its plan, and its conversation is stamped for the purge", () =>

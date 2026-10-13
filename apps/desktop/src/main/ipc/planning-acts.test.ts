@@ -142,6 +142,11 @@ function fixture() {
           asked.push(`tree:${params.path}`);
           return { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE } as const;
         }),
+      planningSkills: (params) =>
+        Effect.sync(() => {
+          asked.push(`skills:${params.planId}`);
+          return { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY } as const;
+        }),
       planningRevisions: (params) =>
         Effect.sync(() => {
           asked.push(`revisions:${params.planId}:${params.before}`);
@@ -477,6 +482,34 @@ it.effect(
 );
 
 it.effect(
+  "a repository's skills are read through the host from a panel and answer what it answered, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const plan = { planId: PLAN_ID };
+
+      const read = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_SKILLS, payload: plan },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_SKILLS, payload: plan },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY },
+      });
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_SKILLS].refusal,
+      });
+      assert.deepEqual(f.asked, [`skills:${PLAN_ID}`]);
+    }),
+);
+
+it.effect(
   "the version history's reads and its restore reach the host from a panel, and never from the voice window",
   () =>
     Effect.gen(function* () {
@@ -571,6 +604,52 @@ it.effect("Open on GitHub opens a GitHub address in the browser, and no other ad
     assert.notEqual(elsewhere.status, ACT_OUTCOME_STATUS.DONE);
     assert.deepEqual(f.opened, ["https://github.com/acme/relay"]);
   }),
+);
+
+it.effect(
+  "a web link opens an http or https address in the browser, and no other scheme nor an address past the cap",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const refused = [
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "luke://plan/7",
+        "mailto:dean@example.com",
+        "//example.com/docs",
+        "https://",
+        `https://example.com/docs?q=${"a".repeat(2_048)}`,
+      ];
+
+      const opened = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
+        PANEL,
+      );
+      const plain = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "http://localhost:3000/" } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
+        VOICE,
+      );
+      const outcomes = yield* Effect.forEach(refused, (url) =>
+        f.router.performAct(
+          // SAFETY: an address the schema refuses is sent as the shape it would arrive in.
+          { kind: ACT_KIND.WEB_OPEN, payload: { url } } as never,
+          PANEL,
+        ),
+      );
+
+      assert.equal(opened.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(plain.status, ACT_OUTCOME_STATUS.DONE);
+      assert.notEqual(fromVoice.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.status === ACT_OUTCOME_STATUS.DONE),
+        refused.map(() => false),
+      );
+      assert.deepEqual(f.opened, ["https://example.com/docs", "http://localhost:3000/"]);
+    }),
 );
 
 it.effect("the voice window does not reach the plans", () =>

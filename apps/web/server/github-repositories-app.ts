@@ -14,6 +14,7 @@
  * store the service could not reach is unavailable.
  */
 
+import { isWorkspaceMember } from "@sidecar/database/models/workspace-store";
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
@@ -44,7 +45,6 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { isWorkspaceMember } from "./hosted/workspace-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 const HTTP_METHOD = { GET: "GET" } as const;

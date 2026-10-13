@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { it } from "@effect/vitest";
+import * as authSchema from "@sidecar/database/schemas/auth";
+import { getTestDB, openMigratedPglite, sqlClientOverPglite } from "@sidecar/database/testing";
 import { betterAuth } from "better-auth";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { jwt, organization } from "better-auth/plugins";
@@ -16,10 +18,8 @@ import {
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
 } from "../server/auth-policy";
-import * as authSchema from "../server/db/auth-schema";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 import { dropUnreadableJwks, seedOAuthClient } from "../server/seed-clients";
-import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
 
 const AUTH_TABLE_NAME = {
   ACCOUNT: "account",
@@ -63,7 +63,7 @@ function readOAuthClient(clientId: string) {
   });
 }
 
-it.layer(testSqlClient)("the auth service's own tables", (it) => {
+it.layer(getTestDB())("the auth service's own tables", (it) => {
   it.effect("every table the auth service uses stands in the migrated schema", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

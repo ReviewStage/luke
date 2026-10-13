@@ -9,7 +9,7 @@ import { createRoot } from "react-dom/client";
 import { GitHubMark } from "./account-marks";
 import { startSiteAnalytics } from "./analytics";
 import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
-import { LukeMark } from "./SiteChrome";
+import { ConnectionGraphic } from "./connection-graphic";
 import "./styles.css";
 
 /**
@@ -68,26 +68,6 @@ function statusFromAddress(): GitHubInstallStatus {
   );
 }
 
-function ArrowMark(): React.JSX.Element {
-  return (
-    <svg
-      className="size-6 shrink-0 text-muted-foreground"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M5 12h14M13 6l6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function GitHubInstalled(): React.JSX.Element {
   const [status] = useState(statusFromAddress);
   const card = LANDING_CARD[status];
@@ -96,14 +76,7 @@ function GitHubInstalled(): React.JSX.Element {
       <section className={AUTH_CARD} aria-labelledby="landing-title">
         {/* The same pairing the sign-in card draws: the provider's mark, an
             arrow, and Luke's own face. */}
-        <div
-          className="mx-auto mb-5 flex items-center justify-center gap-4 text-foreground"
-          aria-hidden="true"
-        >
-          <GitHubMark className="size-10 shrink-0" />
-          <ArrowMark />
-          <LukeMark className="h-auto w-12 shrink-0" />
-        </div>
+        <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
         <div>
           <span className={AUTH_PILL} data-tone={card.settled ? "settled" : "attention"}>
             {card.badge}

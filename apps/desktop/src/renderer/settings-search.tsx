@@ -1,4 +1,10 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+} from "@sidecar/hosted/integration-wire";
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
   APP_SETTING_SCHEMA,
@@ -15,7 +21,8 @@ import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
-import { commandKeyshortcuts, ShortcutGlyphs } from "./tooltip";
+import { Shortcut } from "./shortcut";
+import { commandKeyshortcuts } from "./tooltip";
 
 /**
  * Searching the Settings tab.
@@ -80,7 +87,7 @@ export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.PLAN_TEMPLATE]: "Plan template",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
-  [SETTINGS_VIEW.API_KEYS]: "API keys",
+  [SETTINGS_VIEW.INTEGRATIONS]: "Integrations",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */
@@ -88,6 +95,17 @@ const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUB
 
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
+
+/** The words every integration's row can be found by, beside its own name. */
+const INTEGRATION_WORDS = "connect disconnect integration mcp";
+
+/** What each integration is for, in the words someone looking for it would type. */
+const INTEGRATION_KEYWORDS = {
+  [INTEGRATION_PROVIDER.LINEAR]: "issues tracker",
+  [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
+  [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
+  [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
+} as const satisfies Record<IntegrationProvider, string>;
 
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
@@ -111,12 +129,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.ROOT,
       haystack: ["Changelog", "release notes version history what's new what changed"],
     },
-    {
-      id: SETTINGS_SEARCH_ROW.FEEDBACK,
-      label: "Feedback",
-      page: SETTINGS_VIEW.ROOT,
-      haystack: ["Feedback", "send feedback submit a prompt bug idea founders"],
-    },
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.SIGN_OUT,
@@ -125,14 +137,21 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.LINEAR,
-          label: "Linear",
-          page: SETTINGS_VIEW.ROOT,
-          haystack: ["Linear", "connect disconnect issues tracker integration mcp"],
-        }
-      : undefined,
+    // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
+    ...INTEGRATION_PROVIDER_LIST.map((provider) =>
+      input.accountDrawn
+        ? {
+            id: provider,
+            label: INTEGRATION_NAME[provider],
+            page: SETTINGS_VIEW.INTEGRATIONS,
+            haystack: [
+              INTEGRATION_NAME[provider],
+              INTEGRATION_WORDS,
+              INTEGRATION_KEYWORDS[provider],
+            ],
+          }
+        : undefined,
+    ),
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,
@@ -180,17 +199,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
-          label: "Default model",
+          label: "Model",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default model", "coding agent model claude gpt start"],
+          haystack: ["Model", "default model coding agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
-          label: "Default effort",
+          label: "Effort",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default effort", "coding agent effort reasoning low medium high max"],
+          haystack: ["Effort", "default effort coding agent reasoning low medium high max"],
         }
       : undefined,
     input.accountDrawn
@@ -206,16 +225,22 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
           label: "Anthropic API key",
-          page: SETTINGS_VIEW.API_KEYS,
-          haystack: ["Anthropic API key", "byok own key claude billing provider credential"],
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "Anthropic API key",
+            "api keys byok own key claude billing provider credential",
+          ],
         }
       : undefined,
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
           label: "OpenAI API key",
-          page: SETTINGS_VIEW.API_KEYS,
-          haystack: ["OpenAI API key", "byok own key gpt codex billing provider credential"],
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: [
+            "OpenAI API key",
+            "api keys byok own key gpt codex billing provider credential",
+          ],
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.
@@ -242,12 +267,19 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     const field = settingFieldForId(setting.id);
     if (!field) return [];
     if (!settingIdVisible(setting.id, input)) return [];
+    // A choice is found by what it offers as well as by its name, so "dark"
+    // finds the theme its row no longer has to describe.
+    const offered = APP_SETTING_SCHEMA[field].control?.options(input) ?? [];
     return [
       {
         id: setting.id,
         label: setting.label,
         page: APP_SETTING_SCHEMA[field].page,
-        haystack: [setting.label, setting.description],
+        haystack: [
+          setting.label,
+          ...(setting.detail === undefined ? [] : [setting.detail]),
+          ...offered.map((option) => option.label),
+        ],
       },
     ];
   });
@@ -366,7 +398,7 @@ export function SettingsSearchField({
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
           padding lands the caret the way a press on the text would. */}
-      <label className="settings-search-well">
+      <label className="settings-search-well field-well">
         <SearchIcon />
         <input
           ref={field}
@@ -415,7 +447,10 @@ export function SettingsSearchField({
             <CloseIcon />
           </button>
         ) : (
-          <ShortcutGlyphs command={APP_COMMAND.FIND} className="settings-search-shortcut" />
+          <Shortcut
+            chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord}
+            className="settings-search-shortcut"
+          />
         )}
       </label>
     </search>

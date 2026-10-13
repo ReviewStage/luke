@@ -2,8 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+} from "@sidecar/credentials/snapshot";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
+import { TerminalIcon } from "@sidecar/panel";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, AppSettingsView } from "@sidecar/settings/wire";
@@ -12,13 +18,19 @@ import { Effect } from "effect";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { useAppKeymap } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
+import type { CallCardInput } from "../call/call-card";
+import { MICROPHONE_UNGRANTED_NOTE } from "../microphone-access";
+import type { MicrophoneControl } from "../settings/controls";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { ToastHost } from "../toast";
@@ -34,7 +46,15 @@ const ignore = () => undefined;
 let turnPage: (view: SettingsView) => void = ignore;
 
 /** Settings with the page held the way the app holds it, so a press turns it. */
-function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Element {
+function Harness({
+  settings,
+  microphone,
+  account,
+}: {
+  settings?: AppSettingsView;
+  microphone?: MicrophoneControl;
+  account?: AccountSnapshot;
+}): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
   return createElement(DesktopSettings, {
@@ -51,6 +71,8 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       view,
       onViewChange: setView,
       ...(settings ? { settings } : undefined),
+      ...(microphone ? { microphone } : undefined),
+      ...(account ? { account } : undefined),
     }),
     onExit: ignore,
   });
@@ -60,7 +82,12 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
 const mounted: Root[] = [];
 
 /** Settings under the window's toast, its atoms on `registry` where given. */
-function mount(settings?: AppSettingsView, registry?: AtomRegistry): HTMLElement {
+function mount(
+  settings?: AppSettingsView,
+  registry?: AtomRegistry,
+  microphone?: MicrophoneControl,
+  account?: AccountSnapshot,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -68,7 +95,11 @@ function mount(settings?: AppSettingsView, registry?: AtomRegistry): HTMLElement
   const surface = createElement(
     Fragment,
     null,
-    createElement(Harness, settings ? { settings } : {}),
+    createElement(Harness, {
+      ...(settings ? { settings } : undefined),
+      ...(microphone ? { microphone } : undefined),
+      ...(account ? { account } : undefined),
+    }),
     createElement(ToastHost),
   );
   act(() => {
@@ -123,12 +154,17 @@ function results(container: ParentNode): readonly { page: string; rows: readonly
 }
 
 function shownPage(container: ParentNode): string {
-  return container.querySelector(".desktop-toolbar-title")?.textContent ?? "";
+  return container.querySelector(".settings-page")?.getAttribute("aria-label") ?? "";
 }
 
-/** The toolbar's button with these words, if it draws one. */
-function toolbarButton(container: ParentNode, words: string): HTMLButtonElement | undefined {
-  return [...container.querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
+/** The plan template's page, by the name it is labelled with, which draws its title in its document rather than its toolbar. */
+function templatePage(container: ParentNode): Element | null {
+  return container.querySelector('.settings-page[aria-label="Plan template"]');
+}
+
+/** The button with these words on the page's title line, if it draws one. */
+function titleLineButton(container: ParentNode, words: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>(".settings-page-head button")].find(
     (button) => button.textContent === words,
   );
 }
@@ -157,6 +193,21 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+test("the list of pages marks Voice while its microphone is ungranted, as the front page does", () => {
+  const ungranted = mount(undefined, undefined, {
+    status: MICROPHONE_STATUS.NOT_DETERMINED,
+    voiceAvailable: true,
+    onRequest: ignore,
+    onOpenSettings: ignore,
+  });
+  const marked = pageList(ungranted).filter((page) => page.includes(MICROPHONE_UNGRANTED_NOTE));
+  assert.equal(marked.length, 1);
+  assert.ok(marked[0]?.startsWith("Voice"), `the mark stands on "${marked[0]}"`);
+
+  // Granted, the row is its name and nothing more.
+  assert.ok(pageList(mount()).includes("Voice"));
+});
+
 test("typing in the sidebar search turns the page list into results grouped under their pages", () => {
   const container = mount();
   const pages = pageList(container);
@@ -167,7 +218,7 @@ test("typing in the sidebar search turns the page list into results grouped unde
     "Keyboard shortcuts",
     "Plan template",
     "Coding agents",
-    "API keys",
+    "Integrations",
   ]);
 
   type(field(container), "hotkey");
@@ -220,20 +271,80 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.equal(shownPage(container), first.page);
 });
 
-test("searching for notifications finds the switch on General, and pressing it lands on the switch", () => {
+test("searching for notifications finds the switch on Coding agents, and pressing it lands on the switch", () => {
   const container = mount();
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
   type(field(container), "notifications");
   assert.deepEqual(results(container), [
-    { page: "General", rows: ["Notify me when a coding agent finishes or needs me"] },
+    { page: "Coding agents", rows: ["Notify me when a coding agent finishes or needs me"] },
   ]);
 
   act(() => result(container, "Notify me when a coding agent finishes or needs me").click());
-  assert.equal(shownPage(container), "General");
+  assert.equal(shownPage(container), "Coding agents");
   const row = container.querySelector(
     `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.AGENT_NOTIFICATIONS}"]`,
   );
   assert.equal(row?.getAttribute("role"), "switch");
+});
+
+test("Coding agents holds the default model, the API keys, and notifications as three groups, and General holds none of them", () => {
+  const container = mount();
+  const headings = () =>
+    [
+      ...container.querySelectorAll(
+        ".settings-page :is(.settings-group-title, .settings-section > h2)",
+      ),
+    ].map((heading) => heading.textContent);
+  assert.ok(!pageList(container).includes("API keys"), "API keys is no page of its own");
+  const codingAgents = [...sidebar(container).querySelectorAll("li > button")].find(
+    (button) => button.textContent === "Coding agents",
+  );
+  assert.equal(
+    codingAgents?.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(TerminalIcon)),
+    "the page wears the terminal it always had",
+  );
+  assert.ok(!headings().includes("Notifications"));
+  assert.ok(!headings().includes("Feedback"), "feedback is the account menu's and Help's");
+
+  act(() => turnPage(SETTINGS_VIEW.CODING_AGENTS));
+  assert.deepEqual(headings(), ["Default model", "API keys", "Notifications"]);
+});
+
+test("searching for an API key finds it on Coding agents, and pressing it lands on the key's row", async () => {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: ignore,
+      act: (request: Act) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PROVIDER_KEYS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { keys: [] } }
+            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+        ),
+    },
+  });
+  const signedIn: AccountSnapshot = {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    provider: ACCOUNT_PROVIDER.GITHUB,
+  };
+  const container = mount(undefined, undefined, undefined, signedIn);
+  type(field(container), "api key");
+  assert.deepEqual(results(container), [
+    { page: "Coding agents", rows: ["Anthropic API key", "OpenAI API key"] },
+  ]);
+
+  act(() => result(container, "OpenAI API key").click());
+  await act(async () => {
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+  assert.equal(shownPage(container), "Coding agents");
+  const row = container.querySelector(
+    `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SEARCH_ROW.API_KEY_OPENAI}"]`,
+  );
+  assert.equal(row?.closest("section")?.querySelector("h2")?.textContent, "API keys");
 });
 
 test("clearing the query restores the page list, and Escape clears before it lets go", () => {
@@ -311,7 +422,7 @@ test("Command-F puts the caret in the search, whose empty field prints the chord
   act(() => root.unmount());
 });
 
-test("a page off its defaults offers Reset to defaults in the toolbar, not in the page, and says a refusal beside it", async () => {
+test("a page off its defaults offers Reset to defaults on its title line, once, and says a refusal beside it", async () => {
   const sent: Act[] = [];
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -328,8 +439,8 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
   });
   const container = mount(settingsView({ voiceAvailable: true, openAtLogin: false }));
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-  const reset = toolbarButton(container, "Reset to defaults");
-  assert.ok(reset, "the toolbar offers the page's reset");
+  const reset = titleLineButton(container, "Reset to defaults");
+  assert.ok(reset, "the title line offers the page's reset");
   const resets = [...container.querySelectorAll("button")].filter((button) =>
     (button.getAttribute("aria-label") ?? button.textContent ?? "").startsWith("Reset"),
   );
@@ -340,7 +451,7 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
     { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: SETTINGS_RESET_SCOPE.APPEARANCE } },
   ]);
   assert.equal(
-    container.querySelector(".desktop-toolbar [role='alert']")?.textContent,
+    container.querySelector(".settings-page-head [role='alert']")?.textContent,
     "The settings are busy.",
   );
 });
@@ -407,7 +518,7 @@ it.effect(
       );
       const container = mount(before, yield* registryOnTestClock);
       act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-      const reset = toolbarButton(container, "Reset to defaults");
+      const reset = titleLineButton(container, "Reset to defaults");
       assert.ok(reset);
 
       act(() => reset.click());
@@ -446,7 +557,7 @@ it.effect(
       );
       const container = mount(before, yield* registryOnTestClock);
       act(() => turnPage(SETTINGS_VIEW.VOICE));
-      const reset = toolbarButton(container, "Reset to defaults");
+      const reset = titleLineButton(container, "Reset to defaults");
       assert.ok(reset);
 
       act(() => reset.click());
@@ -460,14 +571,174 @@ it.effect(
     }),
 );
 
+test("a page names itself at the head of its own column, under no top bar", () => {
+  const container = mount(settingsView({ voiceAvailable: true }));
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+
+  const page = container.querySelector(".settings-page") ?? assert.fail("no page");
+  assert.equal(page.querySelector("h1")?.textContent, "Appearance");
+  assert.equal(page.querySelector(".desktop-toolbar"), null, "the page draws no top bar");
+});
+
 test("a page at its defaults offers no reset", () => {
   const container = mount(settingsView({ voiceAvailable: true }));
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
-  assert.equal(toolbarButton(container, "Reset to defaults"), undefined);
+  assert.equal(titleLineButton(container, "Reset to defaults"), undefined);
 });
 
 test("the front page draws no Quit button, which the app menu's Quit already does", () => {
   const container = mount(settingsView({ voiceAvailable: true }));
   const words = [...container.querySelectorAll("button")].map((button) => button.textContent);
   assert.ok(!words.some((text) => text?.includes("Quit")));
+});
+
+test("the plan template stands as a plan's page beside the list, rather than as a page of the panel", () => {
+  const container = mount();
+  act(() => turnPage(SETTINGS_VIEW.PLAN_TEMPLATE));
+
+  const page = templatePage(container) ?? assert.fail("no template page");
+  assert.equal(page.querySelector(".settings-page-title"), null, "the document carries the title");
+  assert.equal(container.querySelector(".settings-page-scroll"), null);
+  assert.match(
+    container.querySelector(".settings-page")?.textContent ?? "",
+    /Sign in to edit the template/u,
+  );
+});
+
+/** Answers the template page's reads: the account's own template, and no revisions. */
+function answerTemplateReads(request: Act) {
+  return Promise.resolve(
+    request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+      ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "## Why\n", custom: true } }
+      : request.kind === ACT_KIND.PLAN_TEMPLATE_REVISIONS
+        ? { status: ACT_OUTCOME_STATUS.DONE, value: { revisions: [] } }
+        : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+  );
+}
+
+/** A call standing while Settings is open. */
+const CALL: CallCardInput = {
+  card: {
+    planName: "Parser cache migration",
+    status: { voiceWord: "Listening", backend: { planner: undefined, notes: false } },
+    microphoneMuted: false,
+  },
+  speakerMuted: false,
+  controls: {
+    onReturn: ignore,
+    onToggleMicrophone: ignore,
+    onToggleSpeaker: ignore,
+    onEnd: ignore,
+  },
+};
+
+/**
+ * Settings, signed in, on the page `view` names, its reads answered with the
+ * account's own template; `draw` draws it again on another page or with a
+ * call, and `exits` counts how often Settings was left.
+ */
+async function mountSignedIn(view: SettingsView = SETTINGS_VIEW.PLAN_TEMPLATE) {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: { recordSurfaceEvent: ignore, act: answerTemplateReads },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  mounted.push(root);
+  const left = { exits: 0 };
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+    });
+  const draw = async (page: SettingsView, call: CallCardInput | undefined = undefined) => {
+    act(() =>
+      root.render(
+        createElement(DesktopSettings, {
+          sidebar: {
+            collapsed: false,
+            width: SIDEBAR_WIDTH.DEFAULT,
+            onToggle: ignore,
+            onResize: ignore,
+            staged: false,
+          },
+          history: navigationHistory(),
+          call,
+          settings: settingsPanelProps({
+            view: page,
+            onViewChange: ignore,
+            account: {
+              status: ACCOUNT_STATUS.SIGNED_IN,
+              email: "dean@luke.test",
+              name: "Dean",
+              provider: ACCOUNT_PROVIDER.GITHUB,
+            },
+          }),
+          onExit: () => {
+            left.exits += 1;
+          },
+        }),
+      ),
+    );
+    await settle();
+  };
+  await draw(view);
+  const openHistory = async () => {
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('.plan-title-actions [aria-label="Version history"]')
+        ?.click(),
+    );
+    await settle();
+  };
+  return { container, left, draw, settle, openHistory };
+}
+
+test("the template's version history takes the whole window from the page's title line, and Escape and Back leave it for the template rather than leaving Settings", async () => {
+  const { container, left, settle, openHistory } = await mountSignedIn();
+  assert.ok(
+    container.querySelector('.plan-title-actions [aria-label="Version history"]'),
+    "the template's title line offers its version history",
+  );
+
+  await openHistory();
+  assert.equal(container.querySelector(".settings-pages"), null, "the page list gives way");
+  assert.ok(container.querySelector(".desktop-version-history"));
+  assert.equal(runAppCommand(APP_COMMAND.EXIT_SETTINGS), false);
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+  });
+  await settle();
+  assert.ok(container.querySelector(".settings-pages"), "Escape leaves for the template");
+  assert.ok(templatePage(container));
+
+  await openHistory();
+  act(() => container.querySelector<HTMLButtonElement>(".version-log-back")?.click());
+  await settle();
+  assert.ok(templatePage(container), "Back leaves for the template too");
+  assert.equal(left.exits, 0, "Settings was never left");
+});
+
+test("a page turned while the template's history stands leaves it, so coming back finds the template", async () => {
+  const { container, draw, openHistory } = await mountSignedIn();
+  await openHistory();
+
+  await draw(SETTINGS_VIEW.SHORTCUTS);
+  await draw(SETTINGS_VIEW.PLAN_TEMPLATE);
+
+  assert.equal(container.querySelector(".desktop-version-history"), null);
+  assert.ok(templatePage(container));
+});
+
+test("a call's card rides the page list, and floats over the template's history, which has none", async () => {
+  const { draw, openHistory } = await mountSignedIn();
+  await draw(SETTINGS_VIEW.PLAN_TEMPLATE, CALL);
+  const cards = () =>
+    [...document.body.querySelectorAll<HTMLElement>('.call-card[data-leaving="false"]')].map(
+      (card) => card.dataset.surface ?? "",
+    );
+  assert.deepEqual(cards(), ["sidebar"]);
+
+  await openHistory();
+  assert.deepEqual(cards(), ["floating"]);
 });

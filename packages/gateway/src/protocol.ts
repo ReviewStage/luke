@@ -34,7 +34,7 @@ export const GATEWAY_METHOD = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
-  /** The developer's edit of one field of a plan saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
+  /** The developer's edit of a plan's document saved on the service; the open document takes the plan it answered, and a conflict leaves it unchanged. */
   PLANNING_EDIT: "planning.edit",
   /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",
@@ -42,6 +42,8 @@ export const GATEWAY_METHOD = {
   PLANNING_FILE: "planning.file",
   /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   PLANNING_TREE: "planning.tree",
+  /** The skills a developer may choose of one plan's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  PLANNING_SKILLS: "planning.skills",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISIONS: "planning.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -78,12 +80,16 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_RENAME: "codingAgents.rename",
+  /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
@@ -94,18 +100,26 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
   PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  /** A page of the account's plan template history, read from the service now, newest first; or why there is none. */
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  /** One revision of the account's plan template beside the one before it; or why there is none. */
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** Where the account's Linear connection stands, read from the service now. */
-  LINEAR_STATUS: "linear.status",
-  /** A browser sign-in to Linear begun on the service and opened on this Mac; whether it was opened, never the address. */
-  LINEAR_CONNECT: "linear.connect",
-  /** The account's Linear connection ended on the service; where it then stands. */
-  LINEAR_DISCONNECT: "linear.disconnect",
+  /** Where every one of the account's integrations stands, read from the service now. */
+  INTEGRATIONS_STATUS: "integrations.status",
+  /** A browser sign-in to one provider begun on the service and opened on this Mac; whether it was opened, never the address. */
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  /** The tools one provider's server offers the account's agents, read from the service now. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
+  /** The account's connection to one provider ended on the service; where it then stands. */
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */

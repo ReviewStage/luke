@@ -1,4 +1,12 @@
 import {
+  awaitingLinesOfReached,
+  type CodingAgentLatestTurn,
+  type CodingAgentStoreEffect,
+  latestTurnsOfReached,
+  listPublishedCodingAgents,
+  type PublishedCodingAgent,
+} from "@sidecar/database/models/coding-agent-store";
+import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
@@ -12,14 +20,6 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
-import {
-  awaitingLinesOfReached,
-  type CodingAgentLatestTurn,
-  type CodingAgentStoreEffect,
-  latestTurnsOfReached,
-  listPublishedCodingAgents,
-  type PublishedCodingAgent,
-} from "./coding-agent-store.js";
 
 /**
  * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.

@@ -98,14 +98,17 @@ export function codeFeedCalls(
   return [...runs.values()].map(({ call, showings }) => ({ ...call, showings }));
 }
 
+/** A file Luke showed: the newest reference to it, and the commit his checkout stood at, where it was recorded. */
+export type ShownFile = CodeRef & { readonly commit?: string | undefined };
+
 /**
  * Each file Luke showed on the plan, once, in the order first shown, under
- * the newest reference to it: what the "+" offers to open, and what a
- * file's tab is held to.
+ * the newest reference to it and the commit it was read at: what the "+"
+ * offers to open, and what a file's tab is held to.
  */
-export function shownFiles(shown: readonly PlanCodeShowing[]): readonly CodeRef[] {
-  const newest = new Map<string, CodeRef>();
-  for (const { code } of shown) newest.set(code.ref.path, code.ref);
+export function shownFiles(shown: readonly PlanCodeShowing[]): readonly ShownFile[] {
+  const newest = new Map<string, ShownFile>();
+  for (const { code } of shown) newest.set(code.ref.path, { ...code.ref, commit: code.commit });
   return [...newest.values()];
 }
 

@@ -19,8 +19,10 @@ import {
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
 import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
+import { BoardIcon, CodeIcon, TranscriptIcon, WorkIcon } from "@sidecar/panel";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import type { ActKind, ActResultFor } from "#shared/messages/acts";
 import { RUN_PROFILE } from "#shared/messages/app-state";
@@ -331,7 +333,7 @@ function choose(words: string): void {
   act(() => row.click());
 }
 
-test("⌘K lists the commands the window can run now under Actions, each with its chord drawn as keys", () => {
+test("⌘K lists the commands the window can run now under Actions, each with its chord at the row's end", () => {
   mountWindow(PANEL_TAB.PLANS);
   openPalette();
   pressFilter("Actions");
@@ -344,9 +346,11 @@ test("⌘K lists the commands the window can run now under Actions, each with it
     "nothing offers the sidebar's chord here, so the palette leaves it out",
   );
   const settings = listedRows().find((row) => rowWords(row).startsWith("Settings"));
-  assert.deepEqual(
-    [...(settings?.querySelectorAll("kbd.keycap") ?? [])].map((cap) => cap.textContent),
-    ["⌘", ","],
+  assert.equal(settings?.querySelector(".shortcut")?.textContent, "⌘,");
+  assert.equal(
+    settings?.querySelector(".shortcut")?.getAttribute("aria-hidden"),
+    null,
+    "a row is an option with no aria-keyshortcuts of its own, so its chord is read",
   );
 });
 
@@ -477,8 +481,19 @@ test("Show board and the panel's other kinds are listed with the commands, with 
   const input = openPalette();
   pressFilter("Actions");
   search(input, "show");
-  for (const kind of ["Show board", "Show code", "Show transcript", "Show work"]) {
+  for (const [kind, glyph] of [
+    ["Show board", BoardIcon],
+    ["Show code", CodeIcon],
+    ["Show transcript", TranscriptIcon],
+    ["Show work", WorkIcon],
+  ] as const) {
     assert.ok(rows().includes(kind), `${kind} is listed alone, with no chord`);
+    const row = listedRows().find((each) => rowWords(each) === kind);
+    assert.equal(
+      row?.querySelector("svg")?.outerHTML,
+      renderToStaticMarkup(createElement(glyph)),
+      `${kind} wears its tab's glyph`,
+    );
   }
   choose("Show transcript");
   assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "the panel opens on the Plans tab");

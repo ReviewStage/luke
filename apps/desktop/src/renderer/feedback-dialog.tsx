@@ -36,9 +36,11 @@ import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ACT_KIND } from "#shared/messages/acts";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { encodeImage, imageFiles } from "./feedback-images";
 import { trappedTab } from "./settings/confirm-dialog";
+import { Shortcut } from "./shortcut";
 import { BusyLabel } from "./spinner";
 import { useStagedFocus } from "./staged-focus";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
@@ -46,12 +48,12 @@ import { Tooltip } from "./tooltip";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /**
- * Each kind in its own words: the title its dialog and its Settings button
- * carry, the field's name, and the hint the empty field shows. The wire still
+ * Each kind in its own words: the title its dialog carries, the field's
+ * name, and the hint the empty field shows. The wire still
  * calls the second kind a prompt; to the person writing it, it is a feature
  * they would like Luke to have.
  */
-export const FEEDBACK_COPY = {
+const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
     title: "Send feedback",
     field: "Feedback",
@@ -74,6 +76,9 @@ const IMAGE_REFUSAL = {
 } as const;
 
 const SEND_REFUSAL = "Could not send that. Try again.";
+
+/** The chord that sends from anywhere in the dialog, as Send draws and announces it. */
+const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
 /** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
 const SENT_NOTICE: ToastNotice = {
@@ -174,7 +179,7 @@ function ImageThumbnail({
       <img src={feedbackImageUrl(image)} alt={image.name} />
       <button
         type="button"
-        className="feedback-dialog-image-remove"
+        className="corner-dismiss"
         aria-label={`Remove ${image.name}`}
         disabled={busy}
         onClick={onRemove}
@@ -483,17 +488,14 @@ export function FeedbackDialog({
                   <button
                     type="button"
                     className="primary-button"
-                    aria-keyshortcuts="Meta+Enter"
+                    aria-keyshortcuts={shortcutAria(SEND_CHORD)}
                     disabled={!ready}
                     onClick={() => void send()}
                   >
                     <BusyLabel busy={busy} label="Sending">
                       Send
                     </BusyLabel>
-                    <span className="shortcut-glyphs" aria-hidden="true">
-                      <span>⌘</span>
-                      <span>↩</span>
-                    </span>
+                    <Shortcut chord={SEND_CHORD} />
                   </button>
                 </div>
               </div>

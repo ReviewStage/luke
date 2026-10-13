@@ -122,7 +122,6 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       failed: false,
       working: true,
       onRetry: () => undefined,
-      openGitHub: () => undefined,
     }),
     createElement(PlanTranscript, {
       region: {
@@ -229,7 +228,6 @@ test("the card at the top of an agent's tab and a subagent's stands off the tab 
       failed: false,
       working: false,
       onRetry: () => undefined,
-      openGitHub: () => undefined,
     }),
     subagentTab(),
   ];

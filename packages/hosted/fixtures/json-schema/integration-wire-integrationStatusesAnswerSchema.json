@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "linear": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        },
+        "notion": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        },
+        "sentry": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        },
+        "slack": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "pending",
+            "expired",
+            "disconnected",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "linear",
+        "notion",
+        "sentry",
+        "slack"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "integrations"
+  ],
+  "additionalProperties": false
+}

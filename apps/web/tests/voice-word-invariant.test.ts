@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { askRecord } from "@sidecar/database/models/asks";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
+import { type VoiceTarget, voiceWriter } from "@sidecar/database/models/voice-writer";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -30,14 +35,6 @@ import {
   sessionKey,
   UI_PART_TYPE,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../server/db/voice-vocabulary";
-import {
-  type ConversationTarget,
-  storeWriter,
-  type VoiceTarget,
-  voiceWriter,
-} from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
@@ -50,7 +47,6 @@ import {
 } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import {

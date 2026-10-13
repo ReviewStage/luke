@@ -1,6 +1,11 @@
 import { MESSAGE_ROLE, WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
+import {
+  INTEGRATION_PROVIDER_LIST,
+  type IntegrationProvider,
+  integrationProviderFromWire,
+} from "./integration-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -34,7 +39,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * handed, which no one renames. An agent may be archived, which stops a
  * turn still running and leaves it out of the plan's list unless the list
  * asks for archived agents, and brought back; its transcript and pull
- * request are kept.
+ * request are kept. The MCP servers an agent is handed, one per integration
+ * provider the account connected, can each be switched off for it, at its
+ * Start or while it stands: the change is read as its next turn starts, so
+ * a turn already running keeps what it was handed.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -52,6 +60,9 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CALL_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
+  /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
+  MAX_SERVERS: 32,
+  MAX_SERVER_CHARS: 64,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
   /** The most items one to-do list may hold: a long run of work, never a log of every command. */
@@ -129,6 +140,10 @@ export const CODING_AGENT_FAILURE = {
   PROVIDER_KEY: "provider_key",
   /** The agent's session never started, so no turn ran; a new agent is the way on. */
   NOT_STARTED: "not_started",
+  /** The agent runs a fast version, which Luke runs on its own key alone, and the account runs the provider on its own key. */
+  FAST_ON_OWN_KEY: "fast_own_key",
+  /** The provider refused fast mode for the organization of the key the step ran on. */
+  FAST_NOT_ENABLED: "fast_not_enabled",
   OTHER: "other",
 } as const;
 
@@ -249,6 +264,27 @@ export function hasWordsOrFiles(
 }
 
 /**
+ * The MCP servers switched off for an agent, by integration provider. A
+ * provider this build does not know is left out rather than refused, so a
+ * service that offers one more provider than a desktop knows still answers
+ * that desktop its agents, and a provider retired from the list reads as
+ * nothing switched off.
+ */
+export const disabledServersSchema = EffectSchema.Array(
+  EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVER_CHARS)),
+).pipe(
+  EffectSchema.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVERS)),
+  EffectSchema.decodeTo(
+    EffectSchema.Array(EffectSchema.Literals(INTEGRATION_PROVIDER_LIST)),
+    SchemaTransformation.transform({
+      decode: (named): readonly IntegrationProvider[] =>
+        named.flatMap((id) => integrationProviderFromWire(id) ?? []),
+      encode: (servers): readonly string[] => servers,
+    }),
+  ),
+);
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -256,7 +292,8 @@ export function hasWordsOrFiles(
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
- * with a task.
+ * with a task. The MCP servers its draft switched off go with it, and none
+ * is off where the Start names none.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -265,6 +302,7 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 }).check(
   EffectSchema.makeFilter(({ task, attachments }) =>
     task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),
@@ -315,6 +353,17 @@ export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentArchiveRequest = typeof codingAgentArchiveRequestSchema.Type;
+
+/**
+ * Switching the agent's MCP servers (PATCH): the whole list of those off,
+ * which replaces the list standing, so two quick changes land as the later
+ * one. Empty switches every server back on.
+ */
+export const codingAgentServersRequestSchema = EffectSchema.Struct({
+  disabledServers: disabledServersSchema,
+});
+
+export type CodingAgentServersRequest = typeof codingAgentServersRequestSchema.Type;
 
 /**
  * The plan's agent list's query (GET): `archived=include` lists the
@@ -370,6 +419,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
@@ -430,6 +481,69 @@ export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/** What became of one file: made, changed in place, removed, or moved, with or without changes. */
+export const CHANGED_FILE_STATUS = {
+  ADDED: "added",
+  MODIFIED: "modified",
+  DELETED: "deleted",
+  RENAMED: "renamed",
+} as const;
+
+export type ChangedFileStatus = (typeof CHANGED_FILE_STATUS)[keyof typeof CHANGED_FILE_STATUS];
+
+/**
+ * Why a changed file carries no patch: its contents are not text, or its
+ * patch runs past what a read carries, which GitHub leaves out of its own
+ * answer too. A file with neither is drawn from its patch.
+ */
+export const PATCH_OMITTED = {
+  BINARY: "binary",
+  TOO_LARGE: "too-large",
+} as const;
+
+export const CHANGES_BOUNDS = {
+  /** The most files one read of a pull request's changes carries; a pull request with more is cut short, and says so. */
+  MAX_FILES: 300,
+  /** The most characters one file's patch may spell before it is left out as too large. */
+  MAX_PATCH_CHARS: 100_000,
+} as const;
+
+/**
+ * One changed file: its path from the repository's root, and the path it
+ * moved from where it was renamed; what became of it; the lines it adds
+ * and removes; and its patch, every hunk of a unified diff from the first
+ * `@@` header on, or null with why where it carries none.
+ */
+const changedFileSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  previousPath: EffectSchema.NullOr(EffectSchema.String),
+  status: EffectSchema.Literals(Object.values(CHANGED_FILE_STATUS)),
+  additions: countedNumber,
+  deletions: countedNumber,
+  patch: EffectSchema.NullOr(EffectSchema.String),
+  omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
+});
+
+export type CodingAgentChangedFile = typeof changedFileSchema.Type;
+
+/**
+ * One agent's changes (GET): the pull request it published, as its page on
+ * GitHub, its files in the order GitHub lists them now, and whether the
+ * list was cut short at the bound; or null where it has opened none yet,
+ * which is not the same as a pull request that changes nothing.
+ */
+export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
+  pullRequest: EffectSchema.NullOr(
+    EffectSchema.Struct({
+      url: EffectSchema.String,
+      files: EffectSchema.Array(changedFileSchema).check(
+        EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
+      ),
+      truncated: EffectSchema.Boolean,
+    }),
+  ),
+});
 
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the

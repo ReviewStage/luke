@@ -1,0 +1,95 @@
+import { UI_PART_STATE, UI_PART_TYPE } from "@sidecar/brain";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+} from "@sidecar/hosted/coding-agent-wire";
+import { type FileUIPart, isFileUIPart, isTextUIPart, type TextUIPart, type UIMessage } from "ai";
+
+/**
+ * attached-file-parts.ts -- the files a developer attached to a coding agent's message as the journal keeps them, and as eve's receipt of them reads back for matching.
+ *
+ * The journal keeps the words as the row's first part, empty where there
+ * are none, and every file after it as the SDK's file part over a `data:`
+ * URL, a text file under `text/plain`, so the transcript draws a thumbnail
+ * or a name for each from the row alone. eve is handed each text file
+ * inlined under a heading and a fence (`apps/web/server/hosted/attached-files.ts`),
+ * and its receipt lists a line's parts the way it was handed them, so a
+ * line is matched by its words, each text file inlined, and each image and
+ * PDF by its mark.
+ */
+
+/** What heads a text file inlined for the model, before its name. */
+const ATTACHED_FILE_HEADING = "Attached file: ";
+
+/** The shortest fence a text file is inlined in, as Markdown's is. */
+const SHORTEST_FENCE = 3;
+
+/** An attachment's bytes as a `data:` URL, which both eve and the journal carry. */
+export function dataUrl(mediaType: string, base64: string): string {
+  return `data:${mediaType};base64,${base64}`;
+}
+
+/** The base64 of a `data:` URL, or nothing where it is not one. */
+function base64Of(url: string): string | undefined {
+  const comma = url.indexOf(",");
+  return url.startsWith("data:") && comma >= 0 ? url.slice(comma + 1) : undefined;
+}
+
+/** An image or a PDF as a line is matched by it: its name and its type, which a receipt lists it by whether eve staged it or not. */
+export function fileMark(filename: string | undefined, mediaType: string): string {
+  return `[file: ${filename ?? ""} (${mediaType})]`;
+}
+
+/** A text file as the model reads it: its name, then the file in a fence longer than any run of backticks inside it. */
+export function inlinedFile(name: string, text: string): string {
+  const longest = Math.max(0, ...Array.from(text.matchAll(/`+/gu), (run) => run[0].length));
+  const fence = "`".repeat(Math.max(SHORTEST_FENCE, longest + 1));
+  return `${ATTACHED_FILE_HEADING}${name}\n${fence}\n${text}\n${fence}`;
+}
+
+/** The text a text file's base64 spells; the wire has already held it to UTF-8. */
+export function textOf(base64: string): string {
+  return Buffer.from(base64, "base64").toString("utf8");
+}
+
+/** The parts the journal keeps for a developer's line: the words, then each file it carried, in the order attached. */
+export function lineParts(
+  text: string,
+  attachments: readonly CodingAgentAttachment[],
+): (TextUIPart | FileUIPart)[] {
+  return [
+    { type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE },
+    ...attachments.map(
+      (file): FileUIPart => ({
+        type: "file",
+        mediaType: file.mediaType,
+        filename: file.name,
+        url: dataUrl(file.mediaType, file.data),
+      }),
+    ),
+  ];
+}
+
+/**
+ * A line's parts as eve's receipt lists them, in the order eve was handed
+ * them: the words where there are any, each text file inlined, then each
+ * image and PDF by its mark; nothing for a row with no words part.
+ */
+export function receivedPartsOf(
+  parts: readonly UIMessage["parts"][number][],
+): readonly string[] | undefined {
+  const [words, ...rest] = parts;
+  if (words === undefined || !isTextUIPart(words)) return undefined;
+  const files = rest.filter(isFileUIPart);
+  const texts = files.flatMap((part) => {
+    if (part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
+    const base64 = base64Of(part.url);
+    return base64 === undefined ? [] : [inlinedFile(part.filename ?? "", textOf(base64))];
+  });
+  const marks = files.flatMap((part) =>
+    part.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
+      ? []
+      : [fileMark(part.filename, part.mediaType)],
+  );
+  return [...(words.text === "" ? [] : [words.text]), ...texts, ...marks];
+}
