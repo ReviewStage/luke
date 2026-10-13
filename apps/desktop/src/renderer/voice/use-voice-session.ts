@@ -12,13 +12,14 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { VOICE_COMMAND } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LiveCall, type LiveStreamSlot } from "./live-call";
+import { type AvatarAudioActs, LiveCall, type LiveStreamSlot } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -61,13 +62,21 @@ function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot 
  * `AudioContext`, the element Luke's voice plays through — and the
  * subscriptions the main process reaches this window on. Nothing is drawn
  * here, and nothing here appends to the model: every append is the host's.
+ * `avatarAudio` is where Luke's voice goes while a face stands on the call;
+ * absent, no face is fed and the element is never muted for one.
  */
-export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
+export function useVoiceSession(
+  remoteAudio: RefObject<HTMLAudioElement | null>,
+  avatarAudio?: AvatarAudioActs,
+): void {
   const { act, tell } = useAct();
   const local = useAtomValue(localStreamAtom);
   const remote = useAtomValue(remoteStreamAtom);
   const callRef = useRef<LiveCall | undefined>(undefined);
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
+  // Read at each call's construction, since the orchestrator and its factory outlive this render.
+  const avatarAudioRef = useRef(avatarAudio);
+  avatarAudioRef.current = avatarAudio;
   /**
    * Why Luke's voice is not played: the stop silencing the utterance it cut
    * short, and the developer's speaker toggle. The element is muted while
@@ -75,9 +84,17 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    */
   const outputSilenced = useRef(false);
   const speakerMuted = useRef(false);
+  /**
+   * Whether the face is drawing and speaking for Luke in the call window, so
+   * his voice here would be heard twice. Note that the element is muted
+   * rather than detached, because Chromium renders a remote WebRTC stream
+   * into the tee's audio graph only while an element plays it.
+   */
+  const avatarVoicing = useRef(false);
   const playRemoteAudio = () => {
     if (remoteAudio.current) {
-      remoteAudio.current.muted = outputSilenced.current || speakerMuted.current;
+      remoteAudio.current.muted =
+        outputSilenced.current || speakerMuted.current || avatarVoicing.current;
     }
   };
   /** Everything the policy asks of the main process, over the one bridge this window has. */
@@ -138,6 +155,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           outputSilenced.current = silenced;
           playRemoteAudio();
         },
+        avatar: avatarAudioRef.current ? { acts: avatarAudioRef.current } : undefined,
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
@@ -147,6 +165,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
         },
       });
+      call.reportAvatarStatus(appStateNow()?.voice.avatar.status ?? AVATAR_STATUS.OFF);
       callRef.current = call;
       return call;
     },
@@ -161,6 +180,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const drive = useCallback((effect: Effect.Effect<unknown>) => {
     Effect.runForkWith(rendererServicesNow())(effect);
   }, []);
+  /**
+   * The stop, from the key or the panel: the face is told to drop what it
+   * buffered behind Luke's voice whether or not his own track still speaks,
+   * since it runs behind that track.
+   */
+  const stopSpeaking = useCallback(() => {
+    callRef.current?.interruptAvatar();
+    drive(orchestrator.stopSpeaking());
+  }, [drive, orchestrator]);
   const audioContext = useRef<AudioContext | undefined>(undefined);
 
   /**
@@ -180,6 +208,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     };
     orchestrator.surround(surroundings);
   }, [orchestrator, state]);
+
+  // The face's status as main holds it: the call tees Luke's voice into it
+  // from the ask on, and the element goes quiet only once the face speaks
+  // for him, and plays again once it is down.
+  const avatarStatus = state?.voice.avatar.status ?? AVATAR_STATUS.OFF;
+  useEffect(() => {
+    avatarVoicing.current = avatarAudio !== undefined && avatarStatus === AVATAR_STATUS.LIVE;
+    playRemoteAudio();
+    callRef.current?.reportAvatarStatus(avatarStatus);
+  }, [avatarAudio, avatarStatus]);
 
   // Two meters over one context: Luke's track decides the speaking status,
   // since the guide forbids reading it off transcript events, and the
@@ -233,7 +271,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
+        if (command === VOICE_COMMAND.STOP_SPEAKING) stopSpeaking();
         else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
         else if (command === VOICE_COMMAND.TOGGLE_MICROPHONE)
           drive(orchestrator.toggleMicrophone());
@@ -243,7 +281,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           drive(orchestrator.requestMicrophoneAccess());
         }
       }),
-    [drive, orchestrator],
+    [drive, orchestrator, stopSpeaking],
   );
 
   // The Plans tab's microphone, about the plan the panel had open: a call about
@@ -284,10 +322,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // from the panel: the microphone closes, and where Luke is speaking the
   // host tells the model to stop; a press over no session simply does
   // nothing.
-  useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => drive(orchestrator.stopSpeaking())),
-    [drive, orchestrator],
-  );
+  useEffect(() => window.sidecar.onStopHotkeyPress(stopSpeaking), [stopSpeaking]);
 
   useEffect(
     () => () => {

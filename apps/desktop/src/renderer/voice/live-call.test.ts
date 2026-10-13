@@ -11,6 +11,8 @@ import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestra
 import type { WireRecord } from "@sidecar/wire";
 import { type Context, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { AVATAR_STATUS } from "#shared/messages/avatar";
+import type { AvatarTeeContext, AvatarTeePort } from "./avatar-tee";
 import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-call";
 import {
   LIVE_EVENTS_CHANNEL_LABEL,
@@ -188,6 +190,39 @@ class StreamSlot implements LiveStreamSlot {
   }
 }
 
+/**
+ * The tee's audio graph as far as the call reaches it: each context the call
+ * made, whether it was closed, and a worklet that posts what the test hands it.
+ */
+class FakeTeeContexts {
+  readonly made: { closed: boolean }[] = [];
+  #port: AvatarTeePort | undefined;
+
+  readonly create = (): AvatarTeeContext => {
+    const made = { closed: false };
+    this.made.push(made);
+    return {
+      sampleRate: 24_000,
+      audioWorklet: { addModule: () => Promise.resolve() },
+      connectTee: () => {
+        const port: AvatarTeePort = { onmessage: null, close: () => undefined };
+        this.#port = port;
+        return { port, disconnect: () => undefined };
+      },
+      resume: () => Promise.resolve(),
+      close: () => {
+        made.closed = true;
+        return Promise.resolve();
+      },
+    };
+  };
+
+  /** One chunk the worklet completed, posted to whichever graph stands. */
+  post(byte: number): void {
+    this.#port?.onmessage?.(new MessageEvent("message", { data: Uint8Array.of(byte, 0).buffer }));
+  }
+}
+
 /** The two slots the window shows streams in, which every call it holds shares. */
 interface WindowStreams {
   remote: StreamSlot;
@@ -202,6 +237,8 @@ interface FixtureOptions {
   voiceSessionId?: string;
   /** The window's slots, shared with another call; a call of its own otherwise. */
   streams?: WindowStreams;
+  /** Whether the call is handed the avatar's acts, as a window with a face to feed is. */
+  avatar?: boolean;
 }
 
 function build(services: Context.Context<never>, options: FixtureOptions) {
@@ -230,6 +267,10 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
   /** The element Luke plays through, as far as its `muted` goes. */
   let outputSilenced = false;
   const wire: string[] = [];
+  const tee = new FakeTeeContexts();
+  /** The first byte of each chunk the avatar was handed, and how often it was told to stop. */
+  const spoken: number[] = [];
+  let interrupts = 0;
   const call = new LiveCall({
     events: {
       onStatus: (status, heard) => {
@@ -282,6 +323,17 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
       outputSilenced = silenced;
     },
     onWireEvent: (direction, event) => wire.push(`${direction}:${String(event.type)}`),
+    avatar: options.avatar
+      ? {
+          acts: {
+            speak: (pcm) => spoken.push(pcm[0] ?? -1),
+            interrupt: () => {
+              interrupts += 1;
+            },
+          },
+          createTeeContext: tee.create,
+        }
+      : undefined,
     services,
   });
   const channel = () => {
@@ -346,6 +398,14 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
     acknowledge,
     grantMicrophone: () => {
       microphoneGranted = true;
+    },
+    tee,
+    spoken,
+    interrupts: () => interrupts,
+    /** Luke's track arriving on the peer, as the connection hands it up. */
+    remoteTrack: () => {
+      // SAFETY: the call reads only the event's streams, and passes the stream on unread.
+      peer.ontrack?.({ streams: [new FakeStream([new FakeTrack()])] } as unknown as RTCTrackEvent);
     },
     sentTypes: () => channel().sent.map((event) => event.type),
   };
@@ -494,4 +554,175 @@ it.effect(
       assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
       assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
     }),
+);
+
+/** A call opened, started, and carrying Luke's track, with the avatar's acts in hand. */
+const avatarCall = Effect.gen(function* () {
+  const f = yield* fixture({ avatar: true });
+  const opening = yield* Effect.forkChild(f.call.open(OPENING));
+  yield* settle;
+  f.peer.gathered();
+  yield* settle;
+  f.started();
+  yield* Fiber.join(opening);
+  f.remoteTrack();
+  return f;
+});
+
+/** A press of the talk key, through its acknowledgment. */
+const press = (f: ReturnType<typeof build>) =>
+  Effect.gen(function* () {
+    const unmuting = yield* Effect.forkChild(f.call.unmute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+    yield* Fiber.join(unmuting);
+  });
+
+/** The key coming up, through its acknowledgment. */
+const release = (f: ReturnType<typeof build>) =>
+  Effect.gen(function* () {
+    const muting = yield* Effect.forkChild(f.call.mute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+    yield* Fiber.join(muting);
+  });
+
+it.effect(
+  "Luke's voice is teed into the face from the ask until it is down, and nothing drawn under a stop's silence reaches it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* avatarCall;
+      yield* settle;
+      assert.equal(f.tee.made.length, 0);
+      f.call.reportAvatarStatus(AVATAR_STATUS.STARTING);
+      yield* settle;
+      f.tee.post(1);
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      yield* settle;
+      f.tee.post(2);
+      // The ask and the first frame are one tee, not two.
+      assert.equal(f.tee.made.length, 1);
+      assert.deepEqual(f.spoken, [1, 2]);
+      f.call.reportRemoteAudioLevel(true);
+      f.call.silenceOutput();
+      f.tee.post(3);
+      assert.deepEqual(f.spoken, [1, 2]);
+      // The silenced utterance over, what Luke says next reaches the face.
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(1_500);
+      f.tee.post(4);
+      assert.deepEqual(f.spoken, [1, 2, 4]);
+      f.call.reportAvatarStatus(AVATAR_STATUS.ENDED);
+      yield* settle;
+      f.tee.post(5);
+      assert.deepEqual(f.spoken, [1, 2, 4]);
+      assert.equal(f.tee.made[0]?.closed, true);
+    }),
+);
+
+it.effect("a call handed no avatar acts never tees, whatever the face's status", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    yield* Fiber.join(opening);
+    f.remoteTrack();
+    f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+    yield* settle;
+    assert.equal(f.tee.made.length, 0);
+  }),
+);
+
+it.effect("the hang-up takes the tee down with the call", () =>
+  Effect.gen(function* () {
+    const f = yield* avatarCall;
+    f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+    yield* settle;
+    f.channel().receive({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "closed",
+      reason: "close_requested",
+      usage: { seconds: 1 },
+    });
+    yield* settle;
+    f.tee.post(1);
+    assert.deepEqual(f.spoken, []);
+    assert.equal(f.tee.made[0]?.closed, true);
+  }),
+);
+
+it.effect("the stop key interrupts the face only while one is fed", () =>
+  Effect.gen(function* () {
+    const f = yield* avatarCall;
+    f.call.interruptAvatar();
+    assert.equal(f.interrupts(), 0);
+    f.call.reportAvatarStatus(AVATAR_STATUS.STARTING);
+    f.call.interruptAvatar();
+    assert.equal(f.interrupts(), 1);
+    f.call.reportAvatarStatus(AVATAR_STATUS.ENDED);
+    f.call.interruptAvatar();
+    assert.equal(f.interrupts(), 1);
+  }),
+);
+
+it.effect(
+  "a press held over Luke's quiet track stops the face once it has been quiet 350 ms, once a press and a second apart at least",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* avatarCall;
+      f.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      f.call.reportRemoteAudioLevel(true);
+      yield* press(f);
+      // Luke still speaking is the model still answering, which the face mouths.
+      yield* advance(2_000);
+      assert.equal(f.interrupts(), 0);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(349);
+      assert.equal(f.interrupts(), 0);
+      yield* advance(1);
+      assert.equal(f.interrupts(), 1);
+      // The same press stops the face once, whatever Luke does after.
+      f.call.reportRemoteAudioLevel(true);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(1_000);
+      assert.equal(f.interrupts(), 1);
+      // A press right behind it waits out the second since the last stop.
+      yield* release(f);
+      const g = yield* avatarCall;
+      g.call.reportAvatarStatus(AVATAR_STATUS.LIVE);
+      g.call.reportRemoteAudioLevel(false);
+      yield* advance(350);
+      yield* press(g);
+      assert.equal(g.interrupts(), 1);
+      yield* release(g);
+      yield* advance(200);
+      yield* press(g);
+      assert.equal(g.interrupts(), 1);
+      yield* advance(799);
+      assert.equal(g.interrupts(), 1);
+      yield* advance(1);
+      assert.equal(g.interrupts(), 2);
+      // A key let go of before the bound stops nothing.
+      yield* release(g);
+      g.call.reportRemoteAudioLevel(true);
+      yield* press(g);
+      g.call.reportRemoteAudioLevel(false);
+      yield* advance(100);
+      yield* release(g);
+      yield* advance(5_000);
+      assert.equal(g.interrupts(), 2);
+    }),
+);
+
+it.effect("a press with no face fed never barges in", () =>
+  Effect.gen(function* () {
+    const f = yield* avatarCall;
+    f.call.reportRemoteAudioLevel(false);
+    yield* press(f);
+    yield* advance(2_000);
+    assert.equal(f.interrupts(), 0);
+  }),
 );

@@ -34,6 +34,7 @@ import type {
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
+  Clock,
   type Context,
   Deferred,
   Duration,
@@ -44,6 +45,8 @@ import {
   Result,
   type Scope,
 } from "effect";
+import { AVATAR_STATUS, type AvatarState } from "#shared/messages/avatar";
+import { type AvatarTeeContext, type AvatarTeeOptions, startAvatarTee } from "./avatar-tee";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -74,6 +77,16 @@ const SPEAKING_HANGOVER_MS = 1_500;
 /** How often the caption rows are re-read for ones that have settled since their last fragment. */
 const CAPTION_SETTLE_TICK_MS = 500;
 
+/**
+ * How long Luke's own track must have been quiet under a held talk key before
+ * the face is told to stop: the model has stopped for the developer by then,
+ * and what the face still mouths is the tail it buffered behind his voice.
+ */
+const AVATAR_BARGE_IN_QUIET_MS = 350;
+
+/** The least time between two interrupts a barge-in sends, so a stutter on the key is one stop. */
+const AVATAR_BARGE_IN_COOLDOWN_MS = 1_000;
+
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
@@ -84,6 +97,21 @@ interface LiveCallActs {
   reportTransport: (report: VoiceReportLiveTransportParams) => void;
   reportActivity: (idle: boolean) => void;
 }
+
+/**
+ * What the call asks of the avatar's media socket on the host: each 100 ms
+ * chunk of Luke's voice as 24 kHz PCM16, and a stop for the face's mouth.
+ */
+export interface AvatarAudioActs {
+  speak: (pcm: Uint8Array) => void;
+  interrupt: () => void;
+}
+
+/** The face's statuses Luke's voice is teed into it under: once it is asked for, and once it draws. */
+const TEED_AVATAR_STATUSES: ReadonlySet<AvatarState["status"]> = new Set([
+  AVATAR_STATUS.STARTING,
+  AVATAR_STATUS.LIVE,
+]);
 
 /**
  * A stream the window shows, shared by every call it ever holds: the element
@@ -112,6 +140,11 @@ export interface LiveCallOptions {
    * is heard at once rather than when the model obeys.
    */
   onOutputSilenced: (silenced: boolean) => void;
+  /**
+   * The avatar's half of the call: absent, no face is ever fed. The tee's
+   * context is the browser's own unless a test stands one in.
+   */
+  avatar?: { acts: AvatarAudioActs; createTeeContext?: () => AvatarTeeContext } | undefined;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
@@ -201,6 +234,18 @@ export class LiveCall implements LiveVoiceCall {
   /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
   #muting: Deferred.Deferred<boolean> | undefined;
   #ids = 0;
+  /** The face as main last reported it, which decides whether Luke's voice is teed into it. */
+  #avatarStatus: AvatarState["status"] = AVATAR_STATUS.OFF;
+  /** The tee's own fiber, holding the audio graph in a scope of its own until it is interrupted. */
+  #tee: Fiber.Fiber<void> | undefined;
+  /** When Luke's track last went quiet, by the services' clock; undefined while he is audible, and quiet since forever before he first was. */
+  #lukeQuietSince: number | undefined = Number.NEGATIVE_INFINITY;
+  /** Whether a press is down: from the unmute it asked for until the mute that ended it. */
+  #pressed = false;
+  /** Whether this press has already barged in, since a press stops the face once. */
+  #bargedIn = false;
+  #lastInterruptAt = Number.NEGATIVE_INFINITY;
+  #bargeIn: Fiber.Fiber<void> | undefined;
 
   constructor(options: LiveCallOptions) {
     this.#options = options;
@@ -250,6 +295,11 @@ export class LiveCall implements LiveVoiceCall {
    * to release.
    */
   unmute(): Effect.Effect<boolean> {
+    if (!this.#pressed) {
+      this.#pressed = true;
+      this.#bargedIn = false;
+      this.#armBargeIn();
+    }
     return this.#unmuteEffect();
   }
 
@@ -264,6 +314,8 @@ export class LiveCall implements LiveVoiceCall {
    * The answer stays the session's own word on the switch.
    */
   mute(): Effect.Effect<boolean> {
+    this.#pressed = false;
+    this.#armBargeIn();
     const held = this.#muting;
     if (held) return Deferred.await(held);
     const peer = this.#peer;
@@ -296,6 +348,28 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   /**
+   * The face as main holds it in the document. Luke's voice is teed into the
+   * avatar from the moment it is asked for, so the first frame already has
+   * lips to move, until it is down; the element's own mute is the window's.
+   */
+  reportAvatarStatus(status: AvatarState["status"]): void {
+    this.#avatarStatus = status;
+    this.#refreshTee();
+    this.#armBargeIn();
+  }
+
+  /**
+   * The stop key's word to the face: what the avatar buffered behind Luke's
+   * voice is dropped, whether or not his own track is still speaking, since
+   * the face runs behind it.
+   */
+  interruptAvatar(): void {
+    if (!this.#avatarFed()) return;
+    this.#interruptAvatar();
+    this.#armBargeIn();
+  }
+
+  /**
    * The graceful hang-up the conversations guide prescribes: the closed
    * handler already stands, the host is asked for the service's
    * `session.close`, and everything stays open until `session.closed`
@@ -314,6 +388,8 @@ export class LiveCall implements LiveVoiceCall {
    * keeps the idle window open too.
    */
   reportRemoteAudioLevel(active: boolean): void {
+    this.#lukeQuietSince = active ? undefined : this.#now();
+    this.#armBargeIn();
     if (this.#speakingHangover !== undefined) {
       this.#disarm(this.#speakingHangover);
       this.#speakingHangover = undefined;
@@ -428,6 +504,9 @@ export class LiveCall implements LiveVoiceCall {
         onRemoteStream: (stream) => {
           this.#remoteStream = stream;
           this.#options.remoteStream.show(stream);
+          // A stream that replaced another is teed afresh.
+          this.#stopTee();
+          this.#refreshTee();
         },
       });
       if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
@@ -706,6 +785,9 @@ export class LiveCall implements LiveVoiceCall {
     this.#captionTick = undefined;
     if (this.#speakingHangover !== undefined) this.#disarm(this.#speakingHangover);
     this.#speakingHangover = undefined;
+    this.#stopTee();
+    this.#pressed = false;
+    this.#armBargeIn();
     this.#settleSwitch(false);
     Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
     if (peer) {
@@ -730,6 +812,81 @@ export class LiveCall implements LiveVoiceCall {
     this.#withdraw(this.#options.remoteStream, this.#remoteStream);
     this.#setStatus(status);
     Deferred.doneUnsafe(this.#ending, Exit.void);
+  }
+
+  /** Whether a face stands to be fed: one asked for or drawing, on a call still standing. */
+  #avatarFed(): boolean {
+    return (
+      this.#options.avatar !== undefined &&
+      this.standing &&
+      TEED_AVATAR_STATUSES.has(this.#avatarStatus)
+    );
+  }
+
+  /**
+   * Starts the tee where a face is fed and Luke's stream has arrived, and
+   * stops it where either is gone. A chunk drawn while a stop's silence
+   * stands is dropped, so the face is as quiet as the element.
+   */
+  #refreshTee(): void {
+    const avatar = this.#options.avatar;
+    const stream = this.#remoteStream;
+    if (!this.#avatarFed() || !avatar || !stream) {
+      this.#stopTee();
+      return;
+    }
+    if (this.#tee !== undefined) return;
+    const tee: AvatarTeeOptions = {
+      stream,
+      onChunk: (pcm) => {
+        if (!this.#outputSilenced && this.#avatarFed()) avatar.acts.speak(pcm);
+      },
+    };
+    if (avatar.createTeeContext) tee.createContext = avatar.createTeeContext;
+    this.#tee = this.#fork(Effect.scoped(Effect.andThen(startAvatarTee(tee), Effect.never)));
+  }
+
+  #stopTee(): void {
+    if (this.#tee !== undefined) this.#disarm(this.#tee);
+    this.#tee = undefined;
+  }
+
+  /**
+   * The barge-in: a press held over a face still mouthing while Luke's own
+   * track has gone quiet for {@link AVATAR_BARGE_IN_QUIET_MS} stops the face,
+   * once a press and never within {@link AVATAR_BARGE_IN_COOLDOWN_MS} of the
+   * last stop. Re-armed on every edge that moves it, so the bound standing
+   * is always the one the latest facts call for.
+   */
+  #armBargeIn(): void {
+    if (this.#bargeIn !== undefined) this.#disarm(this.#bargeIn);
+    this.#bargeIn = undefined;
+    const quietSince = this.#lukeQuietSince;
+    if (!this.#pressed || this.#bargedIn || quietSince === undefined || !this.#avatarFed()) return;
+    const dueAt = Math.max(
+      quietSince + AVATAR_BARGE_IN_QUIET_MS,
+      this.#lastInterruptAt + AVATAR_BARGE_IN_COOLDOWN_MS,
+    );
+    const delayMs = dueAt - this.#now();
+    if (delayMs > 0) {
+      this.#bargeIn = this.#arm(delayMs, () => {
+        this.#bargeIn = undefined;
+        this.#armBargeIn();
+      });
+      return;
+    }
+    this.#bargedIn = true;
+    this.#interruptAvatar();
+  }
+
+  #interruptAvatar(): void {
+    this.#lastInterruptAt = this.#now();
+    this.#options.avatar?.acts.interrupt();
+  }
+
+  /** The services' clock, so a test's `TestClock` is what the barge-in reads. */
+  #now(): number {
+    return Effect.runSyncWith(this.#services)(Clock.currentTimeMillis);
   }
 
   /** Lifts a stop's silence, where one stands. */
@@ -803,10 +960,13 @@ export class LiveCall implements LiveVoiceCall {
    * fiber, and re-arming interrupts the one it replaces.
    */
   #arm(delayMs: number, work: () => void): Fiber.Fiber<void> {
+    return this.#fork(Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)));
+  }
+
+  /** Runs `effect` under the renderer's services and hangs its interrupt off the session's scope. */
+  #fork(effect: Effect.Effect<void>): Fiber.Fiber<void> {
     const scope = this.#scope;
-    const fiber = Effect.runForkWith(this.#services)(
-      Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)),
-    );
+    const fiber = Effect.runForkWith(this.#services)(effect);
     return scope ? Fiber.runIn(fiber, scope) : fiber;
   }
 
