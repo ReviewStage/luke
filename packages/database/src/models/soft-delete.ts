@@ -28,7 +28,7 @@ export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days
 type ClearFailure = SqlError | Schema.SchemaError;
 
 /** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
-export const DELETED_PLAN_CALLS_PER_SWEEP = 200;
+const DELETED_PLAN_CALLS_PER_SWEEP = 200;
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
