@@ -7,7 +7,7 @@ import {
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
-import { childConversationId } from "@sidecar/database/models/ids";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -31,6 +31,13 @@ import {
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
+import {
+  type ReadWebPageResult,
+  ResearchBudget,
+  runReadWebPage,
+  runSearchWeb,
+  type SearchWebResult,
+} from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { logStoreFailure } from "../store-failure.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -230,6 +237,19 @@ export interface CoderHost {
     admitted: AdmittedConversation,
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient>;
+  /**
+   * Runs one of the agent's public reads, the planning model's own
+   * (`../public-research.ts`): a search or a page read, under the turn's
+   * budget, the search on Luke's key and counted on the account's meter.
+   * The budget is the turn's own, named with its session, since eve numbers
+   * every session's turns afresh.
+   */
+  research(
+    admitted: AdmittedConversation,
+    tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
+    turn: { readonly sessionId: string; readonly eveTurnId: string },
+    input: UnparsedWireValue,
+  ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -263,6 +283,7 @@ function describeFailure(failure: CheckoutFailure): string {
 
 /** The host over the deployment's seams. */
 export function coderHost(seams: CoderHostSeams): CoderHost {
+  const research = new ResearchBudget();
   const agentOf = (admitted: AdmittedConversation) =>
     Effect.map(
       readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
@@ -547,6 +568,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const childId = childConversationId(admitted.target.conversationId, callId);
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
+
+    research: (admitted, tool, turn, input) => {
+      const access = seams.research(admitted.target.userId);
+      const turnId = hostTurnId(turn.sessionId, turn.eveTurnId);
+      const call = { turnId, budget: research, openAi: access.openAi, spend: access.spend };
+      return tool === CODER_TOOL.SEARCH_WEB
+        ? runSearchWeb(call, input)
+        : runReadWebPage(call, input);
+    },
 
     relay: (event, admitted, session, state, prompt) =>
       Effect.gen(function* () {

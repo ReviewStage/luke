@@ -40,7 +40,7 @@ import { CALL_KIND, type CallKind, commandDescription, pageName, type SaidCall }
  * here draws.
  */
 
-/** The tools a coding agent has, eve's and Luke's own notes on the plan, to-do list, and inbox, by the names its parts carry. */
+/** The tools a coding agent has, eve's, the hosted public reads, and Luke's own notes on the plan, to-do list, and inbox, by the names its parts carry, beside the provider-run web reads a transcript written before still names. */
 export const AGENT_TOOL = {
   BASH: "bash",
   READ_FILE: "read_file",
@@ -50,6 +50,8 @@ export const AGENT_TOOL = {
   GLOB: "glob",
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  SEARCH_WEB: "search_web",
+  READ_WEB_PAGE: "read_web_page",
   LOAD_SKILL: "load_skill",
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
@@ -394,6 +396,14 @@ function knownToolView(
         input: textBlock(stringAt(input, "url") ?? ""),
         output: output === undefined ? undefined : wordsOutput(output, "content"),
       };
+    case AGENT_TOOL.READ_WEB_PAGE:
+      return {
+        kind: CALL_KIND.WEB_PAGE,
+        subject: pageName(stringAt(input, "url") ?? ""),
+        input: textBlock(stringAt(input, "url") ?? ""),
+        output: output === undefined ? undefined : wordsOutput(output, "text"),
+      };
+    case AGENT_TOOL.SEARCH_WEB:
     case AGENT_TOOL.WEB_SEARCH:
       return {
         kind: CALL_KIND.WEB_SEARCH,

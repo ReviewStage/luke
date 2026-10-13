@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { failureKind } from "@sidecar/runtime/effect";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
@@ -19,6 +20,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { providerModelOf } from "./model-catalog.js";
 import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
 
 /**
@@ -198,9 +200,25 @@ export type ReadWebPageResult =
     };
 
 /** Luke's own OpenAI access, the brain's key and model; nothing while the deployment holds no key. */
-interface ResearchOpenAi {
+export interface ResearchOpenAi {
   readonly apiKey: Redacted.Redacted;
   readonly modelId: string;
+}
+
+/** Luke's OpenAI access for the search over his key: the brain's own model, by the provider's id; nothing while the deployment holds no key. */
+export function researchOpenAiOf(
+  apiKey: Redacted.Redacted | undefined,
+): ResearchOpenAi | undefined {
+  const named = providerModelOf(BRAIN_OPENAI_DEFAULTS.MODEL);
+  return apiKey === undefined || named === undefined
+    ? undefined
+    : { apiKey, modelId: named.modelId };
+}
+
+/** What one account's research runs on beside its turn: the search's access, and the count of one of its hosted uses. */
+export interface ResearchAccess {
+  readonly openAi: ResearchOpenAi | undefined;
+  readonly spend: Effect.Effect<void, MeterUnavailable>;
 }
 
 /** What one research call runs under: the turn it counts against, the budget, and the search's access. */

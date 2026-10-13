@@ -82,6 +82,13 @@ import {
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
+import {
+  PUBLIC_RESEARCH_BOUNDS,
+  READ_WEB_PAGE_REFUSAL,
+  READ_WEB_PAGE_STATUS,
+  SEARCH_WEB_REFUSAL,
+  SEARCH_WEB_STATUS,
+} from "../server/hosted/public-research";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
@@ -155,6 +162,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
       deploymentSecret: () => undefined,
       keys: () => Effect.succeed(KEYS),
       titleModel: () => titleModel,
+      research: () => ({ openAi: undefined, spend: Effect.void }),
       scriptedModel: () => false,
       now: () => NOW,
     };
@@ -514,6 +522,66 @@ const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
   });
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a turn's page reads are bounded by its own budget, which another session's turn of the same number never spends",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const page = unparsedWire({ url: "https://127.0.0.1/admin" });
+        const first = { sessionId: "wrun_01BUDGET0000000000000001", eveTurnId: "turn_0" };
+        const second = { sessionId: "wrun_01BUDGET0000000000000002", eveTurnId: "turn_0" };
+        const readIn = (turn: typeof first) =>
+          host.research(admitted, CODER_TOOL.READ_WEB_PAGE, turn, page);
+
+        for (let read = 0; read < PUBLIC_RESEARCH_BOUNDS.PAGE_READS_PER_TURN; read += 1) {
+          const answer = yield* readIn(first);
+          assert.ok(answer.status === READ_WEB_PAGE_STATUS.NOT_READ);
+          assert.equal(answer.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+        }
+        const spent = yield* readIn(first);
+        assert.ok(spent.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(spent.reason, READ_WEB_PAGE_REFUSAL.OVER_BUDGET);
+
+        const elsewhere = yield* readIn(second);
+        assert.ok(elsewhere.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(elsewhere.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+      }),
+  );
+
+  it.effect(
+    "a coding agent's public reads are the planning model's own: a search on a deployment holding no key is refused in the search's words, and a page on a private address is never fetched",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const query = "invite link expiry";
+
+        const turn = { sessionId: "wrun_01RESEARCH000000000000001", eveTurnId: "turn_0" };
+        const searched = yield* host.research(
+          admitted,
+          CODER_TOOL.SEARCH_WEB,
+          turn,
+          unparsedWire({ query }),
+        );
+        assert.deepEqual(searched, {
+          status: SEARCH_WEB_STATUS.NOT_SEARCHED,
+          reason: SEARCH_WEB_REFUSAL.UNAVAILABLE,
+          query,
+        });
+
+        const read = yield* host.research(
+          admitted,
+          CODER_TOOL.READ_WEB_PAGE,
+          turn,
+          unparsedWire({ url: "https://127.0.0.1/admin" }),
+        );
+        assert.equal(read.status, READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.ok(read.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(read.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+      }),
+  );
+
   it.effect(
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
     () =>
@@ -916,7 +984,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     assert.equal(opensSandbox(requested(CODER_TOOL.READ_FILE)), true);
     assert.equal(opensSandbox(received([{ type: "text", text: "Match this mock" }])), false);
     assert.equal(opensSandbox(received(undefined)), false);
-    assert.equal(opensSandbox(requested(CODER_TOOL.WEB_SEARCH)), false);
+    assert.equal(opensSandbox(requested(CODER_TOOL.SEARCH_WEB)), false);
   });
 
   it.effect("a title call that fails leaves the agent untitled", () =>
@@ -1791,6 +1859,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           deploymentSecret: () => undefined,
           keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
           titleModel: () => undefined,
+          research: () => ({ openAi: undefined, spend: Effect.void }),
           scriptedModel: () => true,
           now: () => NOW,
         });

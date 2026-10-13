@@ -9,6 +9,7 @@ import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../connection-tools.js";
+import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -16,7 +17,8 @@ import { connectionToolEntries } from "../connection-tools.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `coder/tools/` so the set is exactly this list and eve adds nothing
  * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
- * search, the provider-run web reads, the delegation of a slice of its
+ * search, the hosted public search and page read the planning model has
+ * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), and the load of one of its
@@ -37,8 +39,8 @@ export const CODER_TOOL = {
   GLOB: "glob",
   GREP: "grep",
   APPLY_PATCH: "apply_patch",
-  WEB_FETCH: "web_fetch",
-  WEB_SEARCH: "web_search",
+  SEARCH_WEB: SEARCH_WEB_TOOL.name,
+  READ_WEB_PAGE: READ_WEB_PAGE_TOOL.name,
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
@@ -60,9 +62,19 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
   CODER_TOOL.READ_FILE,
   CODER_TOOL.GLOB,
   CODER_TOOL.GREP,
-  CODER_TOOL.WEB_FETCH,
-  CODER_TOOL.WEB_SEARCH,
+  CODER_TOOL.SEARCH_WEB,
+  CODER_TOOL.READ_WEB_PAGE,
 ]);
+
+/**
+ * eve's provider-run web reads, which coding agents ran before they had the
+ * hosted pair: no agent is offered them now, but a transcript written then
+ * names them, and reads back under the same set.
+ */
+export const RETIRED_CODER_TOOL = {
+  WEB_FETCH: "web_fetch",
+  WEB_SEARCH: "web_search",
+} as const;
 
 /**
  * The tools whose every call runs in the agent's sandbox, which is what
@@ -108,11 +120,12 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 
 /**
  * The coding agent's tools as stored rows are held to them, built once for
- * the deployment, with the Linear connection's calls beside them
+ * the deployment, with the retired web reads a transcript written before
+ * still names, and the Linear connection's calls beside them
  * (`../connection-tools.ts`), which the agent and its workers alike make.
  */
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
-  ...Object.values(CODER_TOOL).map((name) => [
+  ...[...Object.values(CODER_TOOL), ...Object.values(RETIRED_CODER_TOOL)].map((name) => [
     name,
     wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT),
   ]),

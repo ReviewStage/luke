@@ -1,7 +1,7 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import type { UnparsedWireValue } from "../server/core.js";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "../server/core.js";
 import { integrationConnections } from "../server/hosted/agent-runtime/connections.js";
 import { type AGENT_ROLE, ROLE_PROFILE } from "../server/hosted/agent-runtime/role.js";
 import { turnServers } from "../server/hosted/agent-runtime/servers.js";
@@ -15,6 +15,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
+import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
 import { integrationAccessToken } from "../server/hosted/integration-connection.js";
 import { runWeb } from "../server/runtime.js";
@@ -121,6 +122,31 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/**
+ * One public read of the agent's or a worker's, for its `search_web` or
+ * `read_web_page` tool, under the admission that agent's model runs under,
+ * which runs here rather than at an edge of its own; a session the host
+ * does not admit is refused in the read's own words.
+ */
+export function runResearchTool(
+  admit: (auth: SessionAuth, sessionId: string) => ReturnType<CoderHost["admit"]>,
+  tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
+  context: { readonly auth: SessionAuth; readonly sessionId: string; readonly turnId: string },
+  input: UnparsedWireValue,
+): Promise<UnparsedWireValue> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* admit(context.auth, context.sessionId);
+      if (Result.isFailure(admitted)) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
+      }
+      const turn = { sessionId: context.sessionId, eveTurnId: context.turnId };
+      const answer = yield* host.research(admitted.success, tool, turn, input);
+      return { ...answer };
     }),
   );
 }
