@@ -298,7 +298,8 @@ has a workspace for is offered to you to join and never joined for you;
 before you join one, the service asks GitHub, on your own GitHub
 authorization, whether you still reach that installation. Every member of a
 workspace other than a personal one sees every other member's name, email
-address, and role in it.
+address, and role in it, and an owner or an administrator of it can remove
+a member.
 
 The service also keeps your conversation with Luke. Each turn he runs for you
 writes to our database your ask as given; his reply, the summaries of his

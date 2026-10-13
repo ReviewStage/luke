@@ -18,13 +18,16 @@ import { SqlSchema } from "effect/unstable/sql";
 import type { StoreFailure } from "./store-failure.js";
 
 /**
- * workspace-members.ts -- who is in a workspace, and the joins that add to it.
+ * workspace-members.ts -- who is in a workspace, and the joins, removals, and leavings that change it.
  *
  * A member is the organization plugin's `member` row, read here through
  * Drizzle as `workspace-store.ts` reads it. A join is the plugin's own
  * server-only `addMember`, handed in as a seam the way a workspace's
- * creation is. Who may read the members is the caller's to decide from
- * `membershipOf`.
+ * creation is. A removal and a leaving are the plugin's `removeMember` and
+ * `leaveOrganization` in kind, but both take a session cookie a desktop's
+ * bearer never carries, so the row is deleted here instead: no
+ * organization hook is configured that the plugin's own delete would have
+ * run. Who may do which is the caller's to decide from `membershipOf`.
  */
 
 /** The order roles are listed in: owners, then admins, then members. */
@@ -92,6 +95,14 @@ const findMembers = SqlSchema.findAll({
       .orderBy(asc(user.name), asc(user.id)),
 });
 
+const deleteMemberRow = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  execute: ({ userId, organizationId }) =>
+    db
+      .delete(member)
+      .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId))),
+});
+
 /** The workspace as the account sees it as a member, with its role and whether it is a personal one; nothing where it is not a member. */
 export function membershipOf(
   userId: string,
@@ -148,4 +159,9 @@ export function addMember(
     }
     return standing;
   });
+}
+
+/** The account's member row in the workspace deleted; an account not in it deletes nothing. */
+export function removeMember(userId: string, organizationId: string): WorkspaceStoreEffect<void> {
+  return deleteMemberRow({ userId, organizationId });
 }

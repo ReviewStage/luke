@@ -138,16 +138,21 @@ sets the column not null). A plan's summary on the wire names it as `workspaceId
 `memberOfWorkspace` is the one membership condition, a `member` row, which a
 statement joins into its own where clause.
 
-A workspace of an installation is joined and its members read through
+A workspace of an installation is joined, read, and left through
 `server/workspaces-app.ts` under the bearer, since the plugin's own member
-reads take a session cookie a Mac never holds. `POST /api/workspaces/join`
+endpoints take a session cookie a Mac never holds. `POST /api/workspaces/join`
 takes an active installation's id, asks GitHub on the account's own token
 whether it still reaches it (`GitHubApp.userReachesInstallation`), and adds
 the account as a member through the plugin's server-only `addMember`
 (`hosted/workspace-seams.ts`); one already in is answered as it stands.
 `GET /api/workspaces/members?workspaceId=` answers a workspace's members to a
-member, read through Drizzle (`hosted/workspace-members.ts`). A workspace the
-account is not in is `not-found`; a personal one `not-permitted`.
+member, read through Drizzle (`hosted/workspace-members.ts`).
+`POST /api/workspaces/members/remove` lets an owner or an admin remove a
+member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
+an owner leave; both delete the `member` row through Drizzle, no
+organization hook being configured that the plugin's own delete would run.
+A workspace the account is not in is `not-found`; a personal one, or a role
+that does not allow it, `not-permitted`.
 `tests/workspaces-app.test.ts` holds each over the plugin on PGlite.
 
 Dynamic client registration stays disabled. One public client is compiled in:

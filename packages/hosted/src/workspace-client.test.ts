@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
+import { WORKSPACE_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { HostedWorkspaceClient } from "./workspace-client.js";
 import { WORKSPACE_ROLE } from "./workspace-wire.js";
@@ -136,4 +137,77 @@ it.effect("answers nothing where the service refused", () =>
     );
     assert.equal(yield* Effect.provide(workspaces.members(SHARED.id), api.layer), undefined);
   }),
+);
+
+it.effect(
+  "removes a member and leaves a workspace, answered with those who remain and the workspace left",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/workspaces/members/remove": { answer: () => ({ members: [ADA] }) },
+        "POST /api/workspaces/leave": { answer: () => ({ workspaceId: SHARED.id }) },
+      });
+      const workspaces = client();
+
+      const remaining = yield* Effect.provide(
+        workspaces.removeMember(SHARED.id, GRACE.userId),
+        api.layer,
+      );
+      const left = yield* Effect.provide(workspaces.leave(SHARED.id), api.layer);
+
+      assert.deepEqual(remaining, { ok: true, answer: [ADA] });
+      assert.deepEqual(left, { ok: true, answer: SHARED.id });
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/members/remove",
+            body: { workspaceId: SHARED.id, userId: GRACE.userId },
+          },
+          { route: "POST /api/workspaces/leave", body: { workspaceId: SHARED.id } },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "tells a removal or a leave the account's role refused apart from one that is no answer at all",
+  () =>
+    Effect.gen(function* () {
+      const refusal = (error: string, status: number) => ({ answer: () => ({ error }), status });
+      const forbidden = refusal(HOSTED_API_ERROR.NOT_PERMITTED, HTTP_STATUS.FORBIDDEN);
+      const notPermitted = fakeCloudApi({
+        "POST /api/workspaces/members/remove": forbidden,
+        "POST /api/workspaces/leave": forbidden,
+      });
+      const missing = refusal(HOSTED_API_ERROR.NOT_FOUND, HTTP_STATUS.NOT_FOUND);
+      const notFound = fakeCloudApi({
+        "POST /api/workspaces/members/remove": missing,
+        "POST /api/workspaces/leave": missing,
+      });
+      const elsewhere = fakeCloudApi({
+        "POST /api/workspaces/members/remove": {
+          answer: () => ({ members: [{ ...ADA, role: "guest" }] }),
+        },
+        "POST /api/workspaces/leave": { answer: () => ({ workspaceId: PERSONAL.id }) },
+      });
+      const workspaces = client();
+      const both = (layer: typeof notPermitted.layer) =>
+        Effect.provide(
+          Effect.all([
+            workspaces.removeMember(SHARED.id, GRACE.userId),
+            workspaces.leave(SHARED.id),
+          ]),
+          layer,
+        );
+
+      const refused = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      const unanswered = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED };
+      assert.deepEqual(yield* both(notPermitted.layer), [refused, refused]);
+      assert.deepEqual(yield* both(notFound.layer), [unanswered, unanswered]);
+      assert.deepEqual(yield* both(elsewhere.layer), [unanswered, unanswered]);
+    }),
 );

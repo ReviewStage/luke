@@ -17,9 +17,10 @@ import { workspaceIdSchema } from "./plan-wire.js";
  * names, `plan-wire.ts`'s `workspaceIdSchema`.
  *
  * An account joins the workspace of an installation it may join by the
- * installation's id, once GitHub confirms it still reaches it, and a member
- * of a workspace reads its members. A personal workspace is joined by
- * nobody, and its members are read by nobody.
+ * installation's id, once GitHub confirms it still reaches it. A member of a
+ * workspace reads its members; an owner or an admin removes one who is not
+ * an owner, and anyone but an owner leaves. A personal workspace is joined,
+ * managed, and left by nobody.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -82,10 +83,22 @@ export const workspaceMemberSchema = EffectSchema.Struct({
 
 export type WorkspaceMember = typeof workspaceMemberSchema.Type;
 
-/** A workspace's members, owners first, then admins, then members, each by name (GET). */
+/** A workspace's members, owners first, then admins, then members, each by name (GET, and after a removal). */
 export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   members: EffectSchema.Array(workspaceMemberSchema),
 });
 
 /** The query a members read names its workspace under. */
 export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
+
+/** Removing one member from a workspace (POST), answered with the members who remain. */
+export const workspaceMemberRemovalSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  userId: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/** Leaving a workspace (POST), answered with the workspace left. */
+export const workspaceLeaveRequestSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+/** The workspace the account left. */
+export const workspaceLeaveAnswerSchema = workspaceLeaveRequestSchema;

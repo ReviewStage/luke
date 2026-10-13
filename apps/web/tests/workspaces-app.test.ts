@@ -409,6 +409,18 @@ const membersAt = (workspaceId: string): Asked => ({
   path: `/api/workspaces/members?workspaceId=${encodeURIComponent(workspaceId)}`,
 });
 
+const removal = (workspaceId: string, userId: string): Asked => ({
+  method: "POST",
+  path: "/api/workspaces/members/remove",
+  body: { workspaceId, userId },
+});
+
+const leaving = (workspaceId: string): Asked => ({
+  method: "POST",
+  path: "/api/workspaces/leave",
+  body: { workspaceId },
+});
+
 const refusedAs = (status: number, error: string): Answer => ({ status, body: { error } });
 
 it.effect(
@@ -472,7 +484,72 @@ it.effect(
     }),
 );
 
-it.effect("a personal workspace's members are not read", () =>
+it.effect("a member cannot remove another, and an admin removes a member", () =>
+  Effect.gen(function* () {
+    const { api, seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const grace = yield* openGithubAccount("Grace Hopper");
+      const alan = yield* openGithubAccount("Alan Turing");
+      const acme = yield* installationWorkspace(seams, ada);
+      yield* Effect.promise(() =>
+        api.addMember({ body: { userId: grace, organizationId: acme, role: "admin" } }),
+      );
+      yield* Effect.promise(() =>
+        api.addMember({ body: { userId: alan, organizationId: acme, role: "member" } }),
+      );
+      const github = githubReaching([ACME]);
+
+      const byMember = yield* ask(seams, github, alan, removal(acme, grace));
+      const ofOwner = yield* ask(seams, github, grace, removal(acme, ada));
+      const byAdmin = yield* ask(seams, github, grace, removal(acme, alan));
+
+      const notPermitted = refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED);
+      assert.deepEqual(byMember, notPermitted);
+      assert.deepEqual(ofOwner, notPermitted);
+      assert.deepEqual(byAdmin, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: {
+          members: [
+            { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            { userId: grace, name: "Grace Hopper", email: `${grace}@luke.test`, role: "admin" },
+          ],
+        },
+      });
+      assert.deepEqual(
+        yield* ask(seams, github, alan, membersAt(acme)),
+        refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+      );
+    }).pipe(Effect.provide(database));
+  }),
+);
+
+it.effect("an owner cannot leave, and a member leaves", () =>
+  Effect.gen(function* () {
+    const { api, seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const grace = yield* openGithubAccount("Grace Hopper");
+      const acme = yield* installationWorkspace(seams, ada);
+      yield* Effect.promise(() =>
+        api.addMember({ body: { userId: grace, organizationId: acme, role: "member" } }),
+      );
+      const github = githubReaching([ACME]);
+
+      const byOwner = yield* ask(seams, github, ada, leaving(acme));
+      const byMember = yield* ask(seams, github, grace, leaving(acme));
+
+      assert.deepEqual(
+        byOwner,
+        refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+      );
+      assert.deepEqual(byMember, { status: HOSTED_HTTP_STATUS.OK, body: { workspaceId: acme } });
+      assert.deepEqual(yield* membersOf(acme), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
+    }).pipe(Effect.provide(database));
+  }),
+);
+
+it.effect("a personal workspace's members are neither read, removed, nor left", () =>
   Effect.gen(function* () {
     const { seams, database } = yield* openWorkspacePlugin;
     yield* Effect.gen(function* () {
@@ -482,10 +559,15 @@ it.effect("a personal workspace's members are not read", () =>
         answerOf(yield* ask(seams, github, ada)).workspaces[0]?.id ??
         assert.fail("no personal workspace");
 
-      const answered = yield* ask(seams, github, ada, membersAt(personal));
+      const answers = [
+        yield* ask(seams, github, ada, membersAt(personal)),
+        yield* ask(seams, github, ada, removal(personal, ada)),
+        yield* ask(seams, github, ada, leaving(personal)),
+      ];
 
       const notPermitted = refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED);
-      assert.deepEqual(answered, notPermitted);
+      assert.deepEqual(answers, [notPermitted, notPermitted, notPermitted]);
+      assert.deepEqual(yield* membersOf(personal), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
 );

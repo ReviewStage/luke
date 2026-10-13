@@ -7,7 +7,10 @@ import {
 import { workspaceIdSchema } from "@sidecar/hosted/plan-wire";
 import {
   WORKSPACE_MEMBERS_QUERY,
+  WORKSPACE_ROLE,
   workspaceJoinRequestSchema,
+  workspaceLeaveRequestSchema,
+  workspaceMemberRemovalSchema,
 } from "@sidecar/hosted/workspace-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { type Cause, Effect, Layer, Option, Result } from "effect";
@@ -43,6 +46,7 @@ import {
   installationWorkspaceOf,
   listMembers,
   membershipOf,
+  removeMember,
 } from "./hosted/workspace-members.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -67,20 +71,28 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * an active installation, once its own GitHub token still reaches that
  * installation; joining one it is in already answers it as it stands.
  * `GET /api/workspaces/members` answers a workspace's members to a member
- * of it. A workspace the account is not in is not found; a personal one,
- * which nobody joins and whose members nobody manages, is not permitted.
+ * of it, `POST /api/workspaces/members/remove` lets an owner or an admin
+ * remove a member who is not an owner, and `POST /api/workspaces/leave`
+ * lets anyone but an owner leave. A workspace the account is not in is not
+ * found, whatever it asked; a personal one, which nobody joins, manages, or
+ * leaves, is not permitted.
  */
 
 const WORKSPACES_PATH = {
   LIST: "/api/workspaces",
   JOIN: "/api/workspaces/join",
   MEMBERS: "/api/workspaces/members",
+  MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  LEAVE: "/api/workspaces/leave",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 
-/** A join names one installation and nothing more. */
+/** A join, a removal, or a leaving names a few ids and nothing more. */
 const MAXIMUM_WORKSPACE_BODY_BYTES = 4 * 1024;
+
+/** The roles that may remove a member. */
+const MANAGING_ROLES: readonly Workspace["role"][] = [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN];
 
 /** No installation synced, so nothing to join. */
 const NONE: SyncedInstallations = [];
@@ -231,6 +243,54 @@ const membersEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMembersEndpoint"
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
 });
 
+/** POST: an owner or an admin removes a member who is not an owner, answered with those who remain. */
+const removeEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceMemberRemoveEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
+  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
+  const removal = readEither(workspaceMemberRemovalSchema)(body);
+  if (Result.isFailure(removal)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, userId: removed } = removal.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (!MANAGING_ROLES.includes(workspace.role)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  const target = yield* hostedStoreOrUnavailable(membershipOf(removed, workspaceId));
+  if (Option.isNone(target)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (target.value.role === WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  yield* hostedStoreOrUnavailable(removeMember(removed, workspaceId));
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/** POST: the account leaves a workspace it does not own. */
+const leaveEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceLeaveEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> {
+  const { userId } = yield* signedInAs(seams, HTTP_METHOD.POST);
+  const body = yield* readJsonBodyEffect(MAXIMUM_WORKSPACE_BODY_BYTES);
+  const leaving = readEither(workspaceLeaveRequestSchema)(body);
+  if (Result.isFailure(leaving)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId } = leaving.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (workspace.role === WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  yield* hostedStoreOrUnavailable(removeMember(userId, workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
+});
+
 /** The group: the workspaces paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
@@ -239,6 +299,12 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.LIST, hostedRefusing(workspacesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.JOIN, hostedRefusing(joinEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.MEMBERS, hostedRefusing(membersEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      WORKSPACES_PATH.MEMBERS_REMOVE,
+      hostedRefusing(removeEndpoint(seams)),
+    ),
+    HttpRouter.add(ANY_METHOD, WORKSPACES_PATH.LEAVE, hostedRefusing(leaveEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

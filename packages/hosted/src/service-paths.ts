@@ -112,6 +112,10 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_JOIN: "/api/workspaces/join",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
+  /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */
+  WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  /** The account leaves a workspace it does not own (POST). */
+  WORKSPACES_LEAVE: "/api/workspaces/leave",
 } as const;
 
 /**
