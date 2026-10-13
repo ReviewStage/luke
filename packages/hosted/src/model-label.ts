@@ -1,4 +1,4 @@
-import type { CatalogModel } from "./models-wire.js";
+import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
  * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out.
@@ -6,7 +6,8 @@ import type { CatalogModel } from "./models-wire.js";
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
  * the planning model's coding-agent tools, whose answers Luke says aloud, so
- * no two of them name one model two ways.
+ * no two of them name one model two ways; and the service, which names
+ * every model it records by the catalog's id before it sends one.
  */
 
 /** The one separator a catalog id has between its provider and the model's own name. */
@@ -24,6 +25,20 @@ const GPT = "gpt";
  * 5.5" reads "Opus 5.5", and Luke says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
  */
 const MAKER_WORD = "Claude ";
+
+/**
+ * A recorded model as the catalog names it. Note that what Luke runs on its
+ * own OpenAI key records OpenAI's own id where it names no catalog id: a
+ * call's voice model (`gpt-live-1`), and the brain's turn rows written before
+ * it named its model by the catalog's id. The catalog names those under their
+ * provider, which is how a card reads whose mark the model wears; an id that
+ * already names one is kept.
+ */
+export function catalogIdOf(model: string): string {
+  return model.includes(CATALOG_ID_SEPARATOR)
+    ? model
+    : `${MODEL_PROVIDER.OPENAI}${CATALOG_ID_SEPARATOR}${model}`;
+}
 
 /** A name without the maker's word it leads with. */
 function withoutMaker(name: string): string {

@@ -18,8 +18,7 @@ import {
   type TurnRecord,
   type TurnTokens,
 } from "@sidecar/hosted/coding-agent-wire";
-import { CATALOG_ID_SEPARATOR } from "@sidecar/hosted/model-label";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { catalogIdOf } from "@sidecar/hosted/model-label";
 import { Option, Schema } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 
@@ -30,18 +29,6 @@ export type RecordedTurn = Pick<
 >;
 
 const decodeUsage = Schema.decodeUnknownOption(TurnUsageColumnSchema);
-
-/**
- * A recorded model as the catalog names it. Note that the brain's turn
- * rows written before it named its model by the catalog's id
- * (`brain-host/model.ts`) record OpenAI's own id, which the catalog names
- * under its provider; an id that already names one is kept.
- */
-function catalogIdOf(model: string): string {
-  return model.includes(CATALOG_ID_SEPARATOR)
-    ? model
-    : `${MODEL_PROVIDER.OPENAI}${CATALOG_ID_SEPARATOR}${model}`;
-}
 
 /** A recorded name the wire carries: one it bounds, and nothing for an empty or overlong one. */
 function choiceOf(recorded: string | null): string | undefined {

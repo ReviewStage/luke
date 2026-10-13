@@ -485,7 +485,7 @@ it.effect("a stopped, failed, or abandoned turn's card says how it ended", () =>
 );
 
 it.effect(
-  "hovering a finished turn on the Call tab says the model Luke ran on, wearing no harness's mark, and that it was stopped where it was",
+  "hovering a finished turn on the Call tab says the model Luke ran on with its provider's mark, as an agent's turn does, and that it was stopped where it was",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(TURN_END + MINUTE);
@@ -515,7 +515,7 @@ it.effect(
       );
       const card = work.hoverWorked();
       assert.equal(card?.querySelector(".turn-card-model")?.textContent, "GPT-6.1 Sol");
-      assert.equal(card?.querySelector("[data-harness]"), null);
+      assert.ok(card?.querySelector(`[data-harness="${MODEL_PROVIDER.OPENAI}"] .provider-mark`));
       assert.equal(card?.querySelector(".turn-card-ending")?.textContent, "Stopped");
       assert.equal(card?.querySelector(".turn-card-tokens"), null);
       work.unmount();
