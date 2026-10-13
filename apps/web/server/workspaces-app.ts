@@ -48,7 +48,7 @@ import { listMembers, removeMember } from "./hosted/workspace-members.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, and a GitHub organization connected or disconnected.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, its personal one first and the rest by name, each with the
@@ -62,12 +62,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * `.../disconnect` removes the workspace's connected installation; both take
  * an owner or admin of the workspace, and a workspace the account is not in
  * answers as none does. `GET /api/workspaces/members` answers a workspace's
- * members to a member of it; a personal one, whose members nobody manages,
- * is not permitted. `POST /api/workspaces/members/remove` lets an owner or
- * an admin remove a member who is not an owner, and `POST /api/workspaces/leave`
- * lets anyone but an owner leave; a workspace the account is not in is not
- * found, and a personal one is not permitted. The bearer is resolved before
- * any row is touched.
+ * members to a member of it, `POST /api/workspaces/members/remove` lets an
+ * owner or admin remove a member who is not an owner, and
+ * `POST /api/workspaces/leave` lets anyone but an owner leave. A personal
+ * workspace, whose members nobody manages, is not permitted any of these.
+ * The bearer is resolved before any row is touched.
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
@@ -84,6 +83,9 @@ const INSTALL_STATE_PARAM = "state";
 
 /** A workspace's name or id is a few dozen characters, so a body past this is not one. */
 const MAXIMUM_BODY_BYTES = 1_024;
+
+/** The roles that remove a member. */
+const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export interface WorkspacesAppSeams {
   resolveUserId: UserIdResolver;
@@ -230,20 +232,17 @@ const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
 });
 
-/** The roles that remove a member: an owner or an admin. */
-const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
-
-/** The workspace named, where the account is in it and it is not a personal one, whose members nobody manages. */
+/** The workspace as a member of it sees it, where it is one whose members are managed; a personal one is not permitted. */
 const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
   userId: string,
-  workspaceId: string,
-) {
-  const workspace = yield* answeredWorkspace(userId, workspaceId);
+  organizationId: string,
+): Effect.fn.Return<Workspace, HostedRefusal, SqlClient.SqlClient> {
+  const workspace = yield* answeredWorkspace(userId, organizationId);
   if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return workspace;
 });
 
-/** POST: an owner or an admin removes a member who is not an owner, answered with those who remain. */
+/** POST: an owner or admin removes a member who is not an owner, answered with those who remain. */
 const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -253,13 +252,14 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   }
   const userId = yield* accountOf(seams);
   const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
-  const removal = readEither(workspaceMemberRemovalSchema)(body);
-  if (Result.isFailure(removal)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { workspaceId, userId: removed } = removal.success;
+  const asked = readEither(workspaceMemberRemovalSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, userId: removed } = asked.success;
   const workspace = yield* managedWorkspace(userId, workspaceId);
   if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const target = yield* answeredWorkspace(removed, workspaceId);
-  if (target.role === WORKSPACE_ROLE.OWNER) {
+  const target = yield* hostedStoreOrUnavailable(workspaceOf(removed, workspaceId));
+  if (Option.isNone(target)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (target.value.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   yield* hostedStoreOrUnavailable(removeMember(removed, workspaceId));
@@ -277,9 +277,9 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   }
   const userId = yield* accountOf(seams);
   const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
-  const leaving = readEither(workspaceLeaveRequestSchema)(body);
-  if (Result.isFailure(leaving)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { workspaceId } = leaving.success;
+  const asked = readEither(workspaceLeaveRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId } = asked.success;
   const workspace = yield* managedWorkspace(userId, workspaceId);
   if (workspace.role === WORKSPACE_ROLE.OWNER) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
@@ -288,7 +288,7 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** The group: the workspaces path, the two GitHub paths, the members paths, the leave path, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the two GitHub paths, the three members paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp> {
