@@ -18,6 +18,7 @@
     "./integration-wire": "./src/integration-wire.js",
     "./model-label": "./src/model-label.js",
     "./models-wire": "./src/models-wire.js",
+    "./page-wire": "./src/page-wire.js",
     "./plan-document": "./src/plan-document.js",
     "./plan-document-template": "./src/plan-document-template.js",
     "./plan-edit": "./src/plan-edit.js",

@@ -71,6 +71,7 @@ const DECLARED_TABLES = [
   "oauth_resource",
   "plan",
   "plan_board",
+  "plan_page_version",
   "plan_revision",
   "repository_pin",
   "session",
