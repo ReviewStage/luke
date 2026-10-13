@@ -7,7 +7,7 @@ import {
   updateCodingAgentBranch,
 } from "@sidecar/database/models/coding-agent-store";
 import { promptHashOf } from "@sidecar/database/models/content-addressed";
-import { childConversationId } from "@sidecar/database/models/ids";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -241,11 +241,13 @@ export interface CoderHost {
    * Runs one of the agent's public reads, the planning model's own
    * (`../public-research.ts`): a search or a page read, under the turn's
    * budget, the search on Luke's key and counted on the account's meter.
+   * The budget is the turn's own, named with its session, since eve numbers
+   * every session's turns afresh.
    */
   research(
     admitted: AdmittedConversation,
     tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
-    turnId: string,
+    turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<SearchWebResult | ReadWebPageResult, never, HttpClient.HttpClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
@@ -567,8 +569,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
-    research: (admitted, tool, turnId, input) => {
+    research: (admitted, tool, turn, input) => {
       const access = seams.research(admitted.target.userId);
+      const turnId = hostTurnId(turn.sessionId, turn.eveTurnId);
       const call = { turnId, budget: research, openAi: access.openAi, spend: access.spend };
       return tool === CODER_TOOL.SEARCH_WEB
         ? runSearchWeb(call, input)

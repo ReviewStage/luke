@@ -144,7 +144,8 @@ export function runResearchTool(
       if (Result.isFailure(admitted)) {
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
       }
-      const answer = yield* host.research(admitted.success, tool, context.turnId, input);
+      const turn = { sessionId: context.sessionId, eveTurnId: context.turnId };
+      const answer = yield* host.research(admitted.success, tool, turn, input);
       return { ...answer };
     }),
   );

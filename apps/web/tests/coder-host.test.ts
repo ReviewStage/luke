@@ -83,6 +83,7 @@ import {
 } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
+  PUBLIC_RESEARCH_BOUNDS,
   READ_WEB_PAGE_REFUSAL,
   READ_WEB_PAGE_STATUS,
   SEARCH_WEB_REFUSAL,
@@ -522,6 +523,33 @@ const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
   it.effect(
+    "a turn's page reads are bounded by its own budget, which another session's turn of the same number never spends",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const page = unparsedWire({ url: "https://127.0.0.1/admin" });
+        const first = { sessionId: "wrun_01BUDGET0000000000000001", eveTurnId: "turn_0" };
+        const second = { sessionId: "wrun_01BUDGET0000000000000002", eveTurnId: "turn_0" };
+        const readIn = (turn: typeof first) =>
+          host.research(admitted, CODER_TOOL.READ_WEB_PAGE, turn, page);
+
+        for (let read = 0; read < PUBLIC_RESEARCH_BOUNDS.PAGE_READS_PER_TURN; read += 1) {
+          const answer = yield* readIn(first);
+          assert.ok(answer.status === READ_WEB_PAGE_STATUS.NOT_READ);
+          assert.equal(answer.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+        }
+        const spent = yield* readIn(first);
+        assert.ok(spent.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(spent.reason, READ_WEB_PAGE_REFUSAL.OVER_BUDGET);
+
+        const elsewhere = yield* readIn(second);
+        assert.ok(elsewhere.status === READ_WEB_PAGE_STATUS.NOT_READ);
+        assert.equal(elsewhere.reason, READ_WEB_PAGE_REFUSAL.NOT_PUBLIC);
+      }),
+  );
+
+  it.effect(
     "a coding agent's public reads are the planning model's own: a search on a deployment holding no key is refused in the search's words, and a page on a private address is never fetched",
     () =>
       Effect.gen(function* () {
@@ -529,10 +557,11 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { admitted } = yield* openAgent(host);
         const query = "invite link expiry";
 
+        const turn = { sessionId: "wrun_01RESEARCH000000000000001", eveTurnId: "turn_0" };
         const searched = yield* host.research(
           admitted,
           CODER_TOOL.SEARCH_WEB,
-          "turn-1",
+          turn,
           unparsedWire({ query }),
         );
         assert.deepEqual(searched, {
@@ -544,7 +573,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const read = yield* host.research(
           admitted,
           CODER_TOOL.READ_WEB_PAGE,
-          "turn-1",
+          turn,
           unparsedWire({ url: "https://127.0.0.1/admin" }),
         );
         assert.equal(read.status, READ_WEB_PAGE_STATUS.NOT_READ);
