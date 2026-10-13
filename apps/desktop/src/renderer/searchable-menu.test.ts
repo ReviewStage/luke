@@ -724,3 +724,86 @@ test("a name or a detail cut short by the menu's width is marked to fade at its 
   const fade = getComputedStyle(menu.find('.plan-compose-menu-name[data-overflow="true"]'));
   assert.equal(fade.textOverflow, "clip", "a fade, not an ellipsis");
 });
+
+/** The row the focused field or list names to assistive technology, read by its words; none where it names nothing. */
+function named(): string | undefined {
+  const id = document.activeElement?.getAttribute("aria-activedescendant");
+  if (id === null || id === undefined) return undefined;
+  const row = document.getElementById(id);
+  assert.ok(row, "the id names an element in the document");
+  return row.textContent ?? undefined;
+}
+
+test("the field names the highlighted row to a reader as the arrows, the pointer, and a search move it, each row by an id of its own that the highlight moving leaves alone", () => {
+  const picks: string[] = [];
+  const menu = mount({ foot: effortFoot(picks) });
+  const field = menu.find<HTMLInputElement>("input[role=combobox]");
+  const ids = () => menu.rows().map((row) => row.id);
+  const first = ids();
+  assert.equal(
+    new Set(first.filter(Boolean)).size,
+    ROWS.length,
+    "every row has an id, none shared",
+  );
+  assert.equal(named(), "acme/billing", "the chosen row, named as the menu opens");
+
+  press("ArrowDown");
+  assert.equal(named(), "acme/site");
+  hover(menu.rows()[0]);
+  assert.equal(named(), "acme/relay");
+  assert.deepEqual(ids(), first, "a row keeps its id as the highlight moves");
+
+  press("ArrowUp");
+  assert.equal(named(), "EffortHigh", "a pinned row is named too");
+  press("ArrowRight");
+  assert.equal(named(), "High", "inside an open submenu, its highlighted row");
+  press("ArrowLeft");
+  assert.equal(named(), "EffortHigh");
+
+  type(field, "zzz");
+  assert.equal(named(), undefined, "nothing is named while nothing matches");
+  type(field, "site");
+  assert.equal(named(), "acme/site");
+});
+
+test("with no field the list, holding focus, names the highlighted row", () => {
+  mount({ placeholder: undefined });
+  assert.equal(named(), "acme/billing");
+  press("ArrowUp");
+  assert.equal(named(), "acme/relay");
+});
+
+test("Home and End take the highlight to the first and the last row that may be picked, pinned rows included, and inside an open submenu to its own first and last", () => {
+  const picks: string[] = [];
+  const menu = mount({
+    rows: ROWS.map((row, index) => (index === 0 ? { ...row, disabled: "Open" } : row)),
+    foot: [...effortFoot(picks), { id: "github", label: "GitHub", disabled: "Not connected" }],
+  });
+  press("End");
+  assert.equal(menu.highlighted(), "EffortHigh", "the last row past the muted one");
+  press("Home");
+  assert.equal(menu.highlighted(), "acme/billing", "the first row past the muted one");
+
+  press("End");
+  press("ArrowRight");
+  press("Home");
+  assert.deepEqual(
+    subRows(menu).map((row) => row[1]),
+    ["true", "false", "false"],
+  );
+  press("End");
+  assert.deepEqual(
+    subRows(menu).map((row) => row[1]),
+    ["false", "false", "true"],
+  );
+  press("Enter");
+  assert.deepEqual(picks, ["max"]);
+});
+
+test("Home and End in the field move the highlight rather than the caret", () => {
+  mount();
+  const home = new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true });
+  act(() => document.activeElement?.dispatchEvent(home));
+  assert.equal(home.defaultPrevented, true);
+  assert.equal(named(), "acme/relay");
+});

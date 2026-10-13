@@ -154,7 +154,7 @@ export function PickerRow({
           className="plan-compose-chip settings-picker-chip"
           {...(anchor ? searchAnchorProps(anchor) : undefined)}
           aria-label={`${label}: ${valueLabel}`}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           disabled={disabled}

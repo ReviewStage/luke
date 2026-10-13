@@ -13,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
@@ -208,6 +209,7 @@ test("the main part starts on the default, naming nothing, and says the default 
   assert.deepEqual(presses, [undefined]);
 
   const menu = await openMenu(page);
+  assertOpensWhatItNames(buttonNamed(page, "Choose a model to start with"));
   assert.deepEqual(reads, ["models", "default", "models", "default"]);
   const search = menu.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
   assert.ok(search, "the search is the menu's first row");

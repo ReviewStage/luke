@@ -30,21 +30,31 @@ afterEach(() => {
 
 const ignore = () => undefined;
 
-/** The section over `update`, on the test's clock, and its first row's button. */
-const mount = (update: UpdateSnapshot) =>
+/** The section over `update`, on the test's clock, and a redraw over the next snapshot. */
+const mountSection = (update: UpdateSnapshot) =>
   Effect.gen(function* () {
     const registry = yield* registryOnTestClock;
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const control = {
-      update,
-      onCheck: () => Promise.resolve(),
-      onInstall: ignore,
-      onOpenLatest: ignore,
+    const restand = (next: UpdateSnapshot) => {
+      const control = {
+        update: next,
+        onCheck: () => Promise.resolve(),
+        onInstall: ignore,
+        onOpenLatest: ignore,
+      };
+      act(() => root.render(onRegistry(registry, createElement(UpdatesSection, { control }))));
     };
-    act(() => root.render(onRegistry(registry, createElement(UpdatesSection, { control }))));
+    restand(update);
+    return { container, restand };
+  });
+
+/** The section over `update`, on the test's clock, and its first row's button. */
+const mount = (update: UpdateSnapshot) =>
+  Effect.gen(function* () {
+    const { container } = yield* mountSection(update);
     const button = container.querySelector<HTMLButtonElement>(".settings-row button");
     assert.ok(button);
     return button;
@@ -84,4 +94,27 @@ it.effect("with no check out the button offers the check, with no spinner", () =
     assert.equal(button.textContent, "Check for updates");
     assert.equal(button.querySelector(".spinner-ring"), null);
   }),
+);
+
+it.effect(
+  "a check that fails says so in an alert that lands with the failure, where the check's own progress was never one",
+  () =>
+    Effect.gen(function* () {
+      const checking = {
+        status: UPDATE_STATUS.CHECKING,
+        currentVersion: "1.2.0",
+        installSupported: true,
+      } as const;
+      const { container, restand } = yield* mountSection(checking);
+      assert.equal(container.querySelector("[role=alert]"), null);
+
+      restand({ status: UPDATE_STATUS.ERROR, currentVersion: "1.2.0", installSupported: true });
+      assert.equal(
+        container.querySelector("[role=alert]")?.textContent,
+        "The update check failed. The releases page has the latest build.",
+      );
+
+      restand(checking);
+      assert.equal(container.querySelector("[role=alert]"), null, "a check again is no alert");
+    }),
 );

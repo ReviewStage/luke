@@ -53,6 +53,7 @@ import {
   UNPINNED_SUMMARY,
   usedPlan,
 } from "#testing/plans-control";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
@@ -980,7 +981,7 @@ function watchedRows() {
   };
 }
 
-test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none waits for a press", async () => {
+test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none says so in an alert and waits for a press", async () => {
   const rows = watchedRows();
   const asked: string[] = [];
   const page = mountOpenPlan({
@@ -1009,12 +1010,18 @@ test("the Work tab reads the turns before its oldest as the row before them scro
     );
 
   assert.equal(row()?.textContent, "Show earlier work");
+  assert.equal(row()?.querySelector("[role=alert]"), null);
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
   await act(async () => {
     await Promise.resolve();
   });
   assert.equal(row()?.textContent, "Could not read earlier work. Retry");
+  assert.equal(
+    row()?.querySelector("[role=alert]")?.textContent,
+    "Could not read earlier work.",
+    "the failure is announced as it lands, the retry's word left out of it",
+  );
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
 
@@ -2307,6 +2314,7 @@ test("Command-T opens the + of the column holding the focus, the plan's column's
   const search = document.activeElement;
   assert.ok(search instanceof HTMLInputElement, "the menu's search has focus");
   assert.ok(search.closest(".desktop-toolbar .tab-add-menu"), "in the column's + menu");
+  assertOpensWhatItNames(columnAddButton(page));
   key(search, "Escape");
   assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.deepEqual(columnTabs(page), [PLAN.name]);

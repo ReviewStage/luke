@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { assertOpensWhatItNames } from "#testing/popup";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { SelectRow } from "./select-row";
 
@@ -85,6 +86,7 @@ test("the row draws its value on a chip and no native select, and a press drops 
 
   act(() => chip(row).click());
   assert.equal(chip(row).getAttribute("aria-expanded"), "true");
+  assertOpensWhatItNames(chip(row));
   assert.equal(row.querySelector('[role="listbox"] input'), null);
   assert.deepEqual(
     [...row.querySelectorAll('[role="option"]')].map((option) => option.textContent),

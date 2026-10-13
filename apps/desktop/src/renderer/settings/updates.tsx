@@ -69,7 +69,16 @@ export function UpdatesSection({ control }: { control: UpdateControl }): React.J
             <strong>Version {control.update.currentVersion}</strong>
             {row.current ? <CheckIcon /> : null}
           </span>
-          <small>{row.detail}</small>
+          {/* Note that a failure mounts an element of its own, an alert, so
+              it is announced as it lands; every other detail is read with
+              the row rather than spoken over whatever the reader is on. */}
+          {row.failed ? (
+            <small key="failed" role="alert">
+              {row.detail}
+            </small>
+          ) : (
+            <small>{row.detail}</small>
+          )}
         </span>
         {updateButton(row.action, control)}
       </div>

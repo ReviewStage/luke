@@ -65,7 +65,11 @@ export function SignInCard(): React.JSX.Element {
               : `Continue with ${SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB]}`}
           </button>
         </div>
-        {failed ? <p className="m-0 text-attention">Sign-in could not start. Try again.</p> : null}
+        {failed ? (
+          <p className="m-0 text-attention" role="alert">
+            Sign-in could not start. Try again.
+          </p>
+        ) : null}
       </section>
     </main>
   );

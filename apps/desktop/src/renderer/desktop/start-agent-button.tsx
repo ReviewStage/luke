@@ -123,7 +123,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           type="button"
           className="icon-button start-agent-chevron"
           aria-label="Choose a model to start with"
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           aria-disabled={unavailable ? "true" : undefined}

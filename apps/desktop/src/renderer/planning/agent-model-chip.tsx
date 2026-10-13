@@ -72,7 +72,7 @@ export function AgentModelChip({
         ref={trigger}
         type="button"
         className="toolbar-button agent-model-button"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}

@@ -265,7 +265,7 @@ export function AddTabButton({
           type="button"
           className="icon-button tab-add"
           aria-label={label}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           onClick={() => {
