@@ -32,7 +32,8 @@ import { ApiKeysSection } from "./api-keys-section";
  * Settings › Coding agents › API keys over a bridge answering as the host would: a key is
  * pasted into a password field, sent once, and gone from the field once the
  * service keeps it; a kept key is drawn as the service's hint and status
- * alone; a refused save says why; a removal asks first. Synthetic keys.
+ * alone, its Edit key and Remove key behind its ⋯; a refused save says why;
+ * a removal asks first, in the confirm dialog. Synthetic keys.
  */
 
 const PASTED = "sk-ant-api03-synthetic-0000000000000000wxyz";
@@ -152,13 +153,46 @@ async function paste(page: HTMLElement, name: string, key: string): Promise<void
 }
 
 const rowOf = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".api-key-row")].find(
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
     (row) => row.querySelector("strong")?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
+
+/** What stands under a provider's row, before the next provider's: its field and its refusal. */
+function under(page: HTMLElement, name: string): readonly Element[] {
+  const drawn: Element[] = [];
+  for (
+    let next = rowOf(page, name).nextElementSibling;
+    next !== null;
+    next = next.nextElementSibling
+  ) {
+    if (next.classList.contains("menu-row")) break;
+    drawn.push(next);
+  }
+  return drawn;
+}
+
+function addKey(page: HTMLElement, name: string): void {
+  act(() => button(page, "Add key", rowOf(page, name)).click());
+}
+
+/** Chooses an item of a provider's ⋯ menu. */
+function chooseFromMenu(page: HTMLElement, name: string, item: string): void {
+  const more =
+    rowOf(page, name).querySelector<HTMLButtonElement>(
+      `button[aria-label="${name} key actions"]`,
+    ) ?? assert.fail(`no ${name} menu`);
+  act(() => more.click());
+  const chosen =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === item,
+    ) ?? assert.fail(`no ${item} item`);
+  act(() => chosen.click());
+}
 
 test("a pasted key is sent once from a password field, leaves the field once kept, and is drawn as the service's hint alone", async () => {
   const page = await mount();
 
+  addKey(page, "Anthropic");
   const input = field(page, "Anthropic");
   assert.equal(input.type, "password");
   assert.equal(input.autocomplete, "off");
@@ -170,15 +204,19 @@ test("a pasted key is sent once from a password field, leaves the field once kep
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key: PASTED }],
   );
   const row = rowOf(page, "Anthropic");
-  assert.match(row.textContent ?? "", /sk-ant-…wxyz · Added .* · Verified/u);
-  assert.equal(row.querySelector("input"), null, "the kept key's row holds no field");
+  assert.match(row.textContent ?? "", /Verified · sk-ant-…wxyz · Added /u);
+  assert.equal(page.querySelector("input"), null, "the kept key's row holds no field");
   assert.ok(!page.innerHTML.includes(PASTED), "the page holds the key nowhere once kept");
 });
 
 test("the page and its fields are kept out of the screen recording", async () => {
   const page = await mount();
 
-  assert.ok(page.querySelector("section")?.classList.contains("ph-no-capture"));
+  addKey(page, "OpenAI");
+  assert.ok(
+    page.querySelector(".ph-no-capture section"),
+    "the group is under the unrecorded class",
+  );
   assert.ok(field(page, "OpenAI").classList.contains("ph-no-capture"));
 });
 
@@ -186,13 +224,17 @@ test("a save the service refuses says why under the row and keeps nothing", asyn
   refuseSave = PROVIDER_KEY_REJECTION.WRONG_PROVIDER;
   const page = await mount();
 
+  addKey(page, "OpenAI");
   await paste(page, "OpenAI", PASTED);
 
   assert.equal(
-    rowOf(page, "OpenAI").querySelector('[role="alert"]')?.textContent,
+    under(page, "OpenAI").find((each) => each.getAttribute("role") === "alert")?.textContent,
     "This looks like an Anthropic key. Paste it into the Anthropic row.",
   );
-  assert.ok(rowOf(page, "OpenAI").querySelector("input"), "the field stands for another try");
+  assert.ok(
+    under(page, "OpenAI").some((each) => each.querySelector("input")),
+    "the field stands for another try",
+  );
 });
 
 test("a key the provider refused, one out of quota, and one the service cannot read each ask for a hand", async () => {
@@ -209,7 +251,7 @@ test("a key the provider refused, one out of quota, and one the service cannot r
 
   assert.equal(
     rowOf(page, "Anthropic").querySelector('[role="alert"]')?.textContent,
-    "This key can no longer be read. Replace it.",
+    "This key can no longer be read.",
   );
   assert.equal(
     rowOf(page, "OpenAI").querySelector('[role="alert"]')?.textContent,
@@ -217,20 +259,23 @@ test("a key the provider refused, one out of quota, and one the service cannot r
   );
 });
 
-test("Replace opens the field over a kept key, and Remove asks before it removes", async () => {
+test("a kept key's ⋯ offers Edit key, which opens the field, and Remove key, which asks before it removes", async () => {
   stored = [ANTHROPIC_KEPT];
   const page = await mount();
 
-  act(() => button(page, "Replace", rowOf(page, "Anthropic")).click());
-  assert.ok(field(page, "Anthropic"));
-  act(() => button(page, "Cancel", rowOf(page, "Anthropic")).click());
-  act(() => button(page, "Remove", rowOf(page, "Anthropic")).click());
+  chooseFromMenu(page, "Anthropic", "Edit key");
+  assert.equal(document.activeElement, field(page, "Anthropic"), "the field takes the paste");
+  act(() => button(page, "Cancel").click());
+  assert.equal(page.querySelector("input"), null);
+
+  chooseFromMenu(page, "Anthropic", "Remove key");
   const askedBeforeRemoving = sent.some(
     (request) => request.kind === ACT_KIND.PROVIDER_KEYS_REMOVE,
   );
-  act(() =>
-    button(page, "Remove", rowOf(page, "Anthropic").querySelector("fieldset") ?? undefined).click(),
-  );
+  const dialog =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+  assert.equal(dialog.querySelector("h2")?.textContent, "Remove your Anthropic API key?");
+  act(() => button(page, "Remove key", dialog).click());
   await settle();
 
   assert.equal(askedBeforeRemoving, false);
@@ -240,7 +285,10 @@ test("Replace opens the field over a kept key, and Remove asks before it removes
       .map((request) => request.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }],
   );
-  assert.ok(field(page, "Anthropic"), "a removed key's row offers the field again");
+  assert.ok(
+    button(page, "Add key", rowOf(page, "Anthropic")),
+    "a removed key's row offers Add key",
+  );
 });
 
 test("a read that fails offers to try again, and no account reads nothing", async () => {
@@ -275,8 +323,11 @@ test("while one row's save is out, the other row waits, so two answers cannot la
   holdSaves = [];
   const page = await mount();
 
+  addKey(page, "Anthropic");
+  addKey(page, "OpenAI");
   await paste(page, "Anthropic", PASTED);
-  const openAiSave = button(page, "Save", rowOf(page, "OpenAI"));
+  const openAiForm = () => field(page, "OpenAI").form ?? assert.fail("no OpenAI form");
+  const openAiSave = button(page, "Save", openAiForm());
   const waited = openAiSave.disabled;
   const release = holdSaves[0] ?? assert.fail("the save was not sent");
   stored = [ANTHROPIC_KEPT];
@@ -284,5 +335,26 @@ test("while one row's save is out, the other row waits, so two answers cannot la
   await settle();
 
   assert.equal(waited, true);
-  assert.equal(button(page, "Save", rowOf(page, "OpenAI")).disabled, false);
+  assert.equal(button(page, "Save", openAiForm()).disabled, false);
+});
+
+test("Escape in a key's field closes the editor alone, and never reaches the window's own Escape", async () => {
+  const page = await mount();
+  let reached = 0;
+  const onWindow = (event: KeyboardEvent) => {
+    if (event.key === "Escape") reached += 1;
+  };
+  window.addEventListener("keydown", onWindow);
+  try {
+    addKey(page, "Anthropic");
+    act(() => {
+      field(page, "Anthropic").dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    assert.equal(page.querySelector("input"), null, "the editor closed");
+    assert.equal(reached, 0, "Settings stays open");
+  } finally {
+    window.removeEventListener("keydown", onWindow);
+  }
 });

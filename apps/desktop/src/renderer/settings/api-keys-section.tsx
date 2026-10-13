@@ -7,41 +7,43 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
-import { CheckIcon, KeyIcon } from "@sidecar/panel";
+import { PencilIcon, TrashIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton } from "../retry-button";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { BusyLabel, SpinnerRegion } from "../spinner";
-import { useConfirm } from "./confirm-state";
-import { ConfirmSwap } from "./confirm-swap";
+import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
+import { MenuRow } from "./menu-row";
+import { SettingsGroup } from "./settings-group";
 
 /**
  * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
  *
  * A group of the Coding agents page, under the default model it runs. One
- * row per provider. A provider with no key of the account's draws a
- * password field and Save; one with a key draws its hint — its prefix and
- * last four characters, as the service answers it — when it was added, and
- * how the provider last answered it, with Replace and Remove beside. The
- * service never answers a key, so the page never holds one but the one
- * being pasted: it stands in the field alone, is read from it once on Save,
- * and is cleared from it as soon as the service keeps it. A save the
- * service refuses says why under the row and leaves the field as pasted.
- * One change runs at a time across the rows, since every answer is the
- * account's keys whole and two in flight could land out of order.
- * Remove asks first, in place. The whole group is kept out of the screen
- * recording, which masks a field's characters but not their count.
+ * row per provider. A provider with no key of the account's offers Add key;
+ * one with a key draws how the provider last answered it, its hint — its
+ * prefix and last four characters, as the service answers it — and when it
+ * was added, with Edit key and Remove key behind the row's ⋯ and a
+ * right-click. Adding or editing grows the row a password field, Cancel,
+ * and Save. The service never answers a key, so the page never holds one
+ * but the one being pasted: it stands in the field alone, is read from it
+ * once on Save, and is cleared from it as soon as the service keeps it. A
+ * save the service refuses says why under the row and leaves the field as
+ * pasted. One change runs at a time across the rows, since every answer is
+ * the account's keys whole and two in flight could land out of order.
+ * Remove asks first, in the confirm dialog. The whole group is kept out of
+ * the screen recording, which masks a field's characters but not their
+ * count.
  */
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
   FAILED: "Your keys could not be read.",
   SIGNED_OUT: "Sign in to add your own API keys.",
-  NOTE: "A coding agent on a provider's model runs on your own key for that provider when you add one, and usage on it is billed to you by that provider. Without one, it runs on Luke's.",
   SAVE_FAILED: "The key could not be saved. Try again.",
   REMOVE_FAILED: "The key could not be removed. Try again.",
 } as const;
@@ -77,11 +79,11 @@ function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus
     case PROVIDER_KEY_STATUS.VERIFIED:
       return "Verified";
     case PROVIDER_KEY_STATUS.INVALID:
-      return `${name} rejected this key. Replace it.`;
+      return `${name} rejected this key.`;
     case PROVIDER_KEY_STATUS.QUOTA_EXCEEDED:
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
-      return "This key can no longer be read. Replace it.";
+      return "This key can no longer be read.";
   }
 }
 
@@ -123,18 +125,17 @@ function ProviderKeyRow({
 }): React.JSX.Element {
   const name = PROVIDER_NAME[provider];
   const field = useRef<HTMLInputElement | null>(null);
-  const [replacing, setReplacing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  const removal = useConfirm({ subject: stored !== undefined, surfaceOpen: true }, () =>
+  const removal = useConfirmDialog({ subject: stored !== undefined, surfaceOpen: true }, () =>
     onRemove(provider),
   );
-  const editing = stored === undefined || replacing;
 
-  // Replace opens the field with the focus in it, ready for the paste.
+  // Add and Edit open the field with the focus in it, ready for the paste.
   useEffect(() => {
-    if (replacing) field.current?.focus();
-  }, [replacing]);
+    if (editing) field.current?.focus();
+  }, [editing]);
 
   const save = () => {
     const key = field.current?.value.trim() ?? "";
@@ -147,41 +148,72 @@ function ProviderKeyRow({
       if (refused !== undefined) return;
       // Kept: the key leaves the field, and the row draws the service's word for it.
       if (field.current !== null) field.current.value = "";
-      setReplacing(false);
+      setEditing(false);
     });
   };
+  const cancel = () => {
+    if (field.current !== null) field.current.value = "";
+    setRejection(undefined);
+    setEditing(false);
+  };
+
+  const actions =
+    stored === undefined || editing
+      ? []
+      : [
+          {
+            label: "Edit key",
+            icon: <PencilIcon />,
+            disabled: removal.busy || locked,
+            onSelect: () => setEditing(true),
+          },
+          {
+            label: "Remove key",
+            icon: <TrashIcon />,
+            danger: true,
+            disabled: removal.busy || locked,
+            onSelect: removal.ask,
+          },
+        ];
+  const verified = stored?.status === PROVIDER_KEY_STATUS.VERIFIED;
 
   return (
-    <div
-      className="settings-row settings-row-wrapping api-key-row"
-      {...searchAnchorProps(PROVIDER_ANCHOR[provider])}
-    >
-      <span className="settings-copy">
-        <span className="settings-name">
+    <>
+      <MenuRow label={`${name} key actions`} actions={actions} anchor={PROVIDER_ANCHOR[provider]}>
+        <span className="settings-row-mark">
           <HarnessMark provider={provider} />
-          <strong>{name}</strong>
-          {stored?.status === PROVIDER_KEY_STATUS.VERIFIED && !editing ? <CheckIcon /> : null}
         </span>
-        {stored !== undefined && !editing ? (
-          <small>
-            <code className="api-key-hint">{stored.hint}</code>
-            {` · Added ${ADDED_FORMAT.format(stored.addedAt)} · `}
-            <span
-              className={
-                stored.status === PROVIDER_KEY_STATUS.VERIFIED ? undefined : "api-key-trouble"
-              }
-              role={stored.status === PROVIDER_KEY_STATUS.VERIFIED ? undefined : "alert"}
-            >
-              {keyStatusWords(provider, stored.status)}
-            </span>
-          </small>
-        ) : (
-          <small>{`Usage on your key is billed by ${name}.`}</small>
-        )}
-      </span>
+        <span className="settings-copy">
+          <strong>{name}</strong>
+          {stored === undefined ? null : (
+            <small>
+              <span
+                className="settings-state"
+                data-state={verified ? "connected" : "attention"}
+                role={verified ? undefined : "alert"}
+              >
+                {keyStatusWords(provider, stored.status)}
+              </span>
+              {" · "}
+              <code className="api-key-hint">{stored.hint}</code>
+              {` · Added ${ADDED_FORMAT.format(stored.addedAt)}`}
+            </small>
+          )}
+        </span>
+        {stored === undefined && !editing ? (
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={locked}
+            onClick={() => setEditing(true)}
+          >
+            Add key
+          </button>
+        ) : null}
+      </MenuRow>
       {editing ? (
         <form
-          className="settings-actions api-key-form"
+          className="api-key-form"
           onSubmit={(event) => {
             event.preventDefault();
             save();
@@ -197,64 +229,45 @@ function ProviderKeyRow({
             spellCheck={false}
             disabled={saving}
             onChange={() => setRejection(undefined)}
+            // Escape closes the editor and nothing behind it: the window's own
+            // Escape would leave Settings. A composition's Escape is the IME's.
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              event.stopPropagation();
+              cancel();
+            }}
           />
-          <button type="submit" className="toolbar-button" disabled={saving || locked}>
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={saving}
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="primary-button" disabled={saving || locked}>
             <BusyLabel busy={saving} label="Checking the key">
               Save
             </BusyLabel>
           </button>
-          {replacing ? (
-            <button
-              type="button"
-              className="toolbar-button"
-              disabled={saving}
-              onClick={() => {
-                if (field.current !== null) field.current.value = "";
-                setRejection(undefined);
-                setReplacing(false);
-              }}
-            >
-              Cancel
-            </button>
-          ) : null}
         </form>
-      ) : (
-        <ConfirmSwap
-          confirm={{
-            question: `Remove your ${name} API key? Agents on ${name} models will run on Luke's key.`,
-            stage: removal.stage,
-            verb: "Remove",
-            running: "Removing",
-            onKeep: removal.keep,
-            onAct: removal.run,
-          }}
-        >
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={removal.busy || locked}
-            onClick={() => setReplacing(true)}
-          >
-            Replace
-          </button>
-          <button
-            type="button"
-            className="toolbar-button account-delete"
-            disabled={removal.busy || locked}
-            /* The ellipsis is the promise that it asks first. */
-            title="Remove…"
-            onClick={removal.ask}
-          >
-            Remove
-          </button>
-        </ConfirmSwap>
-      )}
-      {rejection !== undefined || removal.rejection !== undefined ? (
-        <p className="error-message api-key-error" role="alert">
-          {rejection ?? removal.rejection}
-        </p>
       ) : null}
-    </div>
+      {rejection === undefined ? null : (
+        <p className="error-message" role="alert">
+          {rejection}
+        </p>
+      )}
+      <ConfirmDialog
+        confirm={removal}
+        question={{
+          title: `Remove your ${name} API key?`,
+          body: `Agents on ${name} models will run on Luke's key.`,
+          verb: "Remove key",
+          running: "Removing…",
+        }}
+      />
+    </>
   );
 }
 
@@ -333,17 +346,12 @@ export function ApiKeysSection({
   );
 
   return (
-    <section className={`settings-section ${NO_CAPTURE}`}>
-      <h2>
-        <KeyIcon />
-        API keys
-      </h2>
-      {!signedIn ? (
-        <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
-      ) : keys !== undefined ? (
-        <>
-          <p className="settings-note">{PAGE_LINE.NOTE}</p>
-          {PROVIDERS.map((provider) => (
+    <div className={NO_CAPTURE}>
+      <SettingsGroup title="API keys">
+        {!signedIn ? (
+          <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+        ) : keys !== undefined ? (
+          PROVIDERS.map((provider) => (
             <ProviderKeyRow
               key={provider}
               provider={provider}
@@ -352,18 +360,20 @@ export function ApiKeysSection({
               onSave={save}
               onRemove={remove}
             />
-          ))}
-        </>
-      ) : readFailed ? (
-        <>
-          <p className="error-message" role="alert">
-            {PAGE_LINE.FAILED}
-          </p>
-          <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
-        </>
-      ) : (
-        <SpinnerRegion label="Loading your keys" />
-      )}
-    </section>
+          ))
+        ) : readFailed ? (
+          <div className="settings-card-line">
+            <p className="error-message" role="alert">
+              {PAGE_LINE.FAILED}
+            </p>
+            <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
+          </div>
+        ) : (
+          <div className="settings-card-line">
+            <SpinnerRegion label="Loading your keys" />
+          </div>
+        )}
+      </SettingsGroup>
+    </div>
   );
 }

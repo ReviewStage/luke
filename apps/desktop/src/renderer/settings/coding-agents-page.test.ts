@@ -472,11 +472,25 @@ test("a write the service refused leaves the default as it was and says so under
   assert.match(page.querySelector('[role="alert"]')?.textContent ?? "", /could not be saved/u);
 });
 
+/** What the model row says under its name, if anything. */
+function modelNote(page: HTMLElement): string | undefined {
+  return (
+    page.querySelector(".settings-picker")?.closest(".settings-row")?.querySelector("small")
+      ?.textContent ?? undefined
+  );
+}
+
 test("a key saved in the API keys group is what the model row says at once", async () => {
   const page = await mount();
-  const note = () => page.querySelector(".settings-copy small")?.textContent;
-  assert.equal(note(), "What a click on Start runs an agent on.");
+  const note = () => modelNote(page);
+  assert.equal(note(), undefined, "on Luke's key the row says nothing");
 
+  const add = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) =>
+      each.textContent === "Add key" &&
+      each.closest(".menu-row")?.textContent?.includes("Anthropic"),
+  );
+  act(() => add?.click());
   const field =
     page.querySelector<HTMLInputElement>('input[aria-label="Anthropic API key"]') ??
     assert.fail("no Anthropic field");
@@ -484,7 +498,7 @@ test("a key saved in the API keys group is what the model row says at once", asy
   const form = field.closest("form") ?? assert.fail("no form around the field");
   act(() => form.requestSubmit());
   await settle();
-  assert.equal(note(), "What a click on Start runs an agent on, on your own Anthropic key.");
+  assert.equal(note(), "Runs on your own Anthropic key.");
 });
 
 test("with no account signed in the page asks nothing and says to sign in", async () => {
@@ -540,13 +554,7 @@ test("the model row says the default runs on the account's own key where the pro
   ownKeyStatus = PROVIDER_KEY_STATUS.UNREADABLE;
   const unusable = await mount();
 
-  const note = (page: HTMLElement) =>
-    page.querySelector(".settings-picker-row .settings-copy small, .settings-copy small")
-      ?.textContent;
-  assert.equal(note(own), "What a click on Start runs an agent on, on your own Anthropic key.");
-  assert.equal(note(luke), "What a click on Start runs an agent on.");
-  assert.equal(
-    note(unusable),
-    "What a click on Start runs an agent on. Your Anthropic key needs attention under API keys.",
-  );
+  assert.equal(modelNote(own), "Runs on your own Anthropic key.");
+  assert.equal(modelNote(luke), undefined);
+  assert.equal(modelNote(unusable), "Your Anthropic key needs attention under API keys.");
 });
