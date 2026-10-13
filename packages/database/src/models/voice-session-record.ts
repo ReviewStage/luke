@@ -83,8 +83,9 @@ interface VoiceSessionOwnership {
   sessionId: string;
 }
 
-/** A live session the account was shown to have opened: the plan its creation bound it to, where its row names one. */
+/** A live session the account was shown to have opened: the store's id for its row, and the plan its creation bound it to, where its row names one. */
 interface OwnedVoiceSession {
+  readonly voiceSessionId: string;
   readonly planId: string | undefined;
 }
 
@@ -458,7 +459,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
         Option.match({
           onNone: () => undefined,
-          onSome: (row) => ({ planId: row.planId ?? undefined }),
+          onSome: (row) => ({ voiceSessionId: row.id, planId: row.planId ?? undefined }),
         }),
       ),
     earlierCalls: (input) =>

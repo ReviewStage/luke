@@ -1,6 +1,7 @@
 import type { VoiceSecondsOutcome } from "@sidecar/database/models/quota";
 import type { LiveSessionTrace } from "@sidecar/voice/live-session";
-import type { HostedApiError } from "../core.js";
+import type { AvatarUnavailableReason, HostedApiError } from "../core.js";
+import type { CallAvatarEnding } from "./call-avatar.js";
 
 /**
  * What the service writes down about itself: status codes, close codes,
@@ -36,6 +37,14 @@ export const LOG_EVENT = {
   CALL_ENDING: "call-ending",
   /** The device sent a frame the service does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
+  /** Luke's face came up on the call: its row is open and the device was answered. */
+  AVATAR_STARTED: "avatar-started",
+  /** The face could not come up: the reason the device was answered with says why. */
+  AVATAR_UNAVAILABLE: "avatar-unavailable",
+  /** The face went down at LiveAvatar and its row was closed: how the call took it down. */
+  AVATAR_ENDED: "avatar-ended",
+  /** A stop LiveAvatar refused or a row that did not land; the row is left open for the sweep, and the event is all it says. */
+  AVATAR_FAILED: "avatar-failed",
   SESSION_ENDED: "session-ended",
   /** A session's own `voice_sessions` write failed; the event is all it says. */
   SESSION_FAILED: "session-failed",
@@ -63,7 +72,7 @@ export interface RelayCounts {
   bytesToDevice: number;
   /** Reflected audio frames dropped by type, never forwarded. */
   droppedAudio: number;
-  /** Reports in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
+  /** Reports and avatar asks in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
   reportsRead: number;
   /** Device frames the service refused, closing the socket; at most one, since the first ends the socket. */
   refusedUnpermitted: number;
@@ -89,6 +98,10 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; reason: string }
   | { event: typeof LOG_EVENT.CALL_ENDING }
   | { event: typeof LOG_EVENT.FRAME_REFUSED; type: string | undefined }
+  | { event: typeof LOG_EVENT.AVATAR_STARTED }
+  | { event: typeof LOG_EVENT.AVATAR_UNAVAILABLE; reason: AvatarUnavailableReason }
+  | { event: typeof LOG_EVENT.AVATAR_ENDED; ending: CallAvatarEnding }
+  | { event: typeof LOG_EVENT.AVATAR_FAILED }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
       finalization: Finalization;

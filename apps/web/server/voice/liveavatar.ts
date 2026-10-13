@@ -78,7 +78,8 @@ export const LIVEAVATAR_STOP_REASON = {
   ZOMBIE_SESSION_REAP: "ZOMBIE_SESSION_REAP",
 } as const;
 
-type LiveAvatarStopReason = (typeof LIVEAVATAR_STOP_REASON)[keyof typeof LIVEAVATAR_STOP_REASON];
+export type LiveAvatarStopReason =
+  (typeof LIVEAVATAR_STOP_REASON)[keyof typeof LIVEAVATAR_STOP_REASON];
 
 export class LiveAvatarError extends Data.TaggedError("LiveAvatarError")<{
   readonly failure: LiveAvatarFailure;

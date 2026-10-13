@@ -88,6 +88,8 @@ type Opened =
       accountId: string;
       /** The plan the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
       planId: string;
+      /** The store's id for the session's row, where the account's register landed one: what an avatar session on the call is recorded against. */
+      voiceSessionId: string | undefined;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
       /**
@@ -404,6 +406,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId,
         accountId: account.accountId,
         planId: frame.planId,
+        voiceSessionId,
         attachId,
         started: false,
         sideband,
@@ -453,6 +456,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId: frame.sessionId,
         accountId,
         planId: owned.planId,
+        voiceSessionId: owned.voiceSessionId,
         attachId,
         started: true,
         sideband,

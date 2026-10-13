@@ -5,10 +5,11 @@ import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "../server/live";
 import {
   deviceFrameDecision,
   FRAME_DECISION,
+  SESSIONS_AVATAR_FRAMES,
   SESSIONS_REPORT_FRAMES,
 } from "../server/voice/frames";
 
-test("a signed-in device forwards nothing, is read for its hang-up, its idle report, and its stop, and is refused on anything else", () => {
+test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and its avatar asks, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
@@ -21,6 +22,14 @@ test("a signed-in device forwards nothing, is read for its hang-up, its idle rep
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.REPORT);
   }
   assert.equal(deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY), FRAME_DECISION.REPORT);
+  // The avatar asks are the service's to answer, and OpenAI has no part in them.
+  assert.deepEqual(SESSIONS_AVATAR_FRAMES, [
+    VOICE_SERVICE_FRAME.AVATAR_START,
+    VOICE_SERVICE_FRAME.AVATAR_STOP,
+  ]);
+  for (const type of SESSIONS_AVATAR_FRAMES) {
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.AVATAR);
+  }
   // The exchange's own appends from an older build, the microphone switch
   // that never crosses this socket, the device's own audio, a handshake frame
   // after the handshake, and a frame whose type cannot be read: each closes
@@ -33,6 +42,7 @@ test("a signed-in device forwards nothing, is read for its hang-up, its idle rep
     LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
     VOICE_SERVICE_FRAME.SESSION_CREATE,
     VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    VOICE_SERVICE_FRAME.AVATAR_STARTED,
     undefined,
   ]) {
     assert.equal(deviceFrameDecision(type), FRAME_DECISION.REFUSE);

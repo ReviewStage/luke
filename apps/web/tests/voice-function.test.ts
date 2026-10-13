@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { Redacted } from "effect";
+import { afterEach, test, vi } from "vitest";
 import { voiceFunctionOptions } from "../server/voice/function";
+import { LIVEAVATAR_ENVIRONMENT } from "../server/voice/liveavatar";
 import { voiceServer } from "../server/voice/service";
 
 /**
@@ -16,6 +18,19 @@ import { voiceServer } from "../server/voice/service";
  */
 
 test("the voice function's options carry the exchange", () => {
-  const options = voiceFunctionOptions(voiceServer());
+  const options = voiceFunctionOptions(voiceServer(), { liveAvatarKey: undefined });
   assert.notEqual(options.exchange, undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+test("the voice function's options carry LiveAvatar only where both its key and its avatar are set", () => {
+  const liveAvatarKey = Redacted.make("la-test-key");
+  vi.stubEnv(LIVEAVATAR_ENVIRONMENT.AVATAR_ID, "avatar-test");
+  assert.equal(voiceFunctionOptions(voiceServer(), { liveAvatarKey: undefined }).avatar, undefined);
+  assert.notEqual(voiceFunctionOptions(voiceServer(), { liveAvatarKey }).avatar, undefined);
+  vi.stubEnv(LIVEAVATAR_ENVIRONMENT.AVATAR_ID, " ");
+  assert.equal(voiceFunctionOptions(voiceServer(), { liveAvatarKey }).avatar, undefined);
 });

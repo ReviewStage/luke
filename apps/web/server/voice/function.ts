@@ -1,13 +1,16 @@
 import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../hosted/environment.js";
 import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { deploymentExchange } from "./deployment-exchange.js";
+import { LIVEAVATAR_ENVIRONMENT, LiveAvatar } from "./liveavatar.js";
 import { LOG_EVENT, standardOutputLog } from "./log.js";
 import {
   type VoiceServer,
@@ -52,6 +55,15 @@ function configured(name: string): Redacted.Redacted | undefined {
   return named ? Redacted.make(named) : undefined;
 }
 
+/** LiveAvatar on this deployment's key and avatar, over `fetch`; nothing unless both are set, and then a call's ask for the face is answered unavailable. */
+function deploymentAvatar(
+  apiKey: Redacted.Redacted | undefined,
+): Layer.Layer<LiveAvatar> | undefined {
+  const avatarId = process.env[LIVEAVATAR_ENVIRONMENT.AVATAR_ID]?.trim();
+  if (apiKey === undefined || !avatarId) return undefined;
+  return LiveAvatar.layer({ apiKey, avatarId }).pipe(Layer.provide(FetchHttpClient.layer));
+}
+
 /** How much of a report's own wording the log keeps: its fixed sentence, which every reporter on the exchange path puts ahead of the first colon. */
 const REPORT_REASON_BOUND = 120;
 
@@ -67,14 +79,18 @@ function reportReason(message: string): string {
   return (colon === -1 ? message : message.slice(0, colon)).slice(0, REPORT_REASON_BOUND);
 }
 
-/** The service's options as this deployment composes them for the server given, the exchange among them. */
-export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
+/** The service's options as this deployment composes them for the server given and the environment it read, the exchange among them. */
+export function voiceFunctionOptions(
+  server: VoiceServer,
+  environment: Pick<HostedEnvironmentValues, "liveAvatarKey">,
+): VoiceServiceOptions {
   return {
     server,
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
     record: voiceSessionRecord(),
+    avatar: deploymentAvatar(environment.liveAvatarKey),
     exchange: deploymentExchange({
       deploymentSecret: () => configured(CRON_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
@@ -99,7 +115,13 @@ let standing: VoiceServer | undefined;
  */
 function standService(voice: VoiceServer): void {
   void runWeb(
-    Effect.scoped(Effect.andThen(VoiceService.make(voiceFunctionOptions(voice)), Effect.never)),
+    Effect.scoped(
+      Effect.gen(function* () {
+        const environment = yield* HostedEnvironment;
+        yield* VoiceService.make(voiceFunctionOptions(voice, environment));
+        return yield* Effect.never;
+      }),
+    ),
   ).catch(() => undefined);
 }
 

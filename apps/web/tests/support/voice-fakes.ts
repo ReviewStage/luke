@@ -6,10 +6,18 @@ import type { VoiceSessionRecord } from "@sidecar/database/models/voice-session-
 import type { VoiceCloseReason } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
+import {
+  type AvatarGrant,
+  LIVEAVATAR_FAILURE,
+  LiveAvatar,
+  LiveAvatarError,
+  type LiveAvatarService,
+  type LiveAvatarStopReason,
+} from "../../server/voice/liveavatar";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this
@@ -295,7 +303,10 @@ export function fakeSessionRecord(): FakeSessionRecord {
     owned: (input) =>
       Effect.sync(() => {
         const owner = owners.get(input.sessionId);
-        return owner?.userId === input.userId ? { planId: owner.planId } : undefined;
+        const voiceSessionId = fake.voiceSessionIds.get(input.sessionId);
+        return owner?.userId === input.userId && voiceSessionId !== undefined
+          ? { voiceSessionId, planId: owner.planId }
+          : undefined;
       }),
     earlierCalls: () => Effect.succeed([]),
     noteUsage: (input) =>
@@ -423,4 +434,60 @@ export function sendText(socket: WebSocket, text: string): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.send(text, (error) => (error ? reject(error) : resolve()));
   });
+}
+
+/** LiveAvatar as a test plays it: the grants it minted, the stops it was asked for, and whether it refuses either. */
+export interface FakeLiveAvatar {
+  /** The double on the client's own tag, as the service is handed the real one. */
+  readonly layer: Layer.Layer<LiveAvatar>;
+  readonly service: LiveAvatarService;
+  /** Every grant a start answered, in order. */
+  readonly granted: AvatarGrant[];
+  /** Every stop asked for, in order, refused or not. */
+  readonly stopped: Array<{ sessionId: string; reason: LiveAvatarStopReason }>;
+  /** Whether a start is refused, as LiveAvatar answering an error status. */
+  refuseStarts: boolean;
+  /** Whether a stop is refused the same way. */
+  refuseStops: boolean;
+  /** Run inside each start ahead of its answer, for a test that holds a start open. */
+  beforeGrant: Effect.Effect<void>;
+}
+
+const LIVEAVATAR_REFUSED = 500;
+
+export function fakeLiveAvatar(): FakeLiveAvatar {
+  const refused = () =>
+    new LiveAvatarError({ failure: LIVEAVATAR_FAILURE.HTTP, status: LIVEAVATAR_REFUSED });
+  const service: LiveAvatarService = {
+    start: () =>
+      Effect.gen(function* () {
+        yield* fake.beforeGrant;
+        if (fake.refuseStarts) return yield* refused();
+        const sessionId = `avatar-${randomUUID()}`;
+        const grant: AvatarGrant = {
+          sessionId,
+          livekitUrl: "wss://luke-test.livekit.cloud",
+          viewerToken: `viewer-${sessionId}`,
+          mediaUrl: `wss://media.liveavatar.test/${sessionId}`,
+          maxSeconds: 1_200,
+        };
+        fake.granted.push(grant);
+        return grant;
+      }),
+    stop: (sessionId, reason) =>
+      Effect.suspend(() => {
+        fake.stopped.push({ sessionId, reason });
+        return fake.refuseStops ? Effect.fail(refused()) : Effect.void;
+      }),
+  };
+  const fake: FakeLiveAvatar = {
+    layer: Layer.succeed(LiveAvatar, service),
+    service,
+    granted: [],
+    stopped: [],
+    refuseStarts: false,
+    refuseStops: false,
+    beforeGrant: Effect.void,
+  };
+  return fake;
 }
