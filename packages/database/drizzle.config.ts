@@ -7,9 +7,13 @@ import { defineConfig } from "drizzle-kit";
  * migrations that do not commute. Drizzle's migrator (`src/core/migrator.ts`)
  * applies the folders; drizzle-kit never connects to a database here.
  *
- * `db:generate` runs drizzle-kit under tsx's loader, because drizzle-kit
- * loads the schema modules through jiti, which does not read a workspace
- * package's `exports` target `./src/x.js` as the `./src/x.ts` beside it.
+ * `db:generate` runs drizzle-kit under tsx's loader (`NODE_OPTIONS='--import
+ * tsx'`). Note that we need it because rc.4 loads the schema modules through
+ * jiti, which resolves a workspace package's `exports` target `./src/x.js` to
+ * that missing file and never to the `./src/x.ts` beside it, so the first
+ * `@sidecar/hosted/*` import fails. The workaround is the one in
+ * drizzle-team/drizzle-orm#849; #6384 is the open plan to replace jiti.
+ * Delete it once drizzle-kit resolves workspace exports on its own.
  *
  * The history table is the migrator's, named here so a kit command that reads
  * it reads the same one: `public`, not Drizzle's default `drizzle` schema,
