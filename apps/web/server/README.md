@@ -93,7 +93,7 @@ The organization plugin's tables (`organization`, `member`, `invitation`, and
 `session.active_organization_id`) are transcribed into
 `packages/database/src/schemas/auth.ts` from `auth generate` for 1.6.29 with
 one edit, instants through `timestamptz()`, and migration
-`20261013154224_organization` is drizzle-kit's from that module. They keep
+`20261013215818_organization` is drizzle-kit's from that module. They keep
 Better Auth's default model names, since the Drizzle adapter finds a model by
 its export's name. A Luke workspace is an
 `organization` and its team the `member` rows, under the plugin's default
@@ -130,8 +130,8 @@ and is off under `disableOrganizationDeletion`, and `user.deleteUser` wants a
 fresh session.
 
 Every plan belongs to one workspace: `plan.organization_id`, not null and
-cascading with the organization (`20261013161138_plan_organization` adds the
-column, and the custom `20261013161206_plan_organization_backfill` after it
+cascading with the organization (`20261013215825_plan_organization` adds the
+column, and the custom `20261013215828_plan_organization_backfill` after it
 moves every plan standing into its starter's personal workspace and then
 sets the column not null). A plan's summary on the wire names it as `workspaceId`.
 `memberOfWorkspace` is the one membership condition, a `member` row, which a

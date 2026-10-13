@@ -1,6 +1,6 @@
 {
-  "id": "2fe6ba35-ecdd-49e4-acba-ae01cc59b315",
-  "prevId": "7c6daeb4-fb81-46ef-acac-824e39432633",
+  "id": "cf30e702-81db-434f-9d57-af751410a53d",
+  "prevId": "92ab462e-0670-43e0-967c-ee9ac1f0c212",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2755,7 +2755,7 @@
           "name": "organization_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",

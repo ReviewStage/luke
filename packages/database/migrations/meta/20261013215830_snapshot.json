@@ -1,6 +1,6 @@
 {
-  "id": "248fad6f-ecb1-4899-ab38-50fbc1550a95",
-  "prevId": "40f03c9e-6757-410e-bd32-8656f9e7c94b",
+  "id": "7e450f17-18f8-4082-8bdf-057b6c984f06",
+  "prevId": "b604c03e-4019-414b-b6c8-3d4575e65c19",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2144,6 +2144,88 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.github_installation": {
+      "name": "github_installation",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_login": {
+          "name": "account_login",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_type": {
+          "name": "account_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "github_installation_organization_id_organization_id_fk": {
+          "name": "github_installation_organization_id_organization_id_fk",
+          "tableFrom": "github_installation",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "github_installation_installation_id_unique": {
+          "name": "github_installation_installation_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["installation_id"]
+        },
+        "github_installation_account_id_unique": {
+          "name": "github_installation_account_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["account_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.inbox_item": {
       "name": "inbox_item",
       "schema": "",
@@ -2678,6 +2760,62 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.personal_workspace": {
+      "name": "personal_workspace",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "personal_workspace_user_id_user_id_fk": {
+          "name": "personal_workspace_user_id_user_id_fk",
+          "tableFrom": "personal_workspace",
+          "tableTo": "user",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "personal_workspace_organization_id_organization_id_fk": {
+          "name": "personal_workspace_organization_id_organization_id_fk",
+          "tableFrom": "personal_workspace",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "personal_workspace_organization_id_unique": {
+          "name": "personal_workspace_organization_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["organization_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.plan": {
       "name": "plan",
       "schema": "",
@@ -2691,6 +2829,12 @@
         },
         "user_id": {
           "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -2774,6 +2918,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "plan_organization_created": {
+          "name": "plan_organization_created",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2782,6 +2947,15 @@
           "tableFrom": "plan",
           "tableTo": "user",
           "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "plan_organization_id_organization_id_fk": {
+          "name": "plan_organization_id_organization_id_fk",
+          "tableFrom": "plan",
+          "tableTo": "organization",
+          "columnsFrom": ["organization_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
