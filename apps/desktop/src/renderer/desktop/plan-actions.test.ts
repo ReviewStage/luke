@@ -1072,7 +1072,9 @@ test("Start and the ⋯ stand only on the plan's own tab, while the plan's chord
     );
   assert.deepEqual(drawn(), ["Start a coding agent", "Plan actions"]);
   // A menu open as the tab changes goes with the button it dropped from.
-  openMenu(container.querySelector<HTMLButtonElement>('[aria-label="Plan actions"]')!);
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  openMenu(more);
   assert.ok(labels().length > 0);
 
   for (const tab of [AGENT_TAB, MAIN_TAB.INBOX]) {
