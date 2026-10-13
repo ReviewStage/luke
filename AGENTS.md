@@ -237,29 +237,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
-- **`packages/database/src/core/drizzle.ts`** — the Drizzle bridge, ported from
-  `@effect/sql-drizzle` because that plugin peers the v3 line and a second
-  copy of `effect` in the tree would make a `Context.Service` minted in one
-  copy a different service in the other. Drizzle's proxy driver renders a
-  statement and awaits a promise for its rows, and the callback it awaits
-  takes the SQL and nothing else, so the door is `Effect.runPromiseExitWith`
-  on the context the yielding fiber was carrying, squashed to the `SqlError`
-  Drizzle re-wraps. The door's async-context snapshot once reproduced a raw
-  statement's handoff of its caller to the releasing caller's
-  `AsyncLocalStorage` context; Effect 4.0.4 resumes each fiber in its own
-  async context, so the handoff no longer happens, and
-  `apps/web/tests/drizzle-bridge.test.ts` still reads the bridge's answer
-  against the raw statement's on both dialects. Handing that run to an edge
-  is what cannot be done: the context is the point — an enclosing
-  `sql.withTransaction`'s connection is a service of the running fiber and of
-  no runtime an edge built — so the run has to happen where the fiber is,
-  which is inside the callback Drizzle calls. The handle the bridge hands out
-  is no service and no layer, and minting one would be a regression rather
-  than a tidy-up: it carries no capability, so a `Context.Service` over it
-  would add a requirement to every query module that answers
-  `Effect<A, SqlError | Schema.SchemaError, SqlClient>` today and buy
-  nothing, and reading the client from the fiber instead is the same thing
-  that keeps a bridged query inside the transaction around it.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
@@ -289,11 +266,12 @@ reads it: `apps/desktop/src/shared/messages/acts.ts`,
   its migration. Two things differ from lobehub's examples. A row is decoded
   by an Effect `Schema` through `SqlSchema`, never `drizzle-zod`, because
   Effect takes no zod schema and a second validation library would split the
-  one way a boundary value is declared. A statement is an `Effect` on the
-  fiber's `SqlClient` through the bridge
-  (`packages/database/src/core/drizzle.ts`) rather than a promise, until
-  Drizzle's own `drizzle-orm/effect-postgres` supports Effect v4; it is
-  yielded, and `anti-slop/no-await-drizzle-statement` refuses one awaited.
+  one way a boundary value is declared. A statement is an `Effect` from
+  Drizzle's own driver, `drizzle-orm/effect-postgres` over the runtime's
+  `PgClient` (`drizzle-orm/effect-pglite` in the store's tests), read off the
+  `Database` service in `packages/database/src/core/query.ts`, which every
+  layer that provides the `SqlClient` provides beside it; it is yielded, and
+  `anti-slop/no-await-drizzle-statement` refuses one awaited.
   `apps/web/server/README.md`'s "The data layer" is the rest.
 - Runtime only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
