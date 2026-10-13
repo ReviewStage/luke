@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,6 +49,28 @@ function mountPage(): void {
       createElement(WindowShortcutSections, { key: "window" }),
     ]);
   });
+}
+
+/** Whether the talk key's field is recording, as it says to a reader. */
+function recording(): boolean {
+  return changeButton().getAttribute("aria-pressed") === "true";
+}
+
+/** The menu item with these words, in whichever menu stands open. */
+function menuItem(label: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`no ${label} item`)
+  );
+}
+
+function openTalkMenu(): void {
+  const more = document.body.querySelector<HTMLButtonElement>(
+    'button[aria-label="Talk to Luke shortcut actions"]',
+  );
+  assert.ok(more, "the talk row offers its menu");
+  act(() => more.click());
 }
 
 function changeButton(): HTMLButtonElement {
@@ -159,10 +182,10 @@ test("every shortcut the settings search offers lands on a row the page draws", 
 
 test("recording the talk key says so in place, and Escape keeps the key that was there", async () => {
   mountPage();
-  assert.equal(changeButton().textContent, "Change");
+  assert.equal(recording(), false);
 
   act(() => changeButton().click());
-  assert.equal(changeButton().textContent, "Cancel");
+  assert.equal(recording(), true);
   assert.deepEqual(
     caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)),
     [],
@@ -172,7 +195,7 @@ test("recording the talk key says so in place, and Escape keeps the key that was
 
   await chord({ key: "Escape", code: "Escape" });
   assert.deepEqual(stored, []);
-  assert.equal(changeButton().textContent, "Change");
+  assert.equal(recording(), false);
   assert.deepEqual(caps(row(SETTINGS_SEARCH_ROW.TALK_KEY)), ["⌥", "Space"]);
 });
 
@@ -187,9 +210,41 @@ test("a talk key that would take one of the window's own shortcuts is refused, a
     "⌘N is Luke's own shortcut for New plan. Choose another.",
   );
 
-  assert.equal(changeButton().textContent, "Cancel", "a refused chord leaves the recording open");
+  assert.equal(recording(), true, "a refused chord leaves the recording open");
 
   await chord({ key: "j", code: "KeyJ", metaKey: true, altKey: true });
   assert.equal(stored.length, 1, "a chord the window leaves free is stored");
   assert.equal(document.body.querySelector('[role="alert"]'), null);
+});
+
+test("the talk row's ⋯ offers Change shortcut, which records in the chord's own field", () => {
+  mountPage();
+  openTalkMenu();
+
+  act(() => menuItem("Change shortcut").click());
+  assert.equal(recording(), true);
+  assert.equal(document.activeElement, changeButton(), "the field listens for the chord");
+});
+
+test("the talk row's ⋯ removes the key, leaving none, and offers no reset to a default key", async () => {
+  mountPage();
+  openTalkMenu();
+  const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+  assert.ok(
+    !items.some((item) => item.textContent?.startsWith("Reset")),
+    "nothing chosen, nothing to reset",
+  );
+
+  await act(async () => menuItem("Remove shortcut").click());
+  assert.deepEqual(stored, [VOICE_HOTKEY_NONE]);
+});
+
+test("the talk key's field is described by the key it stands at, which its caps alone would not say to a reader", () => {
+  mountPage();
+  const described = () =>
+    document.getElementById(changeButton().getAttribute("aria-describedby") ?? "")?.textContent;
+  assert.equal(described(), voiceHotkeyLabel("Alt+Space"));
+
+  act(() => changeButton().click());
+  assert.equal(changeButton().getAttribute("aria-describedby"), null, "recording says itself");
 });
