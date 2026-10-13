@@ -86,7 +86,7 @@ test("a worker's line and its task card name the task by its first line as plain
   const worker = workerOf(workRowsOf(TURNS, false), "call-worker");
   assert.ok(worker);
   const tab = mounted(createElement(SubagentTab, { worker, shown: true }));
-  const card = tab.querySelector<HTMLDetailsElement>("[data-task-card]");
+  const card = tab.querySelector<HTMLDetailsElement>("[data-plan-card]");
   assert.ok(card);
   assert.equal(
     card.querySelector("summary")?.textContent,
@@ -541,4 +541,41 @@ test("a link in Luke's words opens in the browser over the act channel, a GitHub
     { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
     { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
   ]);
+});
+
+test("Luke's turn is drawn by a coding agent's own message, so his words carry the Copy an agent's turn does, and a stopped turn's lead folds as an agent's does", () => {
+  const work = mounted(
+    createElement(PlanWork, {
+      turns: [
+        {
+          turnId: "turn-words",
+          startedAt: 1,
+          endedAt: 2,
+          state: PLAN_WORK_STATE.FAILED,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-ls",
+              tool: PLAN_WORK_TOOL.REPOSITORY,
+              name: "run_in_repository",
+              state: PLAN_WORK_STATE.DONE,
+              subject: "ls",
+              input: '{ "command": "ls" }',
+              output: "src",
+            },
+            { type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." },
+          ],
+        },
+      ],
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: async () => undefined,
+      onOpenSubagent: () => undefined,
+      shown: true,
+    }),
+  );
+  assert.ok(work.querySelector('button[aria-label="Copy"]'), "no Copy under Luke's words");
+  // The call ahead of the last words folds under the turn's line, as a stopped agent turn's lead does.
+  assert.ok(work.textContent?.includes("1 tool call"));
 });

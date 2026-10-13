@@ -51,6 +51,20 @@ export const CALL_KIND = {
 
 export type CallKind = (typeof CALL_KIND)[keyof typeof CALL_KIND];
 
+/**
+ * A call as the wire that carried it already read it: its kind, the one
+ * input a reader looks for first, and the words a command was said to be
+ * for. The planning model's turns arrive read this way (`work-model.ts`),
+ * so their calls say it beside the SDK's own part, and the row draws what
+ * the wire said rather than reading the tool's input again; a coding
+ * agent's calls say nothing, and their rows are read from the part.
+ */
+export interface SaidCall {
+  readonly kind: CallKind;
+  readonly subject?: string;
+  readonly description?: string;
+}
+
 /** How a call of each kind says what it did, and whether its subject is code (a command, a path) rather than words. */
 export const CALL_WORDS = {
   [CALL_KIND.COMMAND]: { verb: "Ran", code: true },

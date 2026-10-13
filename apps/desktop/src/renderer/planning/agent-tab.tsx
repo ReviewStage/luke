@@ -1,6 +1,5 @@
 import {
   CODING_AGENT_BRIEF,
-  CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
@@ -12,7 +11,7 @@ import type { CatalogModel, ModelChoice, ModelProvider } from "@sidecar/hosted/m
 import { CodingAgentsIcon, DocumentIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { Fragment, type ReactNode, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
@@ -43,6 +42,7 @@ import {
   agentStillWriting,
   agentTabLabel,
   agentWorkingPhase,
+  delegates,
   dockedTodos,
   endLine,
   messageWords,
@@ -50,6 +50,7 @@ import {
   providerOf,
   settledPlanEdits,
   showsPublishedRow,
+  startedAgentOf,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -66,6 +67,8 @@ import {
   toolCallView,
 } from "./tool-call-model";
 import {
+  TranscriptNote,
+  TranscriptOpeningCall,
   TranscriptReasoning,
   TranscriptRows,
   TranscriptSubagent,
@@ -74,6 +77,7 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
+import { CALL_KIND, CALL_WORDS } from "./turn-rows";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
@@ -142,6 +146,8 @@ interface TranscriptLead {
   startingLine: string;
   /** Whether runs of calls fold under one line; a worker's session is read for its detail, so its do not. */
   grouped: boolean;
+  /** Whether a finished turn's line wears the mark of the harness its model ran in; Luke's own turns run in none. */
+  harnessed: boolean;
 }
 
 /** An agent's transcript: the plan it was handed, and the agent starting. */
@@ -154,14 +160,22 @@ const AGENT_LEAD: TranscriptLead = {
   ),
   startingLine: "The agent is starting. Its transcript appears here.",
   grouped: true,
+  harnessed: true,
 };
 
 /** A worker's transcript: the task it was handed, and the worker starting. */
-const WORKER_LEAD: TranscriptLead = {
+export const WORKER_LEAD: TranscriptLead = {
   label: "Task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting. Its transcript appears here.",
   grouped: false,
+  harnessed: true,
+};
+
+/** The planning model's turns, which open on no card and run in no harness of a coding agent's. */
+export const PLANNING_LEAD: TranscriptLead = {
+  ...AGENT_LEAD,
+  harnessed: false,
 };
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -172,6 +186,8 @@ export interface DelegationDoors {
   starts?: ReadonlyMap<string, number> | undefined;
   /** Opens the worker's tab, by the call that started it, with the task and where the worker stands as the row knows it; none where the row stands in a tab that opens no tab. */
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
+  /** Opens a coding agent's tab, by the agent, which the row of a call that started one asks for; none where nothing opens one. */
+  onOpenAgent?: ((agentId: string) => void) | undefined;
 }
 
 /** One tool call: its row, and its input and answer under it once opened. */
@@ -208,7 +224,7 @@ function DelegationRow({
   return (
     <TranscriptSubagent
       callId={part.callId}
-      job={cardTitle(view.task)}
+      job={cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb}
       pair={
         view.choice === undefined ? undefined : { choice: view.choice, models: doors?.models ?? [] }
       }
@@ -258,6 +274,9 @@ interface TodosPlace {
   readonly open: string | undefined;
 }
 
+/** A transcript that holds no to-do list, as the planning model's does not. */
+const NO_TODOS: TodosPlace = { kept: undefined, open: undefined };
+
 /** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
 function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
   const standing = newestTodos(messages);
@@ -287,6 +306,26 @@ function TodosDock({
   );
 }
 
+/** A call that started a coding agent, once it began: the one button that opens the agent's tab, saying what it did. */
+function OpeningCallView({
+  part,
+  onOpen,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  onOpen: () => void;
+}): ReactNode {
+  const view = toolCallView(part);
+  return (
+    <TranscriptOpeningCall
+      callId={part.callId}
+      kind={view.kind}
+      subject={view.subject}
+      state={part.state}
+      onOpen={onOpen}
+    />
+  );
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
@@ -302,15 +341,19 @@ function AgentPartView({
       return <TranscriptWords text={part.text} />;
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
-    case AGENT_PART.TOOL:
-      switch (part.tool) {
-        case CODING_AGENT_DELEGATE_TOOL:
-          return <DelegationRow part={part} doors={delegation} />;
-        case AGENT_TOOL.WRITE_TODOS:
-          return <TodosRow part={part} open={part.callId === todos.open} />;
-        default:
-          return <ToolCallView part={part} />;
+    case AGENT_PART.TOOL: {
+      if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
+      const agent = startedAgentOf(part);
+      const openAgent = delegation?.onOpenAgent;
+      if (agent !== undefined && openAgent !== undefined) {
+        return <OpeningCallView part={part} onOpen={() => openAgent(agent)} />;
       }
+      return part.tool === AGENT_TOOL.WRITE_TODOS ? (
+        <TodosRow part={part} open={part.callId === todos.open} />
+      ) : (
+        <ToolCallView part={part} />
+      );
+    }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
@@ -319,12 +362,21 @@ function AgentPartView({
 }
 
 /** The plan the agent was handed, or the task a worker was: a card across the column, folded under its title. */
-function PlanCard({ text, lead }: { text: string; lead: TranscriptLead }): ReactNode {
+function PlanCard({
+  text,
+  lead,
+  title = cardTitle(text),
+}: {
+  text: string;
+  lead: TranscriptLead;
+  /** The card's line: the text's first line as plain words, unless the transcript names it otherwise. */
+  title?: string | undefined;
+}): ReactNode {
   return (
     <Plan data-plan-card="" aria-label={lead.label}>
       <PlanHeader>
         {lead.icon}
-        <PlanTitle label={lead.label}>{cardTitle(text)}</PlanTitle>
+        <PlanTitle label={lead.label}>{title}</PlanTitle>
       </PlanHeader>
       <PlanContent>
         <TranscriptWords text={text} />
@@ -339,25 +391,28 @@ function PlanCard({ text, lead }: { text: string; lead: TranscriptLead }): React
  * agent's own turns, with a copy of its words under it where it has any,
  * ending once it has finished on how long it worked and when it ended.
  */
-function AgentMessage({
+export function AgentMessage({
   message,
   plan,
   lead,
   moving,
   delegation,
-  todos,
+  todos = NO_TODOS,
+  briefTitle,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
+  /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
+  briefTitle?: string | undefined;
   lead: TranscriptLead;
   /** Whether the agent may still write to this message: it is the last, and the agent still works. */
   moving: boolean;
   delegation: DelegationDoors | undefined;
-  todos: TodosPlace;
+  todos?: TodosPlace;
 }): ReactNode {
   const words = messageWords(message);
-  if (plan) return <PlanCard text={words} lead={lead} />;
+  if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
@@ -387,6 +442,7 @@ function AgentMessage({
           endedAt={finishedAt}
           record={message}
           models={delegation?.models}
+          harnessed={lead.harnessed}
         />
       )}
       {words === "" ? null : <CopyMessageAction words={words} />}
@@ -454,6 +510,8 @@ export function AgentTranscriptView({
   onRetry,
   footer,
   overComposer = false,
+  earlierOmitted = false,
+  briefTitle,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
@@ -477,6 +535,10 @@ export function AgentTranscriptView({
   footer?: ReactNode;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
+  /** Whether older steps than these were left out, which a note says after the card. */
+  earlierOmitted?: boolean;
+  /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
+  briefTitle?: string | undefined;
 }): React.JSX.Element {
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
@@ -496,15 +558,20 @@ export function AgentTranscriptView({
           }
         >
           {messages.map((message, index) => (
-            <AgentMessage
-              key={message.id}
-              message={message}
-              plan={message === plan}
-              lead={lead}
-              moving={working && index === messages.length - 1}
-              delegation={delegation}
-              todos={todos}
-            />
+            <Fragment key={message.id}>
+              <AgentMessage
+                message={message}
+                plan={message === plan}
+                lead={lead}
+                moving={working && index === messages.length - 1}
+                delegation={delegation}
+                todos={todos}
+                briefTitle={briefTitle}
+              />
+              {earlierOmitted && message === plan ? (
+                <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+              ) : null}
+            </Fragment>
           ))}
           {working ? (
             <WorkingLine

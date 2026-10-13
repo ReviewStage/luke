@@ -19,7 +19,7 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/w
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
-import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
+import { CALL_KIND, type CallKind, commandDescription, pageName, type SaidCall } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -426,12 +426,44 @@ function knownToolView(
   }
 }
 
-/** How one tool call is drawn: its row and its body, from the part's input and output. */
+/** A value as its block draws it: words as they are, anything else as its JSON. */
+function valueBlock(value: WireValue): ToolBlock {
+  return isWireString(value) ? textBlock(value) : jsonBlock(value);
+}
+
+/**
+ * A call its wire already read, drawn as the wire said it: its kind, its
+ * subject and the words it was said to be for, a command's input behind its
+ * prompt and anything else as it came, and its answer as it came.
+ */
+function saidToolView(
+  said: SaidCall,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const command = said.kind === CALL_KIND.COMMAND ? stringAt(input, "command") : undefined;
+  return {
+    kind: said.kind,
+    subject: said.subject ?? "",
+    ...(said.description === undefined ? undefined : { description: said.description }),
+    input:
+      command !== undefined
+        ? { kind: TOOL_BLOCK.COMMAND, text: command }
+        : input === undefined
+          ? textBlock("")
+          : valueBlock(input),
+    output: output === undefined ? undefined : valueBlock(output),
+  };
+}
+
+/** How one tool call is drawn: its row and its body, from what its wire said of it, or else the part's input and output. */
 export function toolCallView(input: {
   readonly tool: string;
   readonly input: WireValue | undefined;
   readonly output: WireValue | undefined;
+  readonly said?: SaidCall | undefined;
 }): ToolCallView {
+  if (input.said !== undefined) return saidToolView(input.said, input.input, input.output);
   return (
     knownToolView(input.tool, input.input, input.output) ?? {
       kind: CALL_KIND.OTHER,
@@ -442,9 +474,10 @@ export function toolCallView(input: {
   );
 }
 
-/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`). */
+/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the planning model's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
+  MESSAGE: "message",
   MODEL: "model",
   EFFORT: "effort",
   RESULT: "result",
@@ -465,7 +498,11 @@ export interface DelegationView {
  * agent's own pair, since that is what the service fills it from.
  */
 export function delegationView(
-  part: { readonly input: WireValue | undefined; readonly output: WireValue | undefined },
+  part: {
+    readonly input: WireValue | undefined;
+    readonly output: WireValue | undefined;
+    readonly said?: SaidCall | undefined;
+  },
   own: ModelChoice | undefined,
 ): DelegationView {
   // Note that the output is read whole or not at all, because a half pair names no run.
@@ -479,7 +516,11 @@ export function delegationView(
     ? stringAt(part.output, DELEGATION_FIELD.EFFORT)
     : (stringAt(part.input, DELEGATION_FIELD.EFFORT) ?? own?.effort);
   return {
-    task: stringAt(part.input, DELEGATION_FIELD.TASK) ?? "",
+    task:
+      stringAt(part.input, DELEGATION_FIELD.TASK) ??
+      stringAt(part.input, DELEGATION_FIELD.MESSAGE) ??
+      part.said?.subject ??
+      "",
     choice: model !== undefined && effort !== undefined ? { model, effort } : undefined,
     result: stringAt(part.output, DELEGATION_FIELD.RESULT),
   };

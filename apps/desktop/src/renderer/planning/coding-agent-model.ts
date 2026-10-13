@@ -33,7 +33,15 @@ import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/w
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { AGENT_TOOL, todosView } from "./tool-call-model";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
+import {
+  CALL_KIND,
+  type CallKind,
+  ROW_PART,
+  type RowReading,
+  type SaidCall,
+  type TurnRow,
+  turnRows,
+} from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -715,6 +723,8 @@ const TOOL_PART_TYPE_PREFIX = "tool-";
 
 const TOOL_STATES: ReadonlySet<string> = new Set(Object.values(TOOL_STATE));
 
+const CALL_KINDS: ReadonlySet<string> = new Set(Object.values(CALL_KIND));
+
 /** One part of a stored message as the tab draws it. */
 export type AgentPart =
   | { readonly kind: typeof AGENT_PART.TEXT; readonly text: string }
@@ -728,6 +738,8 @@ export type AgentPart =
       readonly output: WireValue | undefined;
       /** The error's own text, on a call that ended in one. */
       readonly errorText: string | undefined;
+      /** The call as its wire already read it, where it did (`SaidCall`). */
+      readonly said: SaidCall | undefined;
     }
   | { readonly kind: typeof AGENT_PART.STEP_START }
   | { readonly kind: typeof AGENT_PART.OTHER };
@@ -737,6 +749,20 @@ function toolState(value: WireValue | undefined): ToolState {
   return isWireString(value) && TOOL_STATES.has(value)
     ? (value as ToolState)
     : TOOL_STATE.INPUT_AVAILABLE;
+}
+
+/** What a part says its wire read its call as, or nothing where it says nothing this build reads. */
+function saidOf(value: WireValue | undefined): SaidCall | undefined {
+  if (!isRecord(value) || !isWireString(value.kind) || !CALL_KINDS.has(value.kind)) {
+    return undefined;
+  }
+  // SAFETY: membership in the set built from CALL_KIND's values is what the union names.
+  const kind = value.kind as CallKind;
+  return {
+    kind,
+    ...(isWireString(value.subject) ? { subject: value.subject } : undefined),
+    ...(isWireString(value.description) ? { description: value.description } : undefined),
+  };
 }
 
 /**
@@ -762,6 +788,7 @@ function agentPart(part: WireValue): AgentPart {
       input: part.input,
       output: part.output,
       errorText: isWireString(part.errorText) ? part.errorText : undefined,
+      said: saidOf(part.said),
     };
   }
   return { kind: AGENT_PART.OTHER };
@@ -784,11 +811,27 @@ export function settledPlanEdits(messages: readonly CodingAgentMessage[]): numbe
     ).length;
 }
 
-/** Whether a tool part is a delegation to a worker, which the tab draws as a subagent's row rather than a call's. */
+/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
+  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.said?.kind === CALL_KIND.WORKER;
+}
+
+/** Whether a part is a delegation to a worker (`delegates`). */
 export function isDelegation(
   part: AgentPart,
 ): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
-  return part.kind === AGENT_PART.TOOL && part.tool === CODING_AGENT_DELEGATE_TOOL;
+  return part.kind === AGENT_PART.TOOL && delegates(part);
+}
+
+/**
+ * The coding agent a call started, read off its answer, which is the agent
+ * its row opens; nothing for any other call, one still running, or a start
+ * refused, which answers no agent.
+ */
+export function startedAgentOf(part: AgentPart): string | undefined {
+  if (part.kind !== AGENT_PART.TOOL || part.said?.kind !== CALL_KIND.START_AGENT) return undefined;
+  const agent = isRecord(part.output) ? part.output.agent : undefined;
+  return isRecord(agent) && isWireString(agent.id) ? agent.id : undefined;
 }
 
 /** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
@@ -834,13 +877,14 @@ export function dockedTodos(
   return open ? standing : undefined;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
+    if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
     return isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
