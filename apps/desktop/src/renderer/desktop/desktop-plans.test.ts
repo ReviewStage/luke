@@ -4696,7 +4696,7 @@ test("the items waiting on the Inbox tab count as read once the tab is on screen
   function InboxPage() {
     const mainTabs = useMainTabs(false, PLAN.id, agents.agentIds, undefined, true);
     const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id), mainTabs.openAgents);
-    reads = useInboxReads(waiting, false);
+    reads = useInboxReads(waiting, [], false);
     return createElement(DesktopPlans, {
       summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,

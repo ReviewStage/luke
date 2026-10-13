@@ -1053,6 +1053,8 @@ export function usePlansTab(input: {
   // Each press of New plan is counted, so the page focuses its name field
   // again, and hands the repository it chose, if any, to the composer.
   const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) => {
+    // The new-plan page stands under the Inbox too, so a press there leaves it.
+    setInboxView(undefined);
     if (page === PLANS_PAGE.DOCUMENT) leavePlan();
     setNewPlanPresses((presses) => presses + 1);
     setNewPlanPreset(preset);
@@ -1088,13 +1090,16 @@ export function usePlansTab(input: {
     select(planId);
     setFileFor({ planId, ref, commit });
   };
+  // A file asked for is the plan's it was asked on, so a select refused, or
+  // another plan asked for since, lets it go.
+  if (fileFor !== undefined && fileFor.planId !== boundFor) setFileFor(undefined);
   const { onOpenFile } = sidePanel;
   useEffect(() => {
     if (fileFor === undefined || fileFor.planId !== planning.activePlanId) return;
     setFileFor(undefined);
     onOpenFile(fileFor.ref, fileFor.commit);
   }, [fileFor, planning.activePlanId, onOpenFile]);
-  const inboxReads = useInboxReads(input.inboxWaiting, fixture !== undefined);
+  const inboxReads = useInboxReads(input.inboxWaiting, input.inboxPlans, fixture !== undefined);
 
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.

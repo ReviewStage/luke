@@ -2181,3 +2181,33 @@ test("an inbox item's code opens its file in the side panel, on a plan not yet o
   tab.stand({ planning: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: { file: ref.path } });
 });
+
+test("New plan pressed on the new-plan page under the window's Inbox leaves the Inbox for the page", () => {
+  const tab = mount({ shown: true, planning: IDLE_PLANNING_VIEW });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().newPlan.presses, 1);
+});
+
+test("an inbox item's file asked on a plan the host refused to open is let go, so opening that plan later opens no file", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const onOther = {
+    ...OPEN,
+    activePlanId: other.id,
+    document: { status: PLANNING_READ.READY, plan: other },
+  };
+  const tab = mount(
+    { shown: true, planning: onOther },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  act(() =>
+    tab
+      .control()
+      .onShowFile(PLAN.id, { path: "src/invite.ts", startLine: 3, endLine: 5 }, "4f2a9c1d"),
+  );
+  await settle();
+
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+});

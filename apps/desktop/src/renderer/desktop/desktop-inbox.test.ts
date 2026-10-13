@@ -149,7 +149,7 @@ function mount(patch: Partial<PlansControl> = {}) {
       planId: undefined,
       unreadOnly: false,
     });
-    const reads = useInboxReads(WAITING, false);
+    const reads = useInboxReads(WAITING, HOLDING, false);
     const inboxView: InboxViewControl = {
       open: true,
       planId: view.planId,

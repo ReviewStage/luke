@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppInboxPlan } from "#shared/messages/app-state";
+import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 
 /**
  * inbox-reads.ts -- which of each plan's waiting inbox items the developer has seen on this Mac: what the Inbox's unread dots and counts are drawn from.
@@ -11,7 +11,11 @@ import type { AppInboxPlan } from "#shared/messages/app-state";
  * an item the agent edits while it waits stays read, and one answered and
  * posted again under its key is unread once more, having left what was kept
  * as it settled. What is settled, answered or taken back, is never unread:
- * only an item that waits can be. The marks are this window's to remember,
+ * only an item that waits can be. Main's read of the account says so too,
+ * on no screen: an item a plan holding items no longer has waiting leaves
+ * that plan's marks then, so one answered and posted again while neither
+ * board was on screen is unread all the same. A plan main names nowhere,
+ * as every plan before main's first answer, keeps its marks. The marks are this window's to remember,
  * kept in the renderer's own storage as a plan's looks are
  * (`use-plan-looks.ts`), so a read on one Mac leaves the item unread on
  * another. A fixture run starts with nothing read and keeps nothing.
@@ -82,6 +86,30 @@ export function withSeen(reads: InboxReads, planId: string, shown: readonly stri
   return Object.fromEntries([...kept, [planId, shown] as const].slice(-PLANS_KEPT));
 }
 
+/**
+ * The marks with every item main no longer says waits let go: each plan main
+ * names as waiting keeps only its marks still waiting, and each it names as
+ * holding only settled items keeps none. A plan named nowhere keeps its own,
+ * since nothing is known of it. The marks as they stood where nothing moved.
+ */
+export function withWaiting(
+  reads: InboxReads,
+  waiting: readonly AppInboxPlan[],
+  holding: readonly AppInboxPlanHolding[],
+): InboxReads {
+  const named = new Map<string, readonly string[]>(holding.map((plan) => [plan.planId, []]));
+  for (const plan of waiting) named.set(plan.planId, plan.items);
+  let moved = false;
+  const kept = Object.entries(reads).map(([planId, seen]): [string, readonly string[]] => {
+    const standing = named.get(planId);
+    if (standing === undefined) return [planId, seen];
+    const still = seen.filter((item) => standing.includes(item));
+    if (still.length !== seen.length) moved = true;
+    return [planId, still];
+  });
+  return moved ? Object.fromEntries(kept) : reads;
+}
+
 /** What the Inbox draws of the marks, and the press that moves them. */
 export interface InboxReadsControl {
   /** How many of the plan's waiting items it has not shown. */
@@ -92,9 +120,10 @@ export interface InboxReadsControl {
   readonly onSeen: (planId: string, shown: readonly string[]) => void;
 }
 
-/** The marks over what waits across the account, each kept as it moves unless the run is `staged`. */
+/** The marks over what waits across the account and the plans holding items, each kept as it moves unless the run is `staged`. */
 export function useInboxReads(
   waiting: readonly AppInboxPlan[],
+  holding: readonly AppInboxPlanHolding[],
   staged: boolean,
 ): InboxReadsControl {
   // Note that a fixture run's marks are a state of their own rather than the
@@ -113,6 +142,10 @@ export function useInboxReads(
     },
     [staged],
   );
+  // What main says no longer waits leaves the marks as main says it.
+  useEffect(() => {
+    (staged ? setStagedReads : setKept)((held) => withWaiting(held, waiting, holding));
+  }, [staged, waiting, holding]);
   // Note that the marks are written after they change rather than as they
   // do, because an update React asks for twice must not write twice.
   const written = useRef(kept);
