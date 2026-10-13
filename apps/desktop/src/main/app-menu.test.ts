@@ -73,20 +73,24 @@ test("a key the window left unclaimed runs no item: a text field's ⌘⌫ and th
   assert.deepEqual(window.sent, []);
 });
 
-test("Go holds Back and Forward, each handed to the window it was chosen over", () => {
+test("Go holds the Inbox, then Back and Forward, each handed to the window it was chosen over", () => {
   const go = appMenuTemplate("Luke").find((menu) => menu.label === "Go");
   assert.ok(Array.isArray(go?.submenu));
   assert.deepEqual(
     go.submenu.map((each) => [each.label, each.accelerator]),
     [
+      ["Inbox", "Shift+Command+I"],
+      [undefined, undefined],
       ["Back", "Command+["],
       ["Forward", "Command+]"],
     ],
   );
   const window = new FakeBrowserWindow();
+  choose("Inbox", window, false);
   choose("Back", window, false);
   choose("Forward", window, false);
   assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.INBOX],
     [channels.onMenuCommand, APP_COMMAND.BACK],
     [channels.onMenuCommand, APP_COMMAND.FORWARD],
   ]);

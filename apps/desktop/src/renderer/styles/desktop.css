@@ -381,8 +381,35 @@ body,
   background: var(--hairline);
 }
 
-.sidebar-new-plan:disabled {
+.sidebar-new-plan:disabled,
+.sidebar-inbox:disabled {
   opacity: 0.45;
+}
+
+/* The Inbox row is the place shown while the window's Inbox stands, filled as
+   the new-plan page's row is. Its count of what waits unseen stands at its end
+   in a group count's ink, and gives way to its chord while the row is hovered
+   or reached from the keyboard, as the rows above show theirs. */
+.sidebar-inbox[aria-current="page"] {
+  background: var(--raised-strong);
+}
+
+.sidebar-inbox-unread {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-inbox-unread ~ .row-shortcut,
+.sidebar-inbox:hover > .sidebar-inbox-unread,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread {
+  display: none;
+}
+
+.sidebar-inbox:hover > .sidebar-inbox-unread ~ .row-shortcut,
+:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-unread ~ .row-shortcut {
+  display: inline-flex;
 }
 
 .sidebar-new-plan svg,
@@ -536,9 +563,9 @@ body,
   flex: 1;
 }
 
-/* An Inbox row's count of what waits stands in the time's place, drawn as
-   the time is, and, with no Pin or Archive to make room for, stays put
-   under the pointer. */
+/* A plan's count of what waits, in the Inbox's column, stands in the time's
+   place, drawn as the time is, and, with no Pin or Archive to make room for,
+   stays put under the pointer. */
 .sidebar-plan-time,
 .sidebar-inbox-count {
   flex: none;
@@ -2307,6 +2334,68 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-secondary);
   font-size: 12.5px;
   text-align: center;
+}
+
+/* Inbox ---------------------------------------------------------------------- */
+
+/* The window's Inbox, in the plan's place beside the sidebar: the plans
+   holding items in a column on the sidebar's ground, under a bar the work
+   column's height, and the chosen plan's items beside it, at the Inbox
+   tab's own measure (`.desktop-inbox`). */
+.inbox-view {
+  --inbox-list-width: 280px;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: var(--inbox-list-width) minmax(0, 1fr);
+}
+
+.inbox-plans {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+.inbox-plans-bar {
+  justify-content: space-between;
+}
+
+.inbox-plans-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--column-inset) var(--column-inset);
+}
+
+/* A plan with an item the developer has not seen leads with the accent's dot,
+   and its name takes an unread plan's weight; the dot's room stands empty on
+   the rest, so the names line up. */
+.inbox-unread-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  align-self: center;
+  border-radius: 50%;
+}
+
+.inbox-plan[data-unread="true"] .inbox-unread-dot {
+  background: var(--message-sent);
+}
+
+.inbox-view-items {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Only the column's bar meets the folded sidebar's toggle, so the items' bar
+   keeps its own inset then. */
+.desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
+  padding-left: var(--content-inset);
 }
 
 /* Settings ------------------------------------------------------------------- */

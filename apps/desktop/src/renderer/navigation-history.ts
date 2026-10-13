@@ -1,8 +1,8 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a plan's page, a plan's version history, the new-plan page, or
- * Settings, and the history is the one a browser keeps: the places behind,
+ * A place is a plan's page, a plan's version history, the new-plan page,
+ * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
  * moves it, so a plan opened from the sidebar, by a key, by starting it, or
@@ -42,6 +42,7 @@ const PLACE_KIND = {
   PLAN: "plan",
   VERSION_HISTORY: "version-history",
   NEW_PLAN: "new-plan",
+  INBOX: "inbox",
   SETTINGS: "settings",
 } as const;
 
@@ -54,6 +55,7 @@ type Place =
       readonly spot: HistorySpot | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.NEW_PLAN }
+  | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -63,7 +65,7 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the new-plan page, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the new-plan page, the Inbox on any plan, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
@@ -196,7 +198,7 @@ function useHistory(input: {
 /**
  * The window's history: Plans on the plan it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or Settings on its page. A plan the
+ * or on that plan's version history, or the Inbox, or Settings on its page. A plan the
  * account's list once held and holds no more is passed over, unless the list
  * itself could not be read, and so is an archived plan, which the developer
  * put out of the way, unless it is the plan the window is bound for, as it is
@@ -217,24 +219,33 @@ export function useWindowHistory(input: {
   onSettingsViewChange: (view: SettingsView) => void;
   plans: Pick<
     PlansControl,
-    "boundFor" | "plans" | "archived" | "listFailed" | "onSelect" | "onLeavePlan" | "history"
+    | "boundFor"
+    | "plans"
+    | "archived"
+    | "listFailed"
+    | "onSelect"
+    | "onLeavePlan"
+    | "history"
+    | "inboxView"
   >;
 }): WindowHistory {
   const { known, tab, settingsView, plans } = input;
   const { boundFor } = plans;
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
+  const inboxOpen = plans.inboxView.open;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
   for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
+    if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (boundFor === undefined) return { kind: PLACE_KIND.NEW_PLAN };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor, historyOpen, spot]);
+  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen]);
   const reachable = (to: Place) => {
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
@@ -251,6 +262,12 @@ export function useWindowHistory(input: {
       return;
     }
     if (tab !== PANEL_TAB.PLANS) input.onTabChange(PANEL_TAB.PLANS);
+    if (to.kind === PLACE_KIND.INBOX) {
+      plans.inboxView.onOpen();
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox stands over.
+    if (inboxOpen) plans.inboxView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

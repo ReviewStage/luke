@@ -168,6 +168,12 @@ function PlanDocument({
   useEffect(() => {
     if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
   }, [planId, inbox.read, waiting, onInboxRead]);
+  // What waits on the Inbox tab counts as read while the tab is on screen (`inbox-reads.ts`).
+  const inboxOnScreen = planId !== undefined && plans.inboxShown === planId;
+  const { onSeen } = plans.inboxReads;
+  useEffect(() => {
+    if (planId !== undefined && inboxOnScreen && inbox.read) onSeen(planId, waiting);
+  }, [planId, inboxOnScreen, inbox.read, waiting, onSeen]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because

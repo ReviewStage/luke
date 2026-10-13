@@ -61,6 +61,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
+import { type InboxReadsControl, useInboxReads } from "../planning/inbox-reads";
 import {
   DOCUMENT_REGION,
   PLAN_MARK,
@@ -4676,4 +4677,61 @@ test("the Inbox tab's menu offers Pin tab; pinned, it wears no × and offers no 
   chooseFromTab(tabNamed(again, "Inbox 1"), "Unpin tab");
   press(again, '[aria-label="Close Inbox"]');
   assert.deepEqual(columnTabs(again), [PLAN.name, "Opus 5.5"]);
+
+test("the items waiting on the Inbox tab count as read once the tab is on screen with them, and not while another tab is chosen", async () => {
+  const waiting = [{ planId: PLAN.id, items: [FIRST_ITEM, SECOND_ITEM] }];
+  let reads: InboxReadsControl | undefined;
+  const agents = codingAgentsControl({
+    agents: [RUNNING_AGENT],
+    agentIds: [RUNNING_AGENT.id],
+    readInbox: ({ after }) =>
+      after === INBOX_CURSOR_START
+        ? Promise.resolve({
+            items: [waitingItem(FIRST_ITEM), waitingItem(SECOND_ITEM)],
+            cursor: "1.2",
+          })
+        : new Promise(() => undefined),
+  });
+  function InboxPage() {
+    const mainTabs = useMainTabs(false, PLAN.id, agents.agentIds, undefined, true);
+    const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id), mainTabs.openAgents);
+    reads = useInboxReads(waiting, false);
+    return createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        mainTabs,
+        sidePanel,
+        agents,
+        inbox: waiting,
+        inboxReads: reads,
+        // Main is told the Inbox is on screen while the plan's column shows it (`use-plans-tab.ts`).
+        inboxShown: mainTabs.tab === MAIN_TAB.INBOX ? PLAN.id : null,
+      }),
+    });
+  }
+  // The Inbox those items open is chosen on its own; the plan's tab is chosen over it first.
+  window.localStorage.setItem(
+    "luke.mainTabs",
+    JSON.stringify({
+      closedAgents: [],
+      plans: { [PLAN.id]: { inboxSeen: [FIRST_ITEM, SECOND_ITEM], recent: ["plan"] } },
+    }),
+  );
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(InboxPage)));
+  await settle();
+  assert.equal(reads?.total, 2, "the plan's own tab shows none of them");
+
+  act(() => columnAddButton(container).click());
+  act(() => addRow("Inbox").click());
+  await settle();
+  assert.equal(columnChosen(container), "Inbox 2");
+  assert.equal(reads?.total, 0);
 });

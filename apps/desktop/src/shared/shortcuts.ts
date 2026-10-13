@@ -48,6 +48,8 @@ export const APP_COMMAND = {
   FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
+  INBOX: "inbox",
+  EXIT_INBOX: "exit-inbox",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -106,6 +108,7 @@ const SHORTCUT_KEY = {
   T: { accelerator: "T", glyph: "T", key: "t", code: "KeyT" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
+  I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
   // VS Code.
@@ -263,6 +266,11 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
+  [APP_COMMAND.EXIT_INBOX]: {
+    label: "Exit inbox",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
@@ -297,6 +305,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.ARCHIVE_PLAN,
       APP_COMMAND.DELETE_PLAN,
       APP_COMMAND.EXIT_VERSION_HISTORY,
+      APP_COMMAND.INBOX,
+      APP_COMMAND.EXIT_INBOX,
     ],
   },
   {

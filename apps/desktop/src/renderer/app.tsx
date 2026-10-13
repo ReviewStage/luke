@@ -8,7 +8,12 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { type AppInboxPlan, RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+  sessionReplayBootstrap,
+} from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -56,6 +61,9 @@ const NO_UNSEEN_AGENTS: readonly string[] = [];
 
 /** Nothing waits on the developer, as the document reads before main has answered. */
 const NOTHING_WAITING: readonly AppInboxPlan[] = [];
+
+/** No plan holds an inbox item, as the document reads before main has answered. */
+const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -207,6 +215,7 @@ export function App(): React.JSX.Element {
     shown: tab === PANEL_TAB.PLANS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
+    inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
@@ -361,13 +370,14 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, or a plan's version history, back to wherever it was
+      // time: Settings, a plan's version history, or the Inbox, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the new-plan page. A menu and the
       // settings search answer their own Escapes and keep them — the search
       // clearing, then letting go of the caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
