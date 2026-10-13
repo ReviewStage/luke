@@ -7,10 +7,12 @@ import {
   type GatewayMethodTable,
   invalid,
   RefusedRefusal,
+  voiceAvatarAudioParamsSchema,
   voiceCreateLiveSessionParamsSchema,
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
 } from "@sidecar/gateway";
 import type {
   PlanActivityFrame,
@@ -18,7 +20,7 @@ import type {
   PlanDraftFrame,
   PlanWorkFrame,
 } from "@sidecar/hosted";
-import { unavailableLiveDiagnostics } from "@sidecar/voice";
+import { acquireAvatarMedia, unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Scope } from "effect";
@@ -26,6 +28,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import { openSocketOverWs } from "./voice/socket-over-ws.js";
 
 export interface LiveComposer extends Composer {
   readonly service: LiveSessionHolder;
@@ -86,6 +89,8 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     onPlanCode: (code) => dependencies.showPlanCode(code),
     onPlanWork: (work) => dependencies.showPlanWork(work),
     onPlanCallEnded: (planId) => dependencies.planCallEnded(planId),
+    // The face's media socket, over the same `ws` seam the voice service's socket opens through.
+    acquireAvatarMedia: (url) => acquireAvatarMedia({ url, openSocket: openSocketOverWs }),
   });
 
   const methods: GatewayMethodTable = {
@@ -141,6 +146,24 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     // about Luke's output, so this is the one ask that tells him to stop.
     [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
       Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
+    // The video switch: the face is asked for or taken down, and the voice
+    // goes on either way. Where it stands is the holder's observable, read in
+    // process, since the room it reports carries a credential.
+    [GATEWAY_METHOD.VOICE_SET_VIDEO]: (params) => {
+      const request = Result.getOrUndefined(readEither(voiceSetVideoParamsSchema)(params));
+      if (!request) return invalid("on must be a boolean");
+      service.setVideo(request.on);
+      return Effect.succeed({});
+    },
+    // One chunk of Luke's voice for the face to lip-sync. The sentence names
+    // the shape and never the audio.
+    [GATEWAY_METHOD.VOICE_AVATAR_AUDIO]: (params) => {
+      const chunk = Result.getOrUndefined(readEither(voiceAvatarAudioParamsSchema)(params));
+      if (!chunk) return invalid("pcm must be one bounded chunk of base64 audio");
+      return Effect.as(service.avatarAudio(Buffer.from(chunk.pcm, "base64")), {});
+    },
+    // The stop key or a barge-in, cutting the face off where Luke was cut off.
+    [GATEWAY_METHOD.VOICE_AVATAR_INTERRUPT]: () => Effect.as(service.avatarInterrupt(), {}),
     // What the host knows about why voice is or is not available, carrying no
     // credential and no session's SDP: the source's own reading while one
     // stands, and the reason there is none otherwise.

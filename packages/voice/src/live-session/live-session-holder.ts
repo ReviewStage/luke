@@ -7,6 +7,13 @@ import {
   type VoiceReportLiveTransportParams,
 } from "@sidecar/gateway";
 import {
+  AVATAR_STOP_REASON,
+  type AvatarEndedFrame,
+  type AvatarEndReason,
+  type AvatarStartedFrame,
+  type AvatarStopReason,
+  type AvatarUnavailableFrame,
+  type AvatarUnavailableReason,
   type LiveSessionCreated,
   type PlanActivityFrame,
   type PlanCallEndingFrame,
@@ -24,7 +31,18 @@ import {
   liveErrorFields,
 } from "@sidecar/live";
 import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from "effect";
+import {
+  Clock,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Scope,
+  Stream,
+  SubscriptionRef,
+} from "effect";
+import type { AvatarMedia } from "../avatar/avatar-media.js";
 import {
   createdOf,
   type LiveSessionOpened,
@@ -56,6 +74,13 @@ import {
  * peer's transport are the only reasons a session ends from this side, and
  * the service's idle close
  * reaches it as the `session.closed` the relay forwards.
+ *
+ * Luke's face on the call is the one other thing held here: the video switch
+ * asks the service for it and takes it down, the room the service answers
+ * is published in process, never as an event, since its viewer token is a
+ * credential, and the media socket Luke's voice is spoken into stands in a
+ * scope of the face's own inside the session's, told to the service as media
+ * lost when it gives up.
  *
  * Built by `make` for the scope of the composition that holds it, on the
  * same terms as `LiveSessionService`: each session stands in a scope of its
@@ -89,7 +114,50 @@ export interface LiveSessionHolderOptions {
   onPlanWork?: (work: PlanWorkFrame) => void;
   /** The planning call about the plan named ended, so what it put on screen goes with it. */
   onPlanCallEnded?: (planId: string) => void;
+  /**
+   * Opens the media socket Luke's voice is spoken into for the face, standing
+   * for the scope it is acquired in. Without it the holder puts no face up.
+   */
+  acquireAvatarMedia?: (url: string) => Effect.Effect<AvatarMedia, never, Scope.Scope>;
 }
+
+/**
+ * Where Luke's face on the standing call is, as the host holds it: `OFF`
+ * until video is asked for, `STARTING` while the service mints it, `STARTED`
+ * once its room stands and its media socket is opening, `ENDED` once it is down
+ * with the call going on, and `UNAVAILABLE` where the service could not put
+ * one up. Whether its first frame has drawn is the call window's to say.
+ */
+export const HELD_AVATAR_STATUS = {
+  OFF: "off",
+  STARTING: "starting",
+  STARTED: "started",
+  ENDED: "ended",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type HeldAvatarState =
+  | { readonly status: typeof HELD_AVATAR_STATUS.OFF }
+  | { readonly status: typeof HELD_AVATAR_STATUS.STARTING }
+  | { readonly status: typeof HELD_AVATAR_STATUS.STARTED }
+  | { readonly status: typeof HELD_AVATAR_STATUS.ENDED; readonly reason: AvatarEndReason }
+  | {
+      readonly status: typeof HELD_AVATAR_STATUS.UNAVAILABLE;
+      readonly reason: AvatarUnavailableReason;
+    };
+
+/**
+ * The room the face is published into and the token the call window watches
+ * it with. The token is a credential: it is handed on in process to the call
+ * window alone, and never into a Gateway answer or event, app state, a
+ * counted event, a trace, or a fixture.
+ */
+export interface AvatarRoom {
+  readonly livekitUrl: string;
+  readonly viewerToken: string;
+}
+
+const AVATAR_OFF: HeldAvatarState = { status: HELD_AVATAR_STATUS.OFF };
 
 /**
  * Which hand ended a held session, named in the line the holder logs when a
@@ -141,6 +209,8 @@ interface HeldSession {
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
   readonly scope: Scope.Closeable;
+  /** The face's media on this call, from `avatar.started` until the face is down. */
+  avatar: HeldAvatar | undefined;
   started: boolean;
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
@@ -152,6 +222,12 @@ interface HeldSession {
   readonly torn: Deferred.Deferred<void>;
   /** Settled once the session's scope is closed and its transport released. */
   readonly released: Deferred.Deferred<void>;
+}
+
+/** One face's media: the scope its socket stands in, a child of the session's, and the socket once open. */
+interface HeldAvatar {
+  readonly scope: Scope.Closeable;
+  media: AvatarMedia | undefined;
 }
 
 /** What a line names of a session: its id, never its words. */
@@ -192,18 +268,32 @@ export class LiveSessionHolder {
   readonly #tasks: SerialQueue;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
+  /**
+   * The face as the holder decided it, set on the hand that decides, and the
+   * room it stands in; each is published to its observable from here.
+   */
+  #avatar: HeldAvatarState = AVATAR_OFF;
+  #room: AvatarRoom | undefined;
+  readonly #avatarRef: SubscriptionRef.SubscriptionRef<HeldAvatarState>;
+  readonly #roomRef: SubscriptionRef.SubscriptionRef<AvatarRoom | undefined>;
 
   private constructor(
     options: LiveSessionHolderOptions,
     running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
     clock: Clock.Clock,
     sessions: Scope.Scope,
+    refs: {
+      readonly avatar: SubscriptionRef.SubscriptionRef<HeldAvatarState>;
+      readonly room: SubscriptionRef.SubscriptionRef<AvatarRoom | undefined>;
+    },
   ) {
     this.#options = options;
     this.#fibers = running.fibers;
     this.#tasks = running.tasks;
     this.#clock = clock;
     this.#sessions = sessions;
+    this.#avatarRef = refs.avatar;
+    this.#roomRef = refs.room;
   }
 
   /** The holder for one composition, standing for the scope it is built in. */
@@ -222,6 +312,10 @@ export class LiveSessionHolder {
         { fibers, tasks },
         yield* Clock.Clock,
         yield* Scope.fork(scope, "sequential"),
+        {
+          avatar: yield* SubscriptionRef.make(AVATAR_OFF),
+          room: yield* SubscriptionRef.make<AvatarRoom | undefined>(undefined),
+        },
       );
     });
   }
@@ -326,6 +420,7 @@ export class LiveSessionHolder {
         sideband,
         opened,
         scope,
+        avatar: undefined,
         started: false,
         ended: false,
         closing: undefined,
@@ -343,6 +438,9 @@ export class LiveSessionHolder {
       opened.onPlanCode?.((code) => this.#code(session, code));
       opened.onPlanWork?.((work) => this.#work(session, work));
       opened.onPlanCallEnding?.((ending) => this.#ending(session, ending));
+      opened.onAvatarStarted?.((started) => this.#avatarStarted(session, started));
+      opened.onAvatarEnded?.((ended) => this.#avatarEnded(session, ended));
+      opened.onAvatarUnavailable?.((unavailable) => this.#avatarUnavailable(session, unavailable));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -542,6 +640,67 @@ export class LiveSessionHolder {
     return true;
   }
 
+  /**
+   * Where Luke's face on the standing call is, the current state first and
+   * then each change, in process: what the desktop draws its tile from.
+   */
+  get avatarStatus(): Stream.Stream<HeldAvatarState> {
+    return SubscriptionRef.changes(this.#avatarRef);
+  }
+
+  /**
+   * The room the face stands in, the current one first and then each change,
+   * nothing while no face is up. It carries the viewer token, so it is read
+   * in process and handed to the call window alone, never into an event.
+   */
+  get avatarRoom(): Stream.Stream<AvatarRoom | undefined> {
+    return SubscriptionRef.changes(this.#roomRef);
+  }
+
+  /**
+   * The developer's video switch on the standing call. On asks the service
+   * for the face where none is up or coming; off takes the face that is up or
+   * coming down, and the voice goes on either way. A session opened through
+   * no service, or a holder with no media socket to speak into, puts no face
+   * up.
+   */
+  setVideo(on: boolean): void {
+    const session = this.#held;
+    if (!session || session.ended) return;
+    const up =
+      this.#avatar.status === HELD_AVATAR_STATUS.STARTING ||
+      this.#avatar.status === HELD_AVATAR_STATUS.STARTED;
+    if (!on) {
+      if (up) this.#takeAvatarDown(session, AVATAR_STOP_REASON.USER);
+      return;
+    }
+    const start = session.opened.startAvatar;
+    if (up || start === undefined || this.#options.acquireAvatarMedia === undefined) return;
+    start();
+    this.#showAvatar({ status: HELD_AVATAR_STATUS.STARTING }, undefined);
+  }
+
+  /**
+   * One chunk of Luke's voice, spoken into the face's media socket while it
+   * is open. A chunk with no socket to take it, before the socket opens or
+   * after the face is down, is dropped: the voice itself still plays.
+   */
+  avatarAudio(pcm: Uint8Array): Effect.Effect<void> {
+    return Effect.suspend(() => this.#openMedia()?.speak(pcm) ?? Effect.void);
+  }
+
+  /** The face told to drop what it was handed, as Luke is cut off; nothing where no socket is open. */
+  avatarInterrupt(): Effect.Effect<void> {
+    return Effect.suspend(() => this.#openMedia()?.interrupt() ?? Effect.void);
+  }
+
+  /** The standing call's open media socket, if its face has one. */
+  #openMedia(): AvatarMedia | undefined {
+    const session = this.#held;
+    if (!session || session.ended) return undefined;
+    return session.avatar?.media;
+  }
+
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
     return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
@@ -581,6 +740,114 @@ export class LiveSessionHolder {
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.ENDING });
   }
 
+  /**
+   * The service's room for the face it was asked for: the room is shown, and
+   * the media socket is opened into a scope of the face's own, a child of the
+   * session's, so the call's end closes it whoever ends the call. A room for
+   * a face no longer wanted, turned off while it was minted, is passed over:
+   * the stop already sent is the service's to honour.
+   */
+  #avatarStarted(session: HeldSession, started: AvatarStartedFrame): void {
+    const acquire = this.#options.acquireAvatarMedia;
+    if (session.ended || acquire === undefined) return;
+    if (this.#avatar.status !== HELD_AVATAR_STATUS.STARTING) return;
+    const avatar: HeldAvatar = {
+      scope: Scope.forkUnsafe(session.scope, "sequential"),
+      media: undefined,
+    };
+    session.avatar = avatar;
+    this.#start(
+      Effect.asVoid(
+        Effect.forkIn(this.#runMedia(session, avatar, acquire(started.mediaUrl)), avatar.scope),
+      ),
+    );
+    this.#showAvatar(
+      { status: HELD_AVATAR_STATUS.STARTED },
+      { livekitUrl: started.livekitUrl, viewerToken: started.viewerToken },
+    );
+  }
+
+  /**
+   * The face's media socket, opened and then watched for its end on a fiber
+   * of the face's own scope, so taking the face down interrupts both. A
+   * socket that ends for good, its reconnects spent, takes the face down as
+   * media lost and tells the service so; the call goes on as voice.
+   */
+  #runMedia(
+    session: HeldSession,
+    avatar: HeldAvatar,
+    acquire: Effect.Effect<AvatarMedia, never, Scope.Scope>,
+  ): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const media = yield* Scope.provide(acquire, avatar.scope);
+      avatar.media = media;
+      // Note that a socket refused and a socket lost are one end here, media
+      // lost, because either way the face can no longer be spoken into.
+      const end = yield* media.ended;
+      if (session.ended || session.avatar !== avatar) return;
+      yield* Effect.logWarning(`voice avatar: media ended=${end.reason} ${sessionFields(session)}`);
+      this.#takeAvatarDown(session, AVATAR_STOP_REASON.MEDIA_LOST);
+    });
+  }
+
+  /**
+   * The service's word that the face is down. One the holder already took
+   * down itself, whose stop this echoes, or one never up, says nothing new.
+   */
+  #avatarEnded(session: HeldSession, ended: AvatarEndedFrame): void {
+    if (session.ended) return;
+    const status = this.#avatar.status;
+    if (status !== HELD_AVATAR_STATUS.STARTING && status !== HELD_AVATAR_STATUS.STARTED) return;
+    this.#releaseAvatar(session);
+    this.#showAvatar({ status: HELD_AVATAR_STATUS.ENDED, reason: ended.reason }, undefined);
+  }
+
+  /** The service could not put up the face asked for; the call goes on as voice. */
+  #avatarUnavailable(session: HeldSession, unavailable: AvatarUnavailableFrame): void {
+    if (session.ended || this.#avatar.status !== HELD_AVATAR_STATUS.STARTING) return;
+    this.#showAvatar(
+      { status: HELD_AVATAR_STATUS.UNAVAILABLE, reason: unavailable.reason },
+      undefined,
+    );
+  }
+
+  /** The face taken down from this side: the service is told why, and its media released. */
+  #takeAvatarDown(session: HeldSession, reason: AvatarStopReason): void {
+    session.opened.stopAvatar?.(reason);
+    this.#releaseAvatar(session);
+    this.#showAvatar({ status: HELD_AVATAR_STATUS.ENDED, reason }, undefined);
+  }
+
+  /**
+   * The face's scope closed on the holder's own fiber, never on the face's,
+   * since the hand letting go may be the face's own watcher.
+   */
+  #releaseAvatar(session: HeldSession): void {
+    const avatar = session.avatar;
+    session.avatar = undefined;
+    if (avatar !== undefined) this.#start(Scope.close(avatar.scope, Exit.void));
+  }
+
+  /**
+   * The face and its room decided here, on the hand that decides, and
+   * published to their observables on the holder's fiber. Note that what is
+   * published is read when the publish runs rather than when it was asked,
+   * because the publishes run as fibers of their own and the last to run must
+   * leave the latest decision standing.
+   */
+  #showAvatar(state: HeldAvatarState, room: AvatarRoom | undefined): void {
+    this.#avatar = state;
+    this.#room = room;
+    this.#start(
+      Effect.suspend(() =>
+        Effect.andThen(
+          SubscriptionRef.set(this.#avatarRef, this.#avatar),
+          SubscriptionRef.set(this.#roomRef, this.#room),
+        ),
+      ),
+    );
+  }
+
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
     session.usageSeconds = closed.usage.seconds;
@@ -611,6 +878,10 @@ export class LiveSessionHolder {
       notes: false,
     });
     this.#options.onPlanCallEnded?.(session.planId);
+    // Note that the face's media needs no release of its own here, because
+    // its scope is a child of the session's, closed with it by the reader.
+    session.avatar = undefined;
+    this.#showAvatar(AVATAR_OFF, undefined);
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });

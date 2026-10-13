@@ -139,6 +139,12 @@ export const GATEWAY_METHOD = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Luke's face on the standing call asked for or taken down; the voice goes on either way. */
+  VOICE_SET_VIDEO: "voice.setVideo",
+  /** One chunk of Luke's own voice, as the peer heard it, for the face to lip-sync. */
+  VOICE_AVATAR_AUDIO: "voice.avatarAudio",
+  /** The face told to stop speaking what it was handed, as the stop key or a barge-in cuts Luke off. */
+  VOICE_AVATAR_INTERRUPT: "voice.avatarInterrupt",
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
@@ -312,6 +318,37 @@ export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.
  * and the mute carries none of its meaning.
  */
 export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
+
+/** `voice.setVideo`: whether the developer wants Luke's face on the standing call. */
+export const voiceSetVideoParamsSchema = Schema.Struct({ on: Schema.Boolean });
+
+/**
+ * The bounds of one chunk of Luke's voice for the face: PCM16 mono at 24 kHz,
+ * which the peer cuts into 100 ms chunks of 4,800 bytes. The bound is a little
+ * over one chunk, so a chunk the peer's clock ran long on still passes and a
+ * document standing in for one does not.
+ */
+export const AVATAR_AUDIO_BOUNDS = {
+  MAX_PCM_BYTES: 8_192,
+  /** The same bound in base64, four characters for every three bytes, padded. */
+  MAX_BASE64_CHARS: Math.ceil(8_192 / 3) * 4,
+} as const;
+
+/** Standard base64 in whole quanta, padded, with no data-URL prefix and no line breaks. */
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+
+/**
+ * `voice.avatarAudio`: one chunk of Luke's voice as PCM16 mono at 24 kHz, in
+ * base64 because the Gateway carries JSON. It carries Luke's synthesized
+ * voice alone, never the developer's microphone.
+ */
+export const voiceAvatarAudioParamsSchema = Schema.Struct({
+  pcm: Schema.String.check(
+    Schema.isNonEmpty(),
+    Schema.isMaxLength(AVATAR_AUDIO_BOUNDS.MAX_BASE64_CHARS),
+    Schema.isPattern(BASE64_PATTERN),
+  ),
+});
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
 export const voiceLiveSessionChangedSchema = Schema.Struct({

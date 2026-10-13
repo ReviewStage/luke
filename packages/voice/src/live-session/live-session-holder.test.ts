@@ -1,19 +1,37 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
-import type {
-  PlanActivityFrame,
-  PlanCallEndingFrame,
-  PlanCodeFrame,
-  PlanWorkFrame,
+import {
+  AVATAR_END_REASON,
+  AVATAR_STOP_REASON,
+  AVATAR_UNAVAILABLE_REASON,
+  type AvatarEndedFrame,
+  type AvatarStartedFrame,
+  type AvatarStopReason,
+  type AvatarUnavailableFrame,
+  type PlanActivityFrame,
+  type PlanCallEndingFrame,
+  type PlanCodeFrame,
+  type PlanWorkFrame,
+  VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
-import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@sidecar/live";
+import {
+  LIVE_CLOSE_REASON,
+  LIVE_SERVER_EVENT,
+  type LiveClientEvent,
+  parseLiveServerEvent,
+} from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, type Scope, type Stream } from "effect";
+import { Deferred, Effect, Option, type Scope, Stream } from "effect";
+import {
+  AVATAR_MEDIA_END_REASON,
+  type AvatarMedia,
+  type AvatarMediaEnd,
+} from "../avatar/avatar-media.js";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
-import { LiveSessionHolder } from "./live-session-holder.js";
+import { HELD_AVATAR_STATUS, LiveSessionHolder } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted planning call, over a scripted source and
@@ -82,6 +100,24 @@ class FakeSideband implements LiveSideband {
   }
 }
 
+/** A face's media socket as the holder sees it: what it was told, whether its scope let it go, and its end. */
+interface FakeMedia {
+  readonly url: string;
+  readonly spoken: Uint8Array[];
+  interrupts: number;
+  released: boolean;
+  readonly end: Deferred.Deferred<AvatarMediaEnd>;
+}
+
+const STARTED_FRAME: AvatarStartedFrame = {
+  type: VOICE_SERVICE_FRAME.AVATAR_STARTED,
+  avatarSessionId: "liveavatar-1",
+  livekitUrl: "wss://room.livekit.example",
+  viewerToken: "viewer-token",
+  mediaUrl: "wss://media.liveavatar.example",
+  maxSeconds: 1_200,
+};
+
 function settle() {
   return Effect.gen(function* () {
     for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
@@ -118,6 +154,15 @@ interface Fixture {
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
+  /** Every face the source's door asked the service for, as a count, and every stop with its reason. */
+  avatarStarts: number;
+  avatarStops: AvatarStopReason[];
+  /** The service's avatar frames, as the source's door would deliver them. */
+  tellAvatarStarted(started: AvatarStartedFrame): void;
+  tellAvatarEnded(ended: AvatarEndedFrame): void;
+  tellAvatarUnavailable(unavailable: AvatarUnavailableFrame): void;
+  /** Every media socket the holder opened, in order. */
+  media: FakeMedia[];
   /** Where a creation waits before the source answers, so a test can hold one in flight. */
   createGate: Effect.Effect<void>;
   open(planId?: string): Effect.Effect<FakeSideband>;
@@ -137,7 +182,13 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     let workListener: ((work: PlanWorkFrame) => void) | undefined;
     let endingListener: ((ending: PlanCallEndingFrame) => void) | undefined;
     const callsEnded: string[] = [];
+    const avatarStops: AvatarStopReason[] = [];
+    let avatarStartedListener: ((started: AvatarStartedFrame) => void) | undefined;
+    let avatarEndedListener: ((ended: AvatarEndedFrame) => void) | undefined;
+    let avatarUnavailableListener: ((unavailable: AvatarUnavailableFrame) => void) | undefined;
+    const media: FakeMedia[] = [];
     const state = {
+      avatarStarts: 0,
       sourceAvailable: true,
       reportsActivity: true,
       created: 0,
@@ -177,6 +228,23 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onPlanCallEnding: (listener: (ending: PlanCallEndingFrame) => void) => {
                     endingListener = listener;
                   },
+                  startAvatar: () => {
+                    state.avatarStarts += 1;
+                  },
+                  stopAvatar: (reason: AvatarStopReason) => {
+                    avatarStops.push(reason);
+                  },
+                  onAvatarStarted: (listener: (started: AvatarStartedFrame) => void) => {
+                    avatarStartedListener = listener;
+                  },
+                  onAvatarEnded: (listener: (ended: AvatarEndedFrame) => void) => {
+                    avatarEndedListener = listener;
+                  },
+                  onAvatarUnavailable: (
+                    listener: (unavailable: AvatarUnavailableFrame) => void,
+                  ) => {
+                    avatarUnavailableListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -205,6 +273,33 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       onSessionCreated: () => {
         state.created += 1;
       },
+      acquireAvatarMedia: (url) =>
+        Effect.gen(function* () {
+          const opened: FakeMedia = {
+            url,
+            spoken: [],
+            interrupts: 0,
+            released: false,
+            end: yield* Deferred.make<AvatarMediaEnd>(),
+          };
+          media.push(opened);
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              opened.released = true;
+            }),
+          );
+          return {
+            speak: (pcm) =>
+              Effect.sync(() => {
+                opened.spoken.push(pcm);
+              }),
+            interrupt: () =>
+              Effect.sync(() => {
+                opened.interrupts += 1;
+              }),
+            ended: Deferred.await(opened.end),
+          } satisfies AvatarMedia;
+        }),
     });
     return {
       holder,
@@ -240,6 +335,20 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
         endingListener?.(frame);
       },
       callsEnded,
+      get avatarStarts() {
+        return state.avatarStarts;
+      },
+      avatarStops,
+      tellAvatarStarted: (frame) => {
+        avatarStartedListener?.(frame);
+      },
+      tellAvatarEnded: (frame) => {
+        avatarEndedListener?.(frame);
+      },
+      tellAvatarUnavailable: (frame) => {
+        avatarUnavailableListener?.(frame);
+      },
+      media,
       get reportsActivity() {
         return state.reportsActivity;
       },
@@ -290,4 +399,159 @@ it.effect(
       // Nothing is sent at creation or start: the exchange is the service's, and it seeds nothing twice.
       assert.deepEqual(f.sidebands[0]?.sent, []);
     }),
+);
+
+/** What an observable stands at now: `SubscriptionRef.changes` begins with the current value. */
+function now<A>(stream: Stream.Stream<A>): Effect.Effect<A | undefined> {
+  return Effect.map(Stream.runHead(stream), Option.getOrUndefined);
+}
+
+/** A call standing with its face up: video asked for, the room answered, the media socket open. */
+function withFace(f: Fixture) {
+  return Effect.gen(function* () {
+    yield* f.open();
+    f.holder.setVideo(true);
+    f.tellAvatarStarted(STARTED_FRAME);
+    yield* settle();
+    const media = f.media[0];
+    assert.ok(media);
+    return media;
+  });
+}
+
+it.effect("a chunk of Luke's voice reaches the face's media socket once its room stands", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.open();
+    f.holder.setVideo(true);
+    yield* settle();
+    assert.equal(f.avatarStarts, 1);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), { status: HELD_AVATAR_STATUS.STARTING });
+    // A chunk before the room stands has no socket to take it and is dropped.
+    yield* f.holder.avatarAudio(new Uint8Array([9]));
+    f.tellAvatarStarted(STARTED_FRAME);
+    yield* settle();
+    const media = f.media[0];
+    assert.equal(media?.url, STARTED_FRAME.mediaUrl);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), { status: HELD_AVATAR_STATUS.STARTED });
+    assert.deepEqual(yield* now(f.holder.avatarRoom), {
+      livekitUrl: STARTED_FRAME.livekitUrl,
+      viewerToken: STARTED_FRAME.viewerToken,
+    });
+    const chunk = new Uint8Array([1, 2, 3, 4]);
+    yield* f.holder.avatarAudio(chunk);
+    yield* f.holder.avatarInterrupt();
+    assert.deepEqual(media?.spoken, [chunk]);
+    assert.equal(media?.interrupts, 1);
+    // The room's token is the call window's alone: no phase the peer is told carries it.
+    assert.ok(!JSON.stringify(f.changes).includes(STARTED_FRAME.viewerToken));
+  }),
+);
+
+it.effect("video off stops the face, releases its socket, and leaves the call standing", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const media = yield* withFace(f);
+    f.holder.setVideo(false);
+    yield* settle();
+    assert.deepEqual(f.avatarStops, [AVATAR_STOP_REASON.USER]);
+    assert.equal(media.released, true);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), {
+      status: HELD_AVATAR_STATUS.ENDED,
+      reason: AVATAR_END_REASON.USER,
+    });
+    assert.equal(yield* now(f.holder.avatarRoom), undefined);
+    yield* f.holder.avatarAudio(new Uint8Array([1]));
+    assert.deepEqual(media.spoken, []);
+    assert.equal(f.holder.sessionStands(), true);
+    // The service's echo of the stop says nothing new.
+    f.tellAvatarEnded({ type: VOICE_SERVICE_FRAME.AVATAR_ENDED, reason: AVATAR_END_REASON.USER });
+    yield* settle();
+    assert.deepEqual(f.avatarStops, [AVATAR_STOP_REASON.USER]);
+    // Video on again asks for a new face.
+    f.holder.setVideo(true);
+    assert.equal(f.avatarStarts, 2);
+  }),
+);
+
+it.effect("a media socket that ends for good tells the service the media is lost", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const media = yield* withFace(f);
+    yield* Deferred.succeed(media.end, { reason: AVATAR_MEDIA_END_REASON.LOST });
+    yield* settle();
+    assert.deepEqual(f.avatarStops, [AVATAR_STOP_REASON.MEDIA_LOST]);
+    assert.equal(media.released, true);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), {
+      status: HELD_AVATAR_STATUS.ENDED,
+      reason: AVATAR_END_REASON.MEDIA_LOST,
+    });
+    assert.equal(f.holder.sessionStands(), true);
+  }),
+);
+
+it.effect("the service's end of the face releases its socket and says why", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const media = yield* withFace(f);
+    f.tellAvatarEnded({
+      type: VOICE_SERVICE_FRAME.AVATAR_ENDED,
+      reason: AVATAR_END_REASON.MAX_DURATION,
+    });
+    yield* settle();
+    assert.equal(media.released, true);
+    assert.deepEqual(f.avatarStops, []);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), {
+      status: HELD_AVATAR_STATUS.ENDED,
+      reason: AVATAR_END_REASON.MAX_DURATION,
+    });
+    assert.equal(yield* now(f.holder.avatarRoom), undefined);
+  }),
+);
+
+it.effect("a face the service cannot put up leaves the call as voice", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.open();
+    f.holder.setVideo(true);
+    f.tellAvatarUnavailable({
+      type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+      reason: AVATAR_UNAVAILABLE_REASON.NOT_CONFIGURED,
+    });
+    yield* settle();
+    assert.deepEqual(yield* now(f.holder.avatarStatus), {
+      status: HELD_AVATAR_STATUS.UNAVAILABLE,
+      reason: AVATAR_UNAVAILABLE_REASON.NOT_CONFIGURED,
+    });
+    assert.deepEqual(f.media, []);
+    assert.equal(f.holder.sessionStands(), true);
+  }),
+);
+
+it.effect("a room for a face turned off while it was minted opens no socket", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.open();
+    f.holder.setVideo(true);
+    f.holder.setVideo(false);
+    f.tellAvatarStarted(STARTED_FRAME);
+    yield* settle();
+    assert.deepEqual(f.avatarStops, [AVATAR_STOP_REASON.USER]);
+    assert.deepEqual(f.media, []);
+    assert.equal(yield* now(f.holder.avatarRoom), undefined);
+  }),
+);
+
+it.effect("the call's end takes the face with it", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const media = yield* withFace(f);
+    const sideband = f.sidebands[0];
+    assert.ok(sideband);
+    sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 30);
+    yield* settle();
+    assert.equal(media.released, true);
+    assert.deepEqual(yield* now(f.holder.avatarStatus), { status: HELD_AVATAR_STATUS.OFF });
+    assert.equal(yield* now(f.holder.avatarRoom), undefined);
+  }),
 );

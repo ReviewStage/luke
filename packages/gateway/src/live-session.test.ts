@@ -4,7 +4,9 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
+  AVATAR_AUDIO_BOUNDS,
   LIVE_SDP_MAX_CHARACTERS,
+  voiceAvatarAudioParamsSchema,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
 } from "./protocol.js";
@@ -76,4 +78,18 @@ test("a create answer names the session and the SDP answer, tolerating what a ne
     parseAnswer(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }),
     undefined,
   );
+});
+
+test("an avatar chunk is one 100 ms chunk of base64 PCM, and nothing larger or stranger", () => {
+  // 100 ms of PCM16 mono at 24 kHz is 4,800 bytes.
+  const chunk = Buffer.alloc(4_800, 7).toString("base64");
+  assert.deepEqual(parse(voiceAvatarAudioParamsSchema, { pcm: chunk }), { pcm: chunk });
+  const oversized = Buffer.alloc(AVATAR_AUDIO_BOUNDS.MAX_PCM_BYTES + 3).toString("base64");
+  assert.equal(parse(voiceAvatarAudioParamsSchema, { pcm: oversized }), undefined);
+  assert.equal(parse(voiceAvatarAudioParamsSchema, { pcm: "" }), undefined);
+  assert.equal(
+    parse(voiceAvatarAudioParamsSchema, { pcm: "data:audio/pcm;base64,AAAA" }),
+    undefined,
+  );
+  assert.equal(parse(voiceAvatarAudioParamsSchema, { pcm: [1, 2, 3] }), undefined);
 });
