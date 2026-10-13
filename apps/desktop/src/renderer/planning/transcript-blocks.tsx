@@ -513,7 +513,12 @@ export function TranscriptSubagent({
   );
 }
 
-/** A line that folds the rows beneath it: a run of calls, or a finished turn's lead, its icon muted and its summary in the full ink, as a call's line, or shimmering while the run works. */
+/**
+ * A line that folds the rows beneath it: a run of calls, or a finished
+ * turn's lead. Note that it stays in the muted ink, summary and all,
+ * unlike a call's line, because it counts rows rather than saying what one
+ * did, and the rows it opens onto are what a reader scans.
+ */
 function TurnFold({
   icon,
   summary,
@@ -536,11 +541,7 @@ function TurnFold({
         >
           {icon}
         </span>
-        {running ? (
-          <Shimmer>{summary}</Shimmer>
-        ) : (
-          <span className="text-foreground">{summary}</span>
-        )}
+        {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
     </Fold>
