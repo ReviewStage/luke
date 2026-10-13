@@ -310,8 +310,9 @@ or the agent's transcript like any other tool call. Disconnecting stops Luke
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed in
 Linear, and the record of it, stays. Deleting your account removes the record
-but does not ask Vercel Connect to revoke the grant: disconnect Linear first,
-or revoke Luke in Linear's own settings.
+and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
+cannot be reached then, your account is deleted all the same and the grant
+stays until you revoke Luke in Linear's own settings.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values
@@ -551,11 +552,12 @@ reports by Sentry.
   earlier anonymous crash reports cannot be identified as yours and targeted
   through account deletion. Deleting does not affect your Google, GitHub, or
   Linear account, and does not revoke the Luke GitHub App (revoke it in
-  GitHub's settings) or the Linear grant Vercel Connect holds (disconnect
-  Linear first, or revoke Luke in Linear's own settings). A sandbox snapshot
-  stays until Vercel lets it expire, the session history Vercel Workflow
-  keeps stays, and anything stored only on your Mac stays there until you
-  remove it.
+  GitHub's settings). It asks Vercel Connect to revoke the Linear grant it
+  holds; if Vercel Connect cannot be reached, the account is deleted anyway
+  and the grant stays until you revoke Luke in Linear's own settings. A
+  sandbox snapshot stays until Vercel lets it expire, the session history
+  Vercel Workflow keeps stays, and anything stored only on your Mac stays
+  there until you remove it.
 
 ## Google user data
 
