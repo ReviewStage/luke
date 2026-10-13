@@ -49,8 +49,14 @@ import {
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionsAnswerView,
   type ProviderKeysAnswerView,
   planTemplateAnswerViewSchema,
+  planTemplateRevisionAnswerViewSchema,
+  planTemplateRevisionParamsSchema,
+  planTemplateRevisionsAnswerViewSchema,
+  planTemplateRevisionsParamsSchema,
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -240,10 +246,14 @@ export const ACT_KIND = {
    * Settings › Plan template: the Markdown the account's new plans start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then
-   * keeps it.
+   * keeps it. Its version history reads a page of revisions and one
+   * revision at a time, and a restore answers the template as a write does.
    */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * A clip dictated into a message box, carried once from the panel that
    * recorded it to the service and answered with its words. Nothing on the
@@ -749,6 +759,25 @@ export const ACT = {
     payload: actSchema(planTemplateWriteParamsSchema),
     result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
     refusal: "Could not save your plan template on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: {
+    payload: actSchema(planTemplateRevisionsParamsSchema),
+    result: wireResult<PlanTemplateRevisionsAnswerView>(
+      isReadable(planTemplateRevisionsAnswerViewSchema),
+    ),
+    refusal: "Could not read your plan template's history on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
+    payload: actSchema(planTemplateRevisionParamsSchema),
+    result: wireResult<PlanTemplateRevisionAnswerView>(
+      isReadable(planTemplateRevisionAnswerViewSchema),
+    ),
+    refusal: "Could not read that version on this system.",
+  },
+  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
+    payload: actSchema(planTemplateRevisionParamsSchema),
+    result: wireResult<PlanTemplateAnswerView>(isReadable(planTemplateAnswerViewSchema)),
+    refusal: "Could not restore that version on this system.",
   },
   [ACT_KIND.DICTATION_TRANSCRIBE]: {
     payload: actSchema(dictationTranscribeParamsSchema),

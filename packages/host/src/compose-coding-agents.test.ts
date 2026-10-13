@@ -23,7 +23,9 @@ import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
+  type PlanTemplateRevisionLine,
 } from "@sidecar/hosted/plan-document-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -32,6 +34,14 @@ import {
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+
+/** One revision of the template as the service lists it. */
+const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
+  seq: 2,
+  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 1_000, duringCall: false },
+  startedAt: 1_000,
+  changes: 1,
+};
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -218,6 +228,27 @@ function fakeService() {
           template: write.template ?? DEFAULT_PLAN_TEMPLATE,
           custom: write.template !== null,
         };
+      }),
+    readPlanTemplateRevisions: (page) =>
+      Effect.sync(() => {
+        asked.push(`revisions:${page.before ?? "newest"}`);
+        return { revisions: [TEMPLATE_REVISION] };
+      }),
+    readPlanTemplateRevision: (revision) =>
+      Effect.sync(() => {
+        asked.push(`revision:${revision.seq}`);
+        return {
+          revision: {
+            seq: revision.seq,
+            document: { body: "## Why\n", assumptions: [] },
+            previous: null,
+          },
+        };
+      }),
+    restorePlanTemplate: (revision) =>
+      Effect.sync(() => {
+        asked.push(`restore:${revision.seq}`);
+        return { template: "## Why\n", custom: true };
       }),
     transcribeDictation: (clip) =>
       Effect.sync(() => {
@@ -544,6 +575,33 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asked, ["template", "template:## Why\n", "template:the default"]);
+      assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect(
+  "the plan template's history is read a page and a revision at a time and a revision restored, each one ask of the service; a revision with no number is refused before it, and a closed gate answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+      const signedOut = yield* subject({ signedIn: false });
+
+      const newest = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
+      const older = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, { before: 3 });
+      const revision = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: 2 });
+      const restored = yield* call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 2 });
+      const refused = yield* Effect.flip(call(GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 0 }));
+      const unanswered = yield* signedOut.call(GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {});
+
+      assert.deepEqual(newest, { revisions: [TEMPLATE_REVISION] });
+      assert.deepEqual(older, { revisions: [TEMPLATE_REVISION] });
+      assert.deepEqual(revision, {
+        revision: { seq: 2, document: { body: "## Why\n", assumptions: [] }, previous: null },
+      });
+      assert.deepEqual(restored, { template: "## Why\n", custom: true });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(asked, ["revisions:newest", "revisions:3", "revision:2", "restore:2"]);
       assert.deepEqual(signedOut.asked, []);
     }),
 );

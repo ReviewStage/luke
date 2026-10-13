@@ -156,6 +156,15 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLAN_TEMPLATE_WRITE,
     payload: { template: "## Context\n\nWhy this work exists.\n" },
   },
+  [ACT_KIND.PLAN_TEMPLATE_REVISIONS]: { kind: ACT_KIND.PLAN_TEMPLATE_REVISIONS, payload: {} },
+  [ACT_KIND.PLAN_TEMPLATE_REVISION]: {
+    kind: ACT_KIND.PLAN_TEMPLATE_REVISION,
+    payload: { seq: 2 },
+  },
+  [ACT_KIND.PLAN_TEMPLATE_RESTORE]: {
+    kind: ACT_KIND.PLAN_TEMPLATE_RESTORE,
+    payload: { seq: 2 },
+  },
   [ACT_KIND.DICTATION_TRANSCRIBE]: {
     kind: ACT_KIND.DICTATION_TRANSCRIBE,
     payload: { audio: "GkXfow==", durationMs: 1_500, keywords: ["luke"] },

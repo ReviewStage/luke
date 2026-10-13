@@ -26,6 +26,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PLAN_TEMPLATE: "/api/account/plan-template",
   /**
+   * The template's history: a page of its revisions, newest first, or with a
+   * `before` query the page before that revision (GET).
+   * `plan-document-template.ts` declares the answer.
+   */
+  ACCOUNT_PLAN_TEMPLATE_REVISIONS: "/api/account/plan-template/revisions",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.
@@ -177,6 +183,16 @@ export function planRevisionPath(planId: string, seq: number): string {
 /** One revision of one plan put back as its content (POST). */
 export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
+}
+
+/** One revision of the account's plan template: its text beside the text before it (GET). */
+export function planTemplateRevisionPath(seq: number): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS}/${seq}`;
+}
+
+/** One revision of the account's plan template put back as the template (POST). */
+export function planTemplateRestorePath(seq: number): string {
+  return `${planTemplateRevisionPath(seq)}/restore`;
 }
 
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */

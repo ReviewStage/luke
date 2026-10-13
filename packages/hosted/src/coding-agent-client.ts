@@ -32,6 +32,10 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
+  type PlanTemplateRevisionAnswerView,
+  type PlanTemplateRevisionParams,
+  type PlanTemplateRevisionsAnswerView,
+  type PlanTemplateRevisionsParams,
   type PlanTemplateWriteParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
@@ -69,6 +73,8 @@ import {
 } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
+  planTemplateRevisionAnswerSchema,
+  planTemplateRevisionsAnswerSchema,
   planTemplateWriteRequestSchema,
 } from "./plan-document-template.js";
 import {
@@ -87,6 +93,8 @@ import {
   inboxItemPath,
   planAgentsPath,
   planInboxPath,
+  planTemplateRestorePath,
+  planTemplateRevisionPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -314,6 +322,43 @@ export class HostedCodingAgentClient {
         path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE,
         body: JSON.stringify(admitted),
       }),
+      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    );
+  }
+
+  /** A page of the account's plan template history, the newest or the one before a revision. */
+  readPlanTemplateRevisions(
+    params: PlanTemplateRevisionsParams,
+  ): Effect.Effect<PlanTemplateRevisionsAnswerView, never, HttpClient.HttpClient> {
+    const path = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS;
+    const query = new URLSearchParams(
+      params.before === undefined ? {} : { before: String(params.before) },
+    );
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: query.size === 0 ? path : `${path}?${query}`,
+      }),
+      (answer) => readAnswer(answer, planTemplateRevisionsAnswerSchema, {}),
+    );
+  }
+
+  /** One revision of the account's plan template beside the one before it. */
+  readPlanTemplateRevision(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateRevisionAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: planTemplateRevisionPath(params.seq) }),
+      (answer) => readAnswer(answer, planTemplateRevisionAnswerSchema, {}),
+    );
+  }
+
+  /** One revision of the account's plan template put back as the template, answering it as then kept. */
+  restorePlanTemplate(
+    params: PlanTemplateRevisionParams,
+  ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.POST, path: planTemplateRestorePath(params.seq) }),
       (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
     );
   }

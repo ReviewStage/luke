@@ -367,6 +367,47 @@ it.effect(
 );
 
 it.effect(
+  "the plan template's history travels to the host as the methods' page and revision, and an answer the view cannot read is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const requests: RecordedCall[] = [];
+      const client: GatewayClient = {
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            const result =
+              method === GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS
+                ? { revisions: [] }
+                : method === GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE
+                  ? { template: "## Why\n", custom: true }
+                  : { revision: { seq: 0 } };
+            return { ok: true, result: carried(result) };
+          }),
+        on: () => () => undefined,
+      };
+      const operator = operatorOver(client);
+
+      const newest = yield* operator.planTemplateRevisions({});
+      yield* operator.planTemplateRevisions({ before: 3 });
+      const unreadable = yield* operator.planTemplateRevision({ seq: 2 });
+      const restored = yield* operator.planTemplateRestore({ seq: 2 });
+
+      assert.deepEqual(newest, { revisions: [] });
+      assert.deepEqual(unreadable, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(restored, { template: "## Why\n", custom: true });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, {}],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISIONS, { before: 3 }],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_REVISION, { seq: 2 }],
+          [GATEWAY_METHOD.PLAN_TEMPLATE_RESTORE, { seq: 2 }],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "what waits across the account is asked of the host past its cursor and read as the view declares it, and an answer it cannot read is unanswered",
   () =>
     Effect.gen(function* () {
