@@ -133,7 +133,6 @@ it.effect(
       });
       yield* landed;
       assert.equal(toast(), "Plan archivedUndo");
-      assert.equal(dismissButton(), null, "one that leaves by itself offers no ×");
       yield* advance(4_999);
       assert.equal(toast(), "Plan archivedUndo");
       yield* advance(1 + MOTION_DURATION_MS.EXIT);
@@ -149,6 +148,38 @@ it.effect(
       yield* advance(MOTION_DURATION_MS.EXIT);
       assert.deepEqual(undone, ["undo"]);
       assert.equal(toast(), undefined);
+    }),
+);
+
+it.effect(
+  "a toast with an action that leaves by itself is dismissed early by its ×, or by Escape while focus is in it, without running its action",
+  () =>
+    Effect.gen(function* () {
+      const { show } = mount(yield* registryOnTestClock);
+      const undone: string[] = [];
+      const archived: ToastNotice = {
+        words: "Plan archived",
+        tone: TOAST_TONE.DONE,
+        action: { label: "Undo", onPress: () => undone.push("undo") },
+      };
+      show(archived);
+      yield* landed;
+      const dismiss = dismissButton();
+      assert.ok(dismiss, "one with an action offers a ×");
+      act(() => dismiss.click());
+      yield* advance(MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+
+      show(archived);
+      yield* landed;
+      act(() => {
+        actionButton().dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+      });
+      yield* advance(MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+      assert.deepEqual(undone, []);
     }),
 );
 
@@ -349,25 +380,17 @@ it.effect(
     }),
 );
 
-test("the toasts stand in the window's very corner, and step up clear of a call bar only while a card with something to press stands over it", async () => {
+test("the toasts stand in the window's very corner, and nothing at its foot, a call bar or a card with an action, moves them", async () => {
   const rules = cssRules(await builtStylesheet());
   const stack = rules.find((rule) => rule.selectors.includes(".toast-stack"));
   assert.equal(stack?.declarations.get("right"), "var(--space-16)");
   assert.equal(stack?.declarations.get("bottom"), "var(--space-16)");
   assert.equal(stack?.declarations.has("transform"), false);
-  // Nothing at the window's foot moves the corner itself.
-  const lifts = rules.filter(
+  const moves = rules.filter(
     (rule) =>
-      rule.selectors.some((selector) => selector.endsWith(" .toast-stack")) &&
-      rule.declarations.has("bottom"),
+      rule !== stack &&
+      rule.selectors.some((selector) => /\.toast-stack(?!\s)/.test(selector)) &&
+      ["bottom", "transform", "translate", "inset"].some((name) => rule.declarations.has(name)),
   );
-  assert.deepEqual(lifts, []);
-  // The one step: a call bar drawn and a card with an action standing, by the bar's own row.
-  const step = rules.find((rule) =>
-    rule.selectors.includes(
-      'body:has(.desktop-call-bar) .toast-stack:has(.toast[data-action="true"]:not([data-leaving]))',
-    ),
-  );
-  assert.match(step?.declarations.get("transform") ?? "", /var\(--call-row-height\)/);
-  assert.match(stack?.declarations.get("transition") ?? "", /^transform var\(--duration-fast\)/);
+  assert.deepEqual(moves, []);
 });
