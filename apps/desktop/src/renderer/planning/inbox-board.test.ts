@@ -29,6 +29,8 @@ import { Effect, Schema } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { InboxBoard, type InboxCodeDoors } from "./inbox-board";
@@ -446,6 +448,46 @@ it.effect(
       assert.ok(card(page, SETTINGS.id).querySelector("[data-inbox-quiet]"));
       assert.equal(card(page, QUEUE.id).querySelector("[data-inbox-quiet]"), null);
       assert.ok(buttonNamed(card(page, later.id), "Approve"));
+    }),
+);
+
+it.effect(
+  "a link in an item's words opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere",
+  () =>
+    Effect.gen(function* () {
+      const sent = installActBridge();
+      const linked = item({
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "linked",
+        title: "Merge the migration first?",
+        blocks: [
+          {
+            type: INBOX_BLOCK.MARKDOWN,
+            text: "See [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+          },
+        ],
+        response: { type: INBOX_RESPONSE.APPROVAL },
+      });
+      const { agents } = service([{ items: [linked], cursor: "1000.1" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+
+      const words = card(page, linked.id).querySelector("[data-inbox-markdown]");
+      assert.ok(words);
+      assert.equal(words.querySelector('[href="https://example.test/docs"]'), null);
+      assert.equal(words.querySelector(".agent-link-inert")?.textContent, "the docs");
+      const link = words.querySelector<HTMLAnchorElement>(
+        'a[href="https://github.com/acme/relay/pull/7"]',
+      );
+      assert.ok(link);
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+      act(() => {
+        link.dispatchEvent(click);
+      });
+      assert.equal(click.defaultPrevented, true);
+      assert.deepEqual(sent, [
+        { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+      ]);
     }),
 );
 

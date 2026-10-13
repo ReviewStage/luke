@@ -150,7 +150,6 @@ function surfaces(
     failed: false,
     working: false,
     onRetry: () => undefined,
-    openGitHub: () => undefined,
   });
   return [
     ["the Work tab", work],
@@ -428,7 +427,6 @@ test("every call's line says what it did in full ink and its icon and subject in
         failed: false,
         working: true,
         onRetry: () => undefined,
-        openGitHub: () => undefined,
       }),
       createElement(TranscriptOpeningCall, {
         key: "opening",

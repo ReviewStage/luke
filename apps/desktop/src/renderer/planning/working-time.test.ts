@@ -97,7 +97,6 @@ const transcript = (run: { working: boolean; startedAt?: number; ended?: string 
     reading: false,
     failed: false,
     onRetry: () => undefined,
-    openGitHub: () => undefined,
     ...run,
   });
 
@@ -254,7 +253,6 @@ const finishedAgent = (record: TurnRecord) =>
     failed: false,
     working: false,
     onRetry: () => undefined,
-    openGitHub: () => undefined,
   });
 
 /** One of the agent's turns handing a worker a task, the call running or answered. */
@@ -332,7 +330,6 @@ it.effect(
           failed: false,
           working: true,
           onRetry: () => undefined,
-          openGitHub: () => undefined,
         }),
       );
       assert.equal(tab.worked(), null);
@@ -343,7 +340,6 @@ it.effect(
           failed: false,
           working: false,
           onRetry: () => undefined,
-          openGitHub: () => undefined,
         }),
       );
       const worked = tab.worked();
@@ -497,7 +493,6 @@ it.effect(
           failed: false,
           working: true,
           onRetry: () => undefined,
-          openGitHub: () => undefined,
         });
       const tab = yield* mounted(view(true));
       assert.equal(tab.timer(), "42s");

@@ -11,6 +11,8 @@ import {
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { relayout } from "#testing/resize-observer";
 import { PlanWork, SubagentTab } from "./plan-work";
 import { workerOf, workRowsOf } from "./work-model";
@@ -382,4 +384,45 @@ test("an older page that does not land stops the seeking, and the ask is answere
   });
   assert.equal(reads.mock.calls.length, 1, "asked once, not again for the same page");
   assert.equal(revealed.mock.calls.length, 1);
+});
+
+test("a link in Luke's words opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere", () => {
+  const sent = installActBridge();
+  const container = mounted(
+    createElement(PlanWork, {
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1,
+          state: PLAN_WORK_STATE.DONE,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TEXT,
+              text: "Read [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+            },
+          ],
+        },
+      ],
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
+      onOpenSubagent: () => undefined,
+      shown: true,
+    }),
+  );
+  assert.equal(container.querySelector('[href="https://example.test/docs"]'), null);
+  assert.equal(container.querySelector(".agent-link-inert")?.textContent, "the docs");
+  const link = container.querySelector<HTMLAnchorElement>(
+    'a[href="https://github.com/acme/relay/pull/7"]',
+  );
+  assert.ok(link);
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => {
+    link.dispatchEvent(click);
+  });
+  assert.equal(click.defaultPrevented, true);
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+  ]);
 });

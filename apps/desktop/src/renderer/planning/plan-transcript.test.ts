@@ -10,6 +10,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanTranscript } from "./plan-transcript";
@@ -131,6 +133,54 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
   assert.doesNotMatch(drawn, /<img/u);
   assert.doesNotMatch(drawn, /example\.test/u);
   assert.match(drawn, /Look at/u);
+});
+
+test("a link in a spoken line opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere", () => {
+  const sent = installActBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const region: TranscriptRegion = {
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: [
+      {
+        key: "call-1",
+        startedAt: 1_000,
+        live: false,
+        lukeEnded: false,
+        messages: [
+          {
+            id: "0",
+            role: TRANSCRIPT_SPEAKER.ASSISTANT,
+            parts: [
+              {
+                type: TRANSCRIPT_PART_TYPE.TEXT,
+                text: "See [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
+
+  assert.equal(container.querySelector('[href="https://example.test/docs"]'), null);
+  assert.equal(container.querySelector(".agent-link-inert")?.textContent, "the docs");
+  const link = container.querySelector<HTMLAnchorElement>(
+    'a[href="https://github.com/acme/relay/pull/7"]',
+  );
+  assert.ok(link);
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => {
+    link.dispatchEvent(click);
+  });
+  assert.equal(click.defaultPrevented, true);
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+  ]);
 });
 
 test("the empty and failed states each say where the transcript stands, the empty one under the Transcript tab's glyph drawn large, and a failure offers Retry", () => {
