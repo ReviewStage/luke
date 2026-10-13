@@ -1,6 +1,18 @@
 import type { WorkspaceSeams } from "@sidecar/database/models/workspace-seams";
-import { ensurePersonalWorkspace, listWorkspaces } from "@sidecar/database/models/workspace-store";
-import { type Cause, Effect, Layer, Option } from "effect";
+import {
+  createWorkspace,
+  ensurePersonalWorkspace,
+  listWorkspaces,
+  type Workspace,
+  workspaceOf,
+} from "@sidecar/database/models/workspace-store";
+import {
+  WORKSPACE_ROLE,
+  workspaceCreateRequestSchema,
+  workspaceGithubRequestSchema,
+} from "@sidecar/hosted/workspace-wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Cause, Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -9,11 +21,7 @@ import {
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import type { GitHubApp } from "./github/github-app.js";
-import {
-  listAvailableWorkspaces,
-  type SyncedInstallations,
-  syncInstallations,
-} from "./hosted/github-installations.js";
+import { disconnectInstallation } from "./hosted/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -22,40 +30,49 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import type { StoreFailure } from "./hosted/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * workspaces-app.ts -- the workspaces the account is a member of, and the ones it may join, as the Mac reads them.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, and a GitHub organization connected or disconnected.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, its personal one first and the rest by name, each with the
- * account's role in it, and the workspaces of the GitHub App installations
- * its GitHub reaches that it is not a member of, which it may join. Before
- * either is read, the personal workspace is ensured and the installations
- * synced (`hosted/github-installations.ts`), so a read is what makes the
- * account's personal workspace and the workspace of an installation nobody
- * reached before, both through the organization plugin's own write the
- * seams hand in. A GitHub the account cannot read right now, or none at
- * all, leaves the installations unsynced and nothing to join, and the
- * workspaces it already has are answered all the same. The bearer is
- * resolved before any row is touched, and both lists are the bearer's
- * account's alone.
+ * account's role and its connected GitHub account; the personal workspace is
+ * ensured first, so an account's first read makes it. `POST` creates a
+ * workspace with the name given through the organization plugin's
+ * server-only create, the account its owner. `POST /api/workspaces/github/connect`
+ * answers where the browser goes to connect a GitHub organization, and
+ * `.../disconnect` removes the workspace's connected installation; both take
+ * an owner or admin of the workspace, and a workspace the account is not in
+ * answers as none does. The bearer is resolved before any row is touched.
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
+const GITHUB_CONNECT_PATH = "/api/workspaces/github/connect";
+const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 
-const HTTP_METHOD = { GET: "GET" } as const;
+const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 
-/** No installation synced, so nothing to join. */
-const NONE: SyncedInstallations = [];
+/** A workspace's name or id is a few dozen characters, so a body past this is not one. */
+const MAXIMUM_BODY_BYTES = 1_024;
+
+/** The roles that connect and disconnect a workspace's GitHub organization. */
+const GITHUB_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export interface WorkspacesAppSeams {
   resolveUserId: UserIdResolver;
   workspaces: WorkspaceSeams;
 }
+
+type Requirements =
+  | HttpServerRequest.HttpServerRequest
+  | SqlClient.SqlClient
+  | HttpClient.HttpClient
+  | GitHubApp;
 
 /**
  * A write through the plugin, a store failure answered as
@@ -76,55 +93,100 @@ function pluginWriteOrUnavailable<A, R>(
   );
 }
 
-/** The installations synced, or none where GitHub could not be read, logged by the failure's kind alone. */
-function installationsSyncedOrNone(
-  userId: string,
-  seams: WorkspaceSeams,
-): Effect.Effect<
-  SyncedInstallations,
-  HostedRefusal,
-  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
-> {
-  return pluginWriteOrUnavailable(
-    Effect.catch(syncInstallations(userId, seams), (failure) =>
-      // Note that a GitHub read leaves the installations unsynced, and the store or the plugin refuses the request.
-      failure._tag === "GitHubAppNotConfigured" ||
-      failure._tag === "GitHubUnavailable" ||
-      failure._tag === "GitHubSignInRequired"
-        ? Effect.as(Effect.logWarning("Installations not synced", { failure: failure._tag }), NONE)
-        : Effect.fail(failure),
-    ),
-  );
-}
-
-const workspacesEndpoint = /* @__PURE__ */ Effect.fn("web/workspacesEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
-> {
+/** The bearer's account, or the request refused as unauthenticated. */
+const accountOf = Effect.fn("web/workspacesAccount")(function* (seams: WorkspacesAppSeams) {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const account = yield* seams.resolveUserId(request);
   if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const userId = account.value;
-  yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(userId, seams.workspaces));
-  const synced = yield* installationsSyncedOrNone(userId, seams.workspaces);
-  const workspaces = yield* hostedStoreOrUnavailable(listWorkspaces(userId));
-  const available = yield* hostedStoreOrUnavailable(listAvailableWorkspaces(userId, synced));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaces, available });
+  return account.value;
 });
 
-/** The group: the one workspaces path, and the hosted vocabulary's own refusal for any other. */
+/** The workspace the body names, where the account is an owner or admin of it; one it is not in is not found. */
+const administeredWorkspace = Effect.fn("web/administeredWorkspace")(function* (userId: string) {
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceGithubRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, asked.success.workspaceId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (!GITHUB_ROLES.has(workspace.value.role)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  return workspace.value;
+});
+
+/** GET: the account's workspaces; POST: one created. */
+const workspacesEndpoint = Effect.fn("web/workspacesEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* accountOf(seams);
+  yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(userId, seams.workspaces));
+  if (incoming.method === HTTP_METHOD.GET) {
+    const workspaces = yield* hostedStoreOrUnavailable(listWorkspaces(userId));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaces });
+  }
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceCreateRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const organizationId = yield* pluginWriteOrUnavailable(
+    createWorkspace(userId, asked.success.name, seams.workspaces),
+  );
+  const workspace = yield* answeredWorkspace(userId, organizationId);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { workspace });
+});
+
+/** The workspace as the account now sees it; one that vanished between the write and this read is not found. */
+const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
+  userId: string,
+  organizationId: string,
+): Effect.fn.Return<Workspace, HostedRefusal, SqlClient.SqlClient> {
+  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, organizationId));
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return workspace.value;
+});
+
+/** POST: where the browser goes to connect a GitHub organization to the workspace. */
+const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* accountOf(seams);
+  yield* administeredWorkspace(userId);
+  // The intent that binds GitHub's return to the account and the workspace lands in the next commit.
+  return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+});
+
+/** POST: the workspace's connected installation removed, answering the workspace. */
+const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* accountOf(seams);
+  const workspace = yield* administeredWorkspace(userId);
+  yield* hostedStoreOrUnavailable(disconnectInstallation(workspace.id));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    workspace: yield* answeredWorkspace(userId, workspace.id),
+  });
+});
+
+/** The group: the workspaces path, the two GitHub paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH, hostedRefusing(workspacesEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, GITHUB_CONNECT_PATH, hostedRefusing(connectEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, GITHUB_DISCONNECT_PATH, hostedRefusing(disconnectEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }
