@@ -22,7 +22,7 @@ import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
-import { PlanActionsButton } from "./plan-actions";
+import { PlanActions } from "./plan-actions";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
@@ -49,10 +49,12 @@ import { useTabViews } from "./strip-tabs";
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
  * showing its transcript and its composer at the document's measure, and
- * the draft agent's. The toolbar's actions are the plan's, and so is the call
- * bar, so both stand on every tab: a call is about the plan whichever tab is
- * read. The document stays laid out while an agent's tab is shown, so
- * coming back to it finds it where it was left.
+ * the draft agent's. Start and the ⋯ menu are the plan's, not an agent's,
+ * so only the plan's own tab draws them, while their chords (Copy plan,
+ * Archive, Permanently delete) answer on every tab; the call bar is the
+ * plan's too, and stands on every tab: a call is about the plan whichever
+ * tab is read. The document stays laid out while an agent's tab is shown,
+ * so coming back to it finds it where it was left.
  *
  * ⌘T opens the "+" of the column holding the window's focus, ⌘W closes
  * its chosen tab, and ⌘F finds in that tab (`../find-in-tab.tsx`): the side
@@ -240,6 +242,9 @@ function PlanDocument({
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   const { tab } = mainTabs;
+  // Start and the ⋯ button are the plan's, not an agent's, so only the
+  // plan's own tab draws them; the plan's chords stand on every tab.
+  const onPlanTab = tab === MAIN_TAB.PLAN;
   // A delegation's row in an agent's transcript opens its worker in the side
   // panel, where every subagent stands; where the worker stands seeds its glyph.
   const openDelegation = (
@@ -316,10 +321,10 @@ function PlanDocument({
                   onChoose={chooseRepository}
                   openRequest={menuRequest}
                 />
-                <StartAgentButton control={agents} />
+                {onPlanTab ? <StartAgentButton control={agents} /> : null}
               </>
             )}
-            <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
+            <PlanActions plans={plans} plan={plan} button={onPlanTab} onRename={rename.begin} />
           </Fragment>
           <SummaryButton layout={summaryLayout} cardId={summaryCard} />
         </Toolbar>
