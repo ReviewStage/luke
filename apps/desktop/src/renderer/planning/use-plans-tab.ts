@@ -1,4 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { GitHubConnection } from "@sidecar/hosted/github-connection-wire";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
@@ -204,6 +205,12 @@ export interface PlansControl {
   onCreateWorkspace: (name: string) => Promise<string | undefined>;
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
+  /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
+  github: GitHubConnection | undefined;
+  /** Opens the page that connects the account's own GitHub in the browser. */
+  onConnectAccountGitHub: () => void;
+  /** Opens the page that disconnects the account's own GitHub in the browser. */
+  onDisconnectAccountGitHub: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -1052,6 +1059,15 @@ export function usePlansTab(input: {
           failure: PLAN_CALL_FAILURE.UNANSWERED,
         }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A fixture's GitHub is connected nowhere. The page is the service's,
+  // opened by main, and the connection arrives on the view once the panel
+  // comes forward again; one that did not open says why in a toast.
+  const connectAccountGitHub = () => {
+    if (fixture !== undefined) return;
+    act(ACT_KIND.GITHUB_CONNECT).catch((refused: Error) =>
+      toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    );
+  };
   // A fixture's workspaces are made, shared, and connected nowhere. A
   // workspace made is listed at once, main's view holding it after; the
   // invite and the connect open the browser, and a refusal of either says
@@ -1348,6 +1364,11 @@ export function usePlansTab(input: {
         workspace.choose(personal.id);
       }
     },
+    github: viewed.github,
+    onConnectAccountGitHub: connectAccountGitHub,
+    onDisconnectAccountGitHub: () => {
+      if (fixture === undefined) tell(ACT_KIND.GITHUB_DISCONNECT);
+    },
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -1483,6 +1504,7 @@ export function usePlansTab(input: {
       ),
       read: readRepositories,
       openGitHub,
+      connectGitHub: connectAccountGitHub,
       pictures: fixture === undefined,
       scope: repositoriesOf,
     },

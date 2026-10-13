@@ -8,6 +8,7 @@ import type {
   PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
+  PlanningGitHubPageAnswer,
   PlanningMessagesParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
@@ -82,6 +83,8 @@ export interface PlanningActsDependencies {
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+    githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+    githubDisconnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
@@ -130,6 +133,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.WEB_OPEN
+  | typeof ACT_KIND.GITHUB_CONNECT
+  | typeof ACT_KIND.GITHUB_DISCONNECT
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
@@ -186,6 +191,18 @@ function invitePageOf(serviceBaseUrl: string, workspaceId: string): string {
   const page = new URL("/invite.html", serviceBaseUrl);
   page.searchParams.set(INVITE_PAGE_QUERY.WORKSPACE, workspaceId);
   return page.href;
+}
+
+/** A GitHub page the host named, opened in the browser; refused in the act's own words where it named none. */
+function openedPage(
+  kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
+  page: PlanningGitHubPageAnswer,
+  openExternal: (url: string) => Promise<void>,
+) {
+  const refused = new ActRefused({ message: ACT[kind].refusal });
+  return "url" in page
+    ? Effect.tryPromise({ try: () => openExternal(page.url), catch: () => refused })
+    : Effect.fail(refused);
 }
 
 export function planningActRows(
@@ -257,6 +274,20 @@ export function planningActRows(
     [ACT_KIND.GITHUB_OPEN]: ({ url }, sender) => {
       refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
       return dependencies.openExternal(url);
+    },
+    // The address of either page is the service's own, named by the host,
+    // and never one a window handed in, so the act carries none.
+    [ACT_KIND.GITHUB_CONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_CONNECT, sender);
+      return Effect.flatMap(host.githubConnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_CONNECT, page, dependencies.openExternal),
+      );
+    },
+    [ACT_KIND.GITHUB_DISCONNECT]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_DISCONNECT, sender);
+      return Effect.flatMap(host.githubDisconnect(), (page) =>
+        openedPage(ACT_KIND.GITHUB_DISCONNECT, page, dependencies.openExternal),
+      );
     },
     // The address is an http or https one by the act's own schema, so it
     // opens in the browser and never in a file's or another app's handler.

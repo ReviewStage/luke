@@ -20,6 +20,7 @@ import type {
   ShortcutControl,
   UpdateControl,
 } from "./controls";
+import { GitHubSection, type GitHubSettingsControl } from "./github-section";
 import { IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
@@ -57,6 +58,8 @@ export interface SettingsPanelProps {
   shortcuts: ShortcutControl;
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
+  /** Whether the account has GitHub connected, and the pages that connect and disconnect it, drawn while an account is signed in. */
+  github?: GitHubSettingsControl;
 }
 
 /**
@@ -112,6 +115,7 @@ export function SettingsPanel({
   settings,
   shortcuts,
   workspace,
+  github,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
   const voiceNote = voicePageAttention(microphone);
@@ -161,6 +165,13 @@ export function SettingsPanel({
             />
           ))}
         </section>
+      ) : null}
+
+      {/* Under the index, where every refusal for GitHub not connected points. */}
+      {view === SETTINGS_VIEW.ROOT &&
+      github !== undefined &&
+      account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+        <GitHubSection control={github} />
       ) : null}
 
       {view === SETTINGS_VIEW.WORKSPACE &&

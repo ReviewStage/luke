@@ -8,7 +8,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
-import { repositoryFailureNote } from "./planning-model";
+import { CONNECT_GITHUB_LABEL, repositoryFailureNote } from "./planning-model";
 
 /**
  * repository-chip.tsx -- the chip that names a plan's GitHub repository, and the menu that picks one.
@@ -26,7 +26,9 @@ import { repositoryFailureNote } from "./planning-model";
  * pinned under the list the page on GitHub where the developer chooses
  * which repositories the App reaches, which with the App installed nowhere
  * is the page that installs it. With the App installed nowhere and no
- * repository named, the chip offers installing it instead of a menu. The
+ * repository named, the chip offers installing it instead of a menu; with
+ * the list refused for GitHub not connected, the menu offers connecting it
+ * in place of Retry. The
  * list is read from the service when the chip mounts and again whenever
  * the window takes focus, so a developer back from installing the App in
  * the browser sees the change on the next opening; nothing polls. The menu
@@ -42,6 +44,8 @@ export interface RepositoryChooser {
   read: () => Promise<PlanningRepositoriesAnswer>;
   /** Opens a page of GitHub's in the browser. */
   openGitHub: (url: string) => void;
+  /** Opens the page that connects the account's GitHub in the browser, offered where the list was refused for GitHub not connected. */
+  connectGitHub: () => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
   pictures: boolean;
   /** The workspace the list is for, where one is chosen; a chip keyed by it reads afresh when it changes. */
@@ -155,6 +159,8 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
+  // A list refused for GitHub not connected offers connecting it in place of Retry.
+  const disconnected = failure === PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED;
   const installing = listed !== undefined && !listed.installed;
   // With the App installed nowhere and no repository named, the chip's one press is installing it.
   const offersInstall = installing && props.value === null;
@@ -178,9 +184,15 @@ export function RepositoryChip(props: {
         <p className="plan-compose-menu-note" role="alert">
           {repositoryFailureNote(failure)}
         </p>
-        <button type="button" className="plan-compose-menu-row" onClick={read}>
-          <RotateCwIcon aria-hidden="true" />
-          <span className="plan-compose-menu-name">Retry</span>
+        <button
+          type="button"
+          className="plan-compose-menu-row"
+          onClick={disconnected ? () => choose(chooser.connectGitHub) : read}
+        >
+          {disconnected ? <GitHubMark /> : <RotateCwIcon aria-hidden="true" />}
+          <span className="plan-compose-menu-name">
+            {disconnected ? CONNECT_GITHUB_LABEL : "Retry"}
+          </span>
         </button>
       </>
     ) : list === undefined ? (
