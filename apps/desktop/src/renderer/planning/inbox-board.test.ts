@@ -300,7 +300,7 @@ function Tab({
         control: inbox,
         agents,
         onOpenAgent: () => undefined,
-        openGitHub: (url) => opened.push(url),
+        openLink: (url) => opened.push(url),
         code,
       })
     : null;
@@ -401,7 +401,7 @@ const taking =
   });
 
 it.effect(
-  "the plan's open items are drawn the oldest first with their blocks and controls, a choice's recommendation marked, a link opening on GitHub and one elsewhere inert with its address, and a task its agent need not hear back from saying so; a later read adds what landed",
+  "the plan's open items are drawn the oldest first with their blocks and controls, a choice's recommendation marked, a link on GitHub and one elsewhere each opening in the browser, and a task its agent need not hear back from saying so; a later read adds what landed",
   () =>
     Effect.gen(function* () {
       const later = item({
@@ -443,9 +443,11 @@ it.effect(
       const links = card(page, SETTINGS.id).querySelectorAll("[data-inbox-link]");
       assert.equal(links.length, 2);
       press(links[0]?.querySelector("a"));
-      assert.deepEqual(opened, ["https://github.com/acme/relay/settings/branches"]);
-      assert.equal(links[1]?.querySelector("a"), null, "a page off GitHub is no press");
-      assert.equal(links[1]?.textContent, "Why https://example.test/why");
+      press(links[1]?.querySelector("a"));
+      assert.deepEqual(opened, [
+        "https://github.com/acme/relay/settings/branches",
+        "https://example.test/why",
+      ]);
       assert.ok(card(page, SETTINGS.id).querySelector("[data-inbox-quiet]"));
       assert.equal(card(page, QUEUE.id).querySelector("[data-inbox-quiet]"), null);
       assert.ok(buttonNamed(card(page, later.id), "Approve"));
@@ -453,7 +455,7 @@ it.effect(
 );
 
 it.effect(
-  "a link in an item's words opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere",
+  "a link in an item's words opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and a mail address is words that go nowhere",
   () =>
     Effect.gen(function* () {
       const sent = installActBridge();
@@ -464,7 +466,7 @@ it.effect(
         blocks: [
           {
             type: INBOX_BLOCK.MARKDOWN,
-            text: "See [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+            text: "See [the pull request](https://github.com/acme/relay/pull/7), [the docs](https://example.test/docs), and [mail](mailto:dean@example.test).",
           },
         ],
         response: { type: INBOX_RESPONSE.APPROVAL },
@@ -475,19 +477,18 @@ it.effect(
 
       const words = card(page, linked.id).querySelector("[data-inbox-markdown]");
       assert.ok(words);
-      assert.equal(words.querySelector('[href="https://example.test/docs"]'), null);
-      assert.equal(words.querySelector(".agent-link-inert")?.textContent, "the docs");
-      const link = words.querySelector<HTMLAnchorElement>(
-        'a[href="https://github.com/acme/relay/pull/7"]',
-      );
-      assert.ok(link);
-      const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-      act(() => {
-        link.dispatchEvent(click);
-      });
-      assert.equal(click.defaultPrevented, true);
+      assert.equal(words.querySelector('[href="mailto:dean@example.test"]'), null);
+      assert.equal(words.querySelector(".agent-link-inert")?.textContent, "mail");
+      for (const link of words.querySelectorAll<HTMLAnchorElement>("a.agent-link")) {
+        const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+        act(() => {
+          link.dispatchEvent(click);
+        });
+        assert.equal(click.defaultPrevented, true);
+      }
       assert.deepEqual(sent, [
         { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
       ]);
     }),
 );

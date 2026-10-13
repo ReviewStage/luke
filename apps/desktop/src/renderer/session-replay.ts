@@ -249,14 +249,17 @@ function preloadRemoteConfig(key: string): void {
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked while `class` and `style` still lay out,
- * autocapture off, since a click event carries the text of what was clicked,
+ * words or an image asterisked while `class` and `style` still lay out, every
+ * `href` among them but the two the replay lays out by (a stylesheet's and an
+ * icon's symbol), because a link in a transcript or an Inbox item may go to
+ * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
  * and canvas recording off, since a canvas carries its words as pixels. Note
  * that the canvas option is set here rather than left to the library's
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
  */
 const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
+const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
   autocapture: false,
   capture_dead_clicks: false,
@@ -264,8 +267,10 @@ const SESSION_REPLAY_MASKING = {
   session_recording: {
     captureCanvas: { recordCanvas: false },
     maskTextSelector: "*",
-    maskAttributeFn: (name: string, value: string): string =>
-      WORDS.has(name) ? "*".repeat(value.length) : value,
+    maskAttributeFn: (name: string, value: string, element?: Element): string =>
+      WORDS.has(name) || (name === "href" && !LAYOUT_HREFS.has(element?.localName ?? ""))
+        ? "*".repeat(value.length)
+        : value,
   },
 } as const;
 

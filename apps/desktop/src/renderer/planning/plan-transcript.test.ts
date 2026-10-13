@@ -135,7 +135,7 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
   assert.match(drawn, /Look at/u);
 });
 
-test("a link in a spoken line opens on GitHub in the browser over the act channel, and an address off GitHub is words that go nowhere", () => {
+test("a link in a spoken line opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and an address the browser should not open is words that go nowhere", () => {
   const sent = installActBridge();
   const container = document.createElement("div");
   document.body.append(container);
@@ -157,7 +157,7 @@ test("a link in a spoken line opens on GitHub in the browser over the act channe
             parts: [
               {
                 type: TRANSCRIPT_PART_TYPE.TEXT,
-                text: "See [the pull request](https://github.com/acme/relay/pull/7) and [the docs](https://example.test/docs).",
+                text: `See [the pull request](https://github.com/acme/relay/pull/7), [the docs](https://example.test/docs), [a script](javascript:alert(1)), [a file](file:///etc/passwd), [mail](mailto:dean@example.test), [an app](luke://plan/7), and [a long one](https://example.test/?q=${"a".repeat(2_048)}).`,
               },
             ],
           },
@@ -167,19 +167,32 @@ test("a link in a spoken line opens on GitHub in the browser over the act channe
   };
   act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
 
-  assert.equal(container.querySelector('[href="https://example.test/docs"]'), null);
-  assert.equal(container.querySelector(".agent-link-inert")?.textContent, "the docs");
-  const link = container.querySelector<HTMLAnchorElement>(
-    'a[href="https://github.com/acme/relay/pull/7"]',
+  // Note that Streamdown blocks a script's, a file's, and an app's scheme
+  // before the link is ours to draw; a mail address and an address past the
+  // act's cap are ours to refuse.
+  assert.deepEqual(
+    [...container.querySelectorAll("a")].map((link) => link.getAttribute("href")),
+    ["https://github.com/acme/relay/pull/7", "https://example.test/docs"],
   );
-  assert.ok(link);
-  const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-  act(() => {
-    link.dispatchEvent(click);
+  assert.deepEqual(
+    [...container.querySelectorAll(".agent-link-inert")].map((inert) => inert.textContent),
+    ["mail", "a long one"],
+  );
+  assert.equal(
+    container.querySelector(".agent-link-inert")?.getAttribute("title"),
+    "mailto:dean@example.test",
+  );
+  const clicks = [...container.querySelectorAll<HTMLAnchorElement>("a")].map((link) => {
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => {
+      link.dispatchEvent(click);
+    });
+    return click.defaultPrevented;
   });
-  assert.equal(click.defaultPrevented, true);
+  assert.deepEqual(clicks, [true, true]);
   assert.deepEqual(sent, [
     { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+    { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.test/docs" } },
   ]);
 });
 

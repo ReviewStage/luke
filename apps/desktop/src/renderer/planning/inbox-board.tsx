@@ -43,7 +43,7 @@ import type { FileChip } from "./attachment-model";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
 import { copiedLines } from "./code-pane-model";
-import { agentTabLabel, opensOnGitHub } from "./coding-agent-model";
+import { agentTabLabel } from "./coding-agent-model";
 import type { ReadFileWindow } from "./file-tab";
 import {
   CODE_READ,
@@ -63,6 +63,7 @@ import { momentText, sinceText, useMinute } from "./plan-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { opensAsLink } from "./use-open-link";
 import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
 
 /**
@@ -72,10 +73,11 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * one more card of the agent's: each open item is a card the shape of the
  * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
  * and when, its title, the blocks of context the agent wrote, Markdown as
- * the transcript draws it, a link as the transcript draws one, opened on
- * GitHub alone, code as the Code tab draws a card (`code-pane.tsx`),
- * its lines read from GitHub at the agent's commit through the File tab's
- * own read and opened there in the File tab, and an image the agent took
+ * the transcript draws it, a link as the transcript draws one, opened in
+ * the browser where it is a web page, code as the Code tab draws a card
+ * (`code-pane.tsx`), its lines read from GitHub at the agent's commit
+ * through the File tab's own read and opened there in the File tab, and an
+ * image the agent took
  * in its sandbox, drawn at the card's own width from the bytes the host
  * fetched under the account (`use-plan-inbox.ts`) and opened larger over
  * the window by a press, in the viewer an attached file opens in
@@ -211,24 +213,24 @@ function Poster({
   );
 }
 
-/** A link block: a press where it opens on GitHub, as a transcript's links do, else its label with the address beside it to copy. */
+/** A link block: a press where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 function LinkBlock({
   url,
   label,
-  openGitHub,
+  openLink,
 }: {
   url: string;
   label: string;
-  openGitHub: (url: string) => void;
+  openLink: (url: string) => void;
 }): React.JSX.Element {
-  if (opensOnGitHub(url)) {
+  if (opensAsLink(url)) {
     return (
       <a
         href={url}
         className="agent-link"
         onClick={(event) => {
           event.preventDefault();
-          openGitHub(url);
+          openLink(url);
         }}
       >
         {label}
@@ -404,7 +406,7 @@ function KnownBlock({
   images,
   onImage,
   onRetryImage,
-  openGitHub,
+  openLink,
   code,
 }: {
   itemId: string;
@@ -412,7 +414,7 @@ function KnownBlock({
   images: PlanInboxControl["images"];
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
-  openGitHub: (url: string) => void;
+  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   switch (block.type) {
@@ -425,7 +427,7 @@ function KnownBlock({
     case INBOX_BLOCK.LINK:
       return (
         <p className="m-0" data-inbox-link="">
-          <LinkBlock url={block.url} label={block.label} openGitHub={openGitHub} />
+          <LinkBlock url={block.url} label={block.label} openLink={openLink} />
         </p>
       );
     case INBOX_BLOCK.CODE:
@@ -451,14 +453,14 @@ function Blocks({
   images,
   onImage,
   onRetryImage,
-  openGitHub,
+  openLink,
   code,
 }: {
   item: InboxItem;
   images: PlanInboxControl["images"];
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
-  openGitHub: (url: string) => void;
+  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
@@ -474,7 +476,7 @@ function Blocks({
             images={images}
             onImage={onImage}
             onRetryImage={onRetryImage}
-            openGitHub={openGitHub}
+            openLink={openLink}
             code={code}
           />
         ) : (
@@ -745,7 +747,7 @@ function OpenCard({
   onImage,
   onRetryImage,
   onOpenAgent,
-  openGitHub,
+  openLink,
   code,
 }: {
   item: InboxItem;
@@ -761,7 +763,7 @@ function OpenCard({
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
   onOpenAgent: (agentId: string) => void;
-  openGitHub: (url: string) => void;
+  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const draft = draftOf(item);
@@ -784,7 +786,7 @@ function OpenCard({
           images={images}
           onImage={onImage}
           onRetryImage={onRetryImage}
-          openGitHub={openGitHub}
+          openLink={openLink}
           code={code}
         />
         <ResponseControls item={item} draft={draft} disabled={sending} onDraft={setDraft} />
@@ -838,7 +840,7 @@ function SettledCard({
   images,
   onImage,
   onRetryImage,
-  openGitHub,
+  openLink,
   code,
 }: {
   item: InboxItem;
@@ -847,7 +849,7 @@ function SettledCard({
   images: PlanInboxControl["images"];
   onImage: PlanInboxControl["onImage"];
   onRetryImage: PlanInboxControl["onRetryImage"];
-  openGitHub: (url: string) => void;
+  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const words = settledWords(item);
@@ -886,7 +888,7 @@ function SettledCard({
               images={images}
               onImage={onImage}
               onRetryImage={onRetryImage}
-              openGitHub={openGitHub}
+              openLink={openLink}
               code={code}
             />
           </div>
@@ -901,14 +903,14 @@ export function InboxBoard({
   control,
   agents,
   onOpenAgent,
-  openGitHub,
+  openLink,
   code,
 }: {
   control: PlanInboxControl;
   agents: CodingAgentsControl;
   onOpenAgent: (agentId: string) => void;
-  /** Opens a link block's page on GitHub, the one address the window opens in the browser. */
-  openGitHub: (url: string) => void;
+  /** Opens a link block's web page in the browser (`use-open-link.ts`). */
+  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const now = useMinute();
@@ -953,7 +955,7 @@ export function InboxBoard({
           onImage={control.onImage}
           onRetryImage={control.onRetryImage}
           onOpenAgent={onOpenAgent}
-          openGitHub={openGitHub}
+          openLink={openLink}
           code={code}
         />
       ))}
@@ -973,7 +975,7 @@ export function InboxBoard({
                 images={control.images}
                 onImage={control.onImage}
                 onRetryImage={control.onRetryImage}
-                openGitHub={openGitHub}
+                openLink={openLink}
                 code={code}
               />
             ))}

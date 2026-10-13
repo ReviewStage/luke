@@ -1915,8 +1915,8 @@ button.attached-file-face:hover img {
   flex: none;
 }
 
-/* A link in the transcript: the pull request opens in the browser, drawn
-   as a link; any other address is drawn as words that go nowhere. */
+/* A link in the transcript: a web page opens in the browser, drawn as a
+   link; any other address is drawn as words that go nowhere. */
 .agent-link {
   color: var(--state-working);
   text-decoration: underline;

@@ -61,7 +61,7 @@ export interface PlanningActsDependencies {
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   };
-  /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
+  /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
@@ -89,6 +89,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_SET_REPOSITORY
   | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
+  | typeof ACT_KIND.WEB_OPEN
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
@@ -175,6 +176,12 @@ export function planningActRows(
     // repository's page or the App's installation page and nothing else.
     [ACT_KIND.GITHUB_OPEN]: ({ url }, sender) => {
       refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
+      return dependencies.openExternal(url);
+    },
+    // The address is an http or https one by the act's own schema, so it
+    // opens in the browser and never in a file's or another app's handler.
+    [ACT_KIND.WEB_OPEN]: ({ url }, sender) => {
+      refuseUnlessPanel(ACT_KIND.WEB_OPEN, sender);
       return dependencies.openExternal(url);
     },
     // The press names no plan: the plan is the one the host has open, read
