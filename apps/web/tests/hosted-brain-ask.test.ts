@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { conversations, turns } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
@@ -28,7 +29,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   conversationOwnedBy,
   recordedRuntimeSession,

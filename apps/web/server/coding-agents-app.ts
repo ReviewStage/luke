@@ -1,3 +1,4 @@
+import { childConversationId } from "@sidecar/database/models/ids";
 import {
   base64Chars,
   CODING_AGENT_BOUNDS,
@@ -50,7 +51,6 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
-import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import { childTitlesOf } from "./hosted/child-titles.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
@@ -166,7 +166,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * is read as the agent's own is, under the agent and eve's id for the
  * delegation call that started the worker, which its tool part in the
  * agent's transcript carries: the child conversation is a function of the
- * two (`brain-host/ids.ts`), and only a delegation recorded under the
+ * two (`@sidecar/database/models/ids`), and only a delegation recorded under the
  * account's agent answers, so a call of another account's agent reads as
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the

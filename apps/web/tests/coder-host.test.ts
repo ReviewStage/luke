@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
@@ -40,7 +41,6 @@ import {
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
 import type { AdmittedConversation } from "../server/hosted/brain-host/conversation";
-import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";

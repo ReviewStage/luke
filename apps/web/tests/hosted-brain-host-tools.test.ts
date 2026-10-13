@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -34,7 +35,6 @@ import {
   runtimeSessionOwner,
 } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";

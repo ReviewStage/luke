@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
@@ -16,7 +17,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,

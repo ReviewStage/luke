@@ -1,3 +1,4 @@
+import { childConversationId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -18,7 +19,6 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { childConversationId } from "../brain-host/ids.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
   type CodingAgent,

@@ -1,3 +1,4 @@
+import { sentLineId } from "@sidecar/database/models/ids";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -11,7 +12,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { sentLineId } from "../brain-host/ids.js";
 import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 import type { CodingAgent } from "../coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { childConversationId } from "@sidecar/database/models/ids";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
@@ -32,7 +33,6 @@ import {
   type EveSessions,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { childConversationId } from "../server/hosted/brain-host/ids";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
