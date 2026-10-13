@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
 import type { Components } from "streamdown";
+import { ACT_KIND } from "#shared/messages/acts";
+import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
@@ -54,6 +56,7 @@ import {
 import { cn } from "../ai-elements/utils";
 import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
+import { opensOnGitHub } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -78,7 +81,7 @@ import { WorkingTime } from "./working-time";
  * (`transcript-model.ts`, `work-model.ts`, `coding-agent-model.ts` with
  * `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
- * markdown at the panel's scale, reasoning folded under one quiet line
+ * markdown at the panel's scale with a link opening on GitHub, reasoning folded under one quiet line
  * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
@@ -90,29 +93,61 @@ import { WorkingTime } from "./working-time";
  */
 
 /**
- * How a transcript's markdown is drawn: at the panel's scale, its code and
- * tables as `transcript-markdown.tsx` draws them, but never as an image,
- * because an image is a request to wherever its address points the moment
- * the tab opens, and nothing said on a call or written by a model should
- * make one.
+ * A link in a transcript's words. A page on GitHub, such as the pull request
+ * an agent opened, opens in the browser over the act channel; any other
+ * address is drawn as words that go nowhere, with the address as its hint.
+ * Note that the press is ours rather than Streamdown's, because Streamdown's
+ * link asks in a modal of its own and then calls `window.open`, which the
+ * window denies (`hardened-window.ts`), so its link opened nothing.
  */
-export const TRANSCRIPT_COMPONENTS: Components = {
+function TranscriptLink({
+  href,
+  children,
+}: {
+  href: string | undefined;
+  children: ReactNode;
+}): ReactNode {
+  const { tell } = useAct();
+  if (href === undefined || !opensOnGitHub(href)) {
+    return (
+      <span className="agent-link-inert" title={href}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className="agent-link"
+      onClick={(event) => {
+        event.preventDefault();
+        tell(ACT_KIND.GITHUB_OPEN, { url: href });
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+/**
+ * How a transcript's markdown is drawn: at the panel's scale, its code and
+ * tables as `transcript-markdown.tsx` draws them, its links as
+ * {@link TranscriptLink}, but never as an image, because an image is a
+ * request to wherever its address points the moment the tab opens, and
+ * nothing said on a call or written by a model should make one.
+ */
+const TRANSCRIPT_COMPONENTS: Components = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
+  a: ({ href, children }) => <TranscriptLink href={href}>{children}</TranscriptLink>,
   img: () => null,
 };
 
 /** A turn's words as markdown. */
-export function TranscriptWords({
-  text,
-  components = TRANSCRIPT_COMPONENTS,
-}: {
-  text: string;
-  components?: Components;
-}): ReactNode {
+export function TranscriptWords({ text }: { text: string }): ReactNode {
   return (
     <TranscriptMarkdownSource markdown={text}>
-      <MessageResponse mode="static" components={components}>
+      <MessageResponse mode="static" components={TRANSCRIPT_COMPONENTS}>
         {text}
       </MessageResponse>
     </TranscriptMarkdownSource>

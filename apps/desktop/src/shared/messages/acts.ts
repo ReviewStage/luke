@@ -436,6 +436,9 @@ const githubAddress = EffectSchema.String.check(
   EffectSchema.isPattern(GITHUB_ADDRESS),
 );
 
+/** Whether `github.open` takes an address, so a link drawn as a press is one the act will open. */
+export const isGitHubAddress: (address: string) => boolean = EffectSchema.is(githubAddress);
+
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in AppSettingField]: {

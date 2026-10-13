@@ -161,6 +161,8 @@ test("only a page on GitHub opens from the transcript, and each Start refusal ha
   assert.equal(opensOnGitHub("https://github.com/acme/relay/pull/7"), true);
   assert.equal(opensOnGitHub("https://example.com/github.com/x"), false);
   assert.equal(opensOnGitHub("javascript:alert(1)"), false);
+  // An address longer than `github.open` takes is no press that would open nothing.
+  assert.equal(opensOnGitHub(`https://github.com/acme/relay/issues?q=${"a".repeat(2_048)}`), false);
   assert.equal(startFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY), START_NEEDS_REPOSITORY);
   const notes = new Set(Object.values(CODING_AGENT_CALL_FAILURE).map(startFailureNote));
   assert.equal(notes.size, Object.values(CODING_AGENT_CALL_FAILURE).length);

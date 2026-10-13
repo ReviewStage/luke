@@ -24,6 +24,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { ACT_KIND } from "#shared/messages/acts";
+import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
@@ -244,17 +246,12 @@ function drawn(
       failed: false,
       working,
       onRetry: ignore,
-      openGitHub: ignore,
     }),
   );
 }
 
 /** The transcript mounted live, so a row can be opened. */
-function mounted(
-  messages: readonly CodingAgentMessage[],
-  openGitHub: (url: string) => void = ignore,
-  registry?: AtomRegistry,
-): HTMLElement {
+function mounted(messages: readonly CodingAgentMessage[], registry?: AtomRegistry): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -266,7 +263,6 @@ function mounted(
       failed: false,
       working: false,
       onRetry: ignore,
-      openGitHub,
     });
     root.render(registry === undefined ? view : onRegistry(registry, view));
   });
@@ -323,7 +319,6 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
         failed: false,
         working: true,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   });
@@ -407,7 +402,6 @@ test("a delegation refused before its worker began says why in red under its row
         failed: false,
         working: false,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   });
@@ -431,12 +425,8 @@ function open(container: HTMLElement, selector: string): HTMLDetailsElement {
 }
 
 /** The transcript mounted with every run of calls and folded lead opened, as a reader opens them to reach the rows. */
-function unfolded(
-  messages: readonly CodingAgentMessage[],
-  openGitHub: (url: string) => void = ignore,
-  registry?: AtomRegistry,
-): HTMLElement {
-  const container = mounted(messages, openGitHub, registry);
+function unfolded(messages: readonly CodingAgentMessage[], registry?: AtomRegistry): HTMLElement {
+  const container = mounted(messages, registry);
   for (;;) {
     const fold = container.querySelector<HTMLDetailsElement>("[data-turn-fold]:not([open])");
     if (fold === null) return container;
@@ -611,7 +601,6 @@ test("an older list opens on a click onto the list as it stood, and folds once a
           failed: false,
           working: false,
           onRetry: ignore,
-          openGitHub: ignore,
         }),
       ),
     );
@@ -834,8 +823,8 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.doesNotMatch(markup, /href="https:\/\/example\.com\/docs"/u);
   assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
 
-  const opened: string[] = [];
-  const container = unfolded([TURN], (url) => opened.push(url));
+  const sent = installActBridge();
+  const container = unfolded([TURN]);
   const link = container.querySelector<HTMLAnchorElement>("a.agent-link");
   assert.ok(link);
   const click = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -843,7 +832,9 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
     link.dispatchEvent(click);
   });
   assert.equal(click.defaultPrevented, true);
-  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay/pull/7" } },
+  ]);
 });
 
 test("the tab wears no head: it opens on the transcript, what the agent runs on is the chip at the box's foot, and a stopped or failed turn ends the transcript on one quiet line saying so", () => {
@@ -884,7 +875,6 @@ test("with nothing held the tab says the agent is starting, or how it ended befo
         working: false,
         ended,
         onRetry: ignore,
-        openGitHub: ignore,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
@@ -912,7 +902,6 @@ it.effect(
               failed: false,
               working: false,
               onRetry: ignore,
-              openGitHub: ignore,
             }),
           ),
         ),
@@ -993,7 +982,6 @@ test("the working line says the agent is starting before its turn opens and thin
       working: true,
       sessionStarting: true,
       onRetry: ignore,
-      openGitHub: ignore,
     }),
   );
   assert.equal(line(starting), "Starting…");
@@ -1030,7 +1018,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const clipboard = installClipboard();
-      const container = unfolded([PLAN, TURN], ignore, yield* registryOnTestClock);
+      const container = unfolded([PLAN, TURN], yield* registryOnTestClock);
       const copy = container.querySelector<HTMLButtonElement>(
         '.is-assistant button[aria-label="Copy"]',
       );
@@ -1164,7 +1152,6 @@ test("a finished transcript ends on the pull request's row: its number and title
         failed: false,
         working: false,
         onRetry: ignore,
-        openGitHub: ignore,
         footer: createElement(PublishedRow, { pullRequest, openGitHub: ignore }),
       }),
     );

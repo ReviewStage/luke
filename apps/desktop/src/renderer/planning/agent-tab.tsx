@@ -13,7 +13,6 @@ import { TerminalIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon, FileTextIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
@@ -47,7 +46,6 @@ import {
   endLine,
   messageWords,
   newestTodos,
-  opensOnGitHub,
   providerOf,
   settledPlanEdits,
   showsPublishedRow,
@@ -66,7 +64,6 @@ import {
   toolCallView,
 } from "./tool-call-model";
 import {
-  TRANSCRIPT_COMPONENTS,
   TranscriptReasoning,
   TranscriptRows,
   TranscriptSubagent,
@@ -168,30 +165,6 @@ export interface DelegationDoors {
   starts?: ReadonlyMap<string, number> | undefined;
   /** Opens the worker's tab, by the call that started it, with the task and where the worker stands as the row knows it; none where the row stands in a tab that opens no tab. */
   onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
-}
-
-/** How the agent's markdown is drawn: as every transcript's, with a link only to GitHub. */
-function transcriptComponents(openGitHub: (url: string) => void): Components {
-  return {
-    ...TRANSCRIPT_COMPONENTS,
-    a: ({ href, children }) =>
-      href !== undefined && opensOnGitHub(href) ? (
-        <a
-          href={href}
-          className="agent-link"
-          onClick={(event) => {
-            event.preventDefault();
-            openGitHub(href);
-          }}
-        >
-          {children}
-        </a>
-      ) : (
-        <span className="agent-link-inert" title={href}>
-          {children}
-        </span>
-      ),
-  };
 }
 
 /** One tool call: its row, and its input and answer under it once opened. */
@@ -310,18 +283,16 @@ function TodosDock({
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
-  components,
   delegation,
   todos,
 }: {
   part: AgentPart;
-  components: Components;
   delegation: DelegationDoors | undefined;
   todos: TodosPlace;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
-      return <TranscriptWords text={part.text} components={components} />;
+      return <TranscriptWords text={part.text} />;
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL:
@@ -341,15 +312,7 @@ function AgentPartView({
 }
 
 /** The plan the agent was handed, or the task a worker was: a card across the column, folded under its title. */
-function PlanCard({
-  text,
-  lead,
-  components,
-}: {
-  text: string;
-  lead: TranscriptLead;
-  components: Components;
-}): ReactNode {
+function PlanCard({ text, lead }: { text: string; lead: TranscriptLead }): ReactNode {
   return (
     <Plan data-plan-card="" aria-label={lead.label}>
       <PlanHeader>
@@ -357,7 +320,7 @@ function PlanCard({
         <PlanTitle label={lead.label}>{cardTitle(text)}</PlanTitle>
       </PlanHeader>
       <PlanContent>
-        <TranscriptWords text={text} components={components} />
+        <TranscriptWords text={text} />
       </PlanContent>
     </Plan>
   );
@@ -374,7 +337,6 @@ function AgentMessage({
   plan,
   lead,
   moving,
-  components,
   delegation,
   todos,
 }: {
@@ -384,12 +346,11 @@ function AgentMessage({
   lead: TranscriptLead;
   /** Whether the agent may still write to this message: it is the last, and the agent still works. */
   moving: boolean;
-  components: Components;
   delegation: DelegationDoors | undefined;
   todos: TodosPlace;
 }): ReactNode {
   const words = messageWords(message);
-  if (plan) return <PlanCard text={words} lead={lead} components={components} />;
+  if (plan) return <PlanCard text={words} lead={lead} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
@@ -397,7 +358,7 @@ function AgentMessage({
         {words === "" ? null : (
           <>
             <MessageContent>
-              <TranscriptWords text={words} components={components} />
+              <TranscriptWords text={words} />
             </MessageContent>
             <CopyMessageAction words={words} />
           </>
@@ -410,14 +371,7 @@ function AgentMessage({
     <Message from={message.role}>
       <MessageContent>
         <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
-          {(part) => (
-            <AgentPartView
-              part={part}
-              components={components}
-              delegation={delegation}
-              todos={todos}
-            />
-          )}
+          {(part) => <AgentPartView part={part} delegation={delegation} todos={todos} />}
         </TranscriptRows>
       </MessageContent>
       {moving || startedAt === undefined || finishedAt === undefined ? null : (
@@ -471,7 +425,6 @@ export function AgentTranscriptView({
   startedAt,
   ended,
   onRetry,
-  openGitHub,
   footer,
   overComposer = false,
 }: {
@@ -493,14 +446,11 @@ export function AgentTranscriptView({
   /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
   ended?: string | undefined;
   onRetry: () => void;
-  /** Opens a page of GitHub's in the browser, which is where the agent's pull request lives. */
-  openGitHub: (url: string) => void;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
 }): React.JSX.Element {
-  const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -525,7 +475,6 @@ export function AgentTranscriptView({
               plan={message === plan}
               lead={lead}
               moving={working && index === messages.length - 1}
-              components={components}
               delegation={delegation}
               todos={todos}
             />
@@ -638,7 +587,6 @@ export function AgentTabView({
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
-        openGitHub={openGitHub}
         footer={
           showsPublishedRow(agent.status, published) ? (
             <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
@@ -788,7 +736,6 @@ export function AgentSubagentTab({
   /** Hears the transcript the tab holds each time it moves, by the call that started the worker, as an agent's tab says its own. */
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const transcript = useAgentTranscript({
     agentId,
     callId,
@@ -819,7 +766,6 @@ export function AgentSubagentTab({
         startedAt={shown ? transcript.runStartedAt : undefined}
         ended={endLine(status, transcript.failure)}
         onRetry={transcript.onRetry}
-        openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
       />
     </section>
   );
