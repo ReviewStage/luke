@@ -1,3 +1,4 @@
+import { BookOpenIcon } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -9,7 +10,9 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
+import { CardDetail } from "../desktop/plan-card";
 import { Tooltip } from "../tooltip";
+import { FileTypeIcon } from "./file-type-icon";
 import { holdsSlashWord, type SkillOption, skillTokens, type TextRange } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
@@ -25,8 +28,11 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
  * chip is a button: a press, or Enter once it has the focus, opens the
  * skill's `SKILL.md` in a File tab of the side panel, at the default branch
  * as the repository's skills were read, and its hover card says what the
- * skill is for and where it stands. The words stay the message's own
- * underneath, so a copy of the message and a find in the tab read `/name`.
+ * skill is for and where it stands, drawn from a plan card's rows
+ * (`plan-card.tsx`) as a pinned tab's is: the skill's mark and name at its
+ * head, what it is for under it, and its file's line, which opens it too.
+ * A chip the composer drew opens the same file on a press
+ * (`skill-picker.tsx`). The words stay the message's own underneath, so a copy of the message and a find in the tab read `/name`.
  * The skills are the ones the composer offers, read once for the plan
  * (`repository-skills.ts`), and only once a transcript holds a word they
  * could name, so a conversation naming none reads nothing. The "Loaded
@@ -72,15 +78,34 @@ function withChips(text: string, tokens: readonly TextRange[]): string {
   return written + text.slice(at);
 }
 
-/** What the hover card of a skill's chip says: its name, what it is for, and where its file stands. */
-function SkillCard({ skill }: { skill: SkillOption }): React.JSX.Element {
+/**
+ * What the hover card of a skill's chip says, in a plan card's rows: the
+ * skill's mark and its name as the chip says it, what it is for, and the
+ * line of its file, named from the repository's root, which a press opens.
+ */
+function SkillCard({
+  skill,
+  onOpen,
+}: {
+  skill: SkillOption;
+  onOpen: () => void;
+}): React.JSX.Element {
   return (
-    <div className="skill-card">
-      <p className="skill-card-name">/{skill.name}</p>
-      {skill.description === "" ? null : (
-        <p className="skill-card-description">{skill.description}</p>
-      )}
-      <p className="skill-card-path">{skill.path}</p>
+    <div className="plan-card" data-skill-card="">
+      <div className="plan-card-heading">
+        <div className="plan-card-head">
+          <span className="plan-card-glyph">
+            <BookOpenIcon aria-hidden="true" />
+          </span>
+          <span className="plan-card-name">/{skill.name}</span>
+        </div>
+        {skill.description === "" ? null : <p className="plan-card-note">{skill.description}</p>}
+        <CardDetail
+          glyph={<FileTypeIcon name={skill.path} />}
+          label={skill.path}
+          onPress={onOpen}
+        />
+      </div>
     </div>
   );
 }
@@ -94,7 +119,7 @@ function SkillChip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={skill.path} card={<SkillCard skill={skill} />}>
+    <Tooltip label={skill.path} card={<SkillCard skill={skill} onOpen={onOpen} />}>
       <button type="button" className="skill-chip" onClick={onOpen}>
         /{skill.name}
       </button>
@@ -165,6 +190,11 @@ export function useSkillFile(name: string | undefined): (() => void) | undefined
   const skill = useKnownSkills(name !== undefined && name !== "")?.get(name ?? "");
   if (skill === undefined || onOpen === undefined) return undefined;
   return () => onOpen(skill);
+}
+
+/** What opens a skill's `SKILL.md`, for the composer's chips, which read the skills themselves; nothing outside a plan's page. */
+export function useSkillOpener(): ((skill: SkillOption) => void) | undefined {
+  return useContext(SkillFileContext)?.onOpen;
 }
 
 /** A message the developer sent, as markdown, each skill it names drawn as its chip. */
