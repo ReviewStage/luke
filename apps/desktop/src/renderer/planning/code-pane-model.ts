@@ -6,7 +6,7 @@ import { callStart, type TranscriptCallRow } from "./transcript-model";
  * code-pane-model.ts -- what the Code tab's feed says, apart from drawing it: which call each code was shown on, its heading's range, the lines lit, and what its copy carries.
  */
 
-/** The calls the feed groups its code under, as the Transcript tab draws them. */
+/** The calls the feed groups its code under, as the Call tab draws them. */
 export type CodeFeedCallSource = Pick<TranscriptCallRow, "key" | "startedAt" | "live">;
 
 /** One call's run of the feed: the call's key, when it started, whether it stands now, and each code shown on it, oldest first. */

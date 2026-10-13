@@ -21,7 +21,7 @@ import { momentText, sinceText, useMinute } from "./plan-time";
  * text masking covers them.
  */
 
-/** What Luke is called over his note, as the Transcript tab names him. */
+/** What Luke is called over his note, as the Call tab names him. */
 const AUTHOR = "Luke";
 
 /** What the link to the note's card in the Code tab says. */

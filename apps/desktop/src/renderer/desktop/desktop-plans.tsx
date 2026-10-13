@@ -258,7 +258,7 @@ function PlanDocument({
   };
   // An agent's Changes chip opens its pull request's changes in the side panel, beside its tab.
   const openChanges = (agentId: string) => sidePanel.onChoose({ changes: agentId });
-  // A coding agent's start on the Work tab opens the agent's tab in this
+  // A coding agent's start on the Call tab opens the agent's tab in this
   // column, which a panel filling the window over it first gives way to,
   // and hands the keys to this column, so ⌘W closes the tab it opened.
   const openAgent = (agentId: string) => {

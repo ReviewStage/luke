@@ -190,26 +190,26 @@ test("Luke's words stand just above the call bar, labelled with his name, clear 
   assert.equal(reads(), `Luke${LUKE_WORDS}`);
 });
 
-test("the captions are held back while the Transcript is the panel's chosen tab, and come back on another tab", () => {
+test("the captions are held back while the Call is the panel's chosen tab, and come back on another tab", () => {
   render(
     createElement(Window, {
       tab: PANEL_TAB.PLANS,
-      staged: panelOn(SIDE_PANEL_TAB.TRANSCRIPT),
+      staged: panelOn(SIDE_PANEL_TAB.CALL),
       captions: captionStripProps(LUKE_SPEAKING),
     }),
   );
   assert.equal(reads(), undefined);
   pressTab("Board");
   assert.equal(reads(), `Luke${LUKE_WORDS}`);
-  pressTab("Transcript");
+  pressTab("Call");
   assert.equal(reads(), undefined);
 });
 
-test("the captions come back when the panel showing the Transcript closes", () => {
+test("the captions come back when the panel showing the Call closes", () => {
   render(
     createElement(Window, {
       tab: PANEL_TAB.PLANS,
-      staged: panelOn(SIDE_PANEL_TAB.TRANSCRIPT),
+      staged: panelOn(SIDE_PANEL_TAB.CALL),
       captions: captionStripProps(LUKE_SPEAKING),
     }),
   );
@@ -218,7 +218,7 @@ test("the captions come back when the panel showing the Transcript closes", () =
   assert.equal(reads(), `Luke${LUKE_WORDS}`);
 });
 
-test("a Transcript tab standing behind the chosen one does not hold the captions back", () => {
+test("a Call tab standing behind the chosen one does not hold the captions back", () => {
   render(
     createElement(Window, {
       tab: PANEL_TAB.PLANS,
@@ -229,7 +229,7 @@ test("a Transcript tab standing behind the chosen one does not hold the captions
   assert.equal(reads(), `Luke${LUKE_WORDS}`);
 });
 
-test("a Transcript still reading, or whose read failed, shows no words, so the captions stay", () => {
+test("a Call whose transcript is still reading, or whose read failed, shows no words, so the captions stay", () => {
   for (const transcript of [
     { kind: TRANSCRIPT_REGION.READING },
     { kind: TRANSCRIPT_REGION.FAILED },
@@ -237,7 +237,7 @@ test("a Transcript still reading, or whose read failed, shows no words, so the c
     render(
       createElement(Window, {
         tab: PANEL_TAB.PLANS,
-        staged: panelOn(SIDE_PANEL_TAB.TRANSCRIPT),
+        staged: panelOn(SIDE_PANEL_TAB.CALL),
         captions: captionStripProps(LUKE_SPEAKING),
         transcript,
       }),
@@ -246,12 +246,12 @@ test("a Transcript still reading, or whose read failed, shows no words, so the c
   }
 });
 
-test("a voice failure is drawn over the Transcript, since nothing there says it", () => {
+test("a voice failure is drawn over the Call, since nothing there says it", () => {
   const failure = "Luke's voice could not connect. Try again in a moment.";
   render(
     createElement(Window, {
       tab: PANEL_TAB.PLANS,
-      staged: panelOn(SIDE_PANEL_TAB.TRANSCRIPT),
+      staged: panelOn(SIDE_PANEL_TAB.CALL),
       captions: captionStripProps({ tone: CAPTION_TONE.ERROR, words: failure }),
     }),
   );

@@ -1202,7 +1202,7 @@ test("a tab pinned to the sidebar stands under Pinned on one line, its glyph and
 
 test("a pinned tab alone draws Pinned, and a press on it opens its plan on the tab, bringing the Plans tab forward from Settings", () => {
   const billing = listedPlan("Billing");
-  const pin: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.WORK, label: "Work", at: 1 };
+  const pin: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.CALL, label: "Work", at: 1 };
   const opened: PinnedTab[] = [];
   const tabs: PanelTab[] = [];
   const container = mount(DEAN, {

@@ -35,7 +35,7 @@ import { callHeading } from "./transcript-model";
  * lines numbered from where they sit in the file, and a copy of the lines
  * pointed at, so the feed reads as a walkthrough, a step a card. Two
  * snippets of one file are two cards. The cards stand under the call they
- * were shown on, each call opening at the Checkpoint the Transcript tab
+ * were shown on, each call opening at the Checkpoint the Call tab
  * opens it at, and the feed keeps to its newest card while it is scrolled
  * there, so code shown on a live call lands at the bottom as the
  * transcript's lines do, and scrolling up to read an earlier card leaves
@@ -44,7 +44,7 @@ import { callHeading } from "./transcript-model";
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
 
-/** What a call's checkpoint says while the call stands, as the Transcript tab says it. */
+/** What a call's checkpoint says while the call stands, as the Call tab says it. */
 const LIVE_LABEL = "Live";
 
 /** What a card's copy is called, which is its accessible name and its hint. */
@@ -311,7 +311,7 @@ export function CodePane({
   onRevealed,
 }: {
   shown: readonly PlanCodeShowing[];
-  /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
+  /** The plan's calls as the Call tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef, commit?: string) => void;

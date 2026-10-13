@@ -16,7 +16,7 @@ import { TurnCard } from "./turn-card";
  * working-time.tsx -- how long an agent has been working: the compact duration a working line counts in, the clock it counts on once a second, and the line a finished turn ends on.
  *
  * The count is the line's, never a row of its own: a transcript's
- * shimmering "Working…" says it after the word, the Work tab's running
+ * shimmering "Working…" says it after the word, the Call tab's running
  * turn says it after its state, and a running subagent's row says it
  * beside its spinner. The clock is one atom every count reads, run only
  * while some count stands on screen, so a run that ended, a tab that
@@ -120,7 +120,7 @@ export function WorkedFor({
   record?: TurnRecord | undefined;
   /** The catalog as last read, which names the model; empty before the first read lands. */
   models?: readonly CatalogModel[] | undefined;
-  /** Whether the turn ran in a harness, as an agent's and a subagent's do; Luke's own turns on the Work tab ran in none. */
+  /** Whether the turn ran in a harness, as an agent's and a subagent's do; Luke's own turns on the Call tab ran in none. */
   harnessed?: boolean;
 }): ReactNode {
   const now = useMinute();

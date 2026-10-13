@@ -35,11 +35,11 @@ test("a live run draws no synthetic plans", () => {
   );
 });
 
-test("a fixture run under the planning-transcript profile opens its plan on the transcript, an earlier call above the live one", () => {
+test("a fixture run under the planning-transcript profile opens its plan on the Call tab, an earlier call above the live one", () => {
   const run = { fixtureMode: true, profile: RUN_PROFILE.PLANNING_TRANSCRIPT };
   const view = fixturePlanningView(run);
   assert.ok(view !== undefined);
-  assert.equal(fixtureSidePanel(run)?.tab, SIDE_PANEL_TAB.TRANSCRIPT);
+  assert.equal(fixtureSidePanel(run)?.tab, SIDE_PANEL_TAB.CALL);
   const heard = heardCalls({
     held: [],
     voice: FIXTURE_PLANNING_CALL,
@@ -55,11 +55,11 @@ test("a fixture run under the planning-transcript profile opens its plan on the 
   );
 });
 
-test("a fixture run under the planning-work profile opens its plan on the Work tab mid-call, a finished turn above the one still working", () => {
+test("a fixture run under the planning-work profile opens its plan on the Call tab mid-call, a finished turn above the one still working", () => {
   const run = { fixtureMode: true, profile: RUN_PROFILE.PLANNING_WORK };
   const view = fixturePlanningView(run);
   assert.ok(view !== undefined);
-  assert.equal(fixtureSidePanel(run)?.tab, SIDE_PANEL_TAB.WORK);
+  assert.equal(fixtureSidePanel(run)?.tab, SIDE_PANEL_TAB.CALL);
   assert.equal(FIXTURE_PLANNING_CALL.callPlanId, view.activePlanId);
   assert.deepEqual(
     workRowsOf(view.work, true).map((turn) => turn.state),

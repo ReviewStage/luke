@@ -17,7 +17,6 @@ import {
   ExpandIcon,
   SidePanelIcon,
   TranscriptIcon,
-  WorkIcon,
 } from "@sidecar/panel";
 import { FileDiffIcon, InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -44,8 +43,8 @@ import { snippetOf } from "../planning/file-tab-model";
 import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
 import { PlanBoard } from "../planning/plan-board";
-import { PlanTranscript } from "../planning/plan-transcript";
-import { PlanWork, SubagentTab } from "../planning/plan-work";
+import { PlanCall } from "../planning/plan-call";
+import { SubagentTab } from "../planning/plan-work";
 import {
   type ChangesStripTab,
   inPlanOrder,
@@ -137,7 +136,7 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * opened, at the strip's end, and a plan that has used none, and has no agent, says
  * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model and wearing
  * its harness's mark for where the agent stands; after them stand the subagents opened from
- * the Work tab, the "+", or a delegation's row in an agent's tab, one tab
+ * the Call tab, the "+", or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
  * agents until its first message starts it. Every tab closes, and closing
  * an agent's or a subagent's closes only the view: the agent goes on as it
@@ -187,8 +186,7 @@ function documentReserve(area: HTMLElement): number {
 export const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
-  [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
-  [SIDE_PANEL_TAB.WORK]: <WorkIcon />,
+  [SIDE_PANEL_TAB.CALL]: <TranscriptIcon />,
 } as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
@@ -848,17 +846,11 @@ function TabContent({
           onRevealed={onRevealed}
         />
       );
-    case SIDE_PANEL_TAB.TRANSCRIPT:
+    case SIDE_PANEL_TAB.CALL:
       return (
-        <PlanTranscript
+        <PlanCall
           region={transcript.region}
           onRetry={transcript.onRetry}
-          reveal={transcript.reveal}
-        />
-      );
-    case SIDE_PANEL_TAB.WORK:
-      return (
-        <PlanWork
           turns={work.turns}
           callLive={work.callLive}
           earlier={work.earlier}
@@ -867,7 +859,7 @@ function TabContent({
           onOpenAgent={onOpenAgent}
           shown={shown}
           models={agents.models}
-          reveal={work.reveal}
+          reveal={transcript.reveal ?? work.reveal}
         />
       );
   }
@@ -1109,7 +1101,7 @@ export function SidePanel({
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W, ⌘T, and ⌘F answer to. */
   focused: boolean;
-  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Work tab asks for. */
+  /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Call tab asks for. */
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);

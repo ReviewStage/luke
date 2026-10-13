@@ -25,8 +25,7 @@ export function usedPlan(id: string): OpenPlan {
     holds: {
       [SIDE_PANEL_TAB.BOARD]: true,
       [SIDE_PANEL_TAB.CODE]: true,
-      [SIDE_PANEL_TAB.TRANSCRIPT]: true,
-      [SIDE_PANEL_TAB.WORK]: true,
+      [SIDE_PANEL_TAB.CALL]: true,
     },
   };
 }

@@ -15,8 +15,13 @@ import { afterEach, test, vi } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
 import { relayout } from "#testing/resize-observer";
-import { PlanWork, SubagentTab } from "./plan-work";
+import { PlanCall } from "./plan-call";
+import { SubagentTab } from "./plan-work";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workerOf, workRowsOf } from "./work-model";
+
+/** A plan on which nothing was said yet, so the Call tab draws Luke's turns alone. */
+const NO_CALLS: TranscriptRegion = { kind: TRANSCRIPT_REGION.EMPTY };
 
 const roots: Root[] = [];
 
@@ -71,7 +76,9 @@ const TURNS = [
 
 test("a worker's line and its task card name the task by its first line as plain words, and the opened card draws the task as markdown", () => {
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: TURNS,
       callLive: false,
       earlier: undefined,
@@ -181,7 +188,9 @@ test("a turn or a subagent the service says failed reads Failed, as an agent's f
     { ...turn, turnId: "turn-left", state: PLAN_WORK_STATE.RUNNING },
   ];
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns,
       callLive: false,
       earlier: undefined,
@@ -191,7 +200,7 @@ test("a turn or a subagent the service says failed reads Failed, as an agent's f
     }),
   );
   assert.deepEqual(
-    [...work.querySelectorAll("[data-state]")].map((state) => state.textContent),
+    [...work.querySelectorAll("[data-ended]")].map((state) => state.textContent),
     ["Failed", "Failed", "Stopped", "Stopped", "Stopped"],
   );
 
@@ -223,7 +232,9 @@ test("a turn or a subagent the service says failed reads Failed, as an agent's f
 
 test("a worker's job cut short by its line is marked to fade at its end, while a job shown whole is not", () => {
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: TURNS,
       callLive: false,
       earlier: undefined,
@@ -271,7 +282,9 @@ test("a worker's row names the model and effort its session ran on, with the mar
   ];
   const drawn = (model: string | undefined, effort?: string) =>
     mounted(
-      createElement(PlanWork, {
+      createElement(PlanCall, {
+        region: NO_CALLS,
+        onRetry: () => undefined,
         turns: ranOn(model, effort),
         callLive: false,
         earlier: undefined,
@@ -327,7 +340,9 @@ test("a coding agent's start, once the agent began, is the one button that opens
   });
   const opened: string[] = [];
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: [
         {
           turnId: "turn-1",
@@ -397,7 +412,9 @@ test("asked for a moment by a version's Open, the tab brings the turn that was r
   });
   const revealed = vi.fn();
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: [
         said("turn-1", 1_000, "First turn."),
         said("turn-2", 5_000, "Second turn."),
@@ -446,7 +463,9 @@ test("asked for a moment older than every turn drawn, the tab reads older pages 
   const draw = (turns: ReturnType<typeof said>[], earlier: string | undefined) =>
     act(() =>
       root.render(
-        createElement(PlanWork, {
+        createElement(PlanCall, {
+          region: NO_CALLS,
+          onRetry: () => undefined,
           turns,
           callLive: false,
           earlier,
@@ -478,7 +497,9 @@ test("an older page that does not land stops the seeking, and the ask is answere
   const revealed = vi.fn();
   const reads = vi.fn(() => Promise.resolve());
   mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: [
         {
           turnId: "turn-3",
@@ -506,7 +527,9 @@ test("an older page that does not land stops the seeking, and the ask is answere
 test("a link in Luke's words opens in the browser over the act channel, a GitHub page through github.open and any other web page through web.open, and a mail address is words that go nowhere", () => {
   const sent = installActBridge();
   const container = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: [
         {
           turnId: "turn-1",
@@ -545,7 +568,9 @@ test("a link in Luke's words opens in the browser over the act channel, a GitHub
 
 test("Luke's turn is drawn by a coding agent's own message, so his words carry the Copy an agent's turn does, and a stopped turn's lead folds as an agent's does", () => {
   const work = mounted(
-    createElement(PlanWork, {
+    createElement(PlanCall, {
+      region: NO_CALLS,
+      onRetry: () => undefined,
       turns: [
         {
           turnId: "turn-words",

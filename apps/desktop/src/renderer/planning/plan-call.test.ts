@@ -2,8 +2,20 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import {
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
+  type PlanWorkState,
+  type PlanWorkTurn,
+} from "@sidecar/hosted/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
-import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import {
+  LIVE_CLOSE_REASON,
+  LIVE_DEFAULTS,
+  TRANSCRIPT_SPEAKER,
+  type TranscriptSpeaker,
+} from "@sidecar/live";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
@@ -14,8 +26,24 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { installActBridge } from "#testing/act-bridge";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
-import { PlanTranscript } from "./plan-transcript";
+import { PlanCall } from "./plan-call";
 import { type CallRecord, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+
+/** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
+function callTab(
+  props: Partial<Parameters<typeof PlanCall>[0]> & Pick<Parameters<typeof PlanCall>[0], "region">,
+) {
+  return createElement(PlanCall, {
+    onRetry: () => undefined,
+    turns: [],
+    callLive: false,
+    earlier: undefined,
+    onLoadEarlier: () => Promise.resolve(),
+    onOpenSubagent: () => undefined,
+    shown: true,
+    ...props,
+  });
+}
 
 /** Synthetic words throughout. */
 function said(count: number): TranscriptRegion {
@@ -62,9 +90,9 @@ function scrollBox(container: HTMLElement, contentHeight: number): HTMLElement {
   return box;
 }
 
-test("each line is drawn under its speaker, the developer's and Luke's told apart", () => {
+test("each line is drawn as a coding agent's tab draws a message, the developer's a bubble and Luke's the agent's, under no label", () => {
   const drawn = renderToStaticMarkup(
-    createElement(PlanTranscript, {
+    callTab({
       region: {
         kind: TRANSCRIPT_REGION.READY,
         earlierOmitted: false,
@@ -92,17 +120,14 @@ test("each line is drawn under its speaker, the developer's and Luke's told apar
       onRetry: () => undefined,
     }),
   );
-  assert.match(drawn, /class="plan-transcript ph-no-capture"/u);
-  assert.match(
-    drawn,
-    /You<\/span>.*Invites should expire\..*Luke<\/span>.*After how many days\?/su,
-  );
-  assert.match(drawn, /is-user.*is-assistant/su);
+  assert.match(drawn, /<section class="plan-call ph-no-capture" aria-label="Call">/u);
+  assert.match(drawn, /is-user.*Invites should expire\..*is-assistant.*After how many days\?/su);
+  assert.doesNotMatch(drawn, /Luke<\/span>|luke-face/u, "Luke's words stand under no label of his");
 });
 
 test("a spoken line that reads as a markdown image draws no image, so the tab asks nothing of its address", () => {
   const drawn = renderToStaticMarkup(
-    createElement(PlanTranscript, {
+    callTab({
       region: {
         kind: TRANSCRIPT_REGION.READY,
         earlierOmitted: false,
@@ -165,7 +190,7 @@ test("a link in a spoken line opens in the browser over the act channel, a GitHu
       },
     ],
   };
-  act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
+  act(() => root.render(callTab({ region, onRetry: () => undefined })));
 
   // Note that Streamdown blocks a script's, a file's, and an app's scheme
   // before the link is ours to draw; a mail address and an address past the
@@ -196,9 +221,9 @@ test("a link in a spoken line opens in the browser over the act channel, a GitHu
   ]);
 });
 
-test("the empty and failed states each say where the transcript stands, the empty one under the Transcript tab's glyph drawn large, and a failure offers Retry", () => {
+test("the empty and failed states each say where the transcript stands, the empty one under the Call tab's glyph drawn large, and a failure offers Retry", () => {
   const empty = renderToStaticMarkup(
-    createElement(PlanTranscript, {
+    callTab({
       region: { kind: TRANSCRIPT_REGION.EMPTY },
       onRetry: () => undefined,
     }),
@@ -213,7 +238,7 @@ test("the empty and failed states each say where the transcript stands, the empt
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanTranscript, {
+      callTab({
         region: { kind: TRANSCRIPT_REGION.FAILED },
         onRetry: () => {
           retried += 1;
@@ -242,7 +267,7 @@ it.effect(
         root.render(
           onRegistry(
             registry,
-            createElement(PlanTranscript, {
+            callTab({
               region: { kind: TRANSCRIPT_REGION.READING },
               onRetry: () => undefined,
             }),
@@ -263,7 +288,7 @@ test("a new line keeps the list at its newest, unless the developer scrolled up 
   const root = createRoot(container);
   roots.push(root);
   const draw = (region: TranscriptRegion) =>
-    act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
+    act(() => root.render(callTab({ region, onRetry: () => undefined })));
 
   draw(said(1));
   const box = scrollBox(container, 1_000);
@@ -336,7 +361,7 @@ test("each call begins at a divider saying when it started, the standing one mar
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanTranscript, {
+      callTab({
         region: TWO_CALLS,
         onRetry: () => undefined,
       }),
@@ -354,25 +379,25 @@ test("each call begins at a divider saying when it started, the standing one mar
   assert.ok(dividers[1]?.querySelector("svg.lucide-audio-lines"), "a voice glyph, not a dot");
   assert.equal(dividers[1]?.querySelector(".rounded-full"), null);
 
-  // The developer's two lines are one turn, in a bubble at the right; Luke's turns stand under his mark.
-  const turns = [...log.querySelectorAll("[data-speaker]")];
+  // The developer's two lines are one bubble at the right; Luke's turns are the agent's messages, under no mark.
+  const turns = [...log.querySelectorAll(".is-user, .is-assistant")];
   assert.deepEqual(
-    turns.map((turn) => turn.getAttribute("data-speaker")),
-    [TRANSCRIPT_SPEAKER.USER, TRANSCRIPT_SPEAKER.ASSISTANT, TRANSCRIPT_SPEAKER.ASSISTANT],
+    turns.map((turn) => (turn.classList.contains("is-user") ? "user" : "assistant")),
+    ["user", "assistant", "assistant"],
   );
   const [developer, luke] = turns;
-  assert.ok(developer);
-  assert.ok(developer.classList.contains("is-user"));
-  assert.ok(developer.textContent?.includes("Invites should expire."));
-  assert.ok(developer.textContent?.includes("After a week, say."));
-  assert.equal(developer.querySelector(".luke-face"), null);
-  assert.ok(luke);
-  assert.ok(luke.classList.contains("is-assistant"));
-  assert.ok(luke.querySelector(".luke-face"), "Luke's turn stands under his mark");
+  assert.ok(developer?.textContent?.includes("Invites should expire."));
+  assert.ok(developer?.textContent?.includes("After a week, say."));
+  assert.equal(luke?.querySelector(".luke-face"), null);
 
   // The call's order is kept: the divider, the developer, Luke, the next divider, Luke.
-  const order = [...log.querySelectorAll("[data-checkpoint], [data-speaker]")].map((element) =>
-    element.hasAttribute("data-checkpoint") ? "call" : element.getAttribute("data-speaker"),
+  const order = [...log.querySelectorAll("[data-checkpoint], .is-user, .is-assistant")].map(
+    (element) =>
+      element.hasAttribute("data-checkpoint")
+        ? "call"
+        : element.classList.contains("is-user")
+          ? "user"
+          : "assistant",
   );
   assert.deepEqual(order, ["call", "user", "assistant", "call", "assistant"]);
 });
@@ -388,16 +413,9 @@ it.effect(
       const root = createRoot(container);
       roots.push(root);
       act(() =>
-        root.render(
-          onRegistry(
-            registry,
-            createElement(PlanTranscript, { region: TWO_CALLS, onRetry: () => undefined }),
-          ),
-        ),
+        root.render(onRegistry(registry, callTab({ region: TWO_CALLS, onRetry: () => undefined }))),
       );
-      const copy = container.querySelector<HTMLButtonElement>(
-        '[data-speaker="user"] button[aria-label="Copy"]',
-      );
+      const copy = container.querySelector<HTMLButtonElement>('.is-user button[aria-label="Copy"]');
       assert.ok(copy);
       act(() => copy.click());
       yield* settle;
@@ -446,11 +464,7 @@ const drawnOnClock = (region: TranscriptRegion) =>
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    act(() =>
-      root.render(
-        onRegistry(registry, createElement(PlanTranscript, { region, onRetry: () => undefined })),
-      ),
-    );
+    act(() => root.render(onRegistry(registry, callTab({ region, onRetry: () => undefined }))));
     yield* settle;
     return {
       closings: () => [...container.querySelectorAll("[role='log'] p")].map((p) => p.textContent),
@@ -563,7 +577,7 @@ test("asked for a call by a version's Open, the tab brings that call to the top 
   const draw = (region: TranscriptRegion) =>
     act(() =>
       root.render(
-        createElement(PlanTranscript, {
+        callTab({
           region,
           onRetry: () => undefined,
           reveal: { call: "call-2", onRevealed: revealed },
@@ -627,7 +641,7 @@ test("a call brought into view stays there through the redraw its answer asks an
   const draw = (lines: readonly string[]) =>
     act(() =>
       root.render(
-        createElement(PlanTranscript, {
+        callTab({
           region: {
             kind: TRANSCRIPT_REGION.READY,
             earlierOmitted: false,
@@ -644,4 +658,136 @@ test("a call brought into view stays there through the redraw its answer asks an
   assert.equal(log?.scrollTop, 400);
   draw(["The second call.", "A line after."]);
   assert.equal(log?.scrollTop, 400, "the log does not jump back to its newest line");
+});
+
+/** The tab drawn into the page, for a test to read as a reader would. */
+function mounted(element: ReturnType<typeof callTab>): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(element));
+  return container;
+}
+
+/** A line said on a call, naming the row the voice wrote for it, as the record answers it. */
+function saidLine(id: string, role: TranscriptSpeaker, text: string, rowId: string) {
+  return {
+    id,
+    role,
+    parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+    metadata: { rowIds: [rowId] },
+  };
+}
+
+/** A planning turn that read a file and answered, asked for by the rows named. */
+function readingTurn(turnId: string, state: PlanWorkState, asked: readonly string[]): PlanWorkTurn {
+  return {
+    turnId,
+    startedAt: 2_000,
+    ...(state === PLAN_WORK_STATE.RUNNING ? undefined : { endedAt: 9_000 }),
+    state,
+    earlierOmitted: false,
+    ...(asked.length === 0 ? undefined : { asked }),
+    parts: [
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "call-read",
+        tool: PLAN_WORK_TOOL.REPOSITORY,
+        name: "run_in_repository",
+        state: PLAN_WORK_STATE.DONE,
+        subject: "cat src/members/remove.ts",
+        input: JSON.stringify({ command: "cat src/members/remove.ts" }),
+        output: "export function removeMember() {}",
+      },
+      ...(state === PLAN_WORK_STATE.RUNNING
+        ? []
+        : [{ type: PLAN_WORK_PART.TEXT, text: "Removal already checks for an admin." }]),
+    ],
+  };
+}
+
+/** The call the developer asked Luke to check removal on, live or ended. */
+function askingCall(live: boolean): TranscriptRegion {
+  return {
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: [
+      {
+        key: "call-1",
+        startedAt: 1_000,
+        live,
+        lukeEnded: false,
+        messages: [
+          saidLine("0", TRANSCRIPT_SPEAKER.USER, "Check how removal works.", "row-ask"),
+          saidLine(
+            "1",
+            TRANSCRIPT_SPEAKER.ASSISTANT,
+            "It already checks for an admin.",
+            "row-said",
+          ),
+        ],
+      },
+    ],
+  };
+}
+
+/** What a reader meets down the log, in order: the developer's bubbles, Luke's messages, his work, and the working line. */
+function readDown(container: HTMLElement): string[] {
+  const log = container.querySelector('[role="log"]');
+  assert.ok(log);
+  return [...log.querySelectorAll(".is-user, .is-assistant, [data-working]")].map((element) => {
+    if (element.hasAttribute("data-working")) return "working";
+    if (element.classList.contains("is-user")) return `you: ${element.textContent}`;
+    return element.querySelector("[data-call-id], [data-worked]") === null
+      ? `luke: ${element.textContent}`
+      : "luke's work";
+  });
+}
+
+test("Luke's work stands right under the line that asked for it, drawn as an agent's turn, its words left out where he said them aloud", () => {
+  const container = mounted(
+    callTab({
+      region: askingCall(false),
+      turns: [readingTurn("turn-1", PLAN_WORK_STATE.DONE, ["row-ask"])],
+    }),
+  );
+  const drawn = readDown(container);
+  assert.equal(drawn[0], "you: Check how removal works.");
+  assert.equal(drawn[1], "luke's work");
+  assert.match(drawn[2] ?? "", /^luke: It already checks for an admin\./u);
+  assert.equal(drawn.length, 3);
+  assert.equal(
+    container.textContent?.includes("Removal already checks for an admin."),
+    false,
+    "what Luke was handed to say is said once, as he said it",
+  );
+  assert.match(container.querySelector("[data-worked]")?.textContent ?? "", /^Worked for 7s · /u);
+});
+
+test("a turn still working on the live call ends on the working line under it, ahead of what is said after", () => {
+  const container = mounted(
+    callTab({
+      region: askingCall(true),
+      turns: [readingTurn("turn-1", PLAN_WORK_STATE.RUNNING, ["row-ask"])],
+      callLive: true,
+    }),
+  );
+  assert.deepEqual(readDown(container).slice(0, 3), [
+    "you: Check how removal works.",
+    "luke's work",
+    "working",
+  ]);
+});
+
+test("a turn no line asked for keeps its words, since nothing said them aloud, and stands where it started", () => {
+  const container = mounted(
+    callTab({
+      region: askingCall(false),
+      turns: [readingTurn("turn-typed", PLAN_WORK_STATE.DONE, [])],
+    }),
+  );
+  const drawn = readDown(container);
+  assert.equal(drawn.at(-1), "luke's work");
+  assert.ok(container.textContent?.includes("Removal already checks for an admin."));
 });

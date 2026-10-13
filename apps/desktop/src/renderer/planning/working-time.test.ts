@@ -26,10 +26,15 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentTranscriptView } from "./agent-tab";
+import { PlanCall } from "./plan-call";
 import { spanText } from "./plan-time";
-import { PlanWork, SubagentTab } from "./plan-work";
+import { SubagentTab } from "./plan-work";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workerOf, workRowsOf } from "./work-model";
 import { WorkingLine, workedForText, workingClock, workingTime } from "./working-time";
+
+/** A plan on which nothing was said yet, so the Call tab draws Luke's turns alone. */
+const NO_CALLS: TranscriptRegion = { kind: TRANSCRIPT_REGION.EMPTY };
 
 /** React's act warns outside an environment that says it is a test. */
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -100,9 +105,11 @@ const transcript = (run: { working: boolean; startedAt?: number; ended?: string 
     ...run,
   });
 
-/** The Work tab holding one of Luke's turns, begun three minutes before the clock's zero, in the state given, on screen or not. */
+/** The Call tab holding one of Luke's turns, begun three minutes before the clock's zero, in the state given, on screen or not. */
 const work = (state: PlanWorkState, shown: boolean) =>
-  createElement(PlanWork, {
+  createElement(PlanCall, {
+    region: NO_CALLS,
+    onRetry: () => undefined,
     turns: [
       {
         turnId: "turn-1",
@@ -188,7 +195,7 @@ it.effect(
 );
 
 it.effect(
-  "the Work tab's running turn counts from when it began while the tab is on screen, and a settled turn counts nothing",
+  "the Call tab's running turn counts from when it began while the tab is on screen, and a settled turn counts nothing",
   () =>
     Effect.gen(function* () {
       const tab = yield* mounted(work(PLAN_WORK_STATE.RUNNING, true));
@@ -270,7 +277,7 @@ const delegatingTurn = (running: boolean) => ({
   ],
 });
 
-/** The Work tab holding one turn whose worker began 42 seconds before the clock's zero, its call and session running or answered at the zero. */
+/** The Call tab holding one turn whose worker began 42 seconds before the clock's zero, its call and session running or answered at the zero. */
 const workerTurns = (running: boolean): readonly PlanWorkTurn[] => [
   {
     turnId: "turn-1",
@@ -446,12 +453,14 @@ it.effect("a stopped, failed, or abandoned turn's card says how it ended", () =>
 );
 
 it.effect(
-  "hovering a finished turn on the Work tab says the model Luke ran on, wearing no harness's mark, and that it was stopped where it was",
+  "hovering a finished turn on the Call tab says the model Luke ran on, wearing no harness's mark, and that it was stopped where it was",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(TURN_END + MINUTE);
       const work = yield* mounted(
-        createElement(PlanWork, {
+        createElement(PlanCall, {
+          region: NO_CALLS,
+          onRetry: () => undefined,
           turns: [
             {
               turnId: "turn-1",
@@ -505,11 +514,13 @@ it.effect(
 );
 
 it.effect(
-  "the Work tab's running worker counts from its task's start while the tab is on screen, and a finished turn ends on how long it worked",
+  "the Call tab's running worker counts from its task's start while the tab is on screen, and a finished turn ends on how long it worked",
   () =>
     Effect.gen(function* () {
       const tab = (running: boolean, shown: boolean) =>
-        createElement(PlanWork, {
+        createElement(PlanCall, {
+          region: NO_CALLS,
+          onRetry: () => undefined,
           turns: workerTurns(running),
           callLive: true,
           earlier: undefined,
@@ -518,11 +529,11 @@ it.effect(
           shown,
         });
       const work = yield* mounted(tab(true, true));
-      // The turn's own count beside its state, then the worker's beside its spinner.
-      assert.deepEqual(work.timers(), ["1m 0s", "42s"]);
+      // The worker's count beside its spinner, then the turn's own on the working line it ends on.
+      assert.deepEqual(work.timers(), ["42s", "1m 0s"]);
       assert.equal(work.worked(), null);
       yield* advance(Duration.seconds(1));
-      assert.deepEqual(work.timers(), ["1m 1s", "43s"]);
+      assert.deepEqual(work.timers(), ["43s", "1m 1s"]);
       yield* work.draw(tab(true, false));
       assert.deepEqual(work.timers(), []);
       yield* work.draw(tab(false, true));

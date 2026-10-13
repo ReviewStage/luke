@@ -307,7 +307,7 @@ const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
 
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
-/** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place. */
+/** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place, and by the row the voice wrote for it. */
 const FIXTURE_TRANSCRIPT: PlanTranscript = {
   calls: [
     {
@@ -315,19 +315,25 @@ const FIXTURE_TRANSCRIPT: PlanTranscript = {
       startedAt: Date.parse("2026-10-07T16:20:00Z"),
       messages: (
         [
-          [USER, "I want members to be able to invite a teammate by email."],
-          [ASSISTANT, "Who can invite today — only admins?"],
-          [USER, "Right, an admin creates the account by hand. Any member should be able to."],
+          [USER, "I want members to be able to invite a teammate by email.", "fixture-earlier-0"],
+          [ASSISTANT, "Who can invite today — only admins?", "fixture-earlier-1"],
+          [
+            USER,
+            "Right, an admin creates the account by hand. Any member should be able to.",
+            "fixture-earlier-2",
+          ],
           [
             ASSISTANT,
             "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
+            "fixture-earlier-3",
           ],
         ] as const
       ).map(
-        ([role, text], index): TranscriptMessage => ({
+        ([role, text, rowId], index): TranscriptMessage => ({
           id: String(index),
           role,
           parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+          metadata: { rowIds: [rowId] },
         }),
       ),
     },
@@ -449,6 +455,8 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     startedAt: Date.parse("2026-10-07T16:21:00Z"),
     state: PLAN_WORK_STATE.DONE,
     earlierOmitted: false,
+    // The earlier call's "Any member should be able to." asked for it.
+    asked: ["fixture-earlier-2"],
     parts: [
       fixtureCommand("fixture-call-1", "ls src/members", "invite.ts\nmembership.ts\nroles.ts"),
       fixtureCommand(
@@ -467,6 +475,8 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     startedAt: Date.parse("2026-10-07T16:44:00Z"),
     state: PLAN_WORK_STATE.RUNNING,
     earlierOmitted: false,
+    // The call standing now's "who can withdraw an invite?" asked for it.
+    asked: ["fixture-1"],
     parts: [
       {
         type: PLAN_WORK_PART.REASONING,
@@ -539,11 +549,7 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
-const FIXTURE_TRANSCRIPT_PANEL: SidePanelState = {
-  ...FIXTURE_CODE_PANEL,
-  tab: SIDE_PANEL_TAB.TRANSCRIPT,
-};
-const FIXTURE_WORK_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.WORK };
+const FIXTURE_CALL_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.CALL };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
 
 /**
@@ -593,8 +599,9 @@ export function fixturePlanningView(run: {
 /**
  * The side panel a fixture run opens its plan with: on the code Luke has on
  * screen under the planning profile, on the whiteboard under the
- * planning-board profile, on the transcript under the planning-transcript
- * profile, on the work under the planning-work profile, and closed under any other. Nothing for a live
+ * planning-board profile, on the call under the planning-transcript and
+ * planning-work profiles, the latter with Luke at work on it, and closed
+ * under any other. Nothing for a live
  * run, which opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
@@ -604,7 +611,7 @@ export function fixtureSidePanel(run: {
   if (!run.fixtureMode) return undefined;
   if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_CODE_PANEL;
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_BOARD_PANEL;
-  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_TRANSCRIPT_PANEL;
-  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_WORK_PANEL;
+  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_CALL_PANEL;
+  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_CALL_PANEL;
   return FIXTURE_CLOSED_PANEL;
 }

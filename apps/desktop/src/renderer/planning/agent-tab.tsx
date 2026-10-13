@@ -90,7 +90,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * agent-tab.tsx -- one coding agent's tab in the plan's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
- * over `../ai-elements/`), the Transcript and Work tabs alike, from the
+ * over `../ai-elements/`), the Call tab alike, from the
  * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
  * pane: the plan it was handed is a card at the top, folded under its
  * title; each of its own turns runs the column's width with its text as
@@ -98,14 +98,14 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * collapsible row saying what it did (`tool-call-model.ts`), with the
  * input and the answer under the row once opened and a call that ended in
  * an error marked in red, each delegation to a worker a subagent's row on
- * a line of its own, as the Work tab draws its worker's, saying the task
+ * a line of its own, as the Call tab draws its worker's, saying the task
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), each write
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
- * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
- * is the developer's bubble, as the Transcript tab draws one; and while
+ * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
+ * is the developer's bubble, as the Call tab draws one; and while
  * the agent may still write, a shimmering line stands at the end saying
  * what it is doing, "Starting…" until its turn opens, "Thinking…" until
  * the turn draws its first row, and "Working…" after (`agentWorkingPhase`),
